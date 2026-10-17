@@ -36,6 +36,7 @@ import {
   setRating,
   toFacetQuery,
   toggleFacetValue,
+  toggleTag,
   withPage,
   withSort,
   writeFilterState,
@@ -111,6 +112,9 @@ export interface CatalogFilters {
   setInStockOnly(inStockOnly: boolean): void;
   /** Clears every value of one facet — its terms, its range, its star or its toggle. */
   clearFacet(facetId: FacetId): void;
+  /** Adds a tag to the filter, or removes it when it is already applied — the writer the chip for an
+   * applied tag removes it through, so every filter a chip can show has a control that removes it. */
+  toggleTag(tag: string): void;
   /** Clears every facet and tag, keeping the term, the sort and the page size. */
   clearAll(): void;
   /** Whether the address bar holds nothing beyond the defaults, asked of the query writer, which omits
@@ -256,6 +260,10 @@ export function CatalogProvider({ children }: { children: ReactNode }): ReactEle
     (facetId: FacetId): void => commit((current) => clearFacet(current, facetId)),
     [commit],
   );
+  const toggleTagValue = useCallback(
+    (tag: string): void => commit((current) => toggleTag(current, tag)),
+    [commit],
+  );
   const clearAllValues = useCallback(
     (): void => commit((current) => clearAllFilters(current)),
     [commit],
@@ -341,6 +349,7 @@ export function CatalogProvider({ children }: { children: ReactNode }): ReactEle
       setRating: setRatingValue,
       setInStockOnly: setInStockOnlyValue,
       clearFacet: clearFacetValue,
+      toggleTag: toggleTagValue,
       clearAll: clearAllValues,
       isDefault,
     }),
@@ -357,6 +366,7 @@ export function CatalogProvider({ children }: { children: ReactNode }): ReactEle
       setRatingValue,
       setInStockOnlyValue,
       clearFacetValue,
+      toggleTagValue,
       clearAllValues,
     ],
   );

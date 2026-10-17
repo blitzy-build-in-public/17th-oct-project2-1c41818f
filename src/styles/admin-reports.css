@@ -396,11 +396,11 @@
   line-height: var(--text-heading-2-line-height);
   font-variant-numeric: tabular-nums;
 }
-/* The paired data table composes `.sp-table` with `.sp-table--compact` in markup, so the primitive owns its
- * rows; this block adds the space above it and a quieter caption. */
+/* The paired data table composes `.sp-table--compact` and scrolls sideways rather than widening the page. */
 .sp-chart__data {
   min-inline-size: 0;
   margin-block-start: var(--space-2);
+  overflow-x: auto;
 }
 .sp-chart__data .sp-table__caption {
   color: var(--color-text-subtle);

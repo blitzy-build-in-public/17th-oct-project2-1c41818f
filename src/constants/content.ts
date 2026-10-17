@@ -4,6 +4,7 @@
  * Lines: 606
  */
 
+import type { LoyaltyTier } from "@/types/account";
 import type { PromoRejectionReason } from "@/types/commerce";
 
 /**
@@ -317,6 +318,9 @@ export const ACCOUNT_COPY = {
   LAST_NAME_LABEL: "Last name",
   PHONE_LABEL: "Phone number",
   MARKETING_OPT_IN_LABEL: "Email me about offers and new products",
+  PROFILE_EMAIL_HINT: "This address identifies your account and cannot be changed here.",
+  PROFILE_TIER_LABEL: "Loyalty tier",
+  PROFILE_MEMBER_SINCE_LABEL: "Member since",
   ORDERS_HEADING: "Order history",
   ORDERS_STATUS_FILTER_LABEL: "Filter by status",
   ORDERS_DATE_FILTER_LABEL: "Filter by the date the order was placed",
@@ -341,6 +345,19 @@ export const ACCOUNT_COPY = {
   REMOVE_ADDRESS_DIALOG_BODY: "Orders already placed keep the address they were sent to.",
   CONFIRM_REMOVE_ADDRESS_LABEL: "Remove address",
 } as const;
+/**
+ * What each seeded loyalty label reads as beside its heading on the profile.
+ *
+ * A label and nothing more: loyalty point accounting is out of scope, so no balance, earning rate or
+ * redemption is stated or computed anywhere, and `src/data/customers.ts` assigns the tier once when it
+ * seeds an account. Consumer: `src/features/account/ProfilePage.tsx`.
+ */
+export const LOYALTY_TIER_LABELS: Readonly<Record<LoyaltyTier, string>> = {
+  bronze: "Bronze",
+  silver: "Silver",
+  gold: "Gold",
+  platinum: "Platinum",
+};
 /** Describes the password rule from the minimum length `src/constants/config.ts` owns. */
 export const passwordHintLabel = (minLength: number): string =>
   `At least ${minLength} characters, with one letter and one digit.`;
