@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRequests.ts
  * Purpose: Reads a request for the in-process API: the members a query carries, the vocabularies they are validated against and the refusals they produce
- * Lines: 594
+ * Lines: 595
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -68,7 +68,8 @@ export function fieldProblem(field: string): Common.Result<never> {
   return failure(API_ERROR_CODES.VALIDATION_FAILED, VALIDATION_MESSAGES.REQUIRED, field);
 }
 
-/** A `404` for a path, a product or an order that does not exist, worded by the not-found copy. */
+/** A `404` for a path, a product, an order or an address that does not exist, worded by the
+ * not-found copy. */
 export function missing(code: ApiErrorCode): Common.Result<never> {
   return failure(code, NOT_FOUND_COPY.BODY);
 }

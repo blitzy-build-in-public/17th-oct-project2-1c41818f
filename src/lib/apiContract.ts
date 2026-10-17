@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiContract.ts
  * Purpose: The contract the in-process API is built on: its error vocabulary, the failure it shapes and the data-source interface it asks for
- * Lines: 296
+ * Lines: 308
  */
 
 import type * as Account from "@/types/account";
@@ -32,6 +32,8 @@ export const API_ERROR_CODES = {
   PRODUCT_NOT_FOUND: "product-not-found",
   /** The order named in the path does not exist, or does not belong to the caller. */
   ORDER_NOT_FOUND: "order-not-found",
+  /** The address named in the path is not one of the account's addresses. */
+  ADDRESS_NOT_FOUND: "address-not-found",
   /** The email address already belongs to an account. */
   DUPLICATE_EMAIL: "duplicate-email",
   /** The idempotency key was first used for a different order. */
@@ -50,8 +52,8 @@ export const API_ERROR_CODES = {
 export type ApiErrorCode = (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES];
 
 /** The status each code answers with: 401 without a usable session, 402 for the declined demonstration
- * card, 403 short of authority, 404 unknown path, product or order, 409 on a conflict, 422 for a body
- * that broke a field rule and 503 before any data source was bound. */
+ * card, 403 short of authority, 404 an unknown path, product, order or address, 409 on a conflict, 422
+ * for a body that broke a field rule and 503 before any data source was bound. */
 export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   [API_ERROR_CODES.UNAUTHENTICATED]: 401,
   [API_ERROR_CODES.SESSION_EXPIRED]: 401,
@@ -61,6 +63,7 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   [API_ERROR_CODES.ROUTE_NOT_FOUND]: 404,
   [API_ERROR_CODES.PRODUCT_NOT_FOUND]: 404,
   [API_ERROR_CODES.ORDER_NOT_FOUND]: 404,
+  [API_ERROR_CODES.ADDRESS_NOT_FOUND]: 404,
   [API_ERROR_CODES.DUPLICATE_EMAIL]: 409,
   [API_ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT]: 409,
   [API_ERROR_CODES.PAYMENT_DECLINED]: 402,
@@ -268,15 +271,24 @@ export interface SalesProDataSource {
     customerId: Common.CustomerId,
     input: Account.AddressInput,
   ): Common.Result<Account.Address>;
-  /** Replaces an address's members, leaving its default flags as they are. */
+  /** Replaces an address's members, leaving its default flags as they are. The seam resolves the
+   * path's id against the account's book before delegating and answers `404` with the code
+   * `address-not-found` for an id the book does not hold, so an implementation is never asked to
+   * edit another account's address and never restates the refusal. */
   updateAddress(
     customerId: Common.CustomerId,
     addressId: Common.AddressId,
     input: Account.AddressInput,
   ): Common.Result<Account.Address>;
-  /** Removes an address; the default flags fall to the most recently added address that remains. */
+  /** Removes an address; the default flags fall to the most recently added address that remains. The
+   * seam resolves the path's id against the account's book before delegating and answers `404` with
+   * the code `address-not-found` for an id the book does not hold, so an implementation is never asked
+   * to remove another account's address and never restates the refusal. */
   removeAddress(customerId: Common.CustomerId, addressId: Common.AddressId): Common.Result<void>;
-  /** Makes an address the default of `request.kind`, clearing the previous default of that kind. */
+  /** Makes an address the default of `request.kind`, clearing the previous default of that kind. The
+   * seam resolves the path's id against the account's book before delegating and answers `404` with
+   * the code `address-not-found` for an id the book does not hold, so an implementation is never asked
+   * to default another account's address and never restates the refusal. */
   setDefaultAddress(
     customerId: Common.CustomerId,
     addressId: Common.AddressId,

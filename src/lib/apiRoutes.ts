@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 590
+ * Lines: 597
  */
 
 import {
@@ -195,6 +195,17 @@ function ownedCustomer(context: RouteContext): Common.Result<Common.CustomerId> 
   return session.role === "admin" || session.customerId === customerId
     ? ok(customerId)
     : failure(API_ERROR_CODES.FORBIDDEN, FEEDBACK_COPY.ERROR_STATE_BODY);
+}
+
+/** The address a request's path names within the book `customerId` owns, or the `404` for an id that
+ * names none of them: read from the source, so another account's id refuses the same way. */
+function ownedAddress(
+  context: RouteContext,
+  customerId: Common.CustomerId,
+): Common.Result<Common.AddressId> {
+  const addressId = context.params.addressId as Common.AddressId;
+  const holds = context.source.listAddresses(customerId).some((one) => one.id === addressId);
+  return holds ? ok(addressId) : missing(API_ERROR_CODES.ADDRESS_NOT_FOUND);
 }
 
 // Handlers ---------------------------------------------------------------------------------------
@@ -446,34 +457,30 @@ function addAddress(context: RouteContext): Common.Result<unknown> {
 function updateAddress(context: RouteContext): Common.Result<unknown> {
   const owned = ownedCustomer(context);
   if (!owned.ok) return owned;
+  const address = ownedAddress(context, owned.value);
+  if (!address.ok) return address;
   const input = readAddressInput(bodyOf(context));
   const errors = validateAddress(input);
   return hasErrors(errors)
     ? invalidFields(errors)
-    : context.source.updateAddress(
-        owned.value,
-        context.params.addressId as Common.AddressId,
-        input,
-      );
+    : context.source.updateAddress(owned.value, address.value, input);
 }
 
 function removeAddress(context: RouteContext): Common.Result<unknown> {
   const owned = ownedCustomer(context);
-  return owned.ok
-    ? context.source.removeAddress(owned.value, context.params.addressId as Common.AddressId)
-    : owned;
+  if (!owned.ok) return owned;
+  const address = ownedAddress(context, owned.value);
+  return address.ok ? context.source.removeAddress(owned.value, address.value) : address;
 }
 
 function setDefaultAddress(context: RouteContext): Common.Result<unknown> {
   const owned = ownedCustomer(context);
   if (!owned.ok) return owned;
+  const address = ownedAddress(context, owned.value);
+  if (!address.ok) return address;
   const kind = readAddressKind(bodyOf(context));
   if (kind === null) return fieldProblem("kind");
-  return context.source.setDefaultAddress(
-    owned.value,
-    context.params.addressId as Common.AddressId,
-    { kind },
-  );
+  return context.source.setDefaultAddress(owned.value, address.value, { kind });
 }
 
 function getKpis(context: RouteContext): Common.Result<unknown> {
