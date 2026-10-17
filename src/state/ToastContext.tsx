@@ -1,7 +1,7 @@
 /**
  * Path: src/state/ToastContext.tsx
  * Purpose: The toast queue with success, error and info helpers
- * Lines: 239
+ * Lines: 249
  */
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
@@ -69,22 +69,32 @@ type ToastHelperOptions = Omit<ToastInput, "kind" | "message">;
  * and `clear`. Every one of those functions is stable across renders and the
  * value carrying them is memoised, so a consumer re-renders when the queue
  * changes and not when its provider happens to render.
+ *
+ * The six functions are declared as function-valued properties rather than as
+ * methods, because the provider builds them as function-valued properties
+ * either way: an object literal holding the `useCallback` results, where the
+ * two forms describe the same runtime value. The property form is the one a
+ * consumer can read off the object — destructuring it, or handing it to a
+ * position that takes a callback — without raising
+ * `@typescript-eslint/unbound-method`, which flags a method whose receiver it
+ * may have been separated from, and which this repository's lint gate treats as
+ * an error.
  */
 export interface ToastApi {
   /** The queued notifications, oldest first, never more than `TOAST_MAX_VISIBLE`. */
   readonly toasts: readonly ToastMessage[];
   /** Queues a notification of any kind, and returns the new message's id. */
-  notify(input: ToastInput): number;
+  readonly notify: (input: ToastInput) => number;
   /** Queues a success notification, and returns its id. */
-  success(message: string, options?: ToastHelperOptions): number;
+  readonly success: (message: string, options?: ToastHelperOptions) => number;
   /** Queues an error notification, and returns its id. */
-  error(message: string, options?: ToastHelperOptions): number;
+  readonly error: (message: string, options?: ToastHelperOptions) => number;
   /** Queues an informational notification, and returns its id. */
-  info(message: string, options?: ToastHelperOptions): number;
+  readonly info: (message: string, options?: ToastHelperOptions) => number;
   /** Removes the message with this id, and does nothing when no message has it. */
-  dismiss(id: number): void;
+  readonly dismiss: (id: number) => void;
   /** Removes every queued message at once. */
-  clear(): void;
+  readonly clear: () => void;
 }
 
 /**

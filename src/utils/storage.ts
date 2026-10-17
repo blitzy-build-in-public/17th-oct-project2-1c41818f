@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/storage.ts
  * Purpose: Typed, versioned, failure-tolerant localStorage access for the cart, the session and the last-used range
- * Lines: 288
+ * Lines: 303
  */
 
 import { STORAGE_KEYS, STORAGE_KEY_PREFIX, STORAGE_VERSION } from "@/constants/config";
@@ -132,15 +132,20 @@ function writeRawItem(key: StorageKey, payload: string): boolean {
   }
 }
 
-/** Removes one raw entry. */
-function removeRawItem(key: StorageKey): void {
+/**
+ * Removes one raw entry; `false` when no store can be reached or the store refused the drop, `true`
+ * when the entry is gone — dropped, or never there to drop.
+ */
+function removeRawItem(key: StorageKey): boolean {
   const store = openStore();
-  if (store === null) return;
+  if (store === null) return false;
   try {
     store.removeItem(key);
+    return true;
   } catch {
-    // An entry the store refuses to drop is at worst one reload stale, and raising here would give a
-    // best-effort cleanup a failure its caller has no way to act on.
+    // An entry the store refuses to drop is reported rather than raised: persistence is best-effort,
+    // and the caller keeps the in-memory state that is already the product's source of truth.
+    return false;
   }
 }
 
@@ -252,23 +257,33 @@ export function writeStored<T>(key: StorageKey, value: T): boolean {
 /**
  * Removes the value stored under a key, if any. Writes to the store.
  *
- * A store that is not there at all, or one that refuses to drop the entry, is a no-op rather than a
- * failure: persistence is not the source of truth for anything here.
+ * A store that is not there at all, or one that refuses to drop the entry, is reported as `false`
+ * rather than raised: persistence is not the source of truth for anything here.
  *
  * @param key - The product-owned key to clear.
+ * @returns `true` when the entry is gone — dropped, or never there to drop — and `false` when no
+ *   store can be reached or the store refused to drop it.
  */
-export function removeStored(key: StorageKey): void {
-  removeRawItem(key);
+export function removeStored(key: StorageKey): boolean {
+  return removeRawItem(key);
 }
 
 /**
  * Removes every entry this product owns: the keys of `STORAGE_KEYS`, and nothing else in the store.
  *
  * Writes to the store. Anything another application on the same origin wrote is left exactly as it
- * was, which is why this walks the product's own keys instead of calling the store's `clear`.
+ * was, which is why this walks the product's own keys instead of calling the store's `clear`. Every
+ * key is attempted even when one is refused, so a single stubborn entry cannot leave the rest of the
+ * product's entries behind.
+ *
+ * @returns `true` when every entry is gone, and `false` when at least one could not be dropped.
  */
-export function clearStoredKeys(): void {
-  for (const key of Object.values(STORAGE_KEYS)) removeRawItem(key);
+export function clearStoredKeys(): boolean {
+  let everyKeyDropped = true;
+  for (const key of Object.values(STORAGE_KEYS)) {
+    if (!removeRawItem(key)) everyKeyDropped = false;
+  }
+  return everyKeyDropped;
 }
 
 /**

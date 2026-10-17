@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Card.tsx
  * Purpose: Card with its header, body and footer slots, and the badge every feature surface uses
- * Lines: 360
+ * Lines: 394
  */
 
 import type { ComponentPropsWithoutRef, ElementType, ReactElement, ReactNode } from "react";
@@ -68,14 +68,41 @@ export type CardProps = Omit<ComponentPropsWithoutRef<"div">, "children"> & {
   /**
    * Marks the card as the one chosen among several.
    *
-   * It is written to the `aria-selected` attribute the stylesheet selects on and is announced where the
-   * card carries a role that supports selection — `option`, `row`, `gridcell`, `tab`, `columnheader` or
-   * `rowheader` — so a card that is a real choice in a listbox or a grid passes that role as well.
-   * Everywhere else the selected frame is the emphasis, the caller's own control carries the state and the
-   * words beside the card name the choice, because no state of this product is left to colour alone.
+   * The state is written as the attribute the rendered role supports: `aria-selected="true"` when the card
+   * renders as one of the six roles ARIA allows that attribute on, and the global `aria-current="true"` on
+   * every other element, so a selected card is announced whichever tag the caller picks rather than
+   * carrying an authoring error the accessibility tree drops. The stylesheet selects on both, so the
+   * accent frame is painted either way as the emphasis on top of the state, and the caller's own `Link` or
+   * `Button` inside the card still carries the action.
    */
   readonly isSelected?: boolean;
 };
+
+/**
+ * The six roles ARIA allows to carry `aria-selected`, and the test that decides which attribute a selected
+ * card writes.
+ *
+ * `aria-selected` is defined on these roles and on no others: written on anything else — the generic role
+ * a `<div>`, `<article>`, `<section>` or `<li>` carries when the caller passes no role — it is an authoring
+ * error the accessibility tree ignores, which would leave the choice to the frame's hue alone. So a card
+ * rendering as one of these six states its selection in `aria-selected`, and every other card states it in
+ * the global `aria-current`, which is valid wherever it is written. The list is ARIA's rather than this
+ * file's, and `src/styles/data-display.css` selects on both attributes.
+ */
+const SELECTION_ROLES: ReadonlySet<string> = new Set([
+  "option",
+  "row",
+  "gridcell",
+  "tab",
+  "columnheader",
+  "rowheader",
+]);
+
+/** The state attribute a selected card writes when its role supports selection. */
+const SELECTED_STATE_ATTRIBUTES = { "aria-selected": "true" } as const;
+
+/** The state attribute a selected card writes when its role does not support selection. */
+const CURRENT_STATE_ATTRIBUTES = { "aria-current": "true" } as const;
 
 /**
  * The surface every feature renders its panels on: a KPI tile, a product tile, the cart's summary, an
@@ -95,6 +122,7 @@ export function Card({
   isFlush = false,
   isInteractive = false,
   isSelected = false,
+  role,
   ...rest
 }: CardProps): ReactElement {
   // The four tags a card renders as take the same attribute surface this component accepts, so the
@@ -103,10 +131,16 @@ export function Card({
   // receives the tag itself either way.
   const Element = as as "div";
 
+  // The role decides which attribute carries the state, so a card that is a real choice in a listbox or a
+  // grid announces its selection instead of writing an attribute its role does not support.
+  const carriesSelection = role !== undefined && SELECTION_ROLES.has(role);
+
   return (
     <Element
       {...rest}
-      aria-selected={isSelected ? "true" : undefined}
+      role={role}
+      {...(isSelected && carriesSelection ? SELECTED_STATE_ATTRIBUTES : {})}
+      {...(isSelected && !carriesSelection ? CURRENT_STATE_ATTRIBUTES : {})}
       className={composeClassName(
         "sp-card",
         isInteractive && "sp-card--interactive",

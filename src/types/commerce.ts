@@ -23,10 +23,10 @@ import type {
  * One line of the cart: a product the shopper added, the price it carried at that moment and the
  * ceiling its quantity may reach.
  *
- * Stock: `maxQuantity` is copied from the product's stock when the line is created and is the
- * ceiling `src/state/cartReducer.ts` clamps every quantity change against. When a product goes out
- * of stock afterwards, the reducer clamps the stored quantity down to what is still purchasable and
- * the cart shows an availability warning, rather than keeping a quantity that cannot be bought.
+ * Stock: `maxQuantity` is the product's stock copied as it stands when the line is created, and is
+ * the ceiling `src/state/cartReducer.ts` clamps every quantity change against. A product with
+ * nothing on hand yields no line at all; one that runs out afterwards has its stored quantity
+ * clamped to what is still buyable, so the cart can warn rather than hold what cannot be bought.
  *
  * Money: `unitPriceMinor` is the line's own price in minor units, before any line or order discount.
  * The totals a shopper reads come from the `PricedCart` that `src/lib/pricingService.ts` returns,

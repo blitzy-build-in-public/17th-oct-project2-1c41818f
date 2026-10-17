@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/transactions.test.ts
  * Purpose: Cart and checkout reducer transitions, stock clamping and submission guards
- * Lines: 597
+ * Lines: 409
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,38 +19,16 @@ import {
   mergeCartLine,
   toCart,
 } from "@/state/cartReducer";
-import {
-  CHECKOUT_FORM_STEPS,
-  CHECKOUT_STEP_SEQUENCE,
-  canAdvanceFrom,
-  checkoutActions,
-  checkoutReducer,
-  createInitialCheckoutState,
-  isFinalFormStep,
-  nextStep,
-  previousStep,
-  stepIndex,
-} from "@/state/checkoutReducer";
-import {
-  FIXED_NOW,
-  makeApiError,
-  makeCart,
-  makeCartLine,
-  makeCartWithLines,
-  makeFieldErrors,
-  makeOrder,
-  makePricedCart,
-  makeProduct,
-} from "../../fixtures";
+import { FIXED_NOW, makeCart, makeCartLine, makeCartWithLines, makeProduct } from "../../fixtures";
 
 import type { CartState } from "@/state/cartReducer";
-import type { CheckoutState, CheckoutStep } from "@/state/checkoutReducer";
 import type { Cart, CartLine } from "@/types/commerce";
 
-// Both subjects are pure functions of a state and an action: every case calls one directly.
+// The cart half of those reducers: the checkout's cases live in tests/unit/state/checkout.test.ts,
+// split out when this file passed the 600-line ceiling.
+// The cart reducer is a pure function of a state and an action: every case calls one directly.
 
 const ADD_ONE = cartActions.add(makeCartLine({ quantity: 1 }));
-const NEXT = checkoutActions.next();
 /** A cart holding nothing, pinned to a fixed instant so no assertion reads one. */
 const EMPTY_CART: CartState = createInitialCartState({ updatedAt: FIXED_NOW });
 /** The fixture's first product once: the cart the cases below act on, and the line it holds. */
@@ -66,12 +44,12 @@ const QUANTITY_REQUESTS: [number, number][] = [
   [2.7, 2],
   [Number.NaN, 1],
 ];
-/** A requested quantity, the ceiling it is held against, and the quantity the line may hold. */
+/** A requested quantity, its ceiling and the quantity held; a ceiling with nothing to buy holds 0. */
 const CLAMP_CASES: [number, number, number][] = [
   [5, 3, 3],
   [1, 3, 1],
   [4.9, 10, 4],
-  [2, 0, 1],
+  [2, 0, 0],
 ];
 /** Line candidates a stored cart must refuse: one unusable field each, the rest well formed. */
 const MALFORMED_LINES: [string, unknown][] = [
@@ -80,50 +58,12 @@ const MALFORMED_LINES: [string, unknown][] = [
   ["quantity", { ...makeCartLine(), quantity: 0 }],
   ["addedAt", { ...makeCartLine(), addedAt: "yesterday" }],
 ];
-/** Every step, the one a forward move reaches, and the one a backward move reaches. */
-const STEP_MOVES: { step: CheckoutStep; next: CheckoutStep; previous: CheckoutStep }[] = [
-  { step: "shipping", next: "payment", previous: "shipping" },
-  { step: "payment", next: "review", previous: "shipping" },
-  { step: "review", next: "review", previous: "payment" },
-  { step: "confirmation", next: "confirmation", previous: "confirmation" },
-];
-/** A checkout at its first step, holding the email the shopper signed in with. */
-const FRESH_CHECKOUT: CheckoutState = createInitialCheckoutState({
-  idempotencyKey: "idem-key",
-  email: "dana@example.com",
-});
-/** The shipping step's values, filled in as the shipping form submits them. */
-const SHIPPING_VALUES = { shipping: { fullName: "Dana Okafor", city: "Portland" } };
-const FILL = checkoutActions.updateValues(SHIPPING_VALUES);
-/** A checkout whose shipping step has been filled in, where the entered values are asserted. */
-const FILLED_CHECKOUT = checkoutReducer(FRESH_CHECKOUT, FILL);
-/** A checkout standing on the review step, the only step from which a submission may begin. */
-const REVIEWING_CHECKOUT = checkoutReducer(checkoutReducer(FILLED_CHECKOUT, NEXT), NEXT);
-/** The checkout a placed order leaves behind, where the confirmation is the only step it may hold. */
-const PLACED_CHECKOUT = placeOrder(startSubmission(REVIEWING_CHECKOUT));
-/** Direct moves refused by identity: forward past validation, and into or out of the confirmation. */
-const REFUSED_DIRECT_MOVES: [CheckoutState, CheckoutStep][] = [
-  [FRESH_CHECKOUT, "payment"],
-  [FRESH_CHECKOUT, "review"],
-  [REVIEWING_CHECKOUT, "confirmation"],
-  [PLACED_CHECKOUT, "review"],
-  [PLACED_CHECKOUT, "payment"],
-  [PLACED_CHECKOUT, "shipping"],
-];
 
-/** Writes values onto the shipping step, as a form does field by field. */
-function editShipping(shipping: Record<string, string>) {
-  return checkoutActions.updateValues({ shipping });
-}
-
-/** Begins the submission the review step allows, from the state the checkout holds. */
-function startSubmission(state: CheckoutState, key = "idem-1"): CheckoutState {
-  return checkoutReducer(state, checkoutActions.submitStarted(key));
-}
-
-/** The checkout after the demonstration order was placed from it. */
-function placeOrder(state: CheckoutState): CheckoutState {
-  return checkoutReducer(state, checkoutActions.submitSucceeded(makeOrder()));
+/** Builds the line a product in stock is added as; a null here is a fixture mistake. */
+function buildLine(...args: Parameters<typeof createCartLine>): CartLine {
+  const line = createCartLine(...args);
+  if (line === null) throw new Error("A product in stock builds a line.");
+  return line;
 }
 
 /**
@@ -162,7 +102,7 @@ function installStore(store: Pick<Storage, "getItem" | "setItem" | "removeItem">
 describe("cart transitions", () => {
   it("adds a product as a line priced in minor units, and merges a second add into it", () => {
     const product = makeProduct({ priceMinor: 4_999, stockOnHand: 15 });
-    const added = cartActions.add(createCartLine(product, 2, FIXED_NOW));
+    const added = cartActions.add(buildLine(product, 2, FIXED_NOW));
     const next = cartReducer(EMPTY_CART, added);
 
     expect(next.lines).toHaveLength(1);
@@ -244,12 +184,21 @@ describe("cart transitions", () => {
     const same = cartActions.replaceLines(EMPTY_CART.lines, FIXED_NOW);
     expect(cartReducer(EMPTY_CART, same)).toBe(EMPTY_CART);
   });
+
+  it("never holds a line whose product has nothing left to buy", () => {
+    // A hand-built line whose ceiling holds nothing is what a product that ran out leaves behind.
+    const unbuyable = makeCartLine({ maxQuantity: 0 });
+    expect(cartReducer(ONE_LINE_CART, cartActions.add(unbuyable))).toBe(ONE_LINE_CART);
+    const replaced = cartReducer(ONE_LINE_CART, cartActions.replaceLines([unbuyable], FIXED_NOW));
+    expect(replaced.lines).toEqual([]);
+    expect(replaced.updatedAt).toBe(FIXED_NOW);
+  });
 });
 
 describe("cart line construction", () => {
   it("copies the product's facts onto the line, and merges on the product", () => {
     const product = makeProduct({ priceMinor: 12_900, stockOnHand: 7 });
-    const line = createCartLine(product, 3, FIXED_NOW);
+    const line = buildLine(product, 3, FIXED_NOW);
 
     expect(line).toMatchObject({
       productId: product.id,
@@ -261,11 +210,10 @@ describe("cart line construction", () => {
       imageUrl: product.images[0].url,
     });
     // One identifier per product, so a second add merges rather than opening a second line.
-    expect(createCartLine(product, 5, FIXED_NOW).id).toBe(line.id);
+    expect(buildLine(product, 5, FIXED_NOW).id).toBe(line.id);
     expect(line.id.startsWith("line_")).toBe(true);
-    // A product with nothing on hand is one purchasable unit, not an unpurchasable line of none.
-    const outOfStock = createCartLine(makeProduct({ stockOnHand: 0 }), 4, FIXED_NOW);
-    expect(outOfStock).toMatchObject({ maxQuantity: 1, quantity: 1 });
+    // A product with nothing on hand builds no line at all, so the cart cannot hold the unbuyable.
+    expect(createCartLine(makeProduct({ stockOnHand: 0 }), 4, FIXED_NOW)).toBeNull();
     // A merge keys on the product, keeps the line's identity and follows the product as it stands.
     const handBuilt: CartLine = { ...makeCartLine({ quantity: 2 }), id: ABSENT_LINE_ID };
     const merged = mergeCartLine([SEED_LINE], handBuilt);
@@ -330,161 +278,6 @@ describe("cart persistence shape", () => {
     // A value that is not an object at all is not a line either.
     expect(isCartLine(null)).toBe(false);
     expect(isCartLine("line_prod")).toBe(false);
-  });
-});
-
-describe("checkout step machine", () => {
-  it("walks the form steps in one ordered sequence, ending at the confirmation", () => {
-    expect(CHECKOUT_STEP_SEQUENCE).toEqual(["shipping", "payment", "review", "confirmation"]);
-    expect(CHECKOUT_FORM_STEPS).toEqual(["shipping", "payment", "review"]);
-    CHECKOUT_STEP_SEQUENCE.forEach((step, index) => {
-      expect(stepIndex(step)).toBe(index);
-      expect(isFinalFormStep(step)).toBe(step === "review");
-    });
-    // The step indicator reaches an earlier step directly; the current one changes nothing.
-    expect(checkoutReducer(REVIEWING_CHECKOUT, checkoutActions.setStep("payment")).step).toBe(
-      "payment",
-    );
-    expect(checkoutReducer(FRESH_CHECKOUT, checkoutActions.setStep("shipping"))).toBe(
-      FRESH_CHECKOUT,
-    );
-  });
-
-  it.each(REFUSED_DIRECT_MOVES)("refuses a direct move that is not a return", (state, step) => {
-    expect(checkoutReducer(state, checkoutActions.setStep(step))).toBe(state);
-  });
-
-  it.each(STEP_MOVES)("moves $step to $next, and back to $previous", ({ step, next, previous }) => {
-    expect(nextStep(step)).toBe(next);
-    expect(previousStep(step)).toBe(previous);
-  });
-
-  it("keeps the entered values when the shopper moves forward and back", () => {
-    const advanced = checkoutReducer(FILLED_CHECKOUT, NEXT);
-    const returned = checkoutReducer(advanced, checkoutActions.back());
-
-    expect(advanced.step).toBe("payment");
-    expect(returned.step).toBe("shipping");
-    expect(returned.values).toBe(FILLED_CHECKOUT.values);
-    expect(returned.values.shipping).toMatchObject({ fullName: "Dana Okafor", city: "Portland" });
-    // A step's complaints block the move until they are cleared, and the flow never leaves its end.
-    expect(canAdvanceFrom("shipping", {})).toBe(true);
-    expect(canAdvanceFrom("review", makeFieldErrors())).toBe(false);
-    expect(canAdvanceFrom("confirmation", {})).toBe(false);
-  });
-});
-
-describe("checkout values and errors", () => {
-  it("merges a patch into its own group and leaves the others as they were", () => {
-    const patch = checkoutActions.updateValues({ payment: { cvc: "123" } });
-    const patched = checkoutReducer(FILLED_CHECKOUT, patch);
-
-    expect(patched.values.payment.cvc).toBe("123");
-    expect(patched.values.payment.number).toBe("");
-    expect(patched.values.shipping).toBe(FILLED_CHECKOUT.values.shipping);
-    expect(patched.values.contact).toBe(FILLED_CHECKOUT.values.contact);
-    // A patch naming no field changes nothing, at any depth, so the state keeps its own reference.
-    for (const values of [{}, { shipping: {} }, { contact: {} }, { shipping: { billing: {} } }]) {
-      expect(checkoutReducer(FILLED_CHECKOUT, checkoutActions.updateValues(values))).toBe(
-        FILLED_CHECKOUT,
-      );
-    }
-    // The priced cart the buyer reviewed is held whole, so an order is built from what they saw.
-    const snapshot = makePricedCart({ lines: [makeCartLine({ quantity: 2 })] });
-    const held = checkoutReducer(FRESH_CHECKOUT, checkoutActions.setSnapshot(snapshot));
-    expect(held.snapshot).toBe(snapshot);
-    expect(Number.isInteger(held.snapshot?.grandTotalMinor)).toBe(true);
-    expect(checkoutReducer(held, checkoutActions.setSnapshot(null)).snapshot).toBeNull();
-  });
-
-  it("merges a nested billing patch and clears the error it names there", () => {
-    const patch = checkoutActions.updateValues({ shipping: { billing: { postalCode: "97201" } } });
-    const failed = checkoutReducer(
-      FILLED_CHECKOUT,
-      checkoutActions.setErrors({ "billing.postalCode": "Enter a postal code." }),
-    );
-    const corrected = checkoutReducer(failed, patch);
-    // A real field merges into the billing address, keeps the flat fields, and clears its error.
-    expect(corrected.values.shipping.billing).toMatchObject({ postalCode: "97201", city: "" });
-    expect(corrected.values.shipping.fullName).toBe("Dana Okafor");
-    expect(corrected.errors).toEqual({});
-  });
-
-  it("stores a field-keyed error map and empties it again", () => {
-    const errors = { fullName: "Enter the full name.", postalCode: "Enter a postal code." };
-    const failed = checkoutReducer(FRESH_CHECKOUT, checkoutActions.setErrors(errors));
-    expect(failed.errors).toEqual(errors);
-    expect(checkoutReducer(failed, checkoutActions.setErrors({ ...errors }))).toBe(failed);
-    expect(checkoutReducer(failed, checkoutActions.clearErrors()).errors).toEqual({});
-    expect(checkoutReducer(FRESH_CHECKOUT, checkoutActions.clearErrors())).toBe(FRESH_CHECKOUT);
-  });
-
-  it("clears the error of the field the shopper corrected, under either spelling", () => {
-    const two = { fullName: "Enter the full name.", email: "Enter an email." };
-    const failed = checkoutReducer(FRESH_CHECKOUT, checkoutActions.setErrors(two));
-    const corrected = checkoutReducer(failed, editShipping({ fullName: "Dana Okafor" }));
-    const cityError = { "shipping.city": "Enter a city." };
-    const qualified = checkoutReducer(FRESH_CHECKOUT, checkoutActions.setErrors(cityError));
-    const requalified = checkoutReducer(qualified, editShipping({ city: "Portland" }));
-    // Correcting one control silences its own complaint and leaves the one beside it standing.
-    expect(corrected.errors).toEqual({ email: "Enter an email." });
-    expect(requalified.errors).toEqual({});
-  });
-});
-
-describe("checkout submission", () => {
-  it("takes one submission at a time, and only from the review step", () => {
-    const submitting = startSubmission(REVIEWING_CHECKOUT);
-    expect(submitting).toMatchObject({ submitting: true, status: "loading", error: null });
-    expect(submitting.idempotencyKey).toBe("idem-1");
-    // A second start is refused while the first is in flight, so the key the attempt carries holds.
-    expect(startSubmission(submitting, "idem-2")).toBe(submitting);
-    expect(startSubmission(FRESH_CHECKOUT)).toBe(FRESH_CHECKOUT);
-    expect(startSubmission(FILLED_CHECKOUT)).toBe(FILLED_CHECKOUT);
-  });
-
-  it("records the placed order, then keeps the confirmation terminal until a reset", () => {
-    const order = makeOrder();
-    const started = startSubmission(REVIEWING_CHECKOUT);
-    const placed = checkoutReducer(started, checkoutActions.submitSucceeded(order));
-
-    expect(placed.step).toBe("confirmation");
-    expect(placed).toMatchObject({ status: "success", submitting: false, error: null, order });
-    expect(placed.submittedAt).toBe(order.placedAt);
-    expect(Object.values(placed.values.payment).every((value) => value === "")).toBe(true);
-    // Moving back from a placed order would invite a second submission of the order already placed.
-    expect(checkoutReducer(placed, NEXT)).toBe(placed);
-    expect(checkoutReducer(placed, checkoutActions.back())).toBe(placed);
-    const reset = checkoutReducer(placed, checkoutActions.reset("idem-2"));
-    expect(reset).toEqual(createInitialCheckoutState({ idempotencyKey: "idem-2" }));
-    expect(reset).toMatchObject({ step: "shipping", order: null, submittedAt: null });
-  });
-
-  it("releases the guard after a failure, keeping the values and the key for the retry", () => {
-    const failure = makeApiError({ status: 402, code: "card-declined", field: "cvc" });
-    const named = { number: "Enter the card number." };
-    const started = startSubmission(REVIEWING_CHECKOUT);
-    const failed = checkoutReducer(started, checkoutActions.submitFailed(failure, named));
-
-    expect(failed).toMatchObject({ status: "error", submitting: false });
-    expect(failed.error?.code).toBe("card-declined");
-    // The failure's own field and the map beside it both mark their controls.
-    expect(failed.errors["number"]).toBe("Enter the card number.");
-    expect(failed.errors["cvc"]).toBe(failure.message);
-    expect(failed.values.shipping.fullName).toBe("Dana Okafor");
-    expect(failed.idempotencyKey).toBe("idem-1");
-    // The retry is accepted again, and it sends the same key so a placed order cannot double.
-    expect(startSubmission(failed)).toMatchObject({ submitting: true, error: null });
-  });
-
-  it("leaves an emptied cart to the cart reducer, which the checkout dispatches on success", () => {
-    // The checkout holds no cart lines of its own: clearing the cart is the cart reducer's own
-    // transition, so an empty cart after a placed order can only have come from the cart state.
-    const placed = placeOrder(startSubmission(REVIEWING_CHECKOUT));
-    const cleared = cartReducer(ONE_LINE_CART, cartActions.clear(FIXED_NOW));
-    expect(placed).not.toHaveProperty("lines");
-    expect(cleared.lines).toEqual([]);
-    expect(cleared.promoCode).toBeNull();
   });
 });
 
@@ -568,6 +361,25 @@ describe("the cart's persistence seam", () => {
     expect(storage.writeStored(STORAGE_KEYS.CART, empty)).toBe(false);
     // The refused write left the value the key already held exactly as it was.
     expect(storage.readStored(STORAGE_KEYS.CART, null, isCartState)).toEqual(state);
+  });
+
+  it("reports a refused removal, leaving the entry where the store kept it", () => {
+    expect(storage.writeStored(STORAGE_KEYS.CART, makeCart())).toBe(true);
+    expect(storage.writeStored(STORAGE_KEYS.SESSION, "ses_demo")).toBe(true);
+    expect(storage.removeStored(STORAGE_KEYS.CART)).toBe(true);
+    expect(storage.hasStored(STORAGE_KEYS.CART)).toBe(false);
+    expect(storage.removeStored(STORAGE_KEYS.CART)).toBe(true);
+    const refused = vi.spyOn(store, "removeItem").mockImplementation(() => {
+      throw new DOMException("The drop was refused.", "SecurityError");
+    });
+    expect(() => storage.removeStored(STORAGE_KEYS.SESSION)).not.toThrow();
+    expect(storage.removeStored(STORAGE_KEYS.SESSION)).toBe(false);
+    expect(storage.readStored(STORAGE_KEYS.SESSION, "none")).toBe("ses_demo");
+    refused.mockClear();
+    expect(() => storage.clearStoredKeys()).not.toThrow();
+    expect(storage.clearStoredKeys()).toBe(false);
+    expect(refused).toHaveBeenCalledTimes(2 * Object.keys(STORAGE_KEYS).length);
+    expect(storage.readStored(STORAGE_KEYS.SESSION, "none")).toBe("ses_demo");
   });
 
   it("degrades to its fallbacks where no store can be reached", () => {

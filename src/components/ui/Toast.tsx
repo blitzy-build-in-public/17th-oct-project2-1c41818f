@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Toast.tsx
  * Purpose: Toast viewport and item with a live region and pausable auto-dismiss
- * Lines: 332
+ * Lines: 338
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -22,8 +22,6 @@ import type { ToastKind, ToastMessage } from "@/state/ToastContext";
  * `sp-toast__message`, whose direct child `svg` the sheet sizes; and the dismiss control's `sp-toast__close`.
  * The dismiss control is the button primitive dressed with that class, so the 44px `--touch-target-min`
  * floor `sp-btn--icon` declares decides its target and stays the primitive's business.
- * The sheet's `sp-toast__action` has no consumer here: a queued message carries words and an optional
- * heading and no action, so nothing in this file renders one.
  * The register is never carried by hue alone. The variant class tints the frame, the leading border and the
  * text together, and each message also draws its kind's glyph inside the text row, so a reader who cannot
  * separate the three surfaces can still separate a tick, an exclamation and an "i".
@@ -50,6 +48,15 @@ const KIND_CLASSES: Readonly<Record<ToastKind, string>> = {
  *
  * The role belongs to the message and never to the container: a live region on the viewport would announce
  * the whole column again each time one message joined or left it, so the same words would be read twice.
+ * The message element is the whole live region, inserted together with the words it announces, so what a
+ * screen reader reads is the message and not the column it joins — which is why the viewport must never
+ * carry `aria-live` as well.
+ *
+ * That shape is the one the running page was checked against: its accessibility tree shows the container as
+ * a named `region` with no `aria-live`, and each message as a `status`, an `alert` for a failure. It is what
+ * keeps a message from being announced twice, and the trade-off it takes deliberately is that assistance
+ * which only announces a live region already present when its content changed may not announce the first
+ * message, where a newly inserted `alert` is widely announced and a `status` is not universally.
  */
 const KIND_LIVE_ROLES: Readonly<Record<ToastKind, "alert" | "status">> = {
   success: "status",
@@ -298,11 +305,10 @@ export function ToastViewport({
   const toastApi = useToast();
 
   /*
-   * The queue's dismiss reaches an item through a stable wrapper. Lifting the method out of the context
-   * value would separate it from the object that owns it, and a wrapper rebuilt on every render would change
-   * the handle each item holds — and an item re-arms its countdown when its handle changes, so a second
-   * message arriving would hand the first one a fresh full duration. The ref carries the latest queue into a
-   * wrapper whose identity never changes.
+   * The queue's dismiss reaches an item through a stable wrapper: a wrapper rebuilt on every render would
+   * change the handle each item holds, and an item re-arms its countdown when its handle changes, so a
+   * second message arriving would hand the first one a fresh full duration. The ref carries the latest queue
+   * into a wrapper whose identity never changes.
    */
   const latestApiRef = useRef(toastApi);
   useEffect(() => {

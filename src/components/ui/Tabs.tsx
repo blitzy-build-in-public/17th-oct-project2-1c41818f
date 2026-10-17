@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Tabs.tsx
  * Purpose: Tabs with roving focus, and the accordion used for disclosure sections
- * Lines: 510
+ * Lines: 512
  */
 
 import { useId, useRef, useState } from "react";
@@ -211,11 +211,13 @@ export interface TabsProps {
 /**
  * A set of tabs whose panels share one region of the page.
  *
- * The set is the `tablist`; each tab is a `role="tab"` button that carries `aria-selected`, an id, and
- * `aria-controls` naming the panel it shows; each panel is a `role="tabpanel"` labelled by its tab and
- * focusable, so a keyboard user can reach the content it reveals. Only the selected tab's panel is in the
- * document, and the selection is derived during render from `value` or from the set's own state — never
- * mirrored into state and never synchronised by an effect.
+ * The set is the `tablist`; each tab is a `role="tab"` button that carries `aria-selected` and an id; the
+ * selected tab also carries `aria-controls` naming the panel it shows, and the tabs that are not selected
+ * carry it not at all, because only the selected tab's panel is in the document and a reference to a panel
+ * that is not mounted is an ARIA authoring error. Each panel is a `role="tabpanel"` labelled by its tab
+ * and focusable, so a keyboard user can reach the content it reveals, and the selection is derived during
+ * render from `value` or from the set's own state — never mirrored into state and never synchronised by an
+ * effect.
  *
  * The keyboard model is the one WAI-ARIA describes for tabs: Tab enters the set at the selected tab (its
  * roving `tabIndex` is `0`), ArrowRight and ArrowLeft move along the set and wrap at either end, Home and
@@ -304,7 +306,7 @@ export function Tabs({
               id={tabId}
               className="sp-tabs__tab"
               aria-selected={isSelected}
-              aria-controls={panelId}
+              aria-controls={isSelected ? panelId : undefined}
               tabIndex={isSelected ? 0 : -1}
               disabled={item.disabled === true}
               onClick={() => {

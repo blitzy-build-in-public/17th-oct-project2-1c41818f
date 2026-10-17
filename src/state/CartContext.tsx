@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CartContext.tsx
  * Purpose: Cart lines, promo code, persistence, mini-cart visibility and the clear the checkout dispatches
- * Lines: 373
+ * Lines: 384
  */
 
 import {
@@ -76,7 +76,9 @@ export interface CartActions {
    *
    * The line is built by `createCartLine`, which prices it at the product's current price and copies
    * the stock on hand as its ceiling; a product the cart already holds is merged into its existing
-   * line rather than added beside it, so this is safe to call on every click.
+   * line rather than added beside it, so this is safe to call on every click. A product with nothing
+   * on hand builds no line at all, so the add leaves the cart untouched and the availability the
+   * product surface shows is what tells the shopper there is nothing to buy.
    */
   addItem(product: Product, quantity?: number): void;
   /** Sets one line's quantity. The transition clamps it between one and that line's stock ceiling. */
@@ -97,12 +99,14 @@ export interface CartActions {
    *
    * The cart slice calls this after a catalogue refresh to bring each line's stock ceiling up to
    * date; a line whose product can no longer supply the quantity it holds is clamped down and the
-   * cart renders its availability warning.
+   * cart renders its availability warning, while a line whose product has nothing left on hand is
+   * dropped rather than stored, because no quantity of it could be bought.
    */
   replaceLines(lines: CartLine[]): void;
   /**
-   * Adopts a whole cart — the shape a stored one is read back as — through the reducer's restore
-   * transition, which re-clamps every line against the ceiling it carries.
+   * Adopts a whole cart — the shape a stored one is read back as — through the reducer's `fromCart`
+   * mapping and its restore transition, so every line is re-clamped against the ceiling it carries
+   * and a line whose product can no longer be bought at all is dropped.
    */
   restoreCart(cart: Cart): void;
   /** Opens the mini-cart drawer. */
@@ -228,7 +232,12 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
 
   const addItem = useCallback(
     (product: Product, quantity: number = 1): void => {
-      dispatch(cartActions.add(createCartLine(product, quantity)));
+      const line = createCartLine(product, quantity);
+      // A product with nothing on hand builds no line, so the add changes nothing: the availability
+      // the product surface already shows is what tells the shopper there is nothing to buy.
+      if (line !== null) {
+        dispatch(cartActions.add(line));
+      }
     },
     [dispatch],
   );
@@ -336,9 +345,12 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
  * Reads the cart: its lines, the promo code applied, when it last changed and whether the mini-cart
  * is open.
  *
- * Returns the provider's memoised value, so two components calling this hook while the cart is
- * unchanged receive the same object, and a consumer of the returned `lines` is not re-rendered by
- * the drawer opening or closing.
+ * Returns the provider's memoised value, so every consumer receives the same object while nothing
+ * about the cart changed and an unrelated parent render does not re-render a consumer. The value
+ * carries the drawer flag beside the lines, so opening or closing the drawer does hand consumers a
+ * new value and re-render a component that reads the cart through this hook. What keeps a memoised
+ * child out of that render is receiving `lines` — whose identity does not change with the drawer —
+ * as a prop instead of reading the cart itself.
  *
  * @returns The cart state as `CartView`.
  * @throws When called above every `CartProvider` — an application wiring mistake, not a state a
@@ -370,4 +382,3 @@ export function useCartDispatch(): CartActions {
   }
   return actions;
 }
-

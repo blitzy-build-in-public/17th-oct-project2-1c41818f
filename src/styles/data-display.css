@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays, toasts and tabs and accordion, loaded from src/styles/components.css
- * Lines: 595
+ * Lines: 597
  */
 
 /* ==== Cards and badges ==== */
@@ -66,13 +66,18 @@
 }
 /* The selected card of a set: the heavier accent frame, the raised surface and the bolder title say which
  * one is chosen, and the words the card carries name the choice beside them, so the state never rests on
- * the hue alone. The attribute is the state — `src/components/ui/Card.tsx` writes `aria-selected`. */
-.sp-card[aria-selected="true"] {
+ * the hue alone. The attribute is the state, and which attribute carries it is the element's role:
+ * `src/components/ui/Card.tsx` writes `aria-selected` on the six roles ARIA allows it on — `option`, `row`,
+ * `gridcell`, `tab`, `columnheader` and `rowheader` — and the global `aria-current` on every other element,
+ * so both are selected on here and the frame is painted whichever of the two the role produced. */
+.sp-card[aria-selected="true"],
+.sp-card[aria-current="true"] {
   border-color: var(--color-accent);
   border-width: var(--border-width-thick);
   box-shadow: var(--shadow-2);
 }
-.sp-card[aria-selected="true"] .sp-card__title {
+.sp-card[aria-selected="true"] .sp-card__title,
+.sp-card[aria-current="true"] .sp-card__title {
   color: var(--color-accent-contrast);
   font-weight: var(--font-weight-bold);
 }
@@ -458,10 +463,14 @@
   max-inline-size: var(--tooltip-max-width);
   pointer-events: none;
 }
-/* The viewport is the live region and never takes a click, so only a toast itself is interactive. Entry is
- * the transition from the values the component mounts the item with; auto-dismiss pauses on hover or focus,
- * which is the viewport's timer. The leading border is drawn in the text colour of the variant, so the icon,
- * the words and the rule all say the same thing and the hue is never the only carrier. */
+/* The viewport never takes a click, so only a toast itself is interactive, and it is deliberately not a live
+ * region: each message element carries its own live role — `status` for a note or a confirmation, `alert` for
+ * a failure — so the words a screen reader reads are the message's and not the column's. A live region on the
+ * container as well would read that column again whenever one message joined or left it, announcing every
+ * message twice. Entry is the transition from the values the component mounts the item with; auto-dismiss
+ * pauses on hover or focus, which is the viewport's timer. The leading border is drawn in the text colour of
+ * the variant, so the icon, the words and the rule all say the same thing and the hue is never the only
+ * carrier. */
 .sp-toast {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -488,13 +497,6 @@
   flex: none;
   inline-size: var(--space-5);
   block-size: var(--space-5);
-}
-.sp-toast__action {
-  justify-self: start;
-  color: inherit;
-  font-weight: var(--font-weight-medium);
-  text-decoration-line: underline;
-  cursor: pointer;
 }
 .sp-toast__close {
   display: inline-flex;

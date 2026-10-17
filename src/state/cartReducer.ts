@@ -1,7 +1,7 @@
 /**
  * Path: src/state/cartReducer.ts
  * Purpose: Cart transitions with stock clamping and an exhaustive action union
- * Lines: 480
+ * Lines: 539
  */
 
 import type { Product } from "@/types/catalog";
@@ -148,9 +148,10 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case "cart/add": {
       const lines = mergeCartLine(state.lines, action.line);
-      // A line already holding all the stock there is absorbs the add without changing, so the cart
-      // keeps its reference and the availability warning the cart renders is what tells the shopper
-      // why their click changed nothing.
+      // A line already holding all the stock there is absorbs the add without changing, and a line
+      // nobody can buy is not added at all, so the cart keeps its reference either way and the
+      // availability warning the cart renders is what tells the shopper why their click changed
+      // nothing.
       if (lines === state.lines) {
         return state;
       }
@@ -231,23 +232,32 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
  * The cart line a product is added as.
  *
  * The line's identifier is derived from the product's slug, so a product mints one line id and a
- * second add therefore merges into the first line rather than duplicating it. `maxQuantity` copies
- * the stock on hand and `unitPriceMinor` the price as both stand at the moment of the add: a line is
- * priced when it is created, and a later price change reaches the cart through the next add or
- * through the fresh pricing call, never by this module rewriting a stored amount.
+ * second add therefore merges into the first line rather than duplicating it. `maxQuantity` is the
+ * stock on hand copied as it stands and `unitPriceMinor` the price as both stand at the moment of
+ * the add: a line is priced when it is created, and a later price change reaches the cart through
+ * the next add or through the fresh pricing call, never by this module rewriting a stored amount.
+ *
+ * `null` is the answer for a product with nothing on hand: the ceiling holds nothing purchasable, so
+ * there is no line to build and the availability the product surface shows is what tells the shopper
+ * the product cannot be bought.
  *
  * `at` is the instant the line joined the cart — the clock by default, and supplied by a caller that
  * needs a fixed one, which is how the cart tests assert an `updatedAt` instead of observing it.
+ *
+ * @returns The line, or `null` when the product's stock leaves nothing purchasable.
  */
 export function createCartLine(
   product: Product,
   quantity: number = 1,
   at: IsoDateTimeString = toIsoDateTime(new Date()),
-): CartLine {
+): CartLine | null {
   // A product always carries a slug; falling back to its id keeps a hand-built fixture from making
   // the identifier generator throw over a blank source it cannot read.
   const idSource = product.slug.trim() === "" ? product.id : product.slug;
-  const maxQuantity = maxQuantityOf(product.stockOnHand);
+  const maxQuantity = stockCeilingOf(product.stockOnHand);
+  if (maxQuantity < 1) {
+    return null;
+  }
   return {
     id: cartLineId(idSource),
     productId: product.id,
@@ -265,16 +275,27 @@ export function createCartLine(
 
 /**
  * `quantity` as a whole number a line may hold: between one and the line's stock ceiling, through
- * the shared `clampNumber`.
+ * the shared `clampNumber`, or 0 when the ceiling holds nothing purchasable.
  *
- * The floor is one rather than zero because a line at zero is a removal, and removal has a
- * transition of its own. A quantity that arrived as `NaN`, as a fraction from a stepper, or past the
- * ceiling is settled to something the cart can hold rather than refused: refusing would leave the
- * shopper looking at a quantity they did not ask for either way.
+ * A line's ceiling is at least one, because a line with nothing behind it never exists — a product
+ * with nothing on hand builds no line, an add that could not be bought changes nothing, and a line
+ * whose product has run out is dropped as it is read. 0 is therefore this module's answer for "no
+ * purchasable quantity", never a quantity a line holds, and a caller that receives it drops the line.
+ *
+ * The floor is one rather than zero for a ceiling that has something in it, because a line at zero
+ * is a removal, and removal has a transition of its own. A quantity that arrived as `NaN`, as a
+ * fraction from a stepper, or past the ceiling is settled to something the cart can hold rather than
+ * refused: refusing would leave the shopper looking at a quantity they did not ask for either way.
+ *
+ * @returns The quantity the line may hold, or 0 when the ceiling holds nothing purchasable.
  */
 export function clampLineQuantity(quantity: number, maxQuantity: number): number {
+  const ceiling = stockCeilingOf(maxQuantity);
+  if (ceiling < 1) {
+    return 0;
+  }
   const whole = Number.isFinite(quantity) ? Math.trunc(quantity) : 1;
-  return clampNumber(whole, 1, maxQuantityOf(maxQuantity));
+  return clampNumber(whole, 1, ceiling);
 }
 
 /**
@@ -287,9 +308,15 @@ export function clampLineQuantity(quantity: number, maxQuantity: number): number
  * and stock ceiling follow the product as it stands now, so a repriced or short-stocked product is
  * reflected by the add that noticed it. A merge that changes nothing returns the array it was given,
  * which is how the caller tells that the line already holds all the stock there is.
+ *
+ * A line whose ceiling holds nothing purchasable — the product has nothing left on hand — cannot be
+ * added at all, so the array comes back as it was and the cart therefore keeps its own reference.
  */
 export function mergeCartLine(lines: readonly CartLine[], line: CartLine): readonly CartLine[] {
   const incoming = reclampLine(line);
+  if (incoming === null) {
+    return lines;
+  }
   const current = findLineByProduct(lines, incoming.productId);
   if (current === undefined) {
     return [...lines, incoming];
@@ -314,7 +341,8 @@ export function mergeCartLine(lines: readonly CartLine[], line: CartLine): reado
  *
  * It checks shape and nothing more. A line whose quantity outgrew a lower ceiling is a valid line
  * and is repaired by `reclampLine` when it is read, because discarding a shopper's cart over a stock
- * change they did not cause would be the wrong repair.
+ * change they did not cause would be the wrong repair; a ceiling holding nothing purchasable is no
+ * line at all, which is why `maxQuantity` has to be at least one here.
  */
 export function isCartLine(value: unknown): value is CartLine {
   if (typeof value !== "object" || value === null) {
@@ -375,10 +403,11 @@ export function toCart(state: CartState, currency: CurrencyCode = DEFAULT_CURREN
  * `fromCart(toCart(state))` equals `state` field for field.
  *
  * The two repairs the transitions make are made again here, on the way in from a payload this build
- * did not necessarily write: every line is re-clamped to the stock ceiling it carries, and a blank
- * code settles back to none. `version` is deliberately not read — `src/utils/storage.ts` has already
- * discarded a payload whose version it does not recognise — and neither `version` nor `currency` has
- * a member on the state, which is why `toCart` takes the currency as an argument instead.
+ * did not necessarily write: every line is re-clamped to the stock ceiling it carries, a line whose
+ * product has nothing left to buy is dropped, and a blank code settles back to none. `version` is
+ * deliberately not read — `src/utils/storage.ts` has already discarded a payload whose version it
+ * does not recognise — and neither `version` nor `currency` has a member on the state, which is why
+ * `toCart` takes the currency as an argument instead.
  */
 export function fromCart(cart: Cart): CartState {
   return {
@@ -395,24 +424,54 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled cart action: ${JSON.stringify(value)}`);
 }
 
-/** A stock ceiling as a whole number of at least one; anything unusable counts as one. */
-function maxQuantityOf(value: number): number {
-  return Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : 1;
+/**
+ * A stock count as a line's ceiling: the whole units on hand, and 0 when there is nothing
+ * purchasable to hold.
+ *
+ * The ceiling is the stock copied as it stands rather than floored at one, so a count of 0 says
+ * there is nothing purchasable and never a phantom unit. A count that is not a finite number is
+ * unusable and reads as 0 for the same reason, and a fractional count truncates, so a line never
+ * holds part of a unit.
+ */
+function stockCeilingOf(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
-/** A line with its ceiling and quantity repaired, itself when neither needed repairing. */
-function reclampLine(line: CartLine): CartLine {
-  const maxQuantity = maxQuantityOf(line.maxQuantity);
+/**
+ * A line with its ceiling and quantity repaired, itself when neither needed repairing, and `null`
+ * when the ceiling it carries holds nothing purchasable.
+ *
+ * `null` is how a line that cannot be bought is dropped rather than kept at a quantity of one:
+ * `reclampLines` leaves such a line out of the cart and `mergeCartLine` lets it change nothing.
+ */
+function reclampLine(line: CartLine): CartLine | null {
+  const maxQuantity = stockCeilingOf(line.maxQuantity);
+  if (maxQuantity < 1) {
+    return null;
+  }
   const quantity = clampLineQuantity(line.quantity, maxQuantity);
   return quantity === line.quantity && maxQuantity === line.maxQuantity
     ? line
     : { ...line, quantity, maxQuantity };
 }
 
-/** Every line repaired, with the array that came in kept when no line needed repairing. */
+/**
+ * Every line repaired, with the array that came in kept when no line needed repairing and none was
+ * dropped; a line whose product has nothing left to buy is left out of the cart altogether.
+ */
 function reclampLines(lines: readonly CartLine[]): readonly CartLine[] {
-  const next = lines.map(reclampLine);
-  return next.every((line, index) => line === lines[index]) ? lines : next;
+  const next: CartLine[] = [];
+  let keptEveryLine = true;
+  for (const line of lines) {
+    const repaired = reclampLine(line);
+    if (repaired === null || repaired !== line) {
+      keptEveryLine = false;
+    }
+    if (repaired !== null) {
+      next.push(repaired);
+    }
+  }
+  return keptEveryLine ? lines : next;
 }
 
 /** The code the cart holds: trimmed, and none at all when it is blank. */

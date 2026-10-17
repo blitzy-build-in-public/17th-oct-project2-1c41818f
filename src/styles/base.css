@@ -283,7 +283,7 @@ a:not([class]) {
  * purely visual hide in the product needs:
  *   - the checkout step indicator's "current" and "completed" text;
  *   - the admin sidebar's labels once the sidebar becomes an icon rail;
- *   - the live regions that announce a result count, a page change or a toast;
+ *   - the live regions that announce a result count or a page change;
  *   - the chart components' data-table headers, which name each series.
  * The 1px box with a 50% clip-path is the modern spelling of the technique: the element keeps its
  * place in the accessibility tree and stays focusable, while nothing of it is painted. */
