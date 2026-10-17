@@ -62,7 +62,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   └── taxonomy.ts  # 330 · P4 · Done · 405
 │   ├── utils/
 │   │   ├── format.ts  # 380 · P5 · Pending · —
-│   │   ├── dates.ts  # 350 · P5 · Pending · —
+│   │   ├── dates.ts  # 350 · P5 · Done · 597
 │   │   ├── strings.ts  # 350 · P5 · Done · 541
 │   │   ├── validation.ts  # 440 · P5 · Pending · —
 │   │   ├── collections.ts  # 420 · P5 · Pending · —
@@ -70,7 +70,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── queryParams.ts  # 270 · P6 · Pending · —
 │   │   ├── storage.ts  # 270 · P6 · Done · 288
 │   │   ├── async.ts  # 270 · P6 · Pending · —
-│   │   └── csv.ts  # 250 · P6 · Pending · —
+│   │   └── csv.ts  # 250 · P6 · Done · 273
 │   ├── styles/
 │   │   ├── tokens.css  # 250 · P7 · Pending · —
 │   │   ├── base.css  # 270 · P7 · Pending · —
@@ -114,7 +114,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   │   ├── AppLayout.tsx  # 310 · P15 · Pending · —
 │   │   │   ├── Header.tsx  # 380 · P15 · Pending · —
 │   │   │   ├── Footer.tsx  # 240 · P15 · Pending · —
-│   │   │   ├── AdminSidebar.tsx  # 290 · P15 · Pending · —
+│   │   │   ├── AdminSidebar.tsx  # 290 · P15 · Done · 165
 │   │   │   └── PageHeader.tsx  # 200 · P15 · Pending · —
 │   │   ├── ui/
 │   │   │   ├── Button.tsx  # 360 · P16 · Pending · —
@@ -321,6 +321,8 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 | `src/constants/content.ts` | 400 | 596 | +196 (+49.0%) | the file's specified surface is 71 exported members — the copy group for every surface the plan names (identity, page titles, navigation, home, catalogue and product detail, search and filters, cart, checkout, account, admin and reports, empty and error states, accessibility labels) plus the parameterised builders that keep every threshold, money amount and date out of the sentences and the shared pluraliser so no message writes its own plural — each member carrying the documentation §0.12.2 requires; no line is padding, no required capability was cut, and 596 lines stays 4 lines inside the 600-line ceiling, with the overrun taken from the remainder; the free-delivery copy names no delivery service, because which method is free belongs to `SHIPPING_METHODS` and `FREE_SHIPPING_METHOD_ID` in `src/constants/config.ts` and the copy takes the formatted threshold from its caller |
 | `src/state/checkoutReducer.ts` | 350 | 542 | +192 (+54.9%) | the specified surface is 19 exported members — the step union with its two ordered constants, the three value groups with their patch types, the state and its factory, the 11-member action union with its creators, the reducer and the five shared step helpers — plus the seven private helpers the guards, the patch merge and the touched-field error clearing need, every export carrying the purpose-and-invariant documentation §0.12.2 requires (no cart lines in this state, the single-submission guard, the idempotency key retained across a failure so a retry replays, the demonstration card blanked on success and on reset, and the two terminal ends of the step graph); the alternative was to keep two request-assembly converters the plan places with the caller, which were dropped rather than spending lines on them, no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 58 lines inside the 600-line ceiling |
 | `src/constants/taxonomy.ts` | 330 | 405 | +75 (+22.7%) | the file's specified surface is 11 exported vocabularies — the 5 badge variants, the 20 categories (8 parents in showcase order, 12 children), the 12 brands, the 6 sort keys, the 7 order statuses with their badge variants, the 5 facet definitions carrying 9 option records (five contiguous price bands in minor units, three rating floors, the availability toggle), the 3 report definitions carrying 18 typed report columns, the 3 granularities, the 2 baselines, the promo-kind labels and the 5 countries with their postal patterns — each carrying the purpose-and-consumer documentation §0.12.2 requires; 7 of the 18 report columns cannot fit one line inside Prettier's 100-character width because all six declared `ReportColumn` fields are required, so each wraps to a block, and no line is padding, no required capability was cut and no vocabulary literal was shortened to reach the budget; the overrun is taken from the remainder and the file stays 195 lines inside the 600-line ceiling |
+| `src/components/layout/AdminSidebar.tsx` | 290 | 165 | -125 (-43.1%) | the file is a navigation landmark with no behaviour to compute: the `<aside>`, its heading, the `<nav>` it names, the two data-driven `NavLink` items and the storefront return link are its whole surface, and the router applies `aria-current="page"` itself, so the state, the route guard and the repeated markup the plan places elsewhere are deliberately absent; the 125 unused lines return to the remainder and nothing the file's specification requires is missing |
+| `src/utils/dates.ts` | 350 | 597 | +247 (+70.6%) | the file's specified surface is 43 exported members — the six parse-and-emit helpers, the six display formatters with their cached `Intl` formatters, the sixteen range-arithmetic helpers, the bucketing group (`bucketKey`, `bucketStart`, `bucketEnd`, `eachBucket`, `bucketCount`), the six range-and-baseline helpers, and the validator with its typed problems and `toFieldErrors` adapter — plus the nine local types the plan's `src/types` modules do not carry and the 20 private helpers the local-time parsing, ISO week maths and bounded bucket walk need, each public member carrying the purpose, parameter, return and assumption documentation §0.12.2 requires; three deliberate reductions kept it inside the ceiling rather than over it: the doc blocks are written at one or two lines each, `sortByIsoAsc`/`sortByIsoDesc` became the single `sortByIso(items, select, direction)` comparator factory the plan allows as their alternative (one ordering implementation, invalid values last either way), and the internal local-date parser is one function whose round trip rejects impossible days; no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 3 lines inside the 600-line ceiling |
 
 Remainder carried forward at Phase 0: **+111 lines** freed for files not yet generated (-19 - 18 - 4 - 39 - 35 - 8 + 12), pending the four provisional counts above, which are replaced with final figures when their phases complete. `README.md` is not listed: the two lines at that path are a setup placeholder rather than the 310-line phase-39 deliverable, so no deviation is recorded against its budget. The repository is otherwise empty of the plan's content, so the remaining 150 counted files have no actual count yet.
 
