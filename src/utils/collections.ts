@@ -460,7 +460,7 @@ export function pageCountFor(total: number, pageSize: PageSize): number {
 /**
  * Confines a requested `page` to the pages that exist, so a query parameter or a back button naming a page
  * outside the range lands on a page holding results rather than on an empty view: a page before the first
- * becomes `1`, one past the last becomes the last, and a fractional or non-finite page is read as the first.
+ * becomes `1`, one past the last becomes the last, a fractional page truncates, and a non-finite one is `1`.
  */
 export function clampPage(page: number, pageCount: number): number {
   const lastPage = Number.isFinite(pageCount) && pageCount >= 1 ? Math.floor(pageCount) : 1;

@@ -111,10 +111,10 @@ export type FieldErrors = Record<string, string>;
  * table and pagination control.
  *
  * `page` is 1-based, `pageSize` is one of the configured sizes in `src/constants/config.ts`
- * (12, 24 or 48), and `pageCount` is `Math.ceil(total / pageSize)`, or 0 when there is nothing to
- * page. `hasNext` and `hasPrevious` are derived from the first two by the service that builds the
- * page, so a consumer reads them instead of recomputing them and two surfaces cannot disagree
- * about whether a next page exists.
+ * (12, 24 or 48), and `pageCount` is how many pages the collection fills at that size, never below
+ * `1` — an empty collection is one empty page, and `total` is what reports nothing to show. `hasNext`
+ * and `hasPrevious` follow from those two, derived by the service that builds the page, so a consumer
+ * reads them instead of recomputing them, and no two surfaces can disagree about a next page.
  */
 export interface PageResult<TItem> {
   readonly items: TItem[];
