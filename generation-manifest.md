@@ -1,7 +1,7 @@
 <!--
 Path: generation-manifest.md
 Purpose: The authoritative build manifest: tree, budgets, actual counts, phase schedule, cumulative total and status ledger — the one file excluded from the 50,000, written in Phase 0 before any of the above.
-Lines: 367
+Lines: 368
 -->
 
 # SalesPro — generation manifest
@@ -61,7 +61,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── content.ts  # 400 · P4 · Done · 596
 │   │   └── taxonomy.ts  # 330 · P4 · Done · 405
 │   ├── utils/
-│   │   ├── format.ts  # 380 · P5 · Pending · —
+│   │   ├── format.ts  # 380 · P5 · Done · 583
 │   │   ├── dates.ts  # 350 · P5 · Done · 597
 │   │   ├── strings.ts  # 350 · P5 · Done · 541
 │   │   ├── validation.ts  # 440 · P5 · Pending · —
@@ -324,6 +324,7 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 | `src/components/layout/AdminSidebar.tsx` | 290 | 165 | -125 (-43.1%) | the file is a navigation landmark with no behaviour to compute: the `<aside>`, its heading, the `<nav>` it names, the two data-driven `NavLink` items and the storefront return link are its whole surface, and the router applies `aria-current="page"` itself, so the state, the route guard and the repeated markup the plan places elsewhere are deliberately absent; the 125 unused lines return to the remainder and nothing the file's specification requires is missing |
 | `src/utils/dates.ts` | 350 | 597 | +247 (+70.6%) | the file's specified surface is 43 exported members — the six parse-and-emit helpers, the six display formatters with their cached `Intl` formatters, the sixteen range-arithmetic helpers, the bucketing group (`bucketKey`, `bucketStart`, `bucketEnd`, `eachBucket`, `bucketCount`), the six range-and-baseline helpers, and the validator with its typed problems and `toFieldErrors` adapter — plus the nine local types the plan's `src/types` modules do not carry and the 20 private helpers the local-time parsing, ISO week maths and bounded bucket walk need, each public member carrying the purpose, parameter, return and assumption documentation §0.12.2 requires; three deliberate reductions kept it inside the ceiling rather than over it: the doc blocks are written at one or two lines each, `sortByIsoAsc`/`sortByIsoDesc` became the single `sortByIso(items, select, direction)` comparator factory the plan allows as their alternative (one ordering implementation, invalid values last either way), and the internal local-date parser is one function whose round trip rejects impossible days; no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 3 lines inside the 600-line ceiling |
 | `src/features/home/HeroSection.tsx` | 270 | 197 | -73 (-27.0%) | the section is deliberately small and stays so: the landing hero's eyebrow, the route's single `h1`, the supporting paragraph and the two call-to-action `Link`s, a decorative inline SVG illustration and the trust strip mapped from the three `HOME_COPY` claims, with every coordinate of the drawing carried as path geometry instead of a design value and the class contract stated once in a comment rather than repeated per element; no line is padding and no required behaviour was cut, and the landing page's other bands (featured products, category showcase, promotional banner) belong to sibling files, so the 73 unused lines return to the remainder |
+| `src/utils/format.ts` | 380 | 583 | +203 (+53.4%) | the file's specified surface is 25 exported functions plus 2 placeholder constants and 7 exported types — the single rounding rule with its two conversion helpers, the five money formatters (display, compact, the form-field round trip, the parser and the free-shipping remainder), the five number formatters, the five percentage and change formatters, the five domain display values (rating value and its parts, review count, discount, availability) and the two report-cell dispatches — each carrying the purpose, parameter, return and edge-input documentation §0.12.2 requires, on top of the boundary note stating which sibling owns dates, text helpers, CSV escaping and every sentence; the rounding rule, the minor/major factor of 100 and the cached `Intl` formatters each exist once, every import is on the dependency whitelist and every exported member has a named consumer, so no line is padding and no required capability was cut; the overrun is taken from the remainder and the file stays 17 lines inside the 600-line ceiling |
 
 Remainder carried forward at Phase 0: **+111 lines** freed for files not yet generated (-19 - 18 - 4 - 39 - 35 - 8 + 12), pending the four provisional counts above, which are replaced with final figures when their phases complete. `README.md` is not listed: the two lines at that path are a setup placeholder rather than the 310-line phase-39 deliverable, so no deviation is recorded against its budget. The repository is otherwise empty of the plan's content, so the remaining 150 counted files have no actual count yet.
 
