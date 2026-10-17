@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CatalogContext.tsx
  * Purpose: Loaded catalogue page, facets and status, plus the URL-derived filter state and its setter
- * Lines: 411
+ * Lines: 421
  */
 
 import {

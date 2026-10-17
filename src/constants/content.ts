@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 606
+ * Lines: 623
  */
 
 import type { LoyaltyTier } from "@/types/account";
