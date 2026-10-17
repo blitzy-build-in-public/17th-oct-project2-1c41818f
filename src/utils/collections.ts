@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/collections.ts
- * Purpose: Grouping, sorting, uniqueness, chunking, indexing and pagination helpers for collections.
+ * Purpose: Grouping, sorting, uniqueness, chunking, indexing and pagination helpers for collections
  * Lines: 544
  */
 

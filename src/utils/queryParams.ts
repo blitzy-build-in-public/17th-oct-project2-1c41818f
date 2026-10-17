@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/queryParams.ts
- * Purpose: Reads and writes filter, sort and page state to the URL, normalising defaults away.
+ * Purpose: Reads and writes filter, sort and page state to the URL, normalising defaults away
  * Lines: 587
  */
 

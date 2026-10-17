@@ -1,7 +1,7 @@
 /**
  * Path: src/data/customers.ts
  * Purpose: The seeded customer base of 40 accounts including 2 administrators, with profiles, digests and addresses
- * Lines: 382
+ * Lines: 433
  */
 
 import { DEMO_ACCOUNTS } from "@/constants/config";
@@ -9,7 +9,7 @@ import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { DATA_SEED, createSeededRandom, type SeededRandom } from "@/data/products";
 import type { Address, CredentialDigest, Customer, LoyaltyTier, Role } from "@/types/account";
 import type { IsoDateString, IsoDateTimeString } from "@/types/common";
-import { addDays, toIsoDate } from "@/utils/dates";
+import { addDays, parseIso, toIsoDate, toIsoDateTime } from "@/utils/dates";
 import { addressId, createCredentialDigest, createSalt, customerId } from "@/utils/strings";
 
 // Deterministic stream ---------------------------------------------------------------------------
@@ -108,18 +108,53 @@ interface CountryAddressPool {
 }
 
 const COUNTRY_ADDRESS_POOLS: Readonly<Record<CountryCode, CountryAddressPool>> = {
-  US: { postalMould: "#####", places: [["Portland", "OR"], ["Austin", "TX"], ["Boston", "MA"]] },
-  CA: { postalMould: "A#A #A#", places: [["Toronto", "ON"], ["Vancouver", "BC"]] },
-  GB: { postalMould: "AA# #AA", places: [["London", "Greater London"], ["Bristol", "South West"]] },
-  AU: { postalMould: "####", places: [["Sydney", "NSW"], ["Melbourne", "VIC"]] },
-  DE: { postalMould: "#####", places: [["Berlin", "Berlin"], ["Munich", "Bavaria"]] },
+  US: {
+    postalMould: "#####",
+    places: [
+      ["Portland", "OR"],
+      ["Austin", "TX"],
+      ["Boston", "MA"],
+    ],
+  },
+  CA: {
+    postalMould: "A#A #A#",
+    places: [
+      ["Toronto", "ON"],
+      ["Vancouver", "BC"],
+    ],
+  },
+  GB: {
+    postalMould: "AA# #AA",
+    places: [
+      ["London", "Greater London"],
+      ["Bristol", "South West"],
+    ],
+  },
+  AU: {
+    postalMould: "####",
+    places: [
+      ["Sydney", "NSW"],
+      ["Melbourne", "VIC"],
+    ],
+  },
+  DE: {
+    postalMould: "#####",
+    places: [
+      ["Berlin", "Berlin"],
+      ["Munich", "Bavaria"],
+    ],
+  },
 };
 
 /** The dialling prefix each country's addresses record a phone number under, the characters a mould's
  *  letter placeholder is filled from, and the street names a first address line is written on — one
  *  pool for every country, because a street name is not what a postal rule judges. */
 const COUNTRY_DIAL_CODES: Readonly<Record<CountryCode, string>> = {
-  US: "+1", CA: "+1", GB: "+44", AU: "+61", DE: "+49",
+  US: "+1",
+  CA: "+1",
+  GB: "+44",
+  AU: "+61",
+  DE: "+49",
 };
 const POSTAL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const STREET_NAMES = (
@@ -211,14 +246,18 @@ export function buildAddress(input: AddressSeedInput): Address {
   const pool = COUNTRY_ADDRESS_POOLS[country.code];
   const [city, region] = input.random.pick(pool.places);
   return {
-    id: addressId(`${input.owner} ${input.label}`), label: input.label, fullName: input.fullName,
+    id: addressId(`${input.owner} ${input.label}`),
+    label: input.label,
+    fullName: input.fullName,
     line1:
-      `${input.random.int(HOUSE_NUMBER_MIN, HOUSE_NUMBER_MAX)} ` +
-      input.random.pick(STREET_NAMES),
+      `${input.random.int(HOUSE_NUMBER_MIN, HOUSE_NUMBER_MAX)} ` + input.random.pick(STREET_NAMES),
     line2: input.random.chance(SECOND_LINE_CHANCE)
       ? `${UNIT_LABEL} ${input.random.int(1, UNIT_NUMBER_MAX)}`
       : "",
-    city, region, country: country.code, postalCode: postalCodeFor(pool.postalMould, input.random),
+    city,
+    region,
+    country: country.code,
+    postalCode: postalCodeFor(pool.postalMould, input.random),
     phone: input.phone ?? phoneFor(country.code, input.random),
     isDefaultShipping: input.isDefaultShipping ?? false,
     isDefaultBilling: input.isDefaultBilling ?? false,
@@ -259,9 +298,10 @@ function planCustomer(index: number, taken: ReadonlySet<string>, rand: SeededRan
 /** A day and time inside the window `day` bounds: only the day comes from the clock, and only once per
  *  build, so two builds on the same day are identical. */
 function timestampOn(day: IsoDateString, rand: SeededRandom): IsoDateTimeString {
-  const hour = String(rand.int(7, 21)).padStart(2, "0");
-  const minute = String(rand.int(0, 59)).padStart(2, "0");
-  return `${day}T${hour}:${minute}:00`;
+  const at = parseIso(day);
+  if (at === null) throw new TypeError(`timestampOn requires an ISO day; received "${day}"`);
+  at.setHours(rand.int(7, 21), rand.int(0, 59), 0, 0);
+  return toIsoDateTime(at);
 }
 
 /** The salted digest a seeded account stores for the shared demonstration password.
@@ -287,9 +327,13 @@ function buildAddressBook(plan: CustomerPlan, rand: SeededRandom): readonly Addr
   return labels.map((label, position) => {
     const home = position === 0 || !rand.chance(FOREIGN_ADDRESS_CHANCE);
     return buildAddress({
-      owner: plan.email, label, fullName, random: rand,
+      owner: plan.email,
+      label,
+      fullName,
+      random: rand,
       countryCode: home ? undefined : rand.pick(SUPPORTED_COUNTRIES).code,
-      isDefaultShipping: position === 0, isDefaultBilling: position === lastPosition,
+      isDefaultShipping: position === 0,
+      isDefaultBilling: position === lastPosition,
     });
   });
 }
@@ -339,8 +383,12 @@ export function buildCustomerSeed(): CustomerSeed {
     const book = buildAddressBook(plan, rand);
     addresses.push(...book);
     customers.push({
-      id: customerId(plan.email), email: plan.email, firstName: plan.firstName,
-      lastName: plan.lastName, phone: book[0].phone, role: plan.role,
+      id: customerId(plan.email),
+      email: plan.email,
+      firstName: plan.firstName,
+      lastName: plan.lastName,
+      phone: book[0].phone,
+      role: plan.role,
       createdAt: timestampOn(
         addDays(anchorDay, -rand.int(ACCOUNT_AGE_MIN_DAYS, ACCOUNT_AGE_MAX_DAYS)),
         rand,
@@ -355,13 +403,16 @@ export function buildCustomerSeed(): CustomerSeed {
     });
   }
   if (customers.filter((entry) => entry.role === "admin").length !== ADMIN_TOTAL) {
-    throw new Error("The seeded accounts hold a number of administrators other than the configured one.");
+    throw new Error(
+      "The seeded accounts hold a number of administrators other than the configured one.",
+    );
   }
   if (new Set(addresses.map((entry) => entry.id)).size !== addresses.length) {
     throw new Error("Two seeded addresses share an identifier.");
   }
   return {
-    customers, addresses,
+    customers,
+    addresses,
     credentials: customers.map((customer) => ({ customer, digest: digestFor(customer.email) })),
   };
 }

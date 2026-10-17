@@ -1,14 +1,14 @@
 /**
  * Path: src/lib/apiClient.ts
  * Purpose: The single transport seam: one typed request function with latency, abort, error shaping and a test double
- * Lines: 336
+ * Lines: 341
  */
 
 import { FEEDBACK_COPY } from "@/constants/content";
 import type { ApiError, ApiRequestOptions, HttpMethod, QueryParams, Result } from "@/types/common";
-import { createAbortError, isAbortError } from "@/utils/async";
+import { createAbortError, delay, isAbortError } from "@/utils/async";
 
-import { handleRequest, resetMockServer } from "@/lib/mockServer";
+import { getApiLatencyMs, handleRequest, resetMockServer } from "@/lib/mockServer";
 
 // The transport's own failures --------------------------------------------------------------------
 
@@ -203,11 +203,15 @@ export function toApiError(cause: unknown, path: string): ApiError {
  * has already aborted, which is answered with `request-aborted` (`499`). A caller treats that code as
  * a superseded request and renders no error, because the newer request owns the state from there.
  *
- * Three things deliberately do not live here: the response delay, which belongs to the seam and is
- * applied there once, so that nothing applies it twice; the domain rules of filtering, faceting,
- * searching, pricing, ordering, aggregation and reporting, each of which has one home in a service of
- * this folder; and any queue, retry or cache, because a caller that needs to supersede a request
- * cancels it through the abort signal, and the views bound how many requests they keep in flight.
+ * The configured simulator latency is waited out here, once, from the value the seam publishes, before
+ * the seam is asked for an answer. A request cancelled while that wait is pending resolves to
+ * `request-aborted` (`499`) like any other supersession and never rejects, because the wait's abort
+ * error is shaped back into a value by the catch below.
+ *
+ * Two things deliberately do not live here: the domain rules of filtering, faceting, searching,
+ * pricing, ordering, aggregation and reporting, each of which has one home in a service of this folder;
+ * and any queue, retry or cache, because a caller that needs to supersede a request cancels it through
+ * the abort signal, and the views bound how many requests they keep in flight.
  *
  * @param path - The request path, with or without a query string of its own.
  * @param options - The method, query, body, session token and abort signal. `method` defaults to
@@ -222,6 +226,7 @@ export async function request<TValue>(
   const { signal } = options;
   if (signal?.aborted === true) return refuse(toApiError(createAbortError(), path));
   try {
+    await delay(getApiLatencyMs(), signal);
     const settled: unknown = await handleRequest<TValue>(
       resolveRequestTarget(path, options.query),
       dispatcherOptions(options),

@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRequests.ts
  * Purpose: Reads a request for the in-process API: the members a query carries, the vocabularies they are validated against and the refusals they produce
- * Lines: 595
+ * Lines: 599
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -27,6 +27,7 @@ import type * as Commerce from "@/types/commerce";
 import type * as Common from "@/types/common";
 import { clampNumber, normalisePageSize } from "@/utils/collections";
 import { toFieldErrors, validateDateRange, type DateRangeErrorCode } from "@/utils/dates";
+import { isValidIso } from "@/utils/dates";
 import {
   FORM_ERROR_KEY,
   firstError,
@@ -197,7 +198,8 @@ export function splitRequest(
 ): { readonly pathname: string; readonly query: QueryRecord } {
   const separator = path.indexOf("?");
   const pathname = separator === -1 ? path : path.slice(0, separator);
-  const merged: Record<string, unknown> = {};
+  // Prototype-less, so a caller's `__proto__` member reaches no setter and no reader sees it.
+  const merged = Object.create(null) as Record<string, unknown>;
   if (separator !== -1) {
     for (const [key, value] of new URLSearchParams(path.slice(separator + 1))) {
       const existing = merged[key];
@@ -348,9 +350,9 @@ export function readOrderHistory(
 ): Common.Result<CustomerOrderQuery> {
   const status = readVocabulary(query, "status", ORDER_STATUSES);
   if (status === null) return fieldProblem("status");
-  const window = readOptionalRange(query);
-  if (!window.ok) return window;
-  return ok({ ...readPaging(query), customerId, status, ...window.value });
+  const range = readOptionalRange(query);
+  if (!range.ok) return range;
+  return ok({ ...readPaging(query), customerId, status, ...range.value });
 }
 
 /** The range and cut a KPI request carries, with the comparison baseline it names rather than implies. */
@@ -514,6 +516,8 @@ function readLine(value: unknown): Commerce.CartLine | undefined {
     addedAt !== undefined &&
     unitPriceMinor !== undefined;
   if (!identified || quantity === undefined || maxQuantity === undefined) return undefined;
+  // The instant is judged by the cart guard's own ISO rule, so an unusable one is refused here.
+  if (!isValidIso(addedAt)) return undefined;
   if (quantity < 1 || maxQuantity < 1) return undefined;
   return {
     id: id as Common.LineId,

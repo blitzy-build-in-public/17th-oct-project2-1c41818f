@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Button.tsx
  * Purpose: Button, icon button and button group with their variants, sizes, loading and disabled states
- * Lines: 454
+ * Lines: 459
  */
 
 import { useId } from "react";
@@ -157,11 +157,14 @@ interface ButtonCoreProps extends ComponentPropsWithRef<"button"> {
  * it by accident, while an explicit `type="submit"` still reaches the element. `ref` is an ordinary prop in
  * React 19, so the caller's ref arrives through the rest props and no `forwardRef` is used.
  *
- * While `isLoading` the control is disabled and carries `aria-busy="true"`, its visible label stays in the
- * box, the spinner takes the leading slot, and its accessible name is pinned to the label element so the
- * word rendered for assistive technology beside it does not change the name a user hears. A caller's own
- * `aria-label` or `aria-labelledby` is left to do its work instead, because a control that already names
- * itself must not be renamed by this component.
+ * While `isLoading` the control is disabled and carries `aria-busy="true"`, its label element stays in the
+ * box, the spinner takes the leading slot, and its accessible name is pinned to that label element, so the
+ * word rendered for assistive technology beside it does not change the name a user hears. The name is
+ * pinned only when the caller supplied no name of its own and the control renders a label element at all:
+ * an icon-only control renders none, so it is named by the `aria-label` it requires instead. A caller's own
+ * `aria-label`, `aria-labelledby` or `aria-busy` reaches the element untouched while the control is idle,
+ * because an attribute this component has nothing to say about is left out of the element rather than
+ * written as `undefined` over the caller's value.
  *
  * @param props - The resolved variant, size, flags, icon slots, label and the remaining button attributes.
  * @returns The rendered button element.
@@ -236,8 +239,10 @@ function ButtonCore({
       type={type}
       className={classes}
       disabled={isLoading || disabled === true}
-      aria-busy={isLoading ? true : undefined}
-      aria-labelledby={isLoading && !hasCallerSuppliedName ? labelId : undefined}
+      {...(isLoading ? { "aria-busy": true } : {})}
+      {...(isLoading && !hasCallerSuppliedName && !isIconOnly
+        ? { "aria-labelledby": labelId }
+        : {})}
     >
       {leading}
       {label}
@@ -407,8 +412,8 @@ export interface ButtonGroupProps {
   readonly children: ReactNode;
   /**
    * Names the group for assistive technology, so a screen reader announces what the controls belong to —
-   * "Sort order", "Date range". Omit it when the surrounding heading already says it; an empty string is
-   * treated as no name rather than as an unnamed group.
+   * "Sort order", "Date range". Omit it when the surrounding heading already says it; a label that
+   * is empty or only whitespace is treated as no name, so no group is ever named by spaces.
    */
   readonly label?: string;
   /** The axis the controls are arranged along. Defaults to `"horizontal"`. */
@@ -444,7 +449,7 @@ export function ButtonGroup({
     align === undefined ? undefined : GROUP_ALIGN_CLASSES[align],
     className,
   );
-  const accessibleLabel = label !== undefined && label.length > 0 ? label : undefined;
+  const accessibleLabel = label !== undefined && label.trim().length > 0 ? label : undefined;
 
   return (
     <div className={classes} role="group" aria-label={accessibleLabel}>

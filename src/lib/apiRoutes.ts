@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 597
+ * Lines: 600
  */
 
 import {
@@ -84,7 +84,7 @@ import {
   readLimit,
 } from "@/lib/apiRequests";
 
-// The route table ---// The route table --------------------------------------------------------------------------------
+// The route table --------------------------------------------------------------------------------
 
 /** Declares one route, so {@link RouteId} can be derived from the literal ids the table carries. */
 function route<TId extends string>(
@@ -172,9 +172,8 @@ function orderFingerprint(request: OrderCreationRequest): string {
 }
 // Reading what a path names ----------------------------------------------------------------------
 
-/** The acting session of a route the dispatcher has already authorised: the one assertion this file
- * makes, and the reason a `customer` or `administrator` handler reads the session without a second
- * presence check — a request without a usable one never reaches a handler. */
+/** The acting session of an authorised route: the one assertion a `customer` or `administrator` handler
+ * relies on — a handler on an anonymous route checks the dispatcher's refusal first. */
 function sessionOf(context: RouteContext): Account.Session {
   return context.session as Account.Session;
 }
@@ -379,12 +378,16 @@ function listOrders(context: RouteContext): Common.Result<unknown> {
   return query.ok ? ok(context.source.listOrders(query.value)) : query;
 }
 
+/** An order that names no account is answered to whoever holds its identifier; a foreign id is `404`,
+ * never `403`; the level admits a session-less caller, which is all a guest's confirmation carries. */
 function getOrder(context: RouteContext): Common.Result<unknown> {
-  const session = sessionOf(context);
   const order = context.source.getOrder(context.params.id as Common.OrderId);
+  if (order !== undefined && order.customerId === null) return ok(order);
+  if (context.sessionProblem !== null) return { ok: false, error: context.sessionProblem };
   if (order === undefined) return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
-  const owned = session.role === "admin" || order.customerId === session.customerId;
-  return owned ? ok(order) : missing(API_ERROR_CODES.ORDER_NOT_FOUND);
+  const session = sessionOf(context);
+  if (session.role === "admin" || order.customerId === session.customerId) return ok(order);
+  return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
 }
 
 function registerCustomer(context: RouteContext): Common.Result<unknown> {
@@ -546,7 +549,7 @@ const ROUTES = [
   route("shipping.list", "GET", "/api/shipping-methods", "anonymous", listShippingMethods),
   route("orders.create", "POST", "/api/orders", "anonymous", createOrder),
   route("orders.list", "GET", "/api/orders", "customer", listOrders),
-  route("orders.detail", "GET", "/api/orders/:id", "customer", getOrder),
+  route("orders.detail", "GET", "/api/orders/:id", "anonymous", getOrder),
   route("auth.register", "POST", "/api/auth/register", "anonymous", registerCustomer),
   route("auth.login", "POST", "/api/auth/login", "anonymous", signIn),
   route("auth.logout", "POST", "/api/auth/logout", "anonymous", signOut),

@@ -1,7 +1,7 @@
 /**
  * Path: src/state/checkoutReducer.ts
  * Purpose: Checkout step transitions, validation errors, submission and success
- * Lines: 538
+ * Lines: 574
  */
 
 import { hasErrors } from "@/utils/validation";
@@ -243,7 +243,12 @@ export type CheckoutAction =
  * dependency list without its identity changing between renders.
  */
 export const checkoutActions = {
-  /** Moves to a step directly, as the step indicator's earlier steps do. */
+  /**
+   * Returns to a step already completed, as the step indicator's earlier form steps do, keeping
+   * every group of values as it was entered. Forward movement is `next`, which the checkout context
+   * gates on `canAdvanceFrom` after the step's validators have run, and the confirmation cannot be
+   * left, because the only thing waiting there is a second submission of the order already placed.
+   */
   setStep: (step: CheckoutStep): CheckoutAction => ({ type: "checkout/set-step", step }),
   next: (): CheckoutAction => ({ type: "checkout/next" }),
   back: (): CheckoutAction => ({ type: "checkout/back" }),
@@ -289,7 +294,11 @@ export const checkoutActions = {
 export function checkoutReducer(state: CheckoutState, action: CheckoutAction): CheckoutState {
   switch (action.type) {
     case "checkout/set-step": {
-      return action.step === state.step ? state : { ...state, step: action.step };
+      // The direct move is the step indicator's return path to an earlier form step. Anything else
+      // returns the state itself rather than jumping into a step whose validation never ran, or
+      // back into the flow from a placed order: forward movement is `next`, which the checkout
+      // context has already gated on `canAdvanceFrom` by the time it is dispatched.
+      return isReturnStep(state.step, action.step) ? { ...state, step: action.step } : state;
     }
 
     case "checkout/next": {
@@ -433,6 +442,21 @@ export function canAdvanceFrom(step: CheckoutStep, errors: FieldErrors): boolean
 
 // Internal helpers ------------------------------------------------------------------------------
 
+/**
+ * Whether a direct move from `from` to `to` is the return transition the step indicator takes: both
+ * ends must be steps that own a form — so the confirmation, which is reached by a submission and
+ * left by nothing, is excluded at both ends — and the target must sit earlier in the sequence than
+ * the current step. Every other pair is refused by the caller, which is what keeps a forward jump
+ * and a move out of a placed order out of the flow rather than in whichever component dispatches it.
+ */
+function isReturnStep(from: CheckoutStep, to: CheckoutStep): boolean {
+  return (
+    CHECKOUT_FORM_STEPS.some((formStep) => formStep === from) &&
+    CHECKOUT_FORM_STEPS.some((formStep) => formStep === to) &&
+    stepIndex(to) < stepIndex(from)
+  );
+}
+
 /** Proof at compile time that every action was handled: a new member fails to type-check here. */
 function assertNever(value: never): never {
   throw new Error(`Unhandled checkout action: ${JSON.stringify(value)}`);
@@ -456,11 +480,13 @@ function mergeGroup<TGroup extends object>(
 }
 
 /**
- * The values with a patch applied and the error of every field it touched cleared; a patch that
- * names no field changes nothing.
+ * The values with a patch applied and the error of every field it touched cleared. What the patch
+ * touches is {@link touchedFields}' answer, read once here: a patch that names no field — `{}`, or
+ * a group with no key inside it — changes nothing and comes back as the state it was handed.
  */
 function applyValuesPatch(state: CheckoutState, patch: CheckoutValuesPatch): CheckoutState {
-  if (Object.keys(patch).length === 0) {
+  const touched = touchedFields(patch);
+  if (touched.size === 0) {
     return state;
   }
   const { contact, shipping, payment } = patch;
@@ -477,7 +503,33 @@ function applyValuesPatch(state: CheckoutState, patch: CheckoutValuesPatch): Che
             billing: mergeGroup(state.values.shipping.billing, billing),
           },
   };
-  return { ...state, values, errors: clearErrorsFor(state.errors, patch) };
+  return { ...state, values, errors: clearErrorsFor(state.errors, touched) };
+}
+
+/**
+ * The field names a patch carries: for every field it names in `contact`, `payment` and `shipping`
+ * — the shipping group's billing patch included, under the group name it is patched by — the bare
+ * member name and the name qualified by the group it sits in. Empty exactly when the patch names no
+ * field, which is the one answer both the values merge above and the error clearing below read, so a
+ * patch like `{ shipping: {} }` cannot mean one thing to one of them and another to the other.
+ */
+function touchedFields(patch: CheckoutValuesPatch): ReadonlySet<string> {
+  const touched = new Set<string>();
+  const addKeys = (group: string, fields: object): void => {
+    for (const name of Object.keys(fields)) {
+      touched.add(name);
+      touched.add(`${group}.${name}`);
+    }
+  };
+  addKeys("contact", patch.contact ?? {});
+  const shipping = patch.shipping;
+  if (shipping !== undefined) {
+    const { billing, ...shippingFields } = shipping;
+    addKeys("shipping", shippingFields);
+    addKeys("billing", billing ?? {});
+  }
+  addKeys("payment", patch.payment ?? {});
+  return touched;
 }
 
 /**
@@ -498,33 +550,17 @@ function withFailureErrors(
 }
 
 /**
- * The error map with the error of every field the patch touches removed and every other error left
+ * The error map with the error of every field the patch named removed and every other error left
  * where it was: a shopper who has just typed into a field must not be left reading the complaint
  * about the value they replaced.
  *
- * A field is cleared under both spellings a validator might key it by — the bare member name, and
- * the name qualified by the group it sits in — while a field the patch does not name keeps its
- * error, so correcting one control cannot silence the complaint about another.
+ * `touched` is the set {@link touchedFields} read from the patch. A field is cleared under both
+ * spellings a validator might key it by — the bare member name, and the name qualified by the group
+ * it sits in — while a field the patch does not name keeps its error, so correcting one control
+ * cannot silence the complaint about another. An error map from which nothing was cleared keeps its
+ * own reference.
  */
-function clearErrorsFor(errors: FieldErrors, patch: CheckoutValuesPatch): FieldErrors {
-  const touched = new Set<string>();
-  const addKeys = (group: string, fields: object): void => {
-    for (const name of Object.keys(fields)) {
-      touched.add(name);
-      touched.add(`${group}.${name}`);
-    }
-  };
-  addKeys("contact", patch.contact ?? {});
-  const shipping = patch.shipping;
-  if (shipping !== undefined) {
-    const { billing, ...shippingFields } = shipping;
-    addKeys("shipping", shippingFields);
-    addKeys("billing", billing ?? {});
-  }
-  addKeys("payment", patch.payment ?? {});
-  if (touched.size === 0) {
-    return errors;
-  }
+function clearErrorsFor(errors: FieldErrors, touched: ReadonlySet<string>): FieldErrors {
   const next: FieldErrors = {};
   let cleared = false;
   for (const [key, message] of Object.entries(errors)) {

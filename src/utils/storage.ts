@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/storage.ts
- * Purpose: Typed, versioned, failure-tolerant localStorage access for the cart, the session and the last-used range.
+ * Purpose: Typed, versioned, failure-tolerant localStorage access for the cart, the session and the last-used range
  * Lines: 288
  */
 

@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Input.tsx
  * Purpose: Input, text area and form field wrapper with label, hint, required and error handling
- * Lines: 446
+ * Lines: 491
  */
 
 import { useId, useState } from "react";
@@ -22,8 +22,8 @@ import type { FieldErrors } from "@/types/common";
  * starts, for the same reason: the field cannot set either attribute on a control it does not own.
  *
  * The individual ids travel alongside the joined list so that a control carrying auxiliary text of
- * its own — the text area's character counter — extends the described-by list in the field's order
- * instead of guessing it.
+ * its own — the text area's character counter, an addon that carries words — extends the described-by
+ * list in the field's order instead of guessing it.
  *
  * Exported because every control family that renders inside a field shares this one contract:
  * `Select.tsx` declares its controls against it rather than inventing a second shape.
@@ -134,25 +134,38 @@ function classNames(...names: readonly (string | undefined)[]): string {
 
 /** The ids one field can describe its control by, in the order a screen reader reads them. */
 interface DescribedByIds {
+  /** The leading addon's element id, when that addon carries words. */
+  readonly leadingAddonId?: string | undefined;
   /** The hint's element id, when the field renders one. */
   readonly hintId?: string | undefined;
   /** The error's element id, when the field renders one. */
   readonly errorId?: string | undefined;
   /** A control's own auxiliary element — the text area's counter — when it renders one. */
   readonly countId?: string | undefined;
+  /** The trailing addon's element id, when that addon carries words. */
+  readonly trailingAddonId?: string | undefined;
 }
 
 /**
  * Builds an `aria-describedby` value from the ids a control is currently described by, in reading
- * order — the hint, then the error, then any auxiliary count — so the complaint about a field is
- * never read before the help for it, and an absent id contributes nothing at all.
+ * order — the leading addon's words, the hint, then the error, then any auxiliary count, then the
+ * trailing addon's words — so an addon read as a prefix to the value is announced before it and one
+ * read as the value's unit after it, while the field's own help still precedes its complaint and an
+ * absent id contributes nothing at all.
  *
  * The result is `undefined` rather than an empty string when nothing describes the control, because
  * an empty `aria-describedby` is a wiring mistake a reader cannot see. Called by {@link FormField}
- * for the contract it hands its control, and again by {@link TextArea} once it holds a count id.
+ * for the contract it hands its control, and again by {@link Input} and {@link TextArea} once they
+ * hold addon ids — and the text area a count id of its own.
  */
 function composeDescribedBy(ids: DescribedByIds): string | undefined {
-  const described = [ids.hintId, ids.errorId, ids.countId].filter(isPresent);
+  const described = [
+    ids.leadingAddonId,
+    ids.hintId,
+    ids.errorId,
+    ids.countId,
+    ids.trailingAddonId,
+  ].filter(isPresent);
   return described.length === 0 ? undefined : described.join(" ");
 }
 
@@ -185,18 +198,34 @@ function textLengthOf(value: string | number | readonly string[] | undefined): n
 }
 
 /**
- * Renders one addon slot of a field — a unit, a prefix, or a small control the field carries beside
- * its own.
+ * The words an addon contributes to its field's description, or `undefined` when it contributes none.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/styles/controls.css` declares the field, its label, its required
- * marker, its hint, its error and its control slot, and no class for an addon. No class is invented
- * here for one: the addon borrows the field's auxiliary-text register, which is the register the
- * stylesheets give text that stands beside a control, and it sits in the control slot. That sheet
- * owns adding an inline arrangement for the slot; no caller in the product passes an addon today.
+ * An addon made of text carries meaning for the field — "USD" is the unit the value is in and "%" is
+ * what it is measured by — so it is announced as part of the control's description, beside the
+ * field's help and its message. An addon made of elements is deliberately not described: only the
+ * caller knows what its element holds, and a field described by a control inside it would read that
+ * control's name as though it were the field's own. A blank addon is nothing to read.
  */
-function renderAddon(addon: ReactNode): ReactElement | null {
+function addonWords(addon: ReactNode): string | undefined {
+  if (typeof addon !== "string" && typeof addon !== "number") return undefined;
+  const words = String(addon);
+  return isPresent(words) ? words : undefined;
+}
+
+/**
+ * Renders one addon slot of a field — a unit, a prefix, or a small control the field carries beside
+ * its own — with the id the control can point at it through.
+ *
+ * The class is declared in `src/styles/controls.css`, which owns the field family, so the addon is
+ * named by the sheet instead of borrowing the auxiliary-text register the hint uses. Only an addon
+ * carrying words joins the control's description — see {@link addonWords} — while the id is on the
+ * element either way, so the slot itself stays addressable.
+ */
+function renderAddon(addon: ReactNode, id: string): ReactElement | null {
   return addon === undefined || addon === null ? null : (
-    <span className="sp-field__hint">{addon}</span>
+    <span className="sp-field__addon" id={id}>
+      {addon}
+    </span>
   );
 }
 
@@ -283,8 +312,9 @@ export function FormField({
  * Every attribute of a native `<input>` passes straight through, `ref` included — React 19 takes a
  * ref as an ordinary prop, so no wrapper stands between the caller and the element, and the element
  * a caller holds is the one the browser focuses. What this component adds is the wiring an input
- * cannot do alone: the id its label points at, `aria-describedby` for the hint and the error,
- * `aria-invalid` for the invalid state, and the required and disabled attributes.
+ * cannot do alone: the id its label points at, `aria-describedby` for the hint, for the error and for
+ * any addon that carries words, `aria-invalid` for the invalid state, and the required and disabled
+ * attributes.
  *
  * The field's message is `error` when it is given, and otherwise `errors[name]` — the field-keyed map
  * every validator in `src/utils/validation.ts` returns — so a form spreads one map over its fields
@@ -325,22 +355,32 @@ export function Input({
       isDisabled={isFieldDisabled}
       className={containerClassName}
     >
-      {(field) => (
-        <>
-          {renderAddon(leadingAddon)}
-          <input
-            {...rest}
-            id={field.id}
-            name={name}
-            className={classNames("sp-input", className)}
-            disabled={field.isDisabled}
-            required={field.isRequired}
-            aria-invalid={field.isInvalid}
-            aria-describedby={field.describedBy}
-          />
-          {renderAddon(trailingAddon)}
-        </>
-      )}
+      {(field) => {
+        const leadingAddonId = `${field.id}-addon-leading`;
+        const trailingAddonId = `${field.id}-addon-trailing`;
+        return (
+          <>
+            {renderAddon(leadingAddon, leadingAddonId)}
+            <input
+              {...rest}
+              id={field.id}
+              name={name}
+              className={classNames("sp-input", className)}
+              disabled={field.isDisabled}
+              required={field.isRequired}
+              aria-invalid={field.isInvalid}
+              aria-describedby={composeDescribedBy({
+                leadingAddonId: addonWords(leadingAddon) === undefined ? undefined : leadingAddonId,
+                hintId: field.hintId,
+                errorId: field.errorId,
+                trailingAddonId:
+                  addonWords(trailingAddon) === undefined ? undefined : trailingAddonId,
+              })}
+            />
+            {renderAddon(trailingAddon, trailingAddonId)}
+          </>
+        );
+      }}
     </FormField>
   );
 }
@@ -410,9 +450,11 @@ export function TextArea({
       {(field) => {
         const countId =
           showCount && typeof maxLength === "number" ? `${field.id}-count` : undefined;
+        const leadingAddonId = `${field.id}-addon-leading`;
+        const trailingAddonId = `${field.id}-addon-trailing`;
         return (
           <>
-            {renderAddon(leadingAddon)}
+            {renderAddon(leadingAddon, leadingAddonId)}
             <textarea
               {...rest}
               id={field.id}
@@ -427,9 +469,12 @@ export function TextArea({
               required={field.isRequired}
               aria-invalid={field.isInvalid}
               aria-describedby={composeDescribedBy({
+                leadingAddonId: addonWords(leadingAddon) === undefined ? undefined : leadingAddonId,
                 hintId: field.hintId,
                 errorId: field.errorId,
                 countId,
+                trailingAddonId:
+                  addonWords(trailingAddon) === undefined ? undefined : trailingAddonId,
               })}
             />
             {countId === undefined ? null : (
@@ -437,7 +482,7 @@ export function TextArea({
                 {`${usedLength} / ${maxLength}`}
               </p>
             )}
-            {renderAddon(trailingAddon)}
+            {renderAddon(trailingAddon, trailingAddonId)}
           </>
         );
       }}

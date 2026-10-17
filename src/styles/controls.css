@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 504
+ * Lines: 513
  */
 
 /* ==== Buttons ====
@@ -292,6 +292,15 @@
 .sp-rating__count,
 .sp-pagination__count,
 .sp-progress__label {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+/* An addon is what a field carries in its control slot beside the control itself: a unit, a prefix, or a small
+ * control that acts on the value. The class is declared here because this sheet owns the field family, so the
+ * component renders a name this sheet defines instead of borrowing the hint register; the three tokens below
+ * are that register's own, so an addon reads exactly as it did before it had a name of its own. */
+.sp-field__addon {
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line-height);
   color: var(--color-text-muted);

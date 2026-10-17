@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/dates.ts
- * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use.
+ * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use
  * Lines: 597
  */
 

@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/formatting.test.ts
  * Purpose: Money, number and percentage formatting, including rounding edge cases
- * Lines: 574
+ * Lines: 588
  */
 
 import { describe, expect, it } from "vitest";
@@ -164,7 +164,7 @@ const CELL_CASES: CellCase[] = [
 /** The same cells through the export renderer, whose figures stay machine-readable. */
 const EXPORT_CELL_CASES: CellCase[] = [
   { value: fixtures.FIXED_DATE, format: "date", text: fixtures.FIXED_DATE },
-  { value: 1284.9, format: "integer", text: "1284" },
+  { value: 1284.9, format: "integer", text: "1285" },
   { value: 129_950, format: "money", text: "1299.50" },
   { value: 0.125, format: "percent", text: "12.5" },
   { value: 129_900, format: "compact-number", text: "129900" },
@@ -450,6 +450,20 @@ describe("the report cells the table and the export both read", () => {
     expect(exported).not.toContain("$");
     expect(format.parseMoneyToMinor(exported)).toBe(129_950);
     expect(blank).toBe(EMPTY_CELL);
+  });
+  it("renders one cell the same way in the table and in the export", () => {
+    // The two renderers decide a fractional integer cell, a date cell holding no date text and a figure
+    // that is not finite alike: the export writes the table's own figure ungrouped, and both show the
+    // placeholder for a figure no formatter can render rather than the export fabricating a zero.
+    expect(format.formatCellValue(1234.9, "integer")).toBe("1,235");
+    expect(format.formatCellValueForExport(1234.9, "integer")).toBe("1235");
+    expect(format.formatCellValue(-2.5, "integer")).toBe("-3");
+    expect(format.formatCellValueForExport(-2.5, "integer")).toBe("-3");
+    expect(format.formatCellValue(123, "date")).toBe("123");
+    expect(format.formatCellValueForExport(123, "date")).toBe("123");
+    expect(format.formatCellValue(Number.NaN, "money")).toBe(PLACEHOLDER);
+    expect(format.formatCellValueForExport(Number.NaN, "money")).toBe(PLACEHOLDER);
+    expect(format.formatCellValueForExport(Number.POSITIVE_INFINITY, "integer")).toBe(PLACEHOLDER);
   });
 });
 

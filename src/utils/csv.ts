@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/csv.ts
- * Purpose: Serialises rows to CSV with escaping, a row cap and a download trigger.
- * Lines: 273
+ * Purpose: Serialises rows to CSV with escaping, a row cap and a download trigger
+ * Lines: 294
  */
 
 import { CSV_MAX_CELL_LENGTH, CSV_MAX_ROWS } from "@/constants/config";
@@ -25,6 +25,12 @@ const CSV_FILE_NAME_MAX_LENGTH = 120;
 const CSV_QUOTE = '"';
 /** A quote or either line break: what forces quoting, and what no field separator may hold. */
 const CSV_SPECIAL_CHARS = /["\r\n]/;
+/** The apostrophe that marks a cell as text: Excel, Sheets and LibreOffice read it, and hide it. */
+const CSV_TEXT_GUARD = "'";
+/** The first characters a spreadsheet reads as a formula: `=`, `+`, `-`, `@`, a tab and a carriage return. */
+const CSV_FORMULA_LEAD = /^[=+\-@\t\r]/;
+/** A plain signed decimal, the one formula lead left bare so a spreadsheet still sums the figure. */
+const CSV_PLAIN_DECIMAL = /^[+-]?\d+(?:\.\d+)?$/;
 /** Path separators and the Windows-illegal characters: each is replaced by a hyphen. */
 const CSV_UNSAFE_FILE_NAME_CHARS = /[\\/:*?"<>|]/g;
 /** Control characters, DEL included: replaced by a hyphen; a property escape, not a literal class, as lint requires. */
@@ -100,10 +106,24 @@ function resolveLimit(value: number | undefined, fallback: number): number {
 }
 
 /**
+ * Whether a cell's text has to be guarded: its first character is one a spreadsheet reads as the start of a
+ * formula, and the whole text is not a plain signed decimal. Pure.
+ *
+ * @param text - The cell text, already stringified.
+ * @returns True when {@link escapeCsvCell} must prefix the text with {@link CSV_TEXT_GUARD}.
+ */
+function needsFormulaGuard(text: string): boolean {
+  return CSV_FORMULA_LEAD.test(text) && !CSV_PLAIN_DECIMAL.test(text);
+}
+
+/**
  * Renders one cell as CSV field text: quoted, with its inner quotes doubled, when the value carries the
- * separator, a quote or either line break, and bare when it carries none. A `null` or `undefined` cell is
- * empty, a number is written by locale-independent `String()` with no `Intl` call, and a leading `=`, `+`,
- * `-` or `@` is written literally: the export is the text on screen. Pure.
+ * separator, a quote or either line break, and bare when it carries none. Text whose first character is `=`,
+ * `+`, `-`, `@`, a tab or a carriage return is prefixed with one apostrophe, which Excel, Sheets and
+ * LibreOffice read as "this is text" rather than as a formula, do not display, and leave the reader the
+ * characters the table showed; a plain signed decimal is the exception, left unguarded so a negative money
+ * or percent figure stays the number a spreadsheet can sum. A `null` or `undefined` cell is empty, and a
+ * number is written by locale-independent `String()` with no `Intl` call. Pure.
  *
  * @param value - The cell's raw value.
  * @param delimiter - The field separator; defaults to {@link CSV_DELIMITER}.
@@ -115,9 +135,10 @@ export function escapeCsvCell(
 ): string {
   const text = value === null || value === undefined ? "" : String(value);
   const separator = resolveDelimiter(delimiter);
-  const mustQuote = text.includes(separator) || CSV_SPECIAL_CHARS.test(text);
-  if (!mustQuote) return text;
-  return `${CSV_QUOTE}${text.replaceAll(CSV_QUOTE, CSV_QUOTE + CSV_QUOTE)}${CSV_QUOTE}`;
+  const field = needsFormulaGuard(text) ? CSV_TEXT_GUARD + text : text;
+  const mustQuote = field.includes(separator) || CSV_SPECIAL_CHARS.test(field);
+  if (!mustQuote) return field;
+  return `${CSV_QUOTE}${field.replaceAll(CSV_QUOTE, CSV_QUOTE + CSV_QUOTE)}${CSV_QUOTE}`;
 }
 
 /**

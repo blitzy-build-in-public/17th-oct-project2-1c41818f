@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/orderService.ts
  * Purpose: Builds orders from a cart snapshot, numbers them and applies the status transitions
- * Lines: 593
+ * Lines: 596
  */
 
 import { DEFAULT_PAGE_SIZE } from "@/constants/config";
@@ -64,11 +64,12 @@ const DEFAULT_ORDER_HISTORY: OrderHistoryQuery = { page: 1, pageSize: DEFAULT_PA
 /**
  * What every method here may be handed beside its own arguments.
  *
- * `sessionToken` comes from the signed-in session: it is what marks a submission as a customer's rather
- * than a guest's, and what makes the two account endpoints answer at all — without it `GET /api/orders`
- * and `GET /api/orders/:id` are refused with `401`, because the orders they hand back belong to whoever
- * the token authenticates. `signal` cancels a request a newer one supersedes, so a page that navigates
- * away mid-request leaves nothing queued behind it.
+ * `sessionToken` comes from the signed-in session: it marks a submission as a customer's rather than a
+ * guest's, and `GET /api/orders` answers only with one, because the history it hands back belongs to
+ * whoever the token authenticates. `GET /api/orders/:id` needs it for an order that names an account,
+ * while an order placed without one is read by its identifier alone — the only thing the guest's
+ * confirmation route carries. `signal` cancels a request a newer one supersedes, so a page that
+ * navigates away mid-request leaves nothing queued behind it.
  */
 export interface OrderServiceOptions {
   readonly sessionToken?: string;
@@ -525,13 +526,15 @@ export async function createOrder(
  * Reads one order by its identifier, for the confirmation route and the account's order detail.
  *
  * Both callers are reload-safe because of this call: the confirmation knows only the identifier in its
- * path, so an order is fetched rather than remembered from the flow that placed it. Ownership is decided
- * by the seam against the session the request carries, never here and never by an argument — an order
- * belonging to another customer and an identifier no order holds both answer `404`, deliberately the
- * same answer, so a response cannot be read to learn which orders exist.
+ * path, so an order is fetched rather than remembered from the flow that placed it. An order that names
+ * no account has no owner to compare a caller with, so the seam answers it to whoever holds its
+ * identifier, which is what keeps a guest's confirmation reload-safe. Every other order is read by the
+ * session the request carries: one belonging to another customer and an identifier no order holds both
+ * answer `404`, deliberately the same answer, so a response cannot be read to learn which orders exist.
  *
  * @param id - The order's identifier, prefixed `ord_`.
- * @param options - The session token, without which the endpoint answers `401`.
+ * @param options - The session token; an order that names an account answers `401` without one, while an
+ * order placed without an account is read by its identifier alone.
  * @returns The order, or the shaped failure; never a rejection.
  */
 export async function getOrder(

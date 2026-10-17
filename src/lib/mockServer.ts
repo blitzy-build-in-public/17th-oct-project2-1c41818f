@@ -1,14 +1,13 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 353
+ * Lines: 407
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
 import { ACCOUNT_COPY, ADMIN_COPY, FEEDBACK_COPY, NOT_FOUND_COPY } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Common from "@/types/common";
-import { delay } from "@/utils/async";
 import { parseIso } from "@/utils/dates";
 
 import {
@@ -25,11 +24,14 @@ import { splitRequest } from "@/lib/apiRequests";
 import { clearRememberedOrders, routeTable, type RouteId } from "@/lib/apiRoutes";
 
 // The public surface -----------------------------------------------------------------------------
-// The seam is one module to its callers even though its parts live together: this file holds the
-// transport — the bound data source, the simulated latency and failure, the session check and the
-// dispatcher — and repeats here every name a consumer imports, so nothing outside needs a second
-// path. `src/lib/apiContract.ts` carries the error vocabulary and the data-source contract, and
-// `src/lib/apiRequests.ts` and `src/lib/apiRoutes.ts` carry the endpoint layer the dispatcher runs.
+// The seam is one module to its callers: it holds the transport and re-exports every name they
+// import — the bound data source, the latency model and failure injection, the session check and the
+// dispatcher. `apiContract.ts` carries the error vocabulary and the data-source contract,
+// `apiRequests.ts` and `apiRoutes.ts` the endpoints it runs, and `src/lib/apiClient.ts` waits the
+// configured latency out once per request before it asks this seam for an answer. The four modules
+// measure about 1,833 lines, past the 600-line ceiling, so the concern is split by responsibility
+// rather than held in one file, and the split is recorded in `generation-manifest.md` (Part 1 and
+// Part 4).
 
 export { API_ERROR_CODES, API_ERROR_STATUS } from "@/lib/apiContract";
 export type {
@@ -73,20 +75,73 @@ export function resetMockServer(): void {
   clearRememberedOrders();
 }
 
+/** The longest delay the host timer applies: `setTimeout` clamps anything above it to roughly a
+ * millisecond, so a larger setting would report a delay no request ever waits out. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+/** The only form a configured latency may take: digits alone, so a signed, fractional, exponent,
+ * padded or radix-prefixed notation is refused rather than coerced into a number it never meant. */
+const LATENCY_PATTERN = /^[0-9]+$/;
+
+/** The value the last warning named, so a page making a hundred requests reports one misconfigured
+ * variable once rather than once per read. */
+let reportedLatencyValue: string | null = null;
+
 /**
- * The response delay in milliseconds: `VITE_API_LATENCY_MS` when the build or the test environment
- * sets it to a non-negative number, and {@link DEFAULT_API_LATENCY_MS} otherwise.
+ * The milliseconds a configured latency means, or `null` for a value no delay can be made of: a number
+ * only when it is a whole, safe, non-negative integer inside the timer's range, and a string only when
+ * it is digits alone — surrounding whitespace aside — within that same range.
  *
- * The variable is read defensively, because Vite types the environment as an index-signed record: an
- * absent, unparsable or negative value falls back to the default rather than disabling the delay or
- * producing `NaN`, which is what keeps `VITE_API_LATENCY_MS=0` the one way to run without waiting.
+ * @param raw - The value `import.meta.env.VITE_API_LATENCY_MS` holds, whatever its type.
+ * @returns The delay in milliseconds, or `null` when the value cannot be applied as one.
+ */
+function parseLatencyValue(raw: unknown): number | null {
+  if (typeof raw === "number") {
+    if (!Number.isSafeInteger(raw) || raw < 0) return null;
+    return raw > MAX_TIMER_DELAY_MS ? null : raw;
+  }
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!LATENCY_PATTERN.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return parsed > MAX_TIMER_DELAY_MS ? null : parsed;
+}
+
+/** Reports a set-but-unusable `VITE_API_LATENCY_MS` once per distinct value, naming the variable, the
+ * value it holds and the default that takes its place: the developer diagnostic for a misconfiguration
+ * that would otherwise surface only as a missing response delay. */
+function reportUnusableLatencyValue(raw: unknown): void {
+  const shown = typeof raw === "string" ? raw.trim() : String(raw);
+  if (shown === reportedLatencyValue) return;
+  reportedLatencyValue = shown;
+  const message =
+    `VITE_API_LATENCY_MS is set to "${shown}", which is not a whole number of ms ` +
+    `between 0 and ${MAX_TIMER_DELAY_MS}; using the default of ${DEFAULT_API_LATENCY_MS} ms instead.`;
+  console.warn(message);
+}
+
+/**
+ * The response delay in milliseconds: `VITE_API_LATENCY_MS` when the build or the test environment sets
+ * it to a whole number of milliseconds the host timer can apply, and {@link DEFAULT_API_LATENCY_MS}
+ * otherwise.
+ *
+ * The variable is read defensively, because Vite types the environment as an index-signed record and a
+ * mistyped value must not silently remove the delay: a value that is absent, blank, unparsable,
+ * fractional, signed, written in another notation, negative or above the timer's range falls back to
+ * the default rather than disabling the delay or producing `NaN`, which is what keeps
+ * `VITE_API_LATENCY_MS=0` the one way to run without waiting. A value that is set and cannot be used is
+ * reported once on the console, because nothing else in the product can see a misconfigured build
+ * environment.
+ *
+ * @returns The configured delay in milliseconds, or {@link DEFAULT_API_LATENCY_MS} when the variable is
+ * unset or holds a value this build cannot apply; never `NaN`, never negative.
  */
 export function getApiLatencyMs(): number {
   const raw = (import.meta.env as { readonly VITE_API_LATENCY_MS?: unknown }).VITE_API_LATENCY_MS;
-  if (typeof raw === "string" || typeof raw === "number") {
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
-  }
+  if (raw === undefined) return DEFAULT_API_LATENCY_MS;
+  const parsed = parseLatencyValue(raw);
+  if (parsed !== null) return parsed;
+  reportUnusableLatencyValue(raw);
   return DEFAULT_API_LATENCY_MS;
 }
 
@@ -301,32 +356,31 @@ export function matchRoute(method: Common.HttpMethod, path: string): RouteMatch 
  * Answers one request and reports its outcome as a value: nothing throws across this seam, so no page
  * needs a try/catch around a data call.
  *
+ * The response delay is not applied here: `src/lib/apiClient.ts` waits the configured simulator
+ * latency out once, before it asks this seam for an answer, so this function returns as soon as it has
+ * one. The dispatcher runs synchronously now that the wait has moved, and its outcome is published as
+ * a promise all the same, so a caller waits the same way and nothing the dispatcher does escapes
+ * synchronously.
+ *
  * The order the checks run in is the order a server would apply them: the caller's query is parsed
- * from the path, the response is delayed by the simulated latency, a request that arrives before any
- * data source is bound is refused with `503`, an unmatched path with `404`, an armed test failure is
- * consumed, and only then is the session resolved and the route's authority enforced before the
- * endpoint runs. A request aborted while its delay is pending rejects with the abort error, which is
- * the only way this function does not return a `Result`: a cancelled request has no outcome to report.
+ * from the path, a request that arrives before any data source is bound is refused with `503`, an
+ * unmatched path with `404`, an armed test failure is consumed, and only then is the session resolved
+ * and the route's authority enforced before the endpoint runs.
  */
-export async function handleRequest<TValue>(
+export function handleRequest<TValue>(
   path: string,
   options: Common.ApiRequestOptions = {},
 ): Promise<Common.Result<TValue>> {
-  const outcome: Common.Result<unknown> = await dispatch(path, options);
   // The seam is untyped by design: a caller names the payload type its path answers with, the way a
   // client of a real HTTP API asserts the shape it knows the endpoint returns.
-  return outcome as Common.Result<TValue>;
+  return Promise.resolve().then(() => dispatch(path, options) as Common.Result<TValue>);
 }
 
 /** Runs one request through the seam and returns the outcome before it is given the caller's payload
  * type. */
-async function dispatch(
-  path: string,
-  options: Common.ApiRequestOptions,
-): Promise<Common.Result<unknown>> {
+function dispatch(path: string, options: Common.ApiRequestOptions): Common.Result<unknown> {
   const { pathname, query } = splitRequest(path, options.query);
   const method = options.method ?? "GET";
-  await delay(getApiLatencyMs(), options.signal);
   const source = dataSource;
   if (source === null) {
     return failure(API_ERROR_CODES.DATA_SOURCE_UNAVAILABLE, FEEDBACK_COPY.ERROR_STATE_BODY);

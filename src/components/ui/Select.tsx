@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Select.tsx
  * Purpose: Select, checkbox, radio group and switch with accessible labelling
- * Lines: 576
+ * Lines: 580
  */
 
 import { useCallback, useEffect, useId, useRef } from "react";
@@ -429,8 +429,11 @@ export function Checkbox({
  * summary can send focus to the group it names, a fieldset being unfocusable otherwise.
  *
  * The hint and the error are tied to every radio through `aria-describedby`, the error announcing itself as the
- * alert the field anatomy uses. `orientation` adds the horizontal arrangement's class, which
- * `src/styles/controls.css` declares as a modifier of the stacked group, laying its rows out in one line.
+ * alert the field anatomy uses, and the invalid state reaches the radios the same way: a `<fieldset>` cannot
+ * carry `aria-invalid`, so each radio carries it while the group renders an error and omits it while it does
+ * not, which leaves a valid group's radios with no invalid state to announce. `orientation` adds
+ * the horizontal arrangement's class, which `src/styles/controls.css` declares as a modifier of the
+ * stacked group, laying its rows out in one line.
  *
  * @param props - The group's name and legend, the selected value and its change handler, the options, the
  *   auxiliary text, the arrangement, the per-option label renderer and the class a caller's sheet expects on an
@@ -486,6 +489,7 @@ export function RadioGroup({
             checked={value === option.value}
             onChange={() => onChange(option.value)}
             disabled={isDisabled || option.disabled === true}
+            aria-invalid={errorId !== undefined ? "true" : undefined}
             aria-describedby={describedBy}
           />
           <span className="sp-choice__label">

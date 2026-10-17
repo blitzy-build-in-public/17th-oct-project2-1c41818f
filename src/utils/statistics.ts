@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/statistics.ts
- * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports.
+ * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports
  * Lines: 432
  */
 

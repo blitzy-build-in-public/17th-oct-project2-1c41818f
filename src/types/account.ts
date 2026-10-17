@@ -206,10 +206,10 @@ export interface CredentialDigest {
  * The sign-in body of `POST /api/auth/login`.
  *
  * The password is validated by `src/utils/validation.ts` (at least eight characters, with one
- * letter and one digit), digested in `src/lib/authService.ts` and compared against the stored
- * digest; a plain-text password exists only for the length of that call and is never stored. A
- * rejected sign-in answers `401` with one generic message that does not reveal which of the two
- * members was wrong, so a response cannot be used to discover which email addresses have accounts.
+ * letter and one digit) and digested, or verified against the stored digest, by the salt and hash
+ * helpers in `src/utils/strings.ts`; a plain-text password is never stored. A rejected sign-in
+ * answers `401` with one generic message that does not reveal which of the two members was wrong,
+ * so a response cannot be used to discover which email addresses have accounts.
  */
 export interface Credentials {
   /** The account's email address. */
@@ -231,7 +231,7 @@ export interface RegistrationInput {
   /** The sign-in identity of the account being created; unique across accounts. */
   readonly email: string;
 
-  /** Digested through `src/lib/authService.ts`; never stored in clear. */
+  /** Digested by the salt and hash helpers in `src/utils/strings.ts`; never stored in clear. */
   readonly password: string;
 
   readonly firstName: string;
@@ -270,9 +270,9 @@ export interface ProfileUpdateInput {
  * current route, is the unit of authorisation.
  *
  * An expired or unknown token answers `401`, which signs the visitor out and returns them to
- * sign-in rather than degrading into a partially authenticated screen. The session is persisted
- * through `src/utils/storage.ts` under the key in `src/constants/config.ts`; persisting, restoring
- * and clearing it belong to that module and `src/lib/authService.ts`, never to this file.
+ * sign-in rather than degrading into a partially authenticated screen. `src/state/AuthContext.tsx`
+ * persists it through `src/utils/storage.ts` under the key in `src/constants/config.ts` and
+ * revalidates it through `restoreSession` in `src/lib/authService.ts`; nothing here stores it.
  */
 export interface Session {
   /** The opaque credential the client sends back; prefixed `ses_`. */

@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/validation.ts
- * Purpose: Every field and form validator, each returning a field-keyed error map.
+ * Purpose: Every field and form validator, each returning a field-keyed error map
  * Lines: 586
  */
 

@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/transactions.test.ts
  * Purpose: Cart and checkout reducer transitions, stock clamping and submission guards
- * Lines: 566
+ * Lines: 597
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -99,6 +99,17 @@ const FILL = checkoutActions.updateValues(SHIPPING_VALUES);
 const FILLED_CHECKOUT = checkoutReducer(FRESH_CHECKOUT, FILL);
 /** A checkout standing on the review step, the only step from which a submission may begin. */
 const REVIEWING_CHECKOUT = checkoutReducer(checkoutReducer(FILLED_CHECKOUT, NEXT), NEXT);
+/** The checkout a placed order leaves behind, where the confirmation is the only step it may hold. */
+const PLACED_CHECKOUT = placeOrder(startSubmission(REVIEWING_CHECKOUT));
+/** Direct moves refused by identity: forward past validation, and into or out of the confirmation. */
+const REFUSED_DIRECT_MOVES: [CheckoutState, CheckoutStep][] = [
+  [FRESH_CHECKOUT, "payment"],
+  [FRESH_CHECKOUT, "review"],
+  [REVIEWING_CHECKOUT, "confirmation"],
+  [PLACED_CHECKOUT, "review"],
+  [PLACED_CHECKOUT, "payment"],
+  [PLACED_CHECKOUT, "shipping"],
+];
 
 /** Writes values onto the shipping step, as a form does field by field. */
 function editShipping(shipping: Record<string, string>) {
@@ -339,6 +350,10 @@ describe("checkout step machine", () => {
     );
   });
 
+  it.each(REFUSED_DIRECT_MOVES)("refuses a direct move that is not a return", (state, step) => {
+    expect(checkoutReducer(state, checkoutActions.setStep(step))).toBe(state);
+  });
+
   it.each(STEP_MOVES)("moves $step to $next, and back to $previous", ({ step, next, previous }) => {
     expect(nextStep(step)).toBe(next);
     expect(previousStep(step)).toBe(previous);
@@ -368,15 +383,31 @@ describe("checkout values and errors", () => {
     expect(patched.values.payment.number).toBe("");
     expect(patched.values.shipping).toBe(FILLED_CHECKOUT.values.shipping);
     expect(patched.values.contact).toBe(FILLED_CHECKOUT.values.contact);
-    // A patch naming no field changes nothing, so the state keeps its own reference.
-    const untouched = checkoutReducer(FILLED_CHECKOUT, checkoutActions.updateValues({}));
-    expect(untouched.values).toBe(FILLED_CHECKOUT.values);
+    // A patch naming no field changes nothing, at any depth, so the state keeps its own reference.
+    for (const values of [{}, { shipping: {} }, { contact: {} }, { shipping: { billing: {} } }]) {
+      expect(checkoutReducer(FILLED_CHECKOUT, checkoutActions.updateValues(values))).toBe(
+        FILLED_CHECKOUT,
+      );
+    }
     // The priced cart the buyer reviewed is held whole, so an order is built from what they saw.
     const snapshot = makePricedCart({ lines: [makeCartLine({ quantity: 2 })] });
     const held = checkoutReducer(FRESH_CHECKOUT, checkoutActions.setSnapshot(snapshot));
     expect(held.snapshot).toBe(snapshot);
     expect(Number.isInteger(held.snapshot?.grandTotalMinor)).toBe(true);
     expect(checkoutReducer(held, checkoutActions.setSnapshot(null)).snapshot).toBeNull();
+  });
+
+  it("merges a nested billing patch and clears the error it names there", () => {
+    const patch = checkoutActions.updateValues({ shipping: { billing: { postalCode: "97201" } } });
+    const failed = checkoutReducer(
+      FILLED_CHECKOUT,
+      checkoutActions.setErrors({ "billing.postalCode": "Enter a postal code." }),
+    );
+    const corrected = checkoutReducer(failed, patch);
+    // A real field merges into the billing address, keeps the flat fields, and clears its error.
+    expect(corrected.values.shipping.billing).toMatchObject({ postalCode: "97201", city: "" });
+    expect(corrected.values.shipping.fullName).toBe("Dana Okafor");
+    expect(corrected.errors).toEqual({});
   });
 
   it("stores a field-keyed error map and empties it again", () => {

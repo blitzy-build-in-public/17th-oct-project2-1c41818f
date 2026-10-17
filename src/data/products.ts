@@ -11,7 +11,7 @@ import { BRAND_PRODUCT_QUOTA, CATEGORY_PRODUCT_QUOTA, PRODUCT_TOTAL } from "@/da
 import type { Inventory, Product, ProductImage, ProductSpec, ProductStatus } from "@/types/catalog";
 import type { IsoDateString, IsoDateTimeString, MinorUnits } from "@/types/common";
 import { countBy } from "@/utils/collections";
-import { addDays, toIsoDate } from "@/utils/dates";
+import { addDays, parseIso, toIsoDate, toIsoDateTime } from "@/utils/dates";
 import { formatAvailability, fromMinorUnits, roundMinorUnits, toMinorUnits } from "@/utils/format";
 import { brandId, categoryId, initials, productId, sequenceId, slugify } from "@/utils/strings";
 
@@ -389,10 +389,10 @@ function ratingSummaryFor(index: number, rand: SeededRandom): { average: number;
 /** The day and time a product was added, inside the trailing window ending on `anchorDay`: only the day comes
  *  from the clock, and only once per build, so two builds on the same day are identical. */
 function createdAtFor(anchorDay: IsoDateString, rand: SeededRandom): IsoDateTimeString {
-  const day = addDays(anchorDay, -rand.int(0, CATALOGUE_SPAN_DAYS));
-  const hour = String(rand.int(8, 20)).padStart(2, "0");
-  const minute = String(rand.int(0, 59)).padStart(2, "0");
-  return `${day}T${hour}:${minute}:00`;
+  const at = parseIso(addDays(anchorDay, -rand.int(0, CATALOGUE_SPAN_DAYS)));
+  if (at === null) throw new TypeError(`createdAtFor requires an ISO day; received "${anchorDay}"`);
+  at.setHours(rand.int(8, 20), rand.int(0, 59), 0, 0);
+  return toIsoDateTime(at);
 }
 
 /** The catalogue code a product is picked and invoiced by: its maker's code and its position. */

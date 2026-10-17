@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/format.ts
- * Purpose: Formats money, numbers, percentages and compact values for display across every module.
- * Lines: 583
+ * Purpose: Formats money, numbers, percentages and compact values for display across every module
+ * Lines: 599
  */
 
 import { DEFAULT_CURRENCY } from "@/constants/config";
@@ -528,9 +528,10 @@ export function formatAvailability(
 /** Renders one report cell from its column's declared format, the dispatch a report table and its CSV
  *  export both use so a value cannot be rendered two ways. A `money` cell holds minor units, a
  *  `compact-number` cell a plain figure, a `percent` cell a ratio (per `src/types/analytics.ts`) and a
- *  `date` cell an ISO day rendered by `src/utils/dates.ts` — any other bucket key, such as `2025-W05`,
- *  is shown as it stands so a row never blanks. An absent cell renders {@link EMPTY_CELL_TEXT}: nothing
- *  to show is not the same as a zero. */
+ *  `date` cell an ISO day rendered by `src/utils/dates.ts`; any value that is not the type its format
+ *  expects, a bucket key such as `2025-W05` included, is shown as the text it holds so a row never
+ *  blanks. An absent cell renders {@link EMPTY_CELL_TEXT}: nothing to show is not the same as a zero.
+ *  {@link formatCellValueForExport} writes the machine-readable form of the same cell. */
 export function formatCellValue(
   value: ReportCellValue | undefined,
   format: ReportCellFormat,
@@ -547,18 +548,33 @@ export function formatCellValue(
     case "compact-number":
       return typeof value === "number" ? formatCompactNumber(value) : textOf(value);
     case "date":
-      return typeof value === "string" ? formatDate(value) || value : EMPTY_CELL_TEXT;
+      return typeof value === "string" ? formatDate(value) || value : textOf(value);
     default:
       return assertExhaustive(format);
   }
 }
 
-/** Renders one report cell for the CSV export: the same values as {@link formatCellValue} with the
- *  figures kept machine-readable, because a column of `"$1,299.00"` cannot be summed by a spreadsheet.
- *  A money cell exports a plain decimal (`"1299.00"`), an integer or `compact-number` cell a full
- *  ungrouped figure (`"1284"`, never `"1.3K"`), a percent cell the scaled number without its sign
- *  (`"12.5"`) and a text or date cell as it stands. `reportService.toCsvMatrix` uses this; a surface
- *  showing a reader a figure uses {@link formatCellValue}. */
+/** The text of one numeric export cell: `render` over the finite figure it holds, {@link
+ *  EMPTY_VALUE_PLACEHOLDER} for a figure that is not finite, and the text it holds for a value that is
+ *  no figure at all. */
+function exportedFigure(
+  value: ReportCellValue | undefined,
+  render: (figure: number) => string,
+): string {
+  if (typeof value !== "number") return textOf(value);
+  return Number.isFinite(value) ? render(value) : EMPTY_VALUE_PLACEHOLDER;
+}
+
+/** Renders one report cell for the CSV export: the value {@link formatCellValue} renders, written
+ *  machine-readable because a column of `"$1,299.00"` cannot be summed by a spreadsheet. A money cell
+ *  exports a plain decimal (`"1299.00"`), an integer cell the table's own whole figure ungrouped
+ *  (`"1285"` for a fractional `1284.9`), a `compact-number` cell the full figure, a percent cell the
+ *  scaled number without its percent sign (`"12.5"`) and a text cell as it stands; a figure that is not
+ *  finite exports {@link EMPTY_VALUE_PLACEHOLDER} in both renderers, the dash the table shows, rather
+ *  than an empty cell or a fabricated zero. Three departures from the display form are deliberate: a
+ *  `compact-number` cell exports the full figure, a `date` cell the stored ISO text, and a money cell
+ *  the plain decimal a spreadsheet can sum. `reportService.toCsvMatrix` uses this; a surface showing a
+ *  reader a figure uses {@link formatCellValue}. */
 export function formatCellValueForExport(
   value: ReportCellValue | undefined,
   format: ReportCellFormat,
@@ -568,15 +584,15 @@ export function formatCellValueForExport(
     case "date":
       return textOf(value);
     case "integer":
-      return typeof value === "number" ? plainText(Math.trunc(value), 0) : textOf(value);
+      return exportedFigure(value, (figure) => plainText(figure, 0));
     case "money":
-      return typeof value === "number"
-        ? fixedText(fromMinorUnits(value), MONEY_FRACTION_DIGITS)
-        : textOf(value);
+      return exportedFigure(value, (figure) =>
+        fixedText(fromMinorUnits(figure), MONEY_FRACTION_DIGITS),
+      );
     case "percent":
-      return typeof value === "number" ? plainText(value * 100, 1) : textOf(value);
+      return exportedFigure(value, (figure) => plainText(figure * 100, 1));
     case "compact-number":
-      return typeof value === "number" ? plainText(value, DEFAULT_FRACTION_DIGITS) : textOf(value);
+      return exportedFigure(value, (figure) => plainText(figure, DEFAULT_FRACTION_DIGITS));
     default:
       return assertExhaustive(format);
   }

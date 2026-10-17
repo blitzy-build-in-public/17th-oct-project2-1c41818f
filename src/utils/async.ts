@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/async.ts
- * Purpose: Debounce, throttle, retry with backoff and timeout helpers.
+ * Purpose: Debounce, throttle, retry with backoff and timeout helpers
  * Lines: 374
  */
 

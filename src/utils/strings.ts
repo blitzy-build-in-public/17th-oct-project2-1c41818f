@@ -1,6 +1,6 @@
 /**
  * Path: src/utils/strings.ts
- * Purpose: Slug, case, truncation and initial helpers, the prefixed identifier generators, and the credential digest.
+ * Purpose: Slug, case, truncation and initial helpers, the prefixed identifier generators, and the credential digest
  * Lines: 541
  */
 

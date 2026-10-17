@@ -1,33 +1,32 @@
 /**
  * Path: src/state/catalogReducer.ts
  * Purpose: Catalogue load transitions tagged with the query fingerprint that produced them
- * Lines: 266
+ * Lines: 259
  */
 
-import type { Facet, FacetQuery, Product } from "@/types/catalog";
+import type { Facet, FilterState, Product } from "@/types/catalog";
 import type { ApiError, AsyncStatus, IsoDateTimeString, PageResult } from "@/types/common";
-import { DEFAULT_FILTER_STATE, toFacetQuery, writeFilterState } from "@/utils/queryParams";
+import { writeFilterState } from "@/utils/queryParams";
 
 // State -----------------------------------------------------------------------------------------
 
 /**
- * Everything one catalogue load produces, keyed by the query it belongs to.
+ * Everything one catalogue load produces, keyed by the whole request it belongs to.
  *
- * The state carries **no filter values** — no term, no facet selection, no sort and no page. The URL
- * is the store of every one of them, `src/utils/queryParams.ts` is its only reader and writer, and
- * the catalogue context derives them from the location, so a copy here would be a second answer to
- * a question the address bar already answers, and the two would drift apart the first time one was
- * written without the other. There is no action that sets a filter, and none may be added.
+ * The state carries **no filter values** — no term, no facet selection, no sort, no page and no page
+ * size. The URL is the store of every one of them, `src/utils/queryParams.ts` is its only reader and
+ * writer, and the catalogue context derives them from the location, so a copy here would be a second
+ * answer to a question the address bar already answers, and the two would drift apart the first time
+ * one was written without the other. There is no action that sets a filter, and none may be added.
  *
- * What is stored is what a request produced, tagged with the fingerprint of the query that asked
+ * What is stored is what a request produced, tagged with the fingerprint of the request that asked
  * for it:
  *
- * - `fingerprint` is that tag: the canonical key `catalogFingerprint` builds from a query. It stays
- *   `null` until the first load starts, which is the case `isStaleResult` reads as "nothing is
- *   waiting for a result".
- * - `query` is the readable half of the same tag, the filter half of the request in flight, kept so
- *   the state can say which query its results describe. It records what was asked; it is never a
- *   filter to edit and never read as one.
+ * - `fingerprint` is that tag: the canonical key `catalogFingerprint` builds from the whole request
+ *   that produced what is stored, its sort and its page and page size included, so a superseded page
+ *   is discarded by the same single comparison that discards a superseded filter. It stays `null`
+ *   until the first load starts, which is the case `isStaleResult` reads as "nothing is waiting for
+ *   a result".
  * - `page` and `facets` are what the last successful load returned, and both are deliberately kept
  *   across a failure so the error state renders over the result the shopper was reading.
  * - `loadedAt` is the instant the last successful load settled. It arrives with that load's action,
@@ -36,7 +35,6 @@ import { DEFAULT_FILTER_STATE, toFacetQuery, writeFilterState } from "@/utils/qu
 export interface CatalogState {
   readonly status: AsyncStatus;
   readonly fingerprint: string | null;
-  readonly query: FacetQuery | null;
   readonly page: PageResult<Product> | null;
   readonly facets: Facet[];
   readonly error: ApiError | null;
@@ -54,7 +52,6 @@ export function createInitialCatalogState(): CatalogState {
   return {
     status: "idle",
     fingerprint: null,
-    query: null,
     page: null,
     facets: [],
     error: null,
@@ -68,10 +65,11 @@ export function createInitialCatalogState(): CatalogState {
  * Every transition a catalogue load can make, one member each.
  *
  * Three members carry a `fingerprint`, and that is the whole of the staleness rule: a result is
- * applied only while its fingerprint is the state's own. `catalog/load-started` records which query
- * is being asked for, and the two result actions are applied or discarded by comparing what they
- * carry against the state, so a slow response for a query the shopper has moved on from cannot
- * overwrite a newer result that has already landed.
+ * applied only while its fingerprint is the state's own. `catalog/load-started` records the key of
+ * the request being asked for and nothing else of it, because what a request filters by belongs to
+ * the URL, and the two result actions are applied or discarded by comparing what they carry against
+ * the state, so a slow response for a request the shopper has moved on from — a superseded page as
+ * much as a superseded filter — cannot overwrite a newer result that has already landed.
  *
  * `at` is the instant a successful load settled. It travels with the action rather than being read
  * inside the reducer, which is what keeps the transitions reproducible, and it is optional so an
@@ -79,11 +77,7 @@ export function createInitialCatalogState(): CatalogState {
  * already holds.
  */
 export type CatalogAction =
-  | {
-      readonly type: "catalog/load-started";
-      readonly fingerprint: string;
-      readonly query: FacetQuery;
-    }
+  | { readonly type: "catalog/load-started"; readonly fingerprint: string }
   | {
       readonly type: "catalog/load-succeeded";
       readonly fingerprint: string;
@@ -97,23 +91,23 @@ export type CatalogAction =
 // Fingerprint and staleness ---------------------------------------------------------------------
 
 /**
- * The staleness key of a query: the canonical query string `src/utils/queryParams.ts` writes for
- * its filter half, with keys sorted and every field holding its default left out.
+ * The staleness key of a request: the canonical query string `src/utils/queryParams.ts` writes for
+ * the whole of it — the filter half together with the sort, the page and the page size — with keys
+ * sorted and every field holding its default left out.
  *
- * The key is produced by that module's own normaliser and writer rather than from the query's field
- * order, which is what makes two equivalent selections — the same categories listed the other way
- * round, a price range written out or left off — produce one key, and therefore one result the UI
- * treats as current. Only the filter half reaches it: the page and the page size are omitted as
- * their defaults, and the one sort the writer emits for a query carrying a term is derived from
- * that term alone. The empty filter writes the empty string, which is the unfiltered catalogue's
- * key.
+ * The key is produced by that module's own normaliser and writer rather than from the request's
+ * field order, which is what makes two equivalent selections — the same categories listed the other
+ * way round, a price range written out or left off — produce one key, and therefore one result the
+ * UI treats as current. Because the sort, the page and the page size are inside the key as well as
+ * the filters are, two requests that differ by any of them key apart, and that is what lets the
+ * single comparison in `isStaleResult` discard a superseded page exactly as it discards a superseded
+ * filter. The default selection writes the empty string, which is the unfiltered catalogue's key.
  *
- * @param query - The filter half of a listing or search request.
- * @returns The query's canonical key, compared against `CatalogState.fingerprint`.
+ * @param request - The whole request a load is issued for, its sort, page and page size included.
+ * @returns The request's canonical key, compared against `CatalogState.fingerprint`.
  */
-export function catalogFingerprint(query: FacetQuery): string {
-  const canonical: FacetQuery = toFacetQuery({ ...DEFAULT_FILTER_STATE, ...query });
-  return writeFilterState({ ...DEFAULT_FILTER_STATE, ...canonical }).toString();
+export function catalogFingerprint(request: FilterState): string {
+  return writeFilterState(request).toString();
 }
 
 /**
@@ -153,8 +147,8 @@ export function catalogReducer(state: CatalogState, action: CatalogAction): Cata
   switch (action.type) {
     case "catalog/load-started": {
       // A request already in flight for the same key is not a second load: React's StrictMode runs
-      // an effect twice and a re-render can re-issue the same query, and neither should replace the
-      // object the memoised context value is built from. A load in flight holds no error, so the
+      // an effect twice and a re-render can re-issue the same request, and neither should replace
+      // the object the memoised context value is built from. A load in flight holds no error, so the
       // status and the key are enough to recognise the request.
       if (state.status === "loading" && state.fingerprint === action.fingerprint) {
         return state;
@@ -165,7 +159,6 @@ export function catalogReducer(state: CatalogState, action: CatalogAction): Cata
         ...state,
         status: "loading",
         fingerprint: action.fingerprint,
-        query: action.query,
         error: null,
       };
     }
@@ -214,19 +207,19 @@ export function catalogReducer(state: CatalogState, action: CatalogAction): Cata
  * A creator for every action, defined once at module scope so a holder can keep one in a dependency
  * list without its identity changing between renders.
  *
- * `loadStarted` derives the key from the query when the caller supplies none, so the query and the
- * fingerprint a load is tagged with cannot describe two different requests. `loadSucceeded` stamps
+ * `loadStarted` derives the key from the whole request when the caller supplies none, so a load and
+ * the fingerprint it is tagged with cannot describe two different requests. `loadSucceeded` stamps
  * the instant it was called — the only clock read in this module, and the reason the reducer itself
  * has none — in the ISO form `Date` produces, because `src/utils/dates.ts` is outside this module's
  * dependencies; a caller that needs a fixed instant passes its own, which is how a transition is
  * asserted rather than observed.
  */
 export const catalogActions = {
-  /** Records the query a load is being issued for, and the key its result will be recognised by. */
+  /** Records the key of the request a load is being issued for; its values live in the URL. */
   loadStarted: (
-    query: FacetQuery,
-    fingerprint: string = catalogFingerprint(query),
-  ): CatalogAction => ({ type: "catalog/load-started", query, fingerprint }),
+    request: FilterState,
+    fingerprint: string = catalogFingerprint(request),
+  ): CatalogAction => ({ type: "catalog/load-started", fingerprint }),
 
   /** Applies one page of results together with the facets that came back with it. */
   loadSucceeded: (

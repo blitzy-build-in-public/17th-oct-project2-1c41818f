@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/catalogReducer.test.ts
  * Purpose: Load transitions and the query-fingerprint guard that discards a stale response
- * Lines: 461
+ * Lines: 555
  */
 
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ import {
   createInitialCatalogState,
   isStaleResult,
 } from "@/state/catalogReducer";
-import { DEFAULT_FILTER_STATE, toFacetQuery } from "@/utils/queryParams";
+import { DEFAULT_FILTER_STATE } from "@/utils/queryParams";
 
 import {
   FIXED_NOW,
@@ -28,7 +28,7 @@ import {
 } from "../../fixtures";
 
 import type { CatalogAction, CatalogState } from "@/state/catalogReducer";
-import type { Facet, FacetQuery, Product } from "@/types/catalog";
+import type { Facet, FilterState, Product } from "@/types/catalog";
 import type { ApiError, PageResult } from "@/types/common";
 
 // The subject is a pure function of a state and an action: every case below calls it directly, with
@@ -36,8 +36,8 @@ import type { ApiError, PageResult } from "@/types/common";
 
 // Test data -------------------------------------------------------------------------------------
 
-/** The unfiltered catalogue as `GET /api/products` reads it: the default selection's filter half. */
-const UNFILTERED_QUERY: FacetQuery = toFacetQuery(DEFAULT_FILTER_STATE);
+/** The unfiltered catalogue as `GET /api/products` reads it: the default selection, whole. */
+const UNFILTERED_QUERY: FilterState = DEFAULT_FILTER_STATE;
 /** That selection's key: every field holds its default, so the canonical form is empty. */
 const UNFILTERED_KEY = "";
 
@@ -48,9 +48,9 @@ const AURELIA = makeBrand({ name: "Aurelia Audio" }).id;
 const NORTHCREST = makeBrand({ name: "Northcrest" }).id;
 
 /** A search for one term: the query a shopper types into the search field. */
-const SEARCH_QUERY: FacetQuery = { ...UNFILTERED_QUERY, q: "lamp" };
-/** A faceted browse on other terms, whose page of results belongs to a different request entirely. */
-const BROWSE_QUERY: FacetQuery = {
+const SEARCH_QUERY: FilterState = { ...UNFILTERED_QUERY, q: "lamp" };
+/** A faceted browse at its first page, whose results belong to a different request entirely. */
+const BROWSE_QUERY: FilterState = {
   ...UNFILTERED_QUERY,
   categoryIds: [LAPTOPS],
   brandIds: [AURELIA, NORTHCREST],
@@ -59,6 +59,10 @@ const BROWSE_QUERY: FacetQuery = {
 /** The keys both queries are recognised by, asked of the module rather than typed out here. */
 const SEARCH_KEY = catalogFingerprint(SEARCH_QUERY);
 const BROWSE_KEY = catalogFingerprint(BROWSE_QUERY);
+/** That same browse one page further in: the two requests differ by the page and nothing else. */
+const BROWSE_SECOND_PAGE: FilterState = { ...BROWSE_QUERY, page: 2 };
+/** Its key, which differs from the first page's because the page is inside the key. */
+const BROWSE_SECOND_PAGE_KEY = catalogFingerprint(BROWSE_SECOND_PAGE);
 
 /** The ranked page a search returns, and the facets that came back with it. */
 const SEARCH_PRODUCTS: Product[] = [
@@ -73,6 +77,15 @@ const BROWSE_PRODUCTS: Product[] = [
   makeProduct({ name: "Summit Backpack" }),
 ];
 const BROWSE_PAGE: PageResult<Product> = makePageResult(BROWSE_PRODUCTS, { total: 27, page: 2 });
+/** That same result set's first page, with its own items, so an assertion tells the two apart. */
+const BROWSE_FIRST_PRODUCTS: Product[] = [
+  makeProduct({ name: "Coastal Lantern" }),
+  makeProduct({ name: "Driftwood Shelf" }),
+];
+const BROWSE_FIRST_PAGE: PageResult<Product> = makePageResult(BROWSE_FIRST_PRODUCTS, {
+  total: 27,
+  page: 1,
+});
 const SEARCH_FACETS: Facet[] = [
   makeFacet({
     id: "brand",
@@ -110,7 +123,7 @@ const SUCCESS_WITHOUT_INSTANT: CatalogAction = {
 
 /** The state a load for `query` has reached, built through the reducer's own start transition. */
 function stateLoading(
-  query: FacetQuery,
+  query: FilterState,
   fingerprint: string = catalogFingerprint(query),
 ): CatalogState {
   return catalogReducer(
@@ -134,9 +147,8 @@ const FAILED_SEARCH: CatalogState = catalogReducer(
 describe("createInitialCatalogState", () => {
   const initial = createInitialCatalogState();
 
-  it("starts idle, holding no query, no page of results and no error", () => {
+  it("starts idle, holding no page of results and no error", () => {
     expect(initial.status).toBe("idle");
-    expect(initial.query).toBeNull();
     expect(initial.page).toBeNull();
     expect(initial.facets).toEqual([]);
     expect(initial.error).toBeNull();
@@ -150,10 +162,9 @@ describe("createInitialCatalogState", () => {
 });
 
 describe("catalog/load-started", () => {
-  it("records the query and its key and moves the surface to loading", () => {
+  it("records the request's key and moves the surface to loading", () => {
     const loading = stateLoading(BROWSE_QUERY);
     expect(loading.status).toBe("loading");
-    expect(loading.query).toEqual(BROWSE_QUERY);
     expect(loading.fingerprint).toBe(BROWSE_KEY);
   });
 
@@ -162,7 +173,6 @@ describe("catalog/load-started", () => {
       createInitialCatalogState(),
       catalogActions.loadStarted(SEARCH_QUERY),
     );
-    expect(loading.query).toEqual(SEARCH_QUERY);
     expect(isStaleResult(loading, SEARCH_KEY)).toBe(false);
     expect(isStaleResult(loading, BROWSE_KEY)).toBe(true);
   });
@@ -172,13 +182,12 @@ describe("catalog/load-started", () => {
     expect(catalogReducer(loading, catalogActions.loadStarted(SEARCH_QUERY))).toBe(loading);
   });
 
-  it("replaces the key and the query when a newer one supersedes it", () => {
+  it("replaces the key when a newer request supersedes it", () => {
     const superseded = catalogReducer(
       stateLoading(SEARCH_QUERY),
       catalogActions.loadStarted(BROWSE_QUERY),
     );
     expect(superseded.status).toBe("loading");
-    expect(superseded.query).toEqual(BROWSE_QUERY);
     expect(superseded.fingerprint).toBe(BROWSE_KEY);
   });
 
@@ -278,7 +287,7 @@ describe("catalog/reset", () => {
 // The fingerprint and the staleness guard --------------------------------------------------------
 
 /** Selections that must each key apart from the unfiltered catalogue and from one another. */
-const DISTINCT_QUERIES: [string, FacetQuery][] = [
+const DISTINCT_QUERIES: [string, FilterState][] = [
   ["a search term", { ...UNFILTERED_QUERY, q: "lamp" }],
   ["another search term", { ...UNFILTERED_QUERY, q: "kettle" }],
   ["a category selection", { ...UNFILTERED_QUERY, categoryIds: [LAPTOPS] }],
@@ -291,7 +300,7 @@ const DISTINCT_QUERIES: [string, FacetQuery][] = [
 
 describe("catalogFingerprint", () => {
   it("keys one query the same way however often and however it is built", () => {
-    const rebuilt: FacetQuery = {
+    const rebuilt: FilterState = {
       inStockOnly: BROWSE_QUERY.inStockOnly,
       brandIds: [...BROWSE_QUERY.brandIds],
       categoryIds: [...BROWSE_QUERY.categoryIds],
@@ -300,6 +309,9 @@ describe("catalogFingerprint", () => {
       minRating: BROWSE_QUERY.minRating,
       minPriceMinor: BROWSE_QUERY.minPriceMinor,
       maxPriceMinor: BROWSE_QUERY.maxPriceMinor,
+      sort: BROWSE_QUERY.sort,
+      page: BROWSE_QUERY.page,
+      pageSize: BROWSE_QUERY.pageSize,
     };
     expect(catalogFingerprint(BROWSE_QUERY)).toBe(BROWSE_KEY);
     expect(catalogFingerprint(rebuilt)).toBe(BROWSE_KEY);
@@ -340,6 +352,16 @@ describe("catalogFingerprint", () => {
     expect(inverted).toBe(ascending);
   });
 
+  it("keys a page, a sort and a page size apart, as the whole request is inside the key", () => {
+    const keys = [
+      catalogFingerprint({ ...UNFILTERED_QUERY, page: 2 }),
+      catalogFingerprint({ ...UNFILTERED_QUERY, sort: "price-asc" }),
+      catalogFingerprint({ ...UNFILTERED_QUERY, pageSize: 24 }),
+    ];
+    expect(keys.filter((key) => key === UNFILTERED_KEY)).toEqual([]);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
   it.each(DISTINCT_QUERIES)("keys %s apart from the unfiltered catalogue", (_label, query) => {
     expect(catalogFingerprint(query)).not.toBe(UNFILTERED_KEY);
   });
@@ -369,7 +391,6 @@ describe("a result for a superseded query", () => {
     );
     expect(afterLateSearch).toBe(loadingBrowse);
     expect(afterLateSearch.status).toBe("loading");
-    expect(afterLateSearch.query).toEqual(BROWSE_QUERY);
     expect(afterLateSearch.page).toBeNull();
     expect(afterLateSearch.facets).toEqual([]);
     expect(afterLateSearch.loadedAt).toBeNull();
@@ -414,7 +435,78 @@ describe("a result for a superseded query", () => {
   });
 });
 
+describe("a result for a superseded page", () => {
+  it("keys two requests differing only by their page apart", () => {
+    expect(BROWSE_SECOND_PAGE_KEY).not.toBe(BROWSE_KEY);
+    expect(isStaleResult(stateLoading(BROWSE_SECOND_PAGE), BROWSE_KEY)).toBe(true);
+  });
+
+  it("discards a page-1 response that lands while page 2 is loading", () => {
+    const loadingSecondPage = stateLoading(BROWSE_SECOND_PAGE);
+    const afterLateFirstPage = catalogReducer(
+      loadingSecondPage,
+      catalogActions.loadSucceeded(BROWSE_KEY, BROWSE_FIRST_PAGE, SEARCH_FACETS, LATER_INSTANT),
+    );
+    expect(afterLateFirstPage).toBe(loadingSecondPage);
+    expect(afterLateFirstPage.status).toBe("loading");
+    expect(afterLateFirstPage.page).toBeNull();
+    expect(afterLateFirstPage.loadedAt).toBeNull();
+  });
+
+  it("treats a page change as a new load rather than the load already in flight", () => {
+    const loadingFirstPage = stateLoading(BROWSE_QUERY);
+    const loadingSecondPage = catalogReducer(
+      loadingFirstPage,
+      catalogActions.loadStarted(BROWSE_SECOND_PAGE),
+    );
+    expect(loadingSecondPage).not.toBe(loadingFirstPage);
+    expect(loadingSecondPage.status).toBe("loading");
+    expect(loadingSecondPage.fingerprint).toBe(BROWSE_SECOND_PAGE_KEY);
+
+    const settled = catalogReducer(
+      loadingSecondPage,
+      catalogActions.loadSucceeded(BROWSE_SECOND_PAGE_KEY, BROWSE_PAGE, SEARCH_FACETS, FIXED_NOW),
+    );
+    expect(settled.status).toBe("success");
+    expect(settled.loadedAt).toBe(FIXED_NOW);
+    expect(settled.page).toEqual(BROWSE_PAGE);
+    expect(settled.page?.items.map((product) => product.id)).toEqual(
+      BROWSE_PRODUCTS.map((product) => product.id),
+    );
+    expect(settled.page?.page).toBe(2);
+  });
+
+  it("still leaves a repeat of the load already in flight alone", () => {
+    const loadingSecondPage = stateLoading(BROWSE_SECOND_PAGE);
+    expect(catalogReducer(loadingSecondPage, catalogActions.loadStarted(BROWSE_SECOND_PAGE))).toBe(
+      loadingSecondPage,
+    );
+  });
+});
+
 // What this state must not hold ------------------------------------------------------------------
+
+/** Every field of `FilterState`, each of which the URL owns and this state must not hold. */
+const FILTER_FIELDS: (keyof FilterState)[] = [
+  "q",
+  "categoryIds",
+  "brandIds",
+  "minPriceMinor",
+  "maxPriceMinor",
+  "minRating",
+  "inStockOnly",
+  "tags",
+  "sort",
+  "page",
+  "pageSize",
+];
+
+/**
+ * The ten of those names the state holds nothing under at all. `page` is the eleventh and the one name
+ * both shapes declare: the state's own `page` is the loaded page of results, not the number the URL
+ * carries, so no key check can settle it and the type assertion in the case below does.
+ */
+const FILTER_KEY_NAMES = FILTER_FIELDS.filter((field) => field !== "page");
 
 /** The filter writers, every one of which belongs to `src/utils/queryParams.ts` and not to this module. */
 const FILTER_SETTERS = ["setQuery", "toggleFacetValue", "setPriceRange", "withPage", "withSort"];
@@ -432,12 +524,14 @@ describe("the state the URL owns", () => {
       "fingerprint",
       "loadedAt",
       "page",
-      "query",
       "status",
     ]);
-    expect("sort" in settledBrowse).toBe(false);
-    expect("pageSize" in settledBrowse).toBe(false);
+    expect(FILTER_KEY_NAMES.filter((field) => field in settledBrowse)).toEqual([]);
     expect(typeof settledBrowse.page).not.toBe("number");
+  });
+
+  it("exposes no query field for a filter value to be read back out of", () => {
+    expect("query" in settledBrowse).toBe(false);
   });
 
   it("exposes no filter setter, only the four load transitions", () => {

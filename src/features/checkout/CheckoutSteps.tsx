@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutSteps.tsx
  * Purpose: The ordered step indicator with aria-current and per-step headings
- * Lines: 209
+ * Lines: 218
  */
 
 import type { ReactElement } from "react";
@@ -149,8 +149,10 @@ export interface CheckoutStepsProps {
    * Returns to a step already completed, so an earlier step is reachable without retyping what it
    * holds: the checkout keeps every group of values as it was entered and moving back changes no
    * group, so this only names the step. The checkout route owns the transition and passes its own
-   * `setStep`; the indicator dispatches nothing and validates nothing. Omit it and the indicator is
-   * the read-only progress display the step shell's own back control complements.
+   * `setStep`; the indicator dispatches nothing and validates nothing. Omit it — or stand on the
+   * confirmation, where a placed order leaves the three steps as progress marks with nothing left to
+   * return to — and the indicator is the read-only progress display the step shell's own back
+   * control complements.
    */
   readonly onStepSelect?: (step: CheckoutFormStep) => void;
 }
@@ -174,12 +176,19 @@ export interface CheckoutStepsProps {
  */
 export function CheckoutSteps({ currentStep, onStepSelect }: CheckoutStepsProps): ReactElement {
   const lastStep = CHECKOUT_FORM_STEPS[CHECKOUT_FORM_STEPS.length - 1];
+  /**
+   * Whether the shopper still has a step to work on. A return control follows the reducer's own
+   * rule — a direct move reaches an earlier form step only — so at the confirmation, which is no form
+   * step and which `checkout/set-step` will not leave, every step is a progress mark rather than a
+   * destination and no control is offered for a move the state machine refuses.
+   */
+  const isFlowLive = CHECKOUT_FORM_STEPS.some((formStep) => formStep === currentStep);
 
   return (
     <ol className="sp-steps">
       {CHECKOUT_FORM_STEPS.map((step, position) => {
         const status = statusOf(step, currentStep);
-        const isReturnable = onStepSelect !== undefined && status === "completed";
+        const isReturnable = onStepSelect !== undefined && isFlowLive && status === "completed";
 
         return (
           <li
