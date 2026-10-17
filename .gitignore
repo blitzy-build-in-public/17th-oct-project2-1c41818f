@@ -1,37 +1,36 @@
+# Path: .gitignore
+# Purpose: Ignored paths: installed dependencies, build output and local environment files
+# Lines: 36
+
 # Dependencies
 node_modules/
+# package-lock.json and generation-manifest.md are committed deliverables, deliberately not ignored.
 
 # Build output
 dist/
 dist-ssr/
-*.tsbuildinfo
 
 # Test and coverage output
 coverage/
-.nyc_output/
-.vitest/
 
-# Local environment files (never committed; .env.example is the documented template)
+# Local environment files; .env.example stays tracked as the documented, inert template
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
+*.local
 
-# Tooling caches
-.vite/
-.eslintcache
-.cache/
-
-# Logs
-logs/
+# Logs and tooling caches
 *.log
 npm-debug.log*
-yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.vite/
+.eslintcache
 
 # Editors and operating systems
-.vscode/*
-!.vscode/extensions.json
-.idea/
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
