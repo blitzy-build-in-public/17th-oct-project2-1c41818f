@@ -151,7 +151,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   │   └── Tooltip.tsx  # 220 · P18 · Done · 404
 │   │   ├── product/
 │   │   │   ├── ProductCard.tsx  # 360 · P19 · Pending · —
-│   │   │   └── ProductGallery.tsx  # 270 · P19 · Pending · —
+│   │   │   └── ProductGallery.tsx  # 270 · P19 · Done · 272
 │   │   └── charts/
 │   │       ├── chartScales.ts  # 310 · P19 · Done · 401
 │   │       ├── chartGeometry.ts  # part of src/components/charts/chartScales.ts 310 · P19 · Done · 540 · §0.5.5 split of src/components/charts/chartScales.ts
