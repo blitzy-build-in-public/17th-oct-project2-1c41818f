@@ -1,0 +1,260 @@
+/* Path: src/styles/tokens.css
+ * Purpose: Declares every colour, spacing, typography, radius, shadow and z-index token the stylesheets consume.
+ * Lines: 260
+ */
+
+/* The single source of every design value in SalesPro: the other seven stylesheets consume these
+ * declarations by name through var() and declare no colour, size, radius, shadow, z-index, duration
+ * or breakpoint of their own. This sheet loads first, so it depends on nothing in the folder.
+ *
+ * One theme only — no dark-mode block, no theme class — and a system font stack, because the product
+ * issues no network request. Breakpoints are documented here yet cannot be used in a media query,
+ * since CSS does not evaluate var() there: every query names the token and repeats its literal.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ==== Surfaces and text ==== */
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  /* Overlays reuse the card hue and are separated by elevation, so the token exists to keep a card
+   * from ever borrowing an overlay's surface when the palette moves. */
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f2f4f7;
+  --color-surface-inverse: #101828;
+  /* Decorative only: a divider or a row rule, never the boundary that identifies a control. */
+  --color-border-subtle: #eaecf0;
+  --color-border: #d0d5dd;
+  /* Control borders and any outline that carries meaning: 3.65:1 on --color-surface, 3.43:1 on
+   * --color-bg, clearing the 3:1 non-text minimum of WCAG 2.1 SC 1.4.11. */
+  --color-border-strong: #7b8797;
+  --color-text: #101828; /* 17.75:1 on --color-surface, 16.70:1 on --color-bg */
+  --color-text-muted: #475467; /* 7.69:1 on --color-surface, 7.23:1 on --color-bg */
+  --color-text-subtle: #667085; /* 4.97:1 on --color-surface, 4.68:1 on --color-bg: caption, placeholder */
+  --color-text-inverse: #ffffff; /* 17.75:1 on --color-surface-inverse */
+  --color-text-on-accent: #ffffff; /* 6.29:1 on --color-accent */
+
+  /* ==== Accent — exactly one, reserved for the primary action of a screen ==== */
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca; /* white on it: 7.90:1 */
+  --color-accent-active: #3538cd; /* white on it: 8.08:1 */
+  --color-accent-subtle: #eef2ff;
+  --color-accent-contrast: #312e81; /* on --color-accent-subtle: 10.22:1 */
+
+  /* ==== Focus — a token of its own, deliberately not the accent ==== */
+  --color-focus-ring: #1250c4; /* 7.07:1 on --color-surface, 6.65:1 on --color-bg */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* ==== Semantic — each hue as a solid, a tinted surface and its legible text pair ==== */
+  --color-success: #067647; /* white on it: 5.69:1 */
+  --color-success-surface: #ecfdf3;
+  --color-success-text: #05603a; /* on --color-success-surface: 7.26:1 */
+  --color-warning: #b54708; /* white on it: 5.43:1 */
+  --color-warning-surface: #fffaeb;
+  --color-warning-text: #93370d; /* on --color-warning-surface: 7.21:1 */
+  --color-danger: #b42318; /* white on it: 6.57:1 */
+  --color-danger-hover: #912018; /* the destructive button's hover; white on it: 8.66:1 */
+  --color-danger-surface: #fef3f2;
+  --color-danger-text: #912018; /* on --color-danger-surface: 7.97:1 */
+  --color-info: #175cd3; /* white on it: 5.99:1 */
+  --color-info-surface: #eff8ff;
+  --color-info-text: #1849a9; /* on --color-info-surface: 7.62:1 */
+
+  /* ==== Overlay and elevation ==== */
+  --color-backdrop: rgba(16, 24, 40, 0.5);
+  --color-shadow: rgba(16, 24, 40, 0.12); /* the one shadow colour all three levels compose from */
+
+  /* ==== Chart palette — eight series spaced in hue and in lightness, so they stay apart in a
+   * greyscale rendering and in a colour-blind one. Each clears 3:1 on --color-surface, which a 2px
+   * stroke needs to be readable; admin-reports.css maps the numbered tokens onto its series
+   * classes and src/constants/config.ts hands the same references to ChartSeries.color. ==== */
+  --chart-series-1: #4f46e5; /* 6.29:1 */
+  --chart-series-2: #b54708; /* 5.43:1 */
+  --chart-series-3: #0e9384; /* 3.80:1 */
+  --chart-series-4: #dd2590; /* 4.43:1 */
+  --chart-series-5: #64748b; /* 4.76:1 */
+  --chart-series-6: #067647; /* 5.69:1 */
+  --chart-series-7: #7a5af8; /* 4.52:1 */
+  --chart-series-8: #0e7490; /* 5.36:1 */
+  --chart-grid: #eaecf0;
+  --chart-axis: #d0d5dd;
+  --chart-label: #475467; /* 7.69:1 on --color-surface */
+  --chart-positive: #067647;
+  --chart-negative: #b42318;
+
+  /* ==== Spacing — a 4px scale in rem, so every step follows the reader's root font size ==== */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ==== Typography — system families and the raw scale the roles below compose from ==== */
+  --font-family-base:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-height-tight: 1.15;
+  --line-height-snug: 1.3;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.04em;
+
+  /* ==== Type roles — a rule consumes a role, never a raw size or weight; the size of the two
+   * largest roles rises at --breakpoint-md, in the block at the foot of this file ==== */
+  --text-display-size: var(--font-size-3xl);
+  --text-display-line-height: var(--line-height-tight);
+  --text-display-weight: var(--font-weight-bold);
+  --text-display-tracking: var(--letter-spacing-tight);
+  --text-heading-1-size: var(--font-size-2xl);
+  --text-heading-1-line-height: var(--line-height-tight);
+  --text-heading-1-weight: var(--font-weight-bold);
+  --text-heading-1-tracking: var(--letter-spacing-tight);
+  --text-heading-2-size: var(--font-size-xl);
+  --text-heading-2-line-height: var(--line-height-snug);
+  --text-heading-2-weight: var(--font-weight-semibold);
+  --text-heading-2-tracking: var(--letter-spacing-normal);
+  --text-heading-3-size: var(--font-size-lg);
+  --text-heading-3-line-height: var(--line-height-snug);
+  --text-heading-3-weight: var(--font-weight-semibold);
+  --text-heading-3-tracking: var(--letter-spacing-normal);
+  --text-body-size: var(--font-size-md);
+  --text-body-line-height: var(--line-height-normal);
+  --text-body-weight: var(--font-weight-regular);
+  --text-body-tracking: var(--letter-spacing-normal);
+  --text-body-sm-size: var(--font-size-sm);
+  --text-body-sm-line-height: var(--line-height-normal);
+  --text-body-sm-weight: var(--font-weight-regular);
+  --text-body-sm-tracking: var(--letter-spacing-normal);
+  --text-label-size: var(--font-size-sm);
+  --text-label-line-height: var(--line-height-snug);
+  --text-label-weight: var(--font-weight-medium);
+  --text-label-tracking: var(--letter-spacing-normal);
+  --text-caption-size: var(--font-size-xs);
+  --text-caption-line-height: var(--line-height-snug);
+  --text-caption-weight: var(--font-weight-regular);
+  --text-caption-tracking: var(--letter-spacing-wide);
+
+  /* ==== Radius ==== */
+  --radius-none: 0;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* ==== Elevation — exactly three levels, each composed from the one shadow colour and its own
+   * offset and blur, so a level is re-tuned in a single place ==== */
+  --shadow-offset-y-1: 1px;
+  --shadow-blur-1: 2px;
+  --shadow-1: 0 var(--shadow-offset-y-1) var(--shadow-blur-1) var(--color-shadow);
+  --shadow-offset-y-2: 4px;
+  --shadow-blur-2: 12px;
+  --shadow-2: 0 var(--shadow-offset-y-2) var(--shadow-blur-2) var(--color-shadow);
+  --shadow-offset-y-3: 12px;
+  --shadow-blur-3: 32px;
+  --shadow-3: 0 var(--shadow-offset-y-3) var(--shadow-blur-3) var(--color-shadow);
+
+  /* ==== Z-index ladder — the entire z-index vocabulary of the product, so no other sheet writes a
+   * bare number. The table header rises above its own rows and stays below every overlay. ==== */
+  --z-base: 0;
+  --z-table-header: 10;
+  --z-sidebar: 40;
+  --z-header: 100;
+  --z-dropdown: 200;
+  --z-drawer: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* ==== Layout geometry ==== */
+  --layout-container-max: 1280px;
+  --layout-container-narrow: 720px;
+  --layout-gutter: 1rem; /* widens at --breakpoint-md */
+  --layout-header-height: 64px;
+  --layout-sidebar-width: 240px;
+  --layout-sidebar-rail: 64px;
+  --layout-aside-width: 320px; /* the cart and checkout summary column */
+  --layout-facet-width: 260px;
+  --layout-table-min-width: 960px; /* below this a report or order table scrolls instead of compressing */
+  --layout-measure: 65ch; /* the prose measure */
+
+  /* ==== Breakpoints — the documented single source of the four layout stops ==== */
+  /* The numbers are owned by src/constants/config.ts (BREAKPOINTS: SMALL 480, MEDIUM 768, LARGE
+   * 1024, XLARGE 1280) and restated here only because a stylesheet cannot import them; the two must
+   * change together. CSS does not evaluate var() inside a media query, so these four document the
+   * stops rather than feed a query: each query in the folder writes the literal width and carries a
+   * trailing comment naming the token it came from, as the block at the foot of this file does.
+   * The rules they govern: the header navigation collapses below --breakpoint-sm; the facet panel
+   * becomes a drawer below --breakpoint-md, where the admin sidebar also becomes a rail; the product
+   * grid runs two columns at --breakpoint-sm, three at --breakpoint-md and four at --breakpoint-lg. */
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* ==== Control and component dimensions ==== */
+  --control-height-sm: 32px;
+  --control-height-md: 40px;
+  --control-height-lg: 48px;
+  --touch-target-min: 44px; /* the floor a small control pads up to, not a height it must reach */
+  --table-row-height: 48px;
+  --table-header-height: 44px;
+  --modal-width-sm: 400px;
+  --modal-width-md: 560px;
+  --modal-width-lg: 800px;
+  --drawer-width: 380px;
+  --drawer-width-sm: 320px;
+  --tooltip-max-width: 280px;
+  --progress-height: 6px;
+  --avatar-size-sm: 24px;
+  --avatar-size-md: 40px;
+  --border-width: 1px;
+  --border-width-thick: 2px;
+
+  /* ==== Motion and opacity — short and functional; base.css removes every transition under
+   * prefers-reduced-motion, which is where that rule belongs rather than here ==== */
+  --duration-instant: 0ms;
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --opacity-disabled: 0.5;
+  --opacity-inert: 0.6; /* the visible dimming of an inert background behind a drawer */
+}
+
+/* Mobile-first: the two largest type roles and the page gutter are the only values that change at
+ * the medium stop. The width is a literal because a media query cannot read --breakpoint-md. */
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  :root {
+    --layout-gutter: 2rem;
+    --text-display-size: var(--font-size-4xl);
+    --text-heading-1-size: var(--font-size-3xl);
+  }
+}

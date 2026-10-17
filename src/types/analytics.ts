@@ -137,7 +137,7 @@ export interface ChartPoint {
 /**
  * One plotted series: its identity, the name and colour it is drawn with, and its points.
  *
- * `color` is a CSS custom-property reference declared in `src/styles/tokens.css` — `var(--chart-1)`
+ * `color` is a CSS custom-property reference declared in `src/styles/tokens.css` — `var(--chart-series-1)`
  * and its siblings — and never a colour literal, because the tokens are the single source of every
  * design value and a hard-coded colour cannot follow a palette or a contrast fix. `id` stays stable
  * across a re-bucket of the same data, which is what lets a series toggle keep one line selected
