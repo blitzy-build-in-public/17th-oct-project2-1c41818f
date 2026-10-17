@@ -19,9 +19,9 @@ The single source of truth for what exists in this repository: every path with i
 | Budgeted total                              | exactly 50,000 lines, held to ±5% (47,500 – 52,500) by Part 4's ledger                                   |
 | Gated outputs                               | Phase 0 plus 39 phases, each producing 3 to 5 files                                                      |
 | Largest per-file budget                     | 500 lines, inside the request's 600-line ceiling                                                         |
-| Generation phases complete at this snapshot | 12 of 39 — phases 1–10, 14 and 16 hold every file they generate (11, 13, 15, 17–20, 21, 26, 34–35 and 37 are partial) |
-| Counted files written at this snapshot      | 79 of 157, plus all 21 split paths
-| Lines delivered at this snapshot            | 39,989 — the progress line is `Total lines so far: 39,989 / 50000` |
+| Generation phases complete at this snapshot | 13 of 39 — phases 1–11, 14 and 16 hold every file they generate (13, 15, 17–21, 25–26, 30, 32, 34–35 and 37 are partial) |
+| Counted files written at this snapshot      | 88 of 157, plus all 21 split paths
+| Lines delivered at this snapshot            | 43,180 — the progress line is `Total lines so far: 43,180 / 50000` |
 
 ## How a session resumes
 
@@ -40,13 +40,8 @@ Flattening this tree top to bottom reproduces the phase schedule of Part 2 exact
 Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` the phase that generates the file · `Done` the plan's content is complete at that path · `Pending · —` nothing of the plan's content is written yet · `Pending · <count> <note>` the path exists but does not hold the plan's content yet (today only the `README.md` setup placeholder, which phase 39 completes in place) · `part of <mapped path> <budget>` a §0.5.5 split path, carrying no budget of its own and drawing on the mapped file the row names.
 
 ```text
-```text
-```text
-```text
-```text
-```text
 /  (repository root)
-├── generation-manifest.md  # 300 · P0 · Done · 474 · excluded from the 50,000-line total
+├── generation-manifest.md  # 300 · P0 · Done · 478 · excluded from the 50,000-line total
 ├── package.json  # 65 · P1 · Done · 46
 ├── tsconfig.json  # 45 · P1 · Done · 28
 ├── vite.config.ts  # 60 · P1 · Done · 25
@@ -66,7 +61,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   ├── constants/
 │   │   ├── routes.ts  # 180 · P4 · Done · 177
 │   │   ├── config.ts  # 250 · P4 · Done · 382
-│   │   ├── content.ts  # 400 · P4 · Done · 600
+│   │   ├── content.ts  # 400 · P4 · Done · 606
 │   │   └── taxonomy.ts  # 330 · P4 · Done · 405
 │   ├── utils/
 │   │   ├── format.ts  # 380 · P5 · Done · 599
@@ -119,9 +114,9 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── salesHistory.ts  # 380 · P12 · Pending · —
 │   │   └── repositories.ts  # 440 · P12 · Pending · —
 │   ├── state/
-│   │   ├── AuthContext.tsx  # 360 · P13 · Pending · —
+│   │   ├── AuthContext.tsx  # 360 · P13 · Done · 555
 │   │   ├── CartContext.tsx  # 360 · P13 · Done · 384
-│   │   ├── CatalogContext.tsx  # 330 · P13 · Pending · —
+│   │   ├── CatalogContext.tsx  # 330 · P13 · Done · 411
 │   │   ├── CheckoutContext.tsx  # 380 · P13 · Pending · —
 │   │   ├── ToastContext.tsx  # 250 · P13 · Done · 249
 │   │   ├── cartReducer.ts  # 310 · P14 · Done · 539
@@ -164,7 +159,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   │   ├── HomePage.tsx  # 310 · P21 · Pending · —
 │   │   │   ├── HeroSection.tsx  # 270 · P21 · Done · 197
 │   │   │   ├── FeaturedProducts.tsx  # 290 · P21 · Pending · —
-│   │   │   └── CategoryShowcase.tsx  # 250 · P21 · Pending · —
+│   │   │   └── CategoryShowcase.tsx  # 250 · P21 · Done · 231
 │   │   ├── catalog/
 │   │   │   ├── CatalogPage.tsx  # 380 · P22 · Pending · —
 │   │   │   ├── ProductList.tsx  # 310 · P22 · Pending · —
@@ -182,7 +177,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   │   ├── CartItemRow.tsx  # 290 · P25 · Pending · —
 │   │   │   ├── CartSummary.tsx  # 330 · P25 · Pending · —
 │   │   │   ├── MiniCart.tsx  # 330 · P25 · Pending · —
-│   │   │   └── cartSelectors.ts  # 270 · P25 · Pending · —
+│   │   │   └── cartSelectors.ts  # 270 · P25 · Done · 204
 │   │   ├── checkout/
 │   │   │   ├── CheckoutPage.tsx  # 380 · P26 · Pending · —
 │   │   │   ├── CheckoutSteps.tsx  # 250 · P26 · Done · 249
@@ -199,7 +194,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   │   └── AddressBookPage.tsx  # 380 · P29 · Pending · —
 │   │   ├── admin/
 │   │   │   ├── AdminDashboardPage.tsx  # 400 · P30 · Pending · —
-│   │   │   ├── KpiCard.tsx  # 270 · P30 · Pending · —
+│   │   │   ├── KpiCard.tsx  # 270 · P30 · Done · 239
 │   │   │   ├── SalesChart.tsx  # 380 · P30 · Pending · —
 │   │   │   ├── RecentOrdersTable.tsx  # 290 · P30 · Pending · —
 │   │   │   └── TopProductsTable.tsx  # 250 · P30 · Pending · —
@@ -208,7 +203,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │       ├── SalesReport.tsx  # 400 · P31 · Pending · —
 │   │       ├── ProductPerformanceReport.tsx  # 350 · P31 · Pending · —
 │   │       ├── CustomerReport.tsx  # 330 · P32 · Pending · —
-│   │       ├── DateRangePicker.tsx  # 310 · P32 · Pending · —
+│   │       ├── DateRangePicker.tsx  # 310 · P32 · Done · 426
 │   │       └── ReportTable.tsx  # 290 · P32 · Pending · —
 │   ├── Router.tsx  # 390 · P33 · Pending · —
 │   ├── App.tsx  # 290 · P33 · Pending · —
@@ -267,44 +262,44 @@ Phase 0 is the first gated output: its visible content is the tree above with a 
 | 1     | 5 · `package.json` → `index.html`                                                                | 315           | 190 | 190 |
 | 2     | 4 · `eslint.config.js` → `.env.example`                                                          | 110           | 134 | 324 |
 | 3     | 5 · `src/types/common.ts` → `src/types/analytics.ts`                                             | 1,730         | 1,813 | 2,137 |
-| 4     | 4 · `src/constants/routes.ts` → `src/constants/taxonomy.ts`                                      | 1,160         | 1,564 | 3,701 |
-| 5     | 5 · `src/utils/format.ts` → `src/utils/collections.ts`                                           | 1,940         | 3,001 | 6,702 |
-| 6     | 5 · `src/utils/statistics.ts` → `src/utils/csv.ts`                                               | 1,420         | 2,081 | 8,783 |
-| 7     | 4 · `src/styles/tokens.css` → `src/styles/components.css`                                        | 1,370         | 2,993 | 11,776 |
-| 8     | 4 · `src/styles/catalog.css` → `src/styles/account.css`                                          | 1,650         | 2,797 | 14,573 |
-| 9     | 5 · `src/lib/apiClient.ts` → `src/lib/searchService.ts`                                          | 2,150         | 4,210 | 18,783 |
-| 10    | 5 · `src/lib/pricingService.ts` → `src/lib/reportService.ts`                                     | 2,180         | 2,848 | 21,631 |
-| 11    | 4 · `src/data/categories.ts` → `src/data/orders.ts`                                              | 1,490         | 2,027 | 23,658 |
-| 12    | 3 · `src/data/reviews.ts` → `src/data/repositories.ts`                                           | 1,070         | — | 23,658 |
-| 13    | 5 · `src/state/AuthContext.tsx` → `src/state/ToastContext.tsx`                                   | 1,680         | 633 | 23,693 |
-| 14    | 4 · `src/state/cartReducer.ts` → `src/state/hooks.ts`                                            | 1,410         | 1,971 | 25,664 |
-| 15    | 5 · `src/components/layout/AppLayout.tsx` → `src/components/layout/PageHeader.tsx`               | 1,420         | 506 | 26,170 |
-| 16    | 4 · `src/components/ui/Button.tsx` → `src/components/ui/Modal.tsx`                               | 1,520         | 2,183 | 28,353 |
-| 17    | 4 · `src/components/ui/Table.tsx` → `src/components/ui/Feedback.tsx`                             | 1,420         | 992 | 29,345 |
-| 18    | 4 · `src/components/ui/Toast.tsx` → `src/components/ui/Tooltip.tsx`                              | 1,010         | 1,255 | 30,600 |
-| 19    | 3 · `src/components/product/ProductCard.tsx` → `src/components/charts/chartScales.ts`            | 940           | 941 | 31,541 |
-| 20    | 3 · `src/components/charts/LineChart.tsx` → `src/components/charts/DonutChart.tsx`               | 1,150         | — | 31,541 |
-| 21    | 4 · `src/features/home/HomePage.tsx` → `src/features/home/CategoryShowcase.tsx`                  | 1,120         | 197 | 31,738 |
-| 22    | 4 · `src/features/catalog/CatalogPage.tsx` → `src/features/catalog/ProductReviews.tsx`           | 1,495         | — | 31,738 |
-| 23    | 3 · `src/features/search/SearchPage.tsx` → `src/features/search/SearchSuggestions.tsx`           | 960           | — | 31,738 |
-| 24    | 3 · `src/features/search/FilterPanel.tsx` → `src/features/search/ActiveFilters.tsx`              | 940           | — | 31,738 |
-| 25    | 5 · `src/features/cart/CartPage.tsx` → `src/features/cart/cartSelectors.ts`                      | 1,580         | — | 31,738 |
-| 26    | 3 · `src/features/checkout/CheckoutPage.tsx` → `src/features/checkout/ShippingForm.tsx`          | 990           | 249 | 31,987 |
-| 27    | 3 · `src/features/checkout/PaymentForm.tsx` → `src/features/checkout/OrderConfirmation.tsx`      | 1,060         | — | 31,987 |
-| 28    | 3 · `src/features/account/LoginPage.tsx` → `src/features/account/AccountLayout.tsx`              | 940           | — | 31,987 |
-| 29    | 3 · `src/features/account/ProfilePage.tsx` → `src/features/account/AddressBookPage.tsx`          | 1,090         | — | 31,987 |
-| 30    | 5 · `src/features/admin/AdminDashboardPage.tsx` → `src/features/admin/TopProductsTable.tsx`      | 1,590         | — | 31,987 |
-| 31    | 3 · `src/features/reports/ReportsPage.tsx` → `src/features/reports/ProductPerformanceReport.tsx` | 1,080         | — | 31,987 |
-| 32    | 3 · `src/features/reports/CustomerReport.tsx` → `src/features/reports/ReportTable.tsx`           | 930           | — | 31,987 |
-| 33    | 3 · `src/Router.tsx` → `src/main.tsx`                                                            | 800           | — | 31,987 |
-| 34    | 3 · `tests/setup.ts` → `tests/testUtils.tsx`                                                     | 840           | 749 | 32,736 |
-| 35    | 5 · `tests/unit/utils/formatting.test.ts` → `tests/unit/lib/catalogSearch.test.ts`               | 1,760         | 5,228 | 37,964 |
-| 36    | 5 · `tests/unit/lib/pricingService.test.ts` → `tests/unit/lib/reportService.test.ts`             | 1,490         | — | 37,964 |
-| 37    | 5 · `tests/unit/lib/mockServer.test.ts` → `tests/components/Table.test.tsx`                      | 1,510         | 1,318 | 39,282 |
-| 38    | 5 · `tests/components/charts.test.tsx` → `tests/integration/adminReportsFlow.test.tsx`           | 1,750         | — | 39,282 |
-| 39    | 4 · `README.md` → `docs/mock-api.md`                                                             | 940           | — | 39,282 |
+| 4     | 4 · `src/constants/routes.ts` → `src/constants/taxonomy.ts`                                      | 1,160         | 1,570 | 3,707 |
+| 5     | 5 · `src/utils/format.ts` → `src/utils/collections.ts`                                           | 1,940         | 3,001 | 6,708 |
+| 6     | 5 · `src/utils/statistics.ts` → `src/utils/csv.ts`                                               | 1,420         | 2,081 | 8,789 |
+| 7     | 4 · `src/styles/tokens.css` → `src/styles/components.css`                                        | 1,370         | 2,998 | 11,787 |
+| 8     | 4 · `src/styles/catalog.css` → `src/styles/account.css`                                          | 1,650         | 2,797 | 14,584 |
+| 9     | 5 · `src/lib/apiClient.ts` → `src/lib/searchService.ts`                                          | 2,150         | 4,210 | 18,794 |
+| 10    | 5 · `src/lib/pricingService.ts` → `src/lib/reportService.ts`                                     | 2,180         | 2,848 | 21,642 |
+| 11    | 4 · `src/data/categories.ts` → `src/data/orders.ts`                                              | 1,490         | 2,027 | 23,669 |
+| 12    | 3 · `src/data/reviews.ts` → `src/data/repositories.ts`                                           | 1,070         | — | 23,669 |
+| 13    | 5 · `src/state/AuthContext.tsx` → `src/state/ToastContext.tsx`                                   | 1,680         | 1,599 | 25,268 |
+| 14    | 4 · `src/state/cartReducer.ts` → `src/state/hooks.ts`                                            | 1,410         | 1,971 | 27,239 |
+| 15    | 5 · `src/components/layout/AppLayout.tsx` → `src/components/layout/PageHeader.tsx`               | 1,420         | 506 | 27,745 |
+| 16    | 4 · `src/components/ui/Button.tsx` → `src/components/ui/Modal.tsx`                               | 1,520         | 2,183 | 29,928 |
+| 17    | 4 · `src/components/ui/Table.tsx` → `src/components/ui/Feedback.tsx`                             | 1,420         | 1,236 | 31,164 |
+| 18    | 4 · `src/components/ui/Toast.tsx` → `src/components/ui/Tooltip.tsx`                              | 1,010         | 1,255 | 32,419 |
+| 19    | 3 · `src/components/product/ProductCard.tsx` → `src/components/charts/chartScales.ts`            | 940           | 1,213 | 33,632 |
+| 20    | 3 · `src/components/charts/LineChart.tsx` → `src/components/charts/DonutChart.tsx`               | 1,150         | 707 | 34,339 |
+| 21    | 4 · `src/features/home/HomePage.tsx` → `src/features/home/CategoryShowcase.tsx`                  | 1,120         | 428 | 34,767 |
+| 22    | 4 · `src/features/catalog/CatalogPage.tsx` → `src/features/catalog/ProductReviews.tsx`           | 1,495         | — | 34,767 |
+| 23    | 3 · `src/features/search/SearchPage.tsx` → `src/features/search/SearchSuggestions.tsx`           | 960           | — | 34,767 |
+| 24    | 3 · `src/features/search/FilterPanel.tsx` → `src/features/search/ActiveFilters.tsx`              | 940           | — | 34,767 |
+| 25    | 5 · `src/features/cart/CartPage.tsx` → `src/features/cart/cartSelectors.ts`                      | 1,580         | 204 | 34,971 |
+| 26    | 3 · `src/features/checkout/CheckoutPage.tsx` → `src/features/checkout/ShippingForm.tsx`          | 990           | 249 | 35,220 |
+| 27    | 3 · `src/features/checkout/PaymentForm.tsx` → `src/features/checkout/OrderConfirmation.tsx`      | 1,060         | — | 35,220 |
+| 28    | 3 · `src/features/account/LoginPage.tsx` → `src/features/account/AccountLayout.tsx`              | 940           | — | 35,220 |
+| 29    | 3 · `src/features/account/ProfilePage.tsx` → `src/features/account/AddressBookPage.tsx`          | 1,090         | — | 35,220 |
+| 30    | 5 · `src/features/admin/AdminDashboardPage.tsx` → `src/features/admin/TopProductsTable.tsx`      | 1,590         | 239 | 35,459 |
+| 31    | 3 · `src/features/reports/ReportsPage.tsx` → `src/features/reports/ProductPerformanceReport.tsx` | 1,080         | — | 35,459 |
+| 32    | 3 · `src/features/reports/CustomerReport.tsx` → `src/features/reports/ReportTable.tsx`           | 930           | 426 | 35,885 |
+| 33    | 3 · `src/Router.tsx` → `src/main.tsx`                                                            | 800           | — | 35,885 |
+| 34    | 3 · `tests/setup.ts` → `tests/testUtils.tsx`                                                     | 840           | 749 | 36,634 |
+| 35    | 5 · `tests/unit/utils/formatting.test.ts` → `tests/unit/lib/catalogSearch.test.ts`               | 1,760         | 5,228 | 41,862 |
+| 36    | 5 · `tests/unit/lib/pricingService.test.ts` → `tests/unit/lib/reportService.test.ts`             | 1,490         | — | 41,862 |
+| 37    | 5 · `tests/unit/lib/mockServer.test.ts` → `tests/components/Table.test.tsx`                      | 1,510         | 1,318 | 43,180 |
+| 38    | 5 · `tests/components/charts.test.tsx` → `tests/integration/adminReportsFlow.test.tsx`           | 1,750         | — | 43,180 |
+| 39    | 4 · `README.md` → `docs/mock-api.md`                                                             | 940           | — | 43,180 |
 
-Totals: 39 generation phases plus Phase 0, 157 counted files, the 21 §0.5.5 split paths and this manifest, 50,000 planned lines, no phase generates fewer than 3 or more than 5 of the plan's mapped files, and a §0.5.5 split path is generated in the phase that created it, so a phase row can name more Part 1 rows than the mapped files it carries — phase 9's five mapped files come with the three modules its `mockServer.ts` concern was split into. `Actual lines` is the real count of the files that phase has produced — a §0.5.5 split path's lines count against the mapped file they came from — and it reads `—` while none of them is written; `Cumulative` is the delivered total after that phase, so phase 39's cumulative is 39,989. The planned figures stay available in the `Planned lines` column and in Part 3.
+Totals: 39 generation phases plus Phase 0, 157 counted files, the 21 §0.5.5 split paths and this manifest, 50,000 planned lines, no phase generates fewer than 3 or more than 5 of the plan's mapped files, and a §0.5.5 split path is generated in the phase that created it, so a phase row can name more Part 1 rows than the mapped files it carries — phase 9's five mapped files come with the three modules its `mockServer.ts` concern was split into. `Actual lines` is the real count of the files that phase has produced — a §0.5.5 split path's lines count against the mapped file they came from — and it reads `—` while none of them is written; `Cumulative` is the delivered total after that phase, so phase 39's cumulative is 43,180. The planned figures stay available in the `Planned lines` column and in Part 3.
 
 ## Part 3 — Roll-ups and size distribution
 
@@ -318,7 +313,7 @@ Totals: 39 generation phases plus Phase 0, 157 counted files, the 21 §0.5.5 spl
 | Documents (`README.md` and `docs/`)                       | 4       | 940            |
 | §0.5.5 split paths, parts of a counted file               | 21      | — (no budget of their own) |
 | **Counted total**                                         | **157** | **50,000**     |
-| This manifest, excluded from the total                    | 1       | 300 budget · 480 actual |
+| This manifest, excluded from the total                    | 1       | 300 budget · 478 actual |
 | **Paths in Part 1**                                       | **179** | **157 counted + 21 split paths + this manifest** |
 
 | Budget band (lines) | Files   | Lines      | What sits there                                                                                                              |
@@ -343,7 +338,7 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 
 | File               | Budget | Actual | Difference   | Reason                                                                                                                                                                                                                                  |
 | ------------------ | ------ | ------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/data/orders.ts` | 460 | 598 | +138 (+30.0%) | the file delivers the plan's generated order history — the trailing year's ~1,100 orders behind the three exported surfaces the phase requires (`buildOrders`/`ORDERS` and `buildPromoCodes`/`PROMO_CODES`), with exactly 60 orders attributed to seeded accounts, the rest guest orders carrying their own addresses built through `src/data/customers.ts`'s factory, every amount priced through `src/lib/pricingService.ts`'s pure rules and every status walked through `src/lib/orderService.ts`'s transition rule — and the overrun is the machinery that makes those two properties true rather than restated data: one seeded stream and window, the weekday volume curve that guarantees every day trades, the attribution plan with its even slot spread and its forced cancellation, the four status bands with their per-status paths, and the promo decision reached by calling `decidePromo` on each order's own day. Nothing is padded and no required capability was cut; the file was rewritten four times to fit, its documentation compressed to what the code cannot say and three helpers folded into their single callers, and it stands 2 lines inside the 600-line ceiling, so the overrun is taken from the remainder. This phase's landing moves the tree's counted total by +598 over the base Part 2 recorded for phase 11 (1,429), which is why phase 11's `Actual lines` and `Cumulative` and phase 12's `Cumulative` are brought current here while the phases after 12 keep the cumulatives their own runs recorded; settling that chain in full belongs to the phase that next rewrites this manifest. |
+| `src/data/orders.ts` | 460 | 598 | +138 (+30.0%) | the file delivers the plan's generated order history — the trailing year's ~1,100 orders behind the three exported surfaces the phase requires (`buildOrders`/`ORDERS` and `buildPromoCodes`/`PROMO_CODES`), with exactly 60 orders attributed to seeded accounts, the rest guest orders carrying their own addresses built through `src/data/customers.ts`'s factory, every amount priced through `src/lib/pricingService.ts`'s pure rules and every status walked through `src/lib/orderService.ts`'s transition rule — and the overrun is the machinery that makes those two properties true rather than restated data: one seeded stream and window, the weekday volume curve that guarantees every day trades, the attribution plan with its even slot spread and its forced cancellation, the four status bands with their per-status paths, and the promo decision reached by calling `decidePromo` on each order's own day. Nothing is padded and no required capability was cut; the file was rewritten four times to fit, its documentation compressed to what the code cannot say and three helpers folded into their single callers, and it stands 2 lines inside the 600-line ceiling, so the overrun is taken from the remainder. This phase's landing moves the tree's counted total by +598 over the base Part 2 recorded for phase 11 (1,429), which is why phase 11's `Actual lines` and `Cumulative` and phase 12's `Cumulative` are brought current here while the phases after 12 keep the cumulatives their own runs recorded; **Settled in full at this snapshot:** every `Actual lines` and `Cumulative` in Part 2 is recomputed from the counts Part 1 records, so no phase total is left at the value an earlier run gave it. |
 | `package.json` | 65 | 46 | -19 (-29.2%) | every field the plan specifies is declared compactly — 22 pinned packages, the nine scripts, `type: module` and the engines range — and there is nothing further to add, so the unused lines return to the remainder |
 | `tsconfig.json` | 45 | 28 | -17 (-37.8%) | the required compiler posture (strict, react-jsx, bundler resolution, verbatimModuleSyntax, erasableSyntaxOnly, noEmit, the `@/*` alias) fits in 28 lines with no option omitted |
 | `vite.config.ts` | 60 | 25 | -35 (-58.3%) | the file holds exactly what the plan fixes for it — the React plugin, the `@` alias and the build target and output, with its three-field header — delivered in 25 lines against the 60-line budget, and the count is final now that its phase has closed. The options the plan does not name for this file (a preview port and source maps) are deliberately absent rather than invented to reach the number, so the 35 unused lines return to the remainder and nothing the file's specification requires is missing. |
@@ -360,6 +355,8 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 | `src/utils/format.ts` | 380 | 583 | +203 (+53.4%) | the file's specified surface is 25 exported functions plus 2 placeholder constants and 7 exported types — the single rounding rule with its two conversion helpers, the five money formatters (display, compact, the form-field round trip, the parser and the free-shipping remainder), the five number formatters, the five percentage and change formatters, the five domain display values (rating value and its parts, review count, discount, availability) and the two report-cell dispatches — each carrying the purpose, parameter, return and edge-input documentation §0.12.2 requires, on top of the boundary note stating which sibling owns dates, text helpers, CSV escaping and every sentence; the rounding rule, the minor/major factor of 100 and the cached `Intl` formatters each exist once, every import is on the dependency whitelist and every exported member has a named consumer, so no line is padding and no required capability was cut; the overrun is taken from the remainder and the file stays 17 lines inside the 600-line ceiling |
 | `src/utils/format.ts` | 380 | 599 | +219 (+57.6%) | the file's specified surface is 25 exported functions plus 2 placeholder constants and 7 exported types — the single rounding rule with its two conversion helpers, the five money formatters (display, compact, the form-field round trip, the parser and the free-shipping remainder), the five number formatters, the five percentage and change formatters, the five domain display values (rating value and its parts, review count, discount, availability) and the two report-cell dispatches — each carrying the purpose, parameter, return and edge-input documentation §0.12.2 requires, on top of the boundary note stating which sibling owns dates, text helpers, CSV escaping and every sentence; the rounding rule, the minor/major factor of 100 and the cached `Intl` formatters each exist once, every import is on the dependency whitelist and every exported member has a named consumer, so no line is padding and no required capability was cut; the overrun is taken from the remainder and the file stays 1 line inside the 600-line ceiling after the checkpoint that closed the report-cell renderer finding (583 -> 599: the two renderers of one report cell now agree, and both JSDoc blocks state the corrected contract) |
 | `src/utils/strings.ts` | 350 | 541 | +191 (+54.6%) | the file's specified surface is 22 exported members — the 7 text helpers, the generic `prefixedId` and `sequenceId`, the 10 per-entity generators and the `createSalt` / `createCredentialDigest` / `verifyCredential` trio — each carrying the purpose, parameter, return and throw documentation §0.12.2 requires, on top of the single FNV-1a digest implementation the identifier generators and the credential helpers share and the JSDoc stating the rules its callers rest on (the generators' determinism, the session token's opacity, the demonstration-only credential boundary the seed layer and the transport both call); no line is padding, no required capability was cut, and 541 lines stays well inside the 600-line ceiling, with the overrun taken from the remainder |
+| `src/features/reports/DateRangePicker.tsx` | 310 | 426 | +116 (+37.4%) | the file holds the whole range control — the five presets `reportRangePresets` computes, the two `<input type="date">` fields, the Apply control, the resolved range in words, the alert for a problem belonging to the range itself and the optional named baseline — and the 116 lines beyond the budget are the documentation and the ownership wiring the plan's own rules require, not padding: the class-contract comment every file under `src/features/**` carries because it may import no stylesheet and consumes all eight `admin-reports.css` classes by name; the JSDoc §0.12.2 requires on the exported component and its props; the block stating the two invariants the control is built on (the page owns the applied range, this file owns the stored one) and the restore it performs so the next visit resumes where this one finished; and the three comments that keep the range rules in their one home — the field keys annotated with the validator's own `DateRangeErrorField`, the problem-code table whose every sentence comes from `src/constants/content.ts`, and the note that an invalid range is shown to the reader rather than swapped or clamped. Nothing the plan maps to the file is missing and no rule was duplicated into it: every date decision is `src/utils/dates.ts`'s, the store is reached only through `useLocalStorage` over `STORAGE_KEYS.REPORT_RANGE`, and the range never reaches the URL. The file stays 174 lines inside the 600-line ceiling, so no concern was split and the overrun is taken from the remainder |
+| `src/constants/content.ts` (phase-32 amendment to the record above) | 400 | 606 | +6 since that record | the range control is required to state in text whose days a period boundary falls on, and the copy module carried no such sentence: its only claim about the clock sat inside `exportNote`, which is the export's own note and names the export's row and cell caps. It was fixed where copy belongs rather than duplicated into the control, which is what keeps every user-facing string in one home: `DATE_RANGE_COPY.LOCAL_TIME_NOTE` now carries the sentence ("Period boundaries are whole days in your local time zone.") with the two range controls named as its consumers, exactly the contract the object's own documentation states, and this file's header line count was corrected 600 → 606 to match the file. The addition is one property with its documentation and changes no existing sentence, so the copy module stays where the record above left it |
 | `src/utils/validation.ts` | 440 | 596 | +156 (+35.5%) | the specified surface is 30 exported functions and guards plus 9 exported types and constants — the 15 primitive field rules with the `isLuhnValid` checksum and the `isRatingValue` guard, the 7 form rules, the 7 error-map helpers and the value shapes the checkout's own generated types require (`CardValidationInput` accepts each expiry half as the number `CardInput` declares or as the digits in text, because `src/state/checkoutReducer.ts` holds what was typed and the card errors must key by exactly `CardInput`'s member names) — each carrying the purpose, parameter, return and assumption documentation §0.12.2 requires, on top of the private helpers the rule collection, blank reading, digit counting and country lookup need and the parameterised messages `src/constants/content.ts` owns; six reductions kept it clear of the 600-line ceiling instead of against it: the documentation was rewritten twice from 778 and then 749 lines to a two-to-four line block per export, the rule-collection and merge bodies are plain loops because the filter and `Object.fromEntries` forms lost their type narrowing, the single-use optional-field wrapper was inlined into `validatePhone`, the postal-code compiler's try/catch fallback was dropped in favour of a loud load-time failure, the `isSupportedCountry` export was removed because the address rule checks the configured set itself, and the boundary run found and fixed one real defect (`isLuhnValid` threw on a non-string, now guarded); no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 14 lines inside the 600-line ceiling **Brought current at the checkpoint that landed `documented-contract-alignment`:** the file's real count is now 596, 4 lines inside the 600-line ceiling; the checkpoint amendment row below records what moved it. |
 | `src/utils/collections.ts` | 420 | 585 | +165 (+39.3%) | the file's specified surface is the 27 exported helpers across grouping and indexing, ordering, aggregation and paging, plus the 7 exported types they declare, each carrying the purpose, parameter, return and assumption documentation §0.12.2 requires; the lines went to the load-bearing contract each helper states once for its callers — the ordering rule (strings compare by code unit, equal values keep input order, absent values last in both directions whatever the direction), the paging rules (one configured-size check, a page count never below one, and one home for the next/previous flags — `pageFlagsFor`, added by this checkpoint's `paging-flags-declared-twice` fix so `paginate` and `usePagination` cannot disagree about whether another page exists), and `topN`'s bounded pass, rewritten by this checkpoint's `topn-sorts-whole-collection` fix so a caller taking `count` rows no longer pays to order the whole collection; no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 15 lines inside the 600-line ceiling |
 | `src/utils/statistics.ts` | 360 | 512 | +152 (+42.2%) | the file's specified surface is 13 exported functions and 2 exported shapes — `percentChange`, `growthRate`, `changeDirection`, `shareOf`, `averageOrderValue`, `weightedAverage`, `median`, `medianMinorUnits`, `percentile`, `summarise`, `movingAverage`, `cumulativeSeries` and `compareToBaseline`, with `SeriesSummary` and `KpiComparison` — each carrying the purpose, parameter, return and degenerate-input documentation §0.12.2 requires; every rule keeps one home rather than being restated — money rounds only through `roundMinorUnits`, the mean and total are `averageOf` and `sum` from `src/utils/collections.ts`, the direction union is `src/utils/format.ts`'s `ChangeDirection`, the percentile's interpolation is stated once and `median` is `percentile(values, 50)`, and no display string is produced here; the growth beyond the first record is the two additions this checkpoint's work needed — `periodOrders`, the one home for which orders a period counts (a cancelled order out, both range ends inclusive, the range resolved once through `prepareRange` so a scan parses its ends once rather than once per order) and `goodsRevenueMinor`, the one home for what an order's goods brought net of discounts — plus the single-pass `movingAverage` and its documentation; no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 88 lines inside the 600-line ceiling |
@@ -476,6 +473,6 @@ Every phase follows this contract exactly; it is reproduced here so a fresh sess
 4. Append any deviation beyond 10% to Part 4 with its reason, and update the remainder; split a concern into a new file rather than exceeding 600 lines.
 5. Rewrite this manifest in full, print the single progress line, and stop for `continue`.
 
-**This snapshot.** The build has run through the schedule in order: 79 of the 157 counted files hold the plan's content and all 21 §0.5.5 split paths are written, for 39,989 delivered lines; phases 1–10, 14 and 16 hold every file they generate, and phases 11, 13, 15, 17–20, 21, 26, 34–35 and 37 are partial, with 78 counted rows still `Pending`. The closing line below is this snapshot's progress line and the document's last line; a phase's own output ends the same way, with its files' content and then one progress line and nothing after it.
+**This snapshot.** The build has run through the schedule in order: 88 of the 157 counted files hold the plan's content and all 21 §0.5.5 split paths are written, for 43,180 delivered lines; phases 1–11, 14 and 16 hold every file they generate, and 13, 15, 17–21, 25–26, 30, 32, 34–35 and 37 are partial, with 69 counted rows still `Pending`. The closing line below is this snapshot's progress line and the document's last line; a phase's own output ends the same way, with its files' content and then one progress line and nothing after it.
 
-Total lines so far: 39,989 / 50000
+Total lines so far: 43,180 / 50000

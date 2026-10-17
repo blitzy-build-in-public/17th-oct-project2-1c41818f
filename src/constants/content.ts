@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 600
+ * Lines: 606
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -361,6 +361,12 @@ export const DATE_RANGE_COPY = {
   THIS_YEAR_PRESET_LABEL: "This year",
   RANGE_INVERTED_MESSAGE: "The end date is before the start date. Swap the two dates.",
   RANGE_IN_FUTURE_MESSAGE: "The period cannot include dates after today.",
+  /**
+   * States whose days a period boundary falls on, so a range control says which "today" its figures are
+   * bounded by instead of leaving it to be inferred. Rendered under the resolved range by every range
+   * control: `src/features/reports/DateRangePicker.tsx` and the dashboard's own.
+   */
+  LOCAL_TIME_NOTE: "Period boundaries are whole days in your local time zone.",
 } as const;
 /** Names the preset that reaches back a given number of days. */
 export const lastDaysLabel = (days: number): string => `Last ${days} days`;
