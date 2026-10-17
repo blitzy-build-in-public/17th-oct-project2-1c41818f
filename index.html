@@ -1,0 +1,23 @@
+<!doctype html>
+<!--
+  Path: index.html
+  Purpose: Document shell that loads the application: title, meta description, viewport tag and the `#root` mount point
+  Lines: 23
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SalesPro</title>
+    <meta
+      name="description"
+      content="SalesPro is a complete online sales website with a shopper storefront for browsing, search and checkout, and an administrator dashboard and reports for sales analysis."
+    />
+    <!-- Inline data-URI favicon so the browser's implicit /favicon.ico probe cannot 404; no icon file exists to link and no request leaves the page. -->
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
