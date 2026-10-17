@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/checkout.test.ts
  * Purpose: Checkout transitions: the step machine, value and error patches, and the submission guards
- * Lines: 241
+ * Lines: 257
  */
 
 import { describe, expect, it } from "vitest";
@@ -29,7 +29,7 @@ import {
 } from "../../fixtures";
 
 import type { CartState } from "@/state/cartReducer";
-import type { CheckoutState, CheckoutStep } from "@/state/checkoutReducer";
+import type { CheckoutAction, CheckoutState, CheckoutStep } from "@/state/checkoutReducer";
 
 // The checkout reducer and its actions are pure: every case calls one directly.
 
@@ -61,13 +61,13 @@ const REVIEWING_CHECKOUT = checkoutReducer(checkoutReducer(FILLED_CHECKOUT, NEXT
 /** The checkout a placed order leaves behind, where the confirmation is the only step it may hold. */
 const PLACED_CHECKOUT = placeOrder(startSubmission(REVIEWING_CHECKOUT));
 /** Direct moves refused by identity: forward past validation, and into or out of the confirmation. */
-const REFUSED_DIRECT_MOVES: [CheckoutState, CheckoutStep][] = [
-  [FRESH_CHECKOUT, "payment"],
-  [FRESH_CHECKOUT, "review"],
-  [REVIEWING_CHECKOUT, "confirmation"],
-  [PLACED_CHECKOUT, "review"],
-  [PLACED_CHECKOUT, "payment"],
-  [PLACED_CHECKOUT, "shipping"],
+const REFUSED_DIRECT_MOVES: [CheckoutState, CheckoutStep, CheckoutStep][] = [
+  [FRESH_CHECKOUT, "payment", "shipping"],
+  [FRESH_CHECKOUT, "review", "shipping"],
+  [REVIEWING_CHECKOUT, "confirmation", "review"],
+  [PLACED_CHECKOUT, "review", "confirmation"],
+  [PLACED_CHECKOUT, "payment", "confirmation"],
+  [PLACED_CHECKOUT, "shipping", "confirmation"],
 ];
 
 /** Writes values onto the shipping step, as a form does field by field. */
@@ -102,9 +102,15 @@ describe("checkout step machine", () => {
     );
   });
 
-  it.each(REFUSED_DIRECT_MOVES)("refuses a direct move that is not a return", (state, step) => {
-    expect(checkoutReducer(state, checkoutActions.setStep(step))).toBe(state);
-  });
+  it.each(REFUSED_DIRECT_MOVES)(
+    "refuses a direct move that is not a return",
+    (state, step, currentStep) => {
+      // The state stands where the case says it does, so the refusal that follows is the transition
+      // refusing the move rather than a state object that was never built.
+      expect(state.step).toBe(currentStep);
+      expect(checkoutReducer(state, checkoutActions.setStep(step))).toBe(state);
+    },
+  );
 
   it.each(STEP_MOVES)("moves $step to $next, and back to $previous", ({ step, next, previous }) => {
     expect(nextStep(step)).toBe(next);
@@ -237,5 +243,15 @@ describe("checkout submission", () => {
     expect(placed).not.toHaveProperty("lines");
     expect(cleared.lines).toEqual([]);
     expect(cleared.promoCode).toBeNull();
+  });
+});
+
+describe("an unrecognised action", () => {
+  it("fails loudly rather than quietly returning the state unchanged", () => {
+    // The guard is the runtime half of the exhaustive union: a member added later without an arm
+    // fails to compile, and an action arriving from anywhere else fails here rather than coming
+    // back as though the checkout had handled it.
+    const unknown = { type: "checkout/unknown" } as unknown as CheckoutAction;
+    expect(() => checkoutReducer(REVIEWING_CHECKOUT, unknown)).toThrow(/Unhandled checkout action/);
   });
 });

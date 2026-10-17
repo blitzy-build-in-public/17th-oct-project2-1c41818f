@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/queryParams.test.ts
  * Purpose: Filter state to URL and back, with normalisation and default omission
- * Lines: 502
+ * Lines: 508
  */
 
 import { describe, expect, it } from "vitest";
@@ -93,6 +93,13 @@ const SHUFFLED_STATE = makeFilterState({
 /** The same facets without tags, so clearing one facet is seen against the four that remain. */
 const FACET_STATE = makeFilterState({ ...FULL_STATE, tags: [], page: 4 });
 
+/**
+ * The canonical URL of {@link FULL_STATE}: keys sorted, list values comma-joined in their canonical
+ * order, and every field holding a default left out, as `src/utils/queryParams.ts` documents it.
+ */
+const FULLY_POPULATED_QUERY =
+  "?brandIds=brd_aurelia-audio%2Cbrd_northcrest&categoryIds=cat_audio%2Ccat_cameras%2Ccat_laptops&inStock=true&maxPrice=9999&minPrice=5000&minRating=4&page=3&pageSize=24&q=lamp&sort=price-asc&tags=lighting";
+
 /** A facet chip, the shape {@link facetEntry} returns. */
 type FacetEntry = Extract<ActiveFilterEntry, { kind: "facet" }>;
 
@@ -134,9 +141,10 @@ describe("the query state round trip", () => {
 
   it("is a fixed point: writing a URL that was read changes nothing", () => {
     const written = filtersToSearchString(FULL_STATE);
+    expect(written).toBe(FULLY_POPULATED_QUERY);
     const rewritten = filtersToSearchString(readFilterState(written));
     expect(rewritten).toBe(written);
-    expect(readFilterState(rewritten)).toEqual(readFilterState(written));
+    expect(readFilterState(rewritten)).toEqual(FULL_STATE);
   });
 
   it("reads an empty query, and writes one, as the canonical empty selection", () => {
@@ -194,9 +202,7 @@ describe("canonical identity and normalisation", () => {
   });
 
   it("swaps an inverted price range rather than rejecting or dropping it", () => {
-    const invert = (): FilterState => setPriceRange(makeFilterState(), 9_000, 2_000);
-    expect(invert).not.toThrow();
-    const inverted = invert();
+    const inverted = setPriceRange(makeFilterState(), 9_000, 2_000);
     expect(inverted.minPriceMinor).toBe(2_000);
     expect(inverted.maxPriceMinor).toBe(9_000);
     expect(filtersToSearchString(inverted)).toBe(
@@ -334,9 +340,9 @@ describe("the composed writers", () => {
   });
 
   it("holds the state when a facet value names nothing that facet holds", () => {
-    expect(filtersToSearchString(toggleFacetValue(FULL_STATE, "rating", "9"))).toBe(
-      filtersToSearchString(FULL_STATE),
-    );
+    const held = toggleFacetValue(FULL_STATE, "rating", "9");
+    expect(held).toBe(FULL_STATE);
+    expect(filtersToSearchString(held)).toBe(FULLY_POPULATED_QUERY);
   });
 
   it("toggles a tag, and writes nothing for a blank one", () => {

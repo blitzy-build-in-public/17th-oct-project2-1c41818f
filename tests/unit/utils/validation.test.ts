@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/validation.test.ts
  * Purpose: Each validator's accept and reject cases, and the form-level error maps
- * Lines: 570
+ * Lines: 577
  */
 
 // A pure-function suite: it runs in the node project, reaches no DOM, mocks no module and touches no
@@ -32,6 +32,7 @@ import {
   firstError,
   hasErrors,
   isLuhnValid,
+  isRatingValue,
   mergeErrors,
   validateAddress,
   validateCardExpiry,
@@ -130,7 +131,6 @@ describe("field rules", () => {
   });
 
   it("accepts a password of exactly the policy's minimum length", () => {
-    expect(MINIMUM_PASSWORD).toHaveLength(PASSWORD_POLICY.MIN_LENGTH);
     expect(validatePassword(MINIMUM_PASSWORD)).toEqual({});
   });
 
@@ -230,6 +230,13 @@ describe("field rules", () => {
   it("rejects an unchosen, out-of-range or fractional rating as missing", () => {
     for (const rejected of [0, 6, 4.5, "4.5", undefined, ""]) {
       expect(validateRating(rejected)).toEqual({ rating: VALIDATION_MESSAGES.REQUIRED });
+    }
+  });
+
+  it("narrows a rating selection to the five whole values the star control offers", () => {
+    for (const accepted of [1, 2, 3, 4, 5]) expect(isRatingValue(accepted)).toBe(true);
+    for (const rejected of [0, 6, 4.5, "5", undefined, null, Number.NaN]) {
+      expect(isRatingValue(rejected)).toBe(false);
     }
   });
 

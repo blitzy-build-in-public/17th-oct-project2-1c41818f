@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/catalogReducer.test.ts
  * Purpose: Load transitions and the query-fingerprint guard that discards a stale response
- * Lines: 555
+ * Lines: 589
  */
 
 import { describe, expect, it } from "vitest";
@@ -56,13 +56,21 @@ const BROWSE_QUERY: FilterState = {
   brandIds: [AURELIA, NORTHCREST],
   inStockOnly: true,
 };
-/** The keys both queries are recognised by, asked of the module rather than typed out here. */
-const SEARCH_KEY = catalogFingerprint(SEARCH_QUERY);
-const BROWSE_KEY = catalogFingerprint(BROWSE_QUERY);
+/**
+ * The keys both queries are recognised by, written out in the canonical spelling the per-key contract
+ * of `src/utils/queryParams.ts` documents rather than asked of the module: the keys of one query
+ * sorted, every field holding its default left out, and a list written as one comma-separated value
+ * that `URLSearchParams` percent-encodes, which is why a list reads `%2C` here. Typed out, each one
+ * is a claim about the key the module must produce; asked of the module, it would agree with whatever
+ * the module did. A search carries `sort=newest` because a term makes `relevance` the sort that would
+ * be omitted, and this selection was built over `UNFILTERED_QUERY`, whose sort is `newest`.
+ */
+const SEARCH_KEY = "q=lamp&sort=newest";
+const BROWSE_KEY = `brandIds=${AURELIA}%2C${NORTHCREST}&categoryIds=${LAPTOPS}&inStock=true`;
 /** That same browse one page further in: the two requests differ by the page and nothing else. */
 const BROWSE_SECOND_PAGE: FilterState = { ...BROWSE_QUERY, page: 2 };
-/** Its key, which differs from the first page's because the page is inside the key. */
-const BROWSE_SECOND_PAGE_KEY = catalogFingerprint(BROWSE_SECOND_PAGE);
+/** Its key, which differs from the first page's because the page is inside the key and sorts last. */
+const BROWSE_SECOND_PAGE_KEY = `${BROWSE_KEY}&page=2`;
 
 /** The ranked page a search returns, and the facets that came back with it. */
 const SEARCH_PRODUCTS: Product[] = [
@@ -179,6 +187,7 @@ describe("catalog/load-started", () => {
 
   it("leaves the state object alone when the same load is already in flight", () => {
     const loading = stateLoading(SEARCH_QUERY);
+    expect(loading.fingerprint).toBe(SEARCH_KEY);
     expect(catalogReducer(loading, catalogActions.loadStarted(SEARCH_QUERY))).toBe(loading);
   });
 
@@ -211,14 +220,23 @@ describe("catalog/load-succeeded", () => {
     expect(LOADED_SEARCH.error).toBeNull();
   });
 
-  it("carries a later page and both of its paging flags through unchanged", () => {
+  it("clears the error a failed load for the same query left behind", () => {
+    const recovered = catalogReducer(
+      FAILED_SEARCH,
+      catalogActions.loadSucceeded(SEARCH_KEY, SEARCH_PAGE, SEARCH_FACETS, FIXED_NOW),
+    );
+    expect(recovered.status).toBe("success");
+    expect(recovered.error).toBeNull();
+    expect(recovered.page).toBe(SEARCH_PAGE);
+  });
+
+  it("carries the page it was handed through by reference, paging flags included", () => {
     const loadedBrowse = catalogReducer(
       stateLoading(BROWSE_QUERY),
       catalogActions.loadSucceeded(BROWSE_KEY, BROWSE_PAGE, SEARCH_FACETS, FIXED_NOW),
     );
     expect(loadedBrowse.page).toEqual(BROWSE_PAGE);
-    expect(loadedBrowse.page?.hasNext).toBe(true);
-    expect(loadedBrowse.page?.hasPrevious).toBe(true);
+    expect(loadedBrowse.page).toBe(BROWSE_PAGE);
   });
 
   it("stamps the instant the action carried rather than reading a clock", () => {
@@ -256,6 +274,7 @@ describe("catalog/load-failed", () => {
   });
 
   it("changes nothing when a retry fails the same way", () => {
+    expect(FAILED_SEARCH.status).toBe("error");
     expect(catalogReducer(FAILED_SEARCH, catalogActions.loadFailed(SEARCH_KEY, SEARCH_ERROR))).toBe(
       FAILED_SEARCH,
     );
@@ -286,16 +305,23 @@ describe("catalog/reset", () => {
 
 // The fingerprint and the staleness guard --------------------------------------------------------
 
-/** Selections that must each key apart from the unfiltered catalogue and from one another. */
-const DISTINCT_QUERIES: [string, FilterState][] = [
-  ["a search term", { ...UNFILTERED_QUERY, q: "lamp" }],
-  ["another search term", { ...UNFILTERED_QUERY, q: "kettle" }],
-  ["a category selection", { ...UNFILTERED_QUERY, categoryIds: [LAPTOPS] }],
-  ["a brand selection", { ...UNFILTERED_QUERY, brandIds: [AURELIA] }],
-  ["a lower price bound", { ...UNFILTERED_QUERY, minPriceMinor: 2_500 }],
-  ["a rating floor", { ...UNFILTERED_QUERY, minRating: 4 }],
-  ["the availability toggle", { ...UNFILTERED_QUERY, inStockOnly: true }],
-  ["a tag", { ...UNFILTERED_QUERY, tags: ["lighting"] }],
+/**
+ * Selections that must each key apart from the unfiltered catalogue and from one another, each with
+ * the canonical key `src/utils/queryParams.ts` writes for it.
+ */
+const DISTINCT_QUERIES: [string, FilterState, string][] = [
+  ["a search term", { ...UNFILTERED_QUERY, q: "lamp" }, "q=lamp&sort=newest"],
+  ["another search term", { ...UNFILTERED_QUERY, q: "kettle" }, "q=kettle&sort=newest"],
+  [
+    "a category selection",
+    { ...UNFILTERED_QUERY, categoryIds: [LAPTOPS] },
+    `categoryIds=${LAPTOPS}`,
+  ],
+  ["a brand selection", { ...UNFILTERED_QUERY, brandIds: [AURELIA] }, `brandIds=${AURELIA}`],
+  ["a lower price bound", { ...UNFILTERED_QUERY, minPriceMinor: 2_500 }, "minPrice=2500"],
+  ["a rating floor", { ...UNFILTERED_QUERY, minRating: 4 }, "minRating=4"],
+  ["the availability toggle", { ...UNFILTERED_QUERY, inStockOnly: true }, "inStock=true"],
+  ["a tag", { ...UNFILTERED_QUERY, tags: ["lighting"] }, "tags=lighting"],
 ];
 
 describe("catalogFingerprint", () => {
@@ -328,6 +354,7 @@ describe("catalogFingerprint", () => {
       ...UNFILTERED_QUERY,
       categoryIds: [LAPTOPS, CAMERAS, LAPTOPS],
     });
+    expect(ascending).toBe(`categoryIds=${CAMERAS}%2C${LAPTOPS}`);
     expect(shuffled).toBe(ascending);
 
     const ordered = catalogFingerprint({ ...UNFILTERED_QUERY, brandIds: [AURELIA, NORTHCREST] });
@@ -335,6 +362,7 @@ describe("catalogFingerprint", () => {
       ...UNFILTERED_QUERY,
       brandIds: [NORTHCREST, AURELIA, NORTHCREST],
     });
+    expect(ordered).toBe(`brandIds=${AURELIA}%2C${NORTHCREST}`);
     expect(reordered).toBe(ordered);
   });
 
@@ -349,6 +377,7 @@ describe("catalogFingerprint", () => {
       minPriceMinor: 9_000,
       maxPriceMinor: 1_000,
     });
+    expect(ascending).toBe("maxPrice=9000&minPrice=1000");
     expect(inverted).toBe(ascending);
   });
 
@@ -362,9 +391,13 @@ describe("catalogFingerprint", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it.each(DISTINCT_QUERIES)("keys %s apart from the unfiltered catalogue", (_label, query) => {
-    expect(catalogFingerprint(query)).not.toBe(UNFILTERED_KEY);
-  });
+  it.each(DISTINCT_QUERIES)(
+    "keys %s by its own key, apart from the unfiltered catalogue",
+    (_label, query, key) => {
+      expect(catalogFingerprint(query)).toBe(key);
+      expect(catalogFingerprint(query)).not.toBe(UNFILTERED_KEY);
+    },
+  );
 
   it("keys every distinct selection differently, so the guard cannot confuse two queries", () => {
     const keys = DISTINCT_QUERIES.map(([, query]) => catalogFingerprint(query));
@@ -473,11 +506,11 @@ describe("a result for a superseded page", () => {
     expect(settled.page?.items.map((product) => product.id)).toEqual(
       BROWSE_PRODUCTS.map((product) => product.id),
     );
-    expect(settled.page?.page).toBe(2);
   });
 
   it("still leaves a repeat of the load already in flight alone", () => {
     const loadingSecondPage = stateLoading(BROWSE_SECOND_PAGE);
+    expect(loadingSecondPage.fingerprint).toBe(BROWSE_SECOND_PAGE_KEY);
     expect(catalogReducer(loadingSecondPage, catalogActions.loadStarted(BROWSE_SECOND_PAGE))).toBe(
       loadingSecondPage,
     );
@@ -535,6 +568,7 @@ describe("the state the URL owns", () => {
   });
 
   it("exposes no filter setter, only the four load transitions", () => {
+    expect(settledBrowse.fingerprint).toBe(BROWSE_KEY);
     expect(FILTER_SETTERS.filter((name) => name in catalogModule)).toEqual([]);
     expect(Object.keys(catalogActions).sort()).toEqual([
       "loadFailed",

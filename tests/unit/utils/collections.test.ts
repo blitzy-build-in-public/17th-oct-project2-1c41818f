@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/collections.test.ts
  * Purpose: Grouping, sorting, chunking, indexing and pagination helpers, including boundary pages
- * Lines: 586
+ * Lines: 584
  */
 
 import { describe, expect, it } from "vitest";
@@ -327,13 +327,11 @@ describe("sum, sumBy and averageOf", () => {
     expect(sumBy(SALES, (row) => row.revenueMinor)).toBe(6_600);
     expect(sum(NO_NUMBERS)).toBe(0);
     expect(sumBy(NO_SALES, (row) => row.revenueMinor)).toBe(0);
-    expect(Number.isNaN(sum(NO_NUMBERS))).toBe(false);
   });
 
   it("averages a collection and avoids a NaN mean for an empty one", () => {
     expect(averageOf([1_200, 800, 2_400])).toBeCloseTo(1_466.67, 1);
     expect(averageOf(NO_NUMBERS)).toBe(0);
-    expect(Number.isNaN(averageOf(NO_NUMBERS))).toBe(false);
   });
 });
 

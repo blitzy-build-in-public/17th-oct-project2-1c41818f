@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/transactions.test.ts
  * Purpose: Cart and checkout reducer transitions, stock clamping and submission guards
- * Lines: 409
+ * Lines: 472
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,9 +19,10 @@ import {
   mergeCartLine,
   toCart,
 } from "@/state/cartReducer";
+import { isValidIso } from "@/utils/dates";
 import { FIXED_NOW, makeCart, makeCartLine, makeCartWithLines, makeProduct } from "../../fixtures";
 
-import type { CartState } from "@/state/cartReducer";
+import type { CartAction, CartState } from "@/state/cartReducer";
 import type { Cart, CartLine } from "@/types/commerce";
 
 // The cart half of those reducers: the checkout's cases live in tests/unit/state/checkout.test.ts,
@@ -57,6 +58,17 @@ const MALFORMED_LINES: [string, unknown][] = [
   ["productId", { ...makeCartLine(), productId: "" }],
   ["quantity", { ...makeCartLine(), quantity: 0 }],
   ["addedAt", { ...makeCartLine(), addedAt: "yesterday" }],
+];
+/**
+ * One action per mutating family, built by hand with no instant of its own — the shape the union
+ * documents as optional — each one a change to `ONE_LINE_CART` so its arm reaches the fallback.
+ */
+const INSTANTLESS_ACTIONS: [string, CartAction][] = [
+  ["cart/update-quantity", { type: "cart/update-quantity", lineId: SEED_LINE.id, quantity: 3 }],
+  ["cart/remove", { type: "cart/remove", lineId: SEED_LINE.id }],
+  ["cart/clear", { type: "cart/clear" }],
+  ["cart/apply-promo", { type: "cart/apply-promo", code: "SAVE10" }],
+  ["cart/replace-lines", { type: "cart/replace-lines", lines: [makeCartLine({ quantity: 5 })] }],
 ];
 
 /** Builds the line a product in stock is added as; a null here is a fixture mistake. */
@@ -193,6 +205,28 @@ describe("cart transitions", () => {
     expect(replaced.lines).toEqual([]);
     expect(replaced.updatedAt).toBe(FIXED_NOW);
   });
+
+  it.each(INSTANTLESS_ACTIONS)(
+    "keeps the instant the cart already held when %s arrives with none",
+    (_type, action) => {
+      const next = cartReducer(ONE_LINE_CART, action);
+
+      // A state that is not the one that went in proves the transition ran, and the arm therefore
+      // reached its instant: the state's own is the only one it could stamp, since the action
+      // carries none. A dropped fallback leaves `updatedAt` undefined, and a clock read in its
+      // place stamps something other than the instant the cart already held.
+      expect(next).not.toBe(ONE_LINE_CART);
+      expect(next.updatedAt).toBe(FIXED_NOW);
+    },
+  );
+
+  it("fails loudly on an action the union does not name, rather than returning the state", () => {
+    // The guard is the runtime half of the exhaustive union: a member added later without an arm
+    // fails to compile, and an action arriving from anywhere else fails here rather than coming
+    // back as though the cart had handled it.
+    const unknown = { type: "cart/unknown" } as unknown as CartAction;
+    expect(() => cartReducer(ONE_LINE_CART, unknown)).toThrow(/Unhandled cart action/);
+  });
 });
 
 describe("cart line construction", () => {
@@ -225,6 +259,18 @@ describe("cart line construction", () => {
 
   it.each(CLAMP_CASES)("clamps %d against ceiling %d to %d", (requested, ceiling, expected) => {
     expect(clampLineQuantity(requested, ceiling)).toBe(expected);
+  });
+});
+
+describe("cart state construction", () => {
+  it("starts a cart on the clock when the caller supplies no instant", () => {
+    const started = createInitialCartState();
+
+    // The module's own guard accepts the state it starts, and the instant it defaulted is a real
+    // one rather than the absent value a dropped clock default would leave behind. None of this
+    // file's other calls take that default: every one of them pins `FIXED_NOW`.
+    expect(isCartState(started)).toBe(true);
+    expect(isValidIso(started.updatedAt)).toBe(true);
   });
 });
 
@@ -369,17 +415,32 @@ describe("the cart's persistence seam", () => {
     expect(storage.removeStored(STORAGE_KEYS.CART)).toBe(true);
     expect(storage.hasStored(STORAGE_KEYS.CART)).toBe(false);
     expect(storage.removeStored(STORAGE_KEYS.CART)).toBe(true);
-    const refused = vi.spyOn(store, "removeItem").mockImplementation(() => {
-      throw new DOMException("The drop was refused.", "SecurityError");
+    // One stubborn entry: the store refuses to drop the session key and performs every other drop it
+    // is handed, which is how the product's remaining entries are reached despite the refusal.
+    vi.spyOn(store, "removeItem").mockImplementation((key: string) => {
+      if (key === STORAGE_KEYS.SESSION) {
+        throw new DOMException("The drop was refused.", "SecurityError");
+      }
+      entries.delete(key);
     });
-    expect(() => storage.removeStored(STORAGE_KEYS.SESSION)).not.toThrow();
     expect(storage.removeStored(STORAGE_KEYS.SESSION)).toBe(false);
     expect(storage.readStored(STORAGE_KEYS.SESSION, "none")).toBe("ses_demo");
-    refused.mockClear();
-    expect(() => storage.clearStoredKeys()).not.toThrow();
+
+    // The product's other two keys, each filled so the sweep has something to drop, and an entry
+    // another writer left on the same origin.
+    expect(storage.writeStored(STORAGE_KEYS.CART, makeCart())).toBe(true);
+    expect(storage.writeStored(STORAGE_KEYS.REPORT_RANGE, [30])).toBe(true);
+    entries.set("someone-else.key", "kept");
+    expect(storage.hasStored(STORAGE_KEYS.CART)).toBe(true);
+    expect(storage.hasStored(STORAGE_KEYS.REPORT_RANGE)).toBe(true);
+
+    // The sweep reports the refusal, still attempts every other key — so the refusal strands nothing
+    // of the product's own — and leaves another writer's entry exactly as it found it.
     expect(storage.clearStoredKeys()).toBe(false);
-    expect(refused).toHaveBeenCalledTimes(2 * Object.keys(STORAGE_KEYS).length);
+    expect(storage.hasStored(STORAGE_KEYS.CART)).toBe(false);
+    expect(storage.hasStored(STORAGE_KEYS.REPORT_RANGE)).toBe(false);
     expect(storage.readStored(STORAGE_KEYS.SESSION, "none")).toBe("ses_demo");
+    expect(entries.get("someone-else.key")).toBe("kept");
   });
 
   it("degrades to its fallbacks where no store can be reached", () => {
@@ -390,7 +451,8 @@ describe("the cart's persistence seam", () => {
     expect(storage.writeStored(STORAGE_KEYS.CART, fallback)).toBe(false);
     expect(storage.readStored(STORAGE_KEYS.CART, fallback)).toBe(fallback);
     expect(storage.getStoredVersion(STORAGE_KEYS.CART)).toBeUndefined();
-    expect(() => storage.clearStoredKeys()).not.toThrow();
+    // With no store to reach, the sweep reports the failure rather than raising one.
+    expect(storage.clearStoredKeys()).toBe(false);
 
     // A profile that throws on access rather than on a call is answered the same way.
     Object.defineProperty(globalThis, "localStorage", {
@@ -404,6 +466,7 @@ describe("the cart's persistence seam", () => {
     expect(storage.readStored(STORAGE_KEYS.SESSION, "none")).toBe("none");
     expect(storage.writeStored(STORAGE_KEYS.SESSION, "ses_demo")).toBe(false);
     expect(storage.hasStored(STORAGE_KEYS.SESSION)).toBe(false);
-    expect(() => storage.removeStored(STORAGE_KEYS.SESSION)).not.toThrow();
+    // A removal is reported the same way: unperformed, and never raised at the caller.
+    expect(storage.removeStored(STORAGE_KEYS.SESSION)).toBe(false);
   });
 });

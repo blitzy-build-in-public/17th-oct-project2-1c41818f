@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/formatting.test.ts
  * Purpose: Money, number and percentage formatting, including rounding edge cases
- * Lines: 588
+ * Lines: 600
  */
 
 import { describe, expect, it } from "vitest";
@@ -16,10 +16,10 @@ import * as format from "@/utils/format";
 // list of forty specifiers would cost forty lines of import before a single expectation.
 import * as fixtures from "../../fixtures";
 
-// Money is asserted through the invariants every conforming rendering satisfies rather than through a
-// memorised locale string: the digits and the decimal point are checked at the scale the amount was
-// rendered at, so a wrong scale (1999 minor units printed as "1,999.00") fails, while a currency
-// symbol or a grouping separator is free to differ.
+// Money is asserted twice: the case tables pin the text a surface shows ("$19.99"), and every figure is
+// also read through the invariants a conforming rendering satisfies — the digits and the decimal point
+// at the scale the amount was rendered at — so a wrong scale (1999 minor units printed as "1,999.00")
+// fails even where the exact rendering of a large figure is unwieldy to write down.
 
 /** The digits and decimal point of a formatted figure, with its symbol, sign and grouping removed. */
 function digitsOf(formatted: string): string {
@@ -76,13 +76,13 @@ const CONVERSION_CASES: { readonly major: number; readonly minor: MinorUnits }[]
   { major: -19.99, minor: -1999 },
 ];
 
-/** Minor units and the digits a money surface renders them with. */
-const MONEY_CASES: { readonly minor: number; readonly digits: string }[] = [
-  { minor: 0, digits: "0.00" },
-  { minor: 1, digits: "0.01" },
-  { minor: 100, digits: "1.00" },
-  { minor: 1999, digits: "19.99" },
-  { minor: 129_900, digits: "1299.00" },
+/** Minor units and the money text a surface renders them as. */
+const MONEY_CASES: { readonly minor: number; readonly text: string }[] = [
+  { minor: 0, text: "$0.00" },
+  { minor: 1, text: "$0.01" },
+  { minor: 100, text: "$1.00" },
+  { minor: 1999, text: "$19.99" },
+  { minor: 129_900, text: "$1,299.00" },
 ];
 
 /** Text a person typed or a field held, and the minor units it names. */
@@ -153,10 +153,10 @@ const CELL_CASES: CellCase[] = [
   { value: "Aurora Desk Lamp", format: "text", text: "Aurora Desk Lamp" },
   { value: 42, format: "text", text: "42" },
   { value: 1284, format: "integer", text: "1,284" },
-  { value: 1999, format: "money", text: format.formatMoney(1999, CURRENCY) },
+  { value: 1999, format: "money", text: "$19.99" },
   { value: 0.125, format: "percent", text: "12.5%" },
   { value: 1299, format: "compact-number", text: "1.3K" },
-  { value: fixtures.FIXED_DATE, format: "date", text: dates.formatDate(fixtures.FIXED_DATE) },
+  { value: fixtures.FIXED_DATE, format: "date", text: "Oct 15, 2025" },
   { value: "2025-W05", format: "date", text: "2025-W05" },
   { value: null, format: "money", text: EMPTY_CELL },
 ];
@@ -215,14 +215,11 @@ describe("toMinorUnits and fromMinorUnits: a major amount and its minor units", 
 });
 
 describe("formatMoney and formatMoneyCompact: minor units as a surface shows them", () => {
-  it.each(MONEY_CASES)(
-    "renders $minor minor units with the digits $digits",
-    ({ minor, digits }) => {
-      const formatted = format.formatMoney(minor, CURRENCY);
-      expect(digitsOf(formatted)).toBe(digits);
-      expect(formatted).not.toBe("");
-    },
-  );
+  it.each(MONEY_CASES)("renders $minor minor units as $text", ({ minor, text }) => {
+    const formatted = format.formatMoney(minor, CURRENCY);
+    expect(formatted).toBe(text);
+    expect(digitsOf(formatted)).toBe(digitsOf(text));
+  });
   it("keeps the currency marker and the scale exact at both ends of the range", () => {
     expect(format.formatMoney(1999)).toContain("$");
     expect(format.formatMoney(1999)).toBe(format.formatMoney(1999, CURRENCY));
@@ -579,9 +576,24 @@ describe("formatRelativeTime: how long ago an instant was", () => {
     expect(dates.formatRelativeTime(at(-400 * DAY_MS), now)).toMatch(/year/);
     const past = dates.formatRelativeTime(at(-3 * DAY_MS), now);
     const future = dates.formatRelativeTime(at(3 * DAY_MS), now);
+    // One instant inside each band, and one either side of every cutover the function documents.
+    expect(dates.formatRelativeTime(at(-45_000), now)).toBe("1 minute ago");
+    expect(dates.formatRelativeTime(at(-2_699_000), now)).toBe("45 minutes ago");
+    expect(dates.formatRelativeTime(at(-2_700_000), now)).toBe("1 hour ago");
+    expect(dates.formatRelativeTime(at(-3 * 3_600_000), now)).toBe("3 hours ago");
+    expect(dates.formatRelativeTime(at(-79_199_000), now)).toBe("22 hours ago");
+    expect(dates.formatRelativeTime(at(-79_200_000), now)).toBe("yesterday");
+    expect(dates.formatRelativeTime(at(-604_799_000), now)).toBe("7 days ago");
+    expect(dates.formatRelativeTime(at(-604_800_000), now)).toBe("last week");
+    expect(dates.formatRelativeTime(at(-12 * DAY_MS), now)).toBe("2 weeks ago");
+    expect(dates.formatRelativeTime(at(-60 * DAY_MS), now)).toBe("2 months ago");
+    expect(dates.formatRelativeTime(at(-3_023_999_000), now)).toBe("5 weeks ago");
+    expect(dates.formatRelativeTime(at(-3_024_000_000), now)).toBe("last month");
+    expect(dates.formatRelativeTime(at(-31_535_999_000), now)).toBe("12 months ago");
+    expect(dates.formatRelativeTime(at(-31_536_000_000), now)).toBe("last year");
     expect(past).not.toBe(future);
-    expect(past).not.toBe("");
-    expect(future).not.toBe("");
+    expect(past).toBe("3 days ago");
+    expect(future).toBe("in 3 days");
     expect(dates.formatRelativeTime(at(-3 * DAY_MS), now)).toBe(past);
     expect(dates.formatRelativeTime("garbage", now)).toBe("");
   });

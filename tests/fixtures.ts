@@ -1,12 +1,11 @@
 /**
  * Path: tests/fixtures.ts
  * Purpose: Deterministic builders for products, customers, orders, carts and report results used by every test
- * Lines: 599
+ * Lines: 600
  */
 
-// The eight dependencies are imported as namespaces, and only here: each builder below needs a
-// different handful of the sixty names they export. The five type names long enough to push a
-// builder's signature onto a second line are imported by name instead.
+// The dependencies are imported as namespaces, and only here: each builder needs a different handful
+// of their names, so a name used alone, or long enough to wrap a signature, is imported by name.
 import type { ProductPerformance, ReportDefinition, ReportResult } from "@/types/analytics";
 import type { PaymentSummary, ShippingMethod } from "@/types/commerce";
 import type * as Account from "@/types/account";
@@ -15,20 +14,25 @@ import type * as Catalog from "@/types/catalog";
 import type * as Commerce from "@/types/commerce";
 import type * as Common from "@/types/common";
 import * as config from "@/constants/config";
+import { FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
 import * as taxonomy from "@/constants/taxonomy";
+import { priceCartLines } from "@/lib/pricingService";
+import { normalisePageSize, pageCountFor, pageFlagsFor } from "@/utils/collections";
+import { roundMinorUnits } from "@/utils/format";
 import * as strings from "@/utils/strings";
-// Determinism: no builder reads a clock — every timestamp defaults to FIXED_NOW and every identifier is
-// derived from the fields a builder was handed, so two calls and two suite runs agree, bar the one below.
+// The harness's single time basis: no builder reads a clock — every timestamp is pinned to FIXED_NOW
+// (midday UTC, 15 October 2025) and every identifier derives from the fields a builder was handed. A
+// session's expiry is the one value that must track the real clock, so the case needing one passes it.
 /** The instant every fixture timestamp defaults to: midday UTC on 15 October 2025. */
 export const FIXED_NOW = "2025-10-15T12:00:00.000Z";
 export const FIXED_DATE = FIXED_NOW.slice(0, 10);
 export const FIXED_EARLIER_DATE = "2025-01-01";
 export const FIXED_LATER_DATE = "2025-12-31";
-/** The trailing thirty-day range ending on FIXED_DATE, and the expiry every built session carries: one
- * TTL counted from the instant this module loads, not from FIXED_NOW, because the seam revalidates a
- * session against the real clock. Override `expiresAt` with a past instant to build an expired one. */
+/** The trailing thirty-day range ending on FIXED_DATE, and the expiry a built session carries. */
 export const FIXED_DATE_RANGE = { from: "2025-09-16", to: FIXED_DATE };
-export const FIXED_SESSION_EXPIRY = new Date(Date.now() + config.SESSION_TTL_MS).toISOString();
+export const FIXED_SESSION_EXPIRY = new Date(
+  Date.parse(FIXED_NOW) + config.SESSION_TTL_MS,
+).toISOString();
 /** Three products, priced apart so a sort, a subtotal or a ranking has something to order. */
 const PRODUCT_SEEDS = [
   { name: "Aurora Desk Lamp", sku: "AUR-DL-001", priceMinor: 4_999 },
@@ -50,33 +54,31 @@ const CUSTOMER_PHONE = "+1 503 555 0134";
 /** The address book's two labels, which keep the two default addresses' identifiers apart. */
 const BILLING_ADDRESS_LABEL = "Billing";
 const IMAGE_SIZE_PX = 600;
-/** Applies a builder's overrides over its defaults with one shallow spread, this file's whole policy:
- * a nested member is replaced wholesale, and an override of `null` beats its default. */
+/** Applies a builder's overrides over its defaults with one shallow spread, this file's policy: a
+ * nested member replaced wholesale, `null` beats a default, an explicit `undefined` is skipped. */
 function withDefaults<T extends object>(defaults: T, overrides?: Partial<T>): T {
-  return overrides === undefined ? defaults : Object.assign({}, defaults, overrides);
+  if (overrides === undefined) return defaults;
+  const defined: Partial<T> = {};
+  for (const key of Object.keys(overrides) as (keyof T)[]) {
+    if (overrides[key] !== undefined) defined[key] = overrides[key];
+  }
+  return Object.assign({}, defaults, defined);
 }
 /** The generated inline SVG url an image carries: deterministic in its product and its position. */
 function imageUrlFor(product: string, position: number): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${String(IMAGE_SIZE_PX)}" height="${String(IMAGE_SIZE_PX)}" role="img"><rect width="100%" height="100%" fill="#eef1f5"/><text x="50%" y="50%" text-anchor="middle" font-size="28">${product} ${String(position)}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
-/** Rounds a fractional minor-unit amount to the nearest cent; zero for a non-finite amount. */
-function roundMinor(amount: number): Common.MinorUnits {
-  if (!Number.isFinite(amount)) return 0;
-  return Math.sign(amount) * Math.round(Math.abs(amount));
-}
-/** The shipping a basket is charged: the method's configured price, waived at the threshold. */
-function shippingChargeMinor(subtotalMinor: Common.MinorUnits, methodId: string | null) {
-  if (methodId === null) return 0;
-  const waives = methodId === config.FREE_SHIPPING_METHOD_ID;
-  if (waives && subtotalMinor >= config.FREE_SHIPPING_THRESHOLD_MINOR) return 0;
-  return config.SHIPPING_METHODS.find((method) => method.id === methodId)?.priceMinor ?? 0;
-}
 /** The order line a priced cart line becomes, so an order's lines always match its own snapshot. */
 function orderLineFrom(line: Commerce.PricedCartLine): Commerce.OrderLine {
   const { id, productId, sku, unitPriceMinor, quantity, lineTotalMinor, imageUrl } = line;
   const productName = line.name;
   return { id, productId, productName, sku, unitPriceMinor, quantity, lineTotalMinor, imageUrl };
+}
+/** The slug the taxonomy declares for a name, or the name's own slug when it declares none. */
+function slugForName(name: string): string {
+  const declared = [...taxonomy.CATEGORY_DEFINITIONS, ...taxonomy.BRAND_DEFINITIONS];
+  return declared.find((candidate) => candidate.name === name)?.slug ?? strings.slugify(name);
 }
 /** Builds a product image: the first seed product, position 0, 600×600, a generated SVG url. */
 export function makeProductImage(overrides?: Partial<Catalog.ProductImage>): Catalog.ProductImage {
@@ -104,8 +106,8 @@ export function makeProduct(overrides?: Partial<Catalog.Product>): Catalog.Produ
     sku: overrides?.sku ?? PRODUCT_SEEDS[0].sku,
     slug: overrides?.slug ?? strings.slugify(name),
     name,
-    brandId: overrides?.brandId ?? strings.brandId(DEFAULT_BRAND.name),
-    categoryId: overrides?.categoryId ?? strings.categoryId(DEFAULT_CATEGORY.name),
+    brandId: overrides?.brandId ?? strings.brandId(DEFAULT_BRAND.slug),
+    categoryId: overrides?.categoryId ?? strings.categoryId(DEFAULT_CATEGORY.slug),
     summary: "A warm, dimmable desk lamp with a weighted base.",
     description: "Three brightness steps and a weighted base, for a desk that stays lit.",
     features: ["Dimmable in three steps", "Weighted anti-slip base", "Replaceable warm-white bulb"],
@@ -128,10 +130,10 @@ export function makeProduct(overrides?: Partial<Catalog.Product>): Catalog.Produ
 export function makeCategory(overrides?: Partial<Catalog.Category>): Catalog.Category {
   const name = overrides?.name ?? DEFAULT_CATEGORY.name;
   const defaults: Catalog.Category = {
-    id: overrides?.id ?? strings.categoryId(name),
-    slug: overrides?.slug ?? strings.slugify(name),
+    id: overrides?.id ?? strings.categoryId(overrides?.slug ?? slugForName(name)),
+    slug: overrides?.slug ?? slugForName(name),
     name,
-    parentId: overrides?.parentId ?? strings.categoryId(taxonomy.CATEGORY_DEFINITIONS[0].name),
+    parentId: overrides?.parentId ?? strings.categoryId(taxonomy.CATEGORY_DEFINITIONS[0].slug),
     description: "Speakers, headphones and the cables that connect them.",
     position: 0,
   };
@@ -141,8 +143,8 @@ export function makeCategory(overrides?: Partial<Catalog.Category>): Catalog.Cat
 export function makeBrand(overrides?: Partial<Catalog.Brand>): Catalog.Brand {
   const name = overrides?.name ?? DEFAULT_BRAND.name;
   const defaults: Catalog.Brand = {
-    id: overrides?.id ?? strings.brandId(name),
-    slug: overrides?.slug ?? strings.slugify(name),
+    id: overrides?.id ?? strings.brandId(overrides?.slug ?? slugForName(name)),
+    slug: overrides?.slug ?? slugForName(name),
     name,
     description: "Studio-grade audio built for small rooms.",
     productCount: 3,
@@ -170,7 +172,7 @@ export function makeReview(overrides?: Partial<Catalog.Review>): Catalog.Review 
 /** Builds a facet value: the default brand term counted three times; override `count` or `selected`. */
 export function makeFacetValue(overrides?: Partial<Catalog.FacetValue>): Catalog.FacetValue {
   const defaults: Catalog.FacetValue = {
-    value: strings.brandId(DEFAULT_BRAND.name),
+    value: strings.brandId(DEFAULT_BRAND.slug),
     label: DEFAULT_BRAND.name,
     count: 3,
     selected: false,
@@ -233,7 +235,9 @@ export function makeCart(overrides?: Partial<Commerce.Cart>): Commerce.Cart {
   };
   return withDefaults(defaults, overrides);
 }
-/** Builds a promo code: 10% off an order-level basket; override `kind`, `active` or `endsAt`. */
+/** Builds a promo code: 10% off an order basket, in the pinned 2025 window FIXED_EARLIER_DATE to
+ * FIXED_LATER_DATE, so the default suits the pure `decidePromo` and row paths; a real-clock case
+ * passes its own `startsAt`/`endsAt`. Override `kind` or `active`. */
 export function makePromoCode(overrides?: Partial<Commerce.PromoCode>): Commerce.PromoCode {
   const defaults: Commerce.PromoCode = {
     code: "SAVE10",
@@ -254,39 +258,25 @@ export function makePromoCode(overrides?: Partial<Commerce.PromoCode>): Commerce
 export function makeShippingMethod(overrides?: Partial<ShippingMethod>): ShippingMethod {
   return withDefaults({ ...DEFAULT_SHIPPING_METHOD }, overrides);
 }
-/** The overrides a priced cart accepts: its `lines` is the basket to price, not the priced output. */
-export type PricedCartInput = Omit<Partial<Commerce.PricedCart>, "lines"> & {
+/** What a priced cart is built from — basket, code, method, currency — never a computed total. */
+export interface PricedCartInput {
   readonly lines?: readonly Commerce.CartLine[];
-};
-/** Builds a priced cart whose every total is computed from its own lines: subtotals, shipping waived
- * at the floor, tax on the discounted goods, and a grand total that is their sum. */
+  readonly promo?: Commerce.PromoCode;
+  readonly shippingMethodId?: string | null;
+  readonly currency?: Common.CurrencyCode;
+}
+/** Builds a priced cart through `priceCartLines`, the product's single pricing home: it subtracts the
+ * discount, resolves the delivery charge from the discounted subtotal and taxes those goods, so
+ * `subtotal - discount + shipping + tax` is the grand total; an absent `shippingMethodId` means the
+ * method the threshold waives, and an explicit `null` the product's no-method-chosen state. */
 export function makePricedCart(overrides?: PricedCartInput): Commerce.PricedCart {
-  const lines = overrides?.lines ?? [makeCartLine()];
-  const methodId =
-    overrides?.shippingMethodId === undefined
-      ? config.FREE_SHIPPING_METHOD_ID
-      : overrides.shippingMethodId;
-  const pricedLines = lines.map((line) => {
-    const lineSubtotalMinor = line.unitPriceMinor * line.quantity;
-    return { ...line, lineSubtotalMinor, discountMinor: 0, lineTotalMinor: lineSubtotalMinor };
+  const { shippingMethodId = config.FREE_SHIPPING_METHOD_ID } = overrides ?? {};
+  const priced = priceCartLines({
+    lines: overrides?.lines ?? [makeCartLine()],
+    promo: overrides?.promo,
+    shippingMethodId,
   });
-  const subtotalMinor = pricedLines.reduce((sum, line) => sum + line.lineSubtotalMinor, 0);
-  const discountTotalMinor = pricedLines.reduce((sum, line) => sum + line.discountMinor, 0);
-  const shippingMinor = shippingChargeMinor(subtotalMinor, methodId);
-  const taxMinor = roundMinor((subtotalMinor - discountTotalMinor) * config.TAX_RATE);
-  const defaults: Commerce.PricedCart = {
-    lines: pricedLines,
-    subtotalMinor,
-    discountTotalMinor,
-    shippingMinor,
-    taxMinor,
-    grandTotalMinor: subtotalMinor - discountTotalMinor + shippingMinor + taxMinor,
-    appliedPromos: [],
-    freeShippingRemainingMinor: Math.max(0, config.FREE_SHIPPING_THRESHOLD_MINOR - subtotalMinor),
-    currency: config.DEFAULT_CURRENCY,
-    shippingMethodId: methodId,
-  };
-  return withDefaults(defaults, { ...overrides, lines: pricedLines, shippingMethodId: methodId });
+  return overrides?.currency === undefined ? priced : { ...priced, currency: overrides.currency };
 }
 /** Builds an order line: one unit at the seed price; override `quantity` and `unitPriceMinor`. */
 export function makeOrderLine(overrides?: Partial<Commerce.OrderLine>): Commerce.OrderLine {
@@ -378,7 +368,8 @@ export function makeCustomer(overrides?: Partial<Account.Customer>): Account.Cus
   };
   return withDefaults(defaults, overrides);
 }
-/** Builds an active session issued at FIXED_NOW for the customer role; override `role` or `expiresAt`. */
+/** Builds an active session issued at FIXED_NOW, expiring one TTL later; override `role` or `expiresAt` —
+ * a fresh future instant for a session the seam, which judges expiry against the real clock, accepts. */
 export function makeSession(overrides?: Partial<Account.Session>): Account.Session {
   const accountId =
     overrides?.customerId ?? strings.customerId(config.DEMO_ACCOUNTS.CUSTOMER_EMAIL);
@@ -414,7 +405,7 @@ function numericCell(row: Analytics.ReportRow, key: string): number {
 function summariseSalesRows(rows: readonly Analytics.ReportRow[]): Analytics.ReportSummary {
   const orders = rows.reduce((sum, row) => sum + numericCell(row, "orders"), 0);
   const netRevenue = rows.reduce((sum, row) => sum + numericCell(row, "netRevenue"), 0);
-  const average = orders === 0 ? 0 : roundMinor(netRevenue / orders);
+  const average = orders === 0 ? 0 : roundMinorUnits(netRevenue / orders);
   return {
     items: [
       { key: "netRevenue", label: "Net revenue", value: netRevenue, format: "money" },
@@ -429,7 +420,7 @@ export function makeSalesRecord(overrides?: Partial<Analytics.SalesRecord>): Ana
   const refundMinor = overrides?.refundMinor ?? 0;
   const defaults: Analytics.SalesRecord = {
     date: FIXED_DATE,
-    categoryId: strings.categoryId(DEFAULT_CATEGORY.name),
+    categoryId: strings.categoryId(DEFAULT_CATEGORY.slug),
     channel: "web",
     orders: 8,
     units: 11,
@@ -451,7 +442,7 @@ export function makeProductPerformance(overrides?: Partial<ProductPerformance>) 
     productId: overrides?.productId ?? strings.productId(productName),
     productName,
     sku: overrides?.sku ?? seed.sku,
-    categoryId: strings.categoryId(DEFAULT_CATEGORY.name),
+    categoryId: strings.categoryId(DEFAULT_CATEGORY.slug),
     units,
     orders: 9,
     grossRevenueMinor,
@@ -485,7 +476,7 @@ export function makeKpiSummary(overrides?: Partial<Analytics.KpiSummary>): Analy
     revenueMinor,
     orders,
     units: 268,
-    averageOrderValueMinor: orders === 0 ? 0 : roundMinor(revenueMinor / orders),
+    averageOrderValueMinor: orders === 0 ? 0 : roundMinorUnits(revenueMinor / orders),
     newCustomers: 14,
     conversionRate: 0.032,
     baseline: makeKpiBaseline(),
@@ -506,6 +497,14 @@ export function makeChartSeries(overrides?: Partial<Analytics.ChartSeries>): Ana
   };
   return withDefaults(defaults, overrides);
 }
+/** The chart series: one point per row at its own period, so no bucket plots outside the range. */
+function seriesFromRows(rows: readonly Analytics.ReportRow[]): Analytics.ChartSeries {
+  const points = rows.map((row) => {
+    const period: string = String(row.cells.period ?? "");
+    return { x: period, y: numericCell(row, "netRevenue"), label: period };
+  });
+  return makeChartSeries({ points });
+}
 /** Builds the sales report definition with its own columns; override `kind` and `columns`. */
 export function makeReportDefinition(overrides?: Partial<ReportDefinition>): ReportDefinition {
   const defaults: ReportDefinition = {
@@ -514,7 +513,7 @@ export function makeReportDefinition(overrides?: Partial<ReportDefinition>): Rep
   };
   return withDefaults(defaults, overrides);
 }
-/** Builds a run sales report whose summary is totalled from its own rows; override `rows`. */
+/** Builds a run sales report whose summary and chart derive from its own rows; override `rows`. */
 export function makeReportResult(overrides?: Partial<ReportResult>): ReportResult {
   const rows = overrides?.rows ?? [
     salesRow(makeSalesRecord({ date: "2025-09-16", orders: 84, units: 231 })),
@@ -528,30 +527,30 @@ export function makeReportResult(overrides?: Partial<ReportResult>): ReportResul
     granularity: DEFAULT_REPORT_DEFINITION.granularity,
     rows,
     summary: summariseSalesRows(rows),
-    series: [makeChartSeries()],
+    series: [seriesFromRows(rows)],
     generatedAt: FIXED_NOW,
   };
   return withDefaults(defaults, overrides);
 }
-/** Wraps items in a page derived from its total, page and size; an empty collection is one empty page. */
+/** Wraps items in a page whose paging rule is `utils/collections`: an out-of-set size reads as the
+ * default and a non-finite total is one page; count and flags are derived, not overridable. */
 export function makePageResult<TItem>(
   items: readonly TItem[],
-  overrides?: Partial<Common.PageResult<TItem>>,
+  overrides?: Omit<Partial<Common.PageResult<TItem>>, "pageCount" | "hasNext" | "hasPrevious">,
 ): Common.PageResult<TItem> {
   const page = overrides?.page ?? 1;
-  const pageSize = overrides?.pageSize ?? config.DEFAULT_PAGE_SIZE;
+  const pageSize = normalisePageSize(overrides?.pageSize ?? config.DEFAULT_PAGE_SIZE);
   const total = overrides?.total ?? items.length;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const pageCount = pageCountFor(total, pageSize);
   const defaults: Common.PageResult<TItem> = {
     items: [...items],
     total,
     page,
     pageSize,
     pageCount,
-    hasNext: page < pageCount,
-    hasPrevious: page > 1,
+    ...pageFlagsFor(page, pageCount),
   };
-  return withDefaults(defaults, overrides);
+  return withDefaults(defaults, { ...overrides, pageSize });
 }
 /** Wraps a value in a successful result, the shape every service returns instead of throwing. */
 export function makeResult<TValue>(value: TValue): Common.Result<TValue> {
@@ -561,18 +560,18 @@ export function makeResult<TValue>(value: TValue): Common.Result<TValue> {
 export function makeFailureResult<TValue = never>(error: Common.ApiError): Common.Result<TValue> {
   return { ok: false, error };
 }
-/** Builds a generic 500 error; override `status`, `code`, `message` or `field`. */
+/** Builds the transport's own 500 error; override `status`, `code`, `message` or `field`. */
 export function makeApiError(overrides?: Partial<Common.ApiError>): Common.ApiError {
   const defaults: Common.ApiError = {
     status: 500,
-    code: "internal-error",
-    message: "The request could not be completed.",
+    code: "unexpected-error", // the transport's own code: src/lib/apiClient.ts, src/state/hooks.ts
+    message: FEEDBACK_COPY.ERROR_STATE_BODY,
   };
   return withDefaults(defaults, overrides);
 }
 /** Builds a field-keyed error map holding one email error; override the keys or pass `{}`. */
 export function makeFieldErrors(overrides?: Common.FieldErrors): Common.FieldErrors {
-  return { email: "Enter a valid email address.", ...overrides };
+  return { email: VALIDATION_MESSAGES.EMAIL_FORMAT, ...overrides };
 }
 /** Builds the customer with its address book: one default shipping and one default billing address. */
 export function makeCustomerWithAddresses(overrides?: Partial<Account.Customer>): {
@@ -585,15 +584,17 @@ export function makeCustomerWithAddresses(overrides?: Partial<Account.Customer>)
     isDefaultShipping: false,
     isDefaultBilling: true,
   });
+  const addressIds = overrides?.addressIds ?? [shipping.id, billing.id];
   return {
-    customer: makeCustomer({ addressIds: [shipping.id, billing.id], ...overrides }),
+    customer: makeCustomer({ ...overrides, addressIds }),
     addresses: [shipping, billing],
   };
 }
-/** Builds a cart of `count` seed lines at quantities one, two and three; override `promoCode`. */
+/** Builds a cart of one line per seed product, up to three, at quantities one to three: a cart holds
+ * one line per product, so a longer basket passes its own `lines` override. */
 export function makeCartWithLines(count = 3, overrides?: Partial<Commerce.Cart>): Commerce.Cart {
-  const lines = PRODUCT_SEEDS.slice(0, count).map((seed, index) =>
-    makeCartLine({ name: seed.name, quantity: index + 1 }),
+  const lines = PRODUCT_SEEDS.slice(0, Math.max(0, Math.min(count, PRODUCT_SEEDS.length))).map(
+    (seed, index) => makeCartLine({ name: seed.name, quantity: index + 1 }),
   );
-  return makeCart({ lines, ...overrides });
+  return makeCart({ ...overrides, lines: overrides?.lines ?? lines });
 }
