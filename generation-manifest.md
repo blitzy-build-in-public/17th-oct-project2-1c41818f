@@ -1,7 +1,7 @@
 <!--
 Path: generation-manifest.md
 Purpose: The authoritative build manifest: tree, budgets, actual counts, phase schedule, cumulative total and status ledger — the one file excluded from the 50,000, written in Phase 0 before any of the above.
-Lines: 359
+Lines: 360
 -->
 
 # SalesPro — generation manifest
@@ -63,7 +63,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   ├── utils/
 │   │   ├── format.ts  # 380 · P5 · Pending · —
 │   │   ├── dates.ts  # 350 · P5 · Pending · —
-│   │   ├── strings.ts  # 350 · P5 · Pending · —
+│   │   ├── strings.ts  # 350 · P5 · Done · 541
 │   │   ├── validation.ts  # 440 · P5 · Pending · —
 │   │   ├── collections.ts  # 420 · P5 · Pending · —
 │   │   ├── statistics.ts  # 360 · P6 · Pending · —
@@ -317,6 +317,7 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 | `vitest.config.ts` | 85     | 50     | -35 (-41.2%) | provisional: the two-project configuration, setup file, globals, `passWithNoTests` and the V8 thresholds are all present, with the header still to come                                                                                 |
 | `eslint.config.js` | 55     | 58     | +3 (+5.5%)   | the composition the plan names — ignore block, recommended JavaScript rules, type-checked TypeScript rules, the hooks flat preset, the scoped `languageOptions` and the self-scoped JavaScript block — plus the three-field header and the three `react-hooks` advisory rules raised from warn to error, because the plan's style gate requires lint to pass with no warnings and `package.json`'s plain `eslint .` cannot fail on one; three lines over budget, taken from the remainder |
 | `.gitignore`       | 25     | 37     | +12 (+48.0%) | provisional: the setup baseline enumerates every documented ignore group — dependencies, build output, test and coverage output, environment files, tooling caches, logs and editor files; the owning phase completes and re-records it |
+| `src/utils/strings.ts` | 350 | 541 | +191 (+54.6%) | the file's specified surface is 22 exported members — the 7 text helpers, the generic `prefixedId` and `sequenceId`, the 10 per-entity generators and the `createSalt` / `createCredentialDigest` / `verifyCredential` trio — each carrying the purpose, parameter, return and throw documentation §0.12.2 requires, on top of the single FNV-1a digest implementation the identifier generators and the credential helpers share and the JSDoc stating the rules its callers rest on (the generators' determinism, the session token's opacity, the demonstration-only credential boundary the seed layer and the transport both call); no line is padding, no required capability was cut, and 541 lines stays well inside the 600-line ceiling, with the overrun taken from the remainder |
 
 Remainder carried forward at Phase 0: **+111 lines** freed for files not yet generated (-19 - 18 - 4 - 39 - 35 - 8 + 12), pending the four provisional counts above, which are replaced with final figures when their phases complete. `README.md` is not listed: the two lines at that path are a setup placeholder rather than the 310-line phase-39 deliverable, so no deviation is recorded against its budget. The repository is otherwise empty of the plan's content, so the remaining 150 counted files have no actual count yet.
 
