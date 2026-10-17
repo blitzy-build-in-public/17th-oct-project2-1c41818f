@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/orderService.ts
  * Purpose: Builds orders from a cart snapshot, numbers them and applies the status transitions
- * Lines: 596
+ * Lines: 584
  */
 
 import { DEFAULT_PAGE_SIZE } from "@/constants/config";
@@ -19,7 +19,6 @@ import type {
   PricedCartLine,
 } from "@/types/commerce";
 import type {
-  ApiError,
   FieldErrors,
   IsoDateTimeString,
   MinorUnits,
@@ -39,22 +38,16 @@ import {
   validateShippingSubmission,
 } from "@/utils/validation";
 
-import { getJson, postJson } from "@/lib/apiClient";
+import {
+  API_ERROR_CODES,
+  API_PATHS,
+  failure,
+  fillApiPath,
+  getJson,
+  postJson,
+} from "@/lib/apiClient";
 
-// The orders endpoints ---------------------------------------------------------------------------
-
-/** The orders collection: the path a submission is posted to and the one a customer's own history is
- * read from. The in-process seam owns the route table, so this module names the path it calls and
- * neither imports the other. */
-const ORDERS_PATH = "/api/orders";
-
-/** The status a submission this module refuses answers with: the seam's own validation failure, `422`. */
-const VALIDATION_FAILED_STATUS = 422;
-
-/** The code such a refusal carries — the seam's stable reason for a body that broke a field rule.
- * Spelled here rather than imported, so this module depends on the contract's meaning and not on the
- * transport's internals. */
-const VALIDATION_FAILED_CODE = "validation-failed";
+// The orders client's fixed values -----------------------------------------------------------------
 
 /** The page an order history request asks for when its caller names no query of its own. */
 const DEFAULT_ORDER_HISTORY: OrderHistoryQuery = { page: 1, pageSize: DEFAULT_PAGE_SIZE };
@@ -476,23 +469,24 @@ function holdsAnOrder(snapshot: PricedCart): boolean {
   return Array.isArray(lines) && lines.length > 0;
 }
 
-/** The failure a submission this module refuses answers with, shaped as the seam shapes the same
- * refusal: `422`, the stable code for a body that broke a field rule, the first broken field's message
- * and the name of the control it belongs to. */
+/** The failure a submission this module refuses answers with, asked of the seam's own shaper: the
+ * stable code for a body that broke a field rule, at the status the published vocabulary gives it, the
+ * first broken field's message and the name of the control it belongs to. */
 function refusedSubmission(errors: FieldErrors): Result<never> {
-  const error: ApiError = {
-    status: VALIDATION_FAILED_STATUS,
-    code: VALIDATION_FAILED_CODE,
-    message: firstError(errors) ?? VALIDATION_MESSAGES.REQUIRED,
-    field: Object.keys(errors)[0] ?? FORM_ERROR_KEY,
-  };
-  return { ok: false, error };
+  const field = Object.keys(errors)[0] ?? FORM_ERROR_KEY;
+  const message = firstError(errors) ?? VALIDATION_MESSAGES.REQUIRED;
+  return failure(API_ERROR_CODES.VALIDATION_FAILED, message, field);
 }
 
 // The client -------------------------------------------------------------------------------------
 
 /**
  * Places the order a submission describes and returns the order that was created.
+ *
+ * The snapshot and the idempotency key are two members of the request {@link buildOrderInput} assembles, so
+ * the call takes that assembled request rather than a snapshot-and-key shorthand: the endpoint also requires
+ * the contact email, both address snapshots, the delivery method and the payment, and the shorthand could
+ * carry none of them.
  *
  * Three things it deliberately does not do. It does not re-read or re-price the cart, because the
  * snapshot was taken before completion and an order records what the buyer reviewed. It does not decide
@@ -516,7 +510,7 @@ export async function createOrder(
   if (hasErrors(errors)) {
     return refusedSubmission(errors);
   }
-  return postJson<Order, CreateOrderRequest>(ORDERS_PATH, input, {
+  return postJson<Order, CreateOrderRequest>(API_PATHS.ORDERS, input, {
     sessionToken: options.sessionToken,
     signal: options.signal,
   });
@@ -541,7 +535,7 @@ export async function getOrder(
   id: OrderId,
   options: OrderServiceOptions = {},
 ): Promise<Result<Order>> {
-  return getJson<Order>(orderDetailPath(id), {
+  return getJson<Order>(fillApiPath(API_PATHS.ORDER_DETAIL, { id }), {
     sessionToken: options.sessionToken,
     signal: options.signal,
   });
@@ -564,17 +558,11 @@ export async function listOrders(
   history: OrderHistoryQuery = DEFAULT_ORDER_HISTORY,
   options: OrderServiceOptions = {},
 ): Promise<Result<PageResult<Order>>> {
-  return getJson<PageResult<Order>>(ORDERS_PATH, {
+  return getJson<PageResult<Order>>(API_PATHS.ORDERS, {
     query: historyQueryParams(history),
     sessionToken: options.sessionToken,
     signal: options.signal,
   });
-}
-
-/** The path of one order: the collection's path with the identifier appended, encoded as the route
- * builders in `src/constants/routes.ts` encode a path segment. */
-function orderDetailPath(id: OrderId): string {
-  return `${ORDERS_PATH}/${encodeURIComponent(id)}`;
 }
 
 /** The history's query string: the page and each filter a caller named, with an unset one left out. */

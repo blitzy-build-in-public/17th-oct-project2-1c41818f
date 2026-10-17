@@ -1,7 +1,9 @@
 /* Path: src/styles/data-display.css
- * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays, toasts and tabs and accordion, loaded from src/styles/components.css
- * Lines: 597
+ * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
+ * Lines: 529
  */
+
+@import "./tabs-accordion.css";
 
 /* ==== Cards and badges ==== */
 .sp-card {
@@ -232,9 +234,15 @@
   transform: rotate(45deg);
   transition: opacity var(--duration-fast) var(--ease-standard);
 }
-.sp-table__sort:hover::after,
 .sp-table__sort:focus-visible::after {
   opacity: var(--opacity-disabled);
+}
+/* Hover is confined to a device that can hover, as the sheets' other hover rules are, so a tap cannot leave
+ * the caret dimmed on a touch device the finger has already left. */
+@media (hover: hover) {
+  .sp-table__sort:hover::after {
+    opacity: var(--opacity-disabled);
+  }
 }
 [aria-sort="ascending"] .sp-table__sort::after {
   opacity: 1;
@@ -518,80 +526,4 @@
 .sp-toast--info {
   background-color: var(--color-info-surface);
   color: var(--color-info-text);
-}
-
-/* ==== Tabs and accordion ==== */
-.sp-tabs,
-.sp-accordion {
-  display: grid;
-}
-.sp-tabs__list {
-  display: flex;
-  gap: var(--space-1);
-  overflow-x: auto;
-  border-block-end: var(--border-width) solid var(--color-border);
-}
-.sp-tabs__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-block-end: var(--border-width-thick) solid transparent;
-  color: var(--color-text-muted);
-  font-size: var(--text-label-size);
-  font-weight: var(--text-label-weight);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.sp-tabs__tab[aria-selected="true"] {
-  border-block-end-color: var(--color-accent);
-  color: var(--color-accent);
-  font-weight: var(--font-weight-semibold);
-}
-.sp-tabs__tab[disabled] {
-  opacity: var(--opacity-disabled);
-}
-.sp-tabs__panel {
-  padding-block-start: var(--space-5);
-}
-@media (hover: hover) {
-  .sp-tabs__tab:hover:not([aria-selected="true"]):not([disabled]) {
-    background-color: var(--color-surface-sunken);
-  }
-}
-.sp-accordion__item {
-  border-block-end: var(--border-width) solid var(--color-border-subtle);
-}
-.sp-accordion__item:last-child {
-  border-block-end: 0;
-}
-.sp-accordion__trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  inline-size: 100%;
-  padding-block: var(--space-4);
-  font-size: var(--text-label-size);
-  font-weight: var(--text-label-weight);
-  text-align: start;
-  cursor: pointer;
-}
-.sp-accordion__trigger::after {
-  content: "";
-  flex: none;
-  inline-size: var(--space-2);
-  block-size: var(--space-2);
-  border-block-end: var(--border-width-thick) solid currentColor;
-  border-inline-end: var(--border-width-thick) solid currentColor;
-  transform: rotate(45deg);
-  transition: transform var(--duration-fast) var(--ease-standard);
-}
-.sp-accordion__trigger[aria-expanded="true"]::after {
-  transform: rotate(225deg);
-}
-.sp-accordion__panel {
-  padding-block-end: var(--space-4);
-  color: var(--color-text-muted);
-  font-size: var(--text-body-sm-size);
 }

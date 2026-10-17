@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/catalogService.ts
  * Purpose: Filtering, cross-filtered facet counts, sorting and paging over the catalogue
- * Lines: 599
+ * Lines: 582
  */
 
 import { RELATED_PRODUCTS_LIMIT, type PageSize } from "@/constants/config";
@@ -10,7 +10,7 @@ import {
   type FacetDefinition,
   type FacetDefinitionOption,
 } from "@/constants/taxonomy";
-import { getJson } from "@/lib/apiClient";
+import { API_PATHS, fillApiPath, getJson } from "@/lib/apiClient";
 import type {
   Brand,
   Category,
@@ -54,25 +54,6 @@ import {
  * deterministically with ties broken by identifier.
  */
 
-// Endpoint paths --------------------------------------------------------------------------------
-
-/** The listing endpoint, which reads the whole filter state — filter, sort and paging — as parameters. */
-const PRODUCTS_PATH = "/api/products";
-
-/** The facet endpoint, which reads the filter half of a state and answers the five facets directly. */
-const FACETS_PATH = "/api/facets";
-
-/** The path of one product's detail resource: the identifier is percent-encoded, as every sibling
- * builder encodes its own parameter, so a request-derived value stays one path segment. */
-function productPath(id: ProductId): string {
-  return `${PRODUCTS_PATH}/${encodeURIComponent(id)}`;
-}
-
-/** The path of one product's related-items resource, which takes the count to answer as `limit`. */
-function relatedProductsPath(id: ProductId): string {
-  return `${productPath(id)}/related`;
-}
-
 // The client API --------------------------------------------------------------------------------
 
 /**
@@ -97,7 +78,7 @@ export function listProducts(
   filter: FilterState,
   options: CatalogRequestOptions = {},
 ): Promise<Result<PageResult<Product>>> {
-  return getJson<PageResult<Product>>(PRODUCTS_PATH, {
+  return getJson<PageResult<Product>>(API_PATHS.PRODUCTS, {
     query: productQueryParams(filter),
     signal: options.signal,
   });
@@ -115,7 +96,9 @@ export function getProduct(
   id: ProductId,
   options: CatalogRequestOptions = {},
 ): Promise<Result<Product>> {
-  return getJson<Product>(productPath(id), { signal: options.signal });
+  return getJson<Product>(fillApiPath(API_PATHS.PRODUCT_DETAIL, { id }), {
+    signal: options.signal,
+  });
 }
 
 /**
@@ -133,7 +116,7 @@ export function getRelated(
   limit: number = RELATED_PRODUCTS_LIMIT,
   options: CatalogRequestOptions = {},
 ): Promise<Result<Product[]>> {
-  return getJson<RelatedProductsResponse>(relatedProductsPath(id), {
+  return getJson<RelatedProductsResponse>(fillApiPath(API_PATHS.PRODUCT_RELATED, { id }), {
     query: { limit },
     signal: options.signal,
   }).then(unwrapRelatedProducts);
@@ -152,7 +135,7 @@ export function buildFacets(
   filter: FilterState,
   options: CatalogRequestOptions = {},
 ): Promise<Result<Facet[]>> {
-  return getJson<Facet[]>(FACETS_PATH, {
+  return getJson<Facet[]>(API_PATHS.FACETS, {
     query: filterQueryParams(normaliseProductQuery(filter)),
     signal: options.signal,
   });

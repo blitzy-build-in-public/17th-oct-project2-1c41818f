@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/authService.ts
  * Purpose: Registration, sign-in, sign-out, session restore and role checks for the demonstration account store
- * Lines: 428
+ * Lines: 405
  */
 
 import { SESSION_TTL_MS } from "@/constants/config";
@@ -30,7 +30,7 @@ import {
   validateRegistration,
 } from "@/utils/validation";
 
-import { getJson, postJson } from "@/lib/apiClient";
+import { API_ERROR_CODES, API_PATHS, failure, getJson, postJson } from "@/lib/apiClient";
 
 /**
  * The account store's rules: who a session says the visitor is, how long that session lasts, and how an
@@ -66,62 +66,38 @@ import { getJson, postJson } from "@/lib/apiClient";
 // Failure vocabulary ------------------------------------------------------------------------------
 
 /**
- * The status and the code of every authentication failure this module recognises, and the whole set of
- * codes {@link authErrorMessage} has wording for.
+ * The authentication codes this module has wording for, taken from the seam's own vocabulary rather
+ * than spelled again: {@link authErrorMessage} and {@link toAuthFieldErrors} key their tables by
+ * these, and a code the product adds is picked up here by naming its constant.
  *
- * The codes are the seam's own vocabulary and must keep matching it, because a caller branches on them.
- * They are restated here because `src/lib/apiContract.ts`, their one home, is outside the files this
- * module may import — the same reason `src/lib/apiClient.ts` declares the three failures its own
- * transport raises. No status and no code is invented: each mirrors the seam's table entry for entry.
+ * The status each code answers with is deliberately absent: `failure` reads it from the vocabulary the
+ * seam publishes, so no status is written in this file at all.
  */
 export type AuthFailureCode =
-  | "unauthenticated"
-  | "session-expired"
-  | "session-unknown"
-  | "invalid-credentials"
-  | "forbidden"
-  | "duplicate-email"
-  | "validation-failed";
+  | typeof API_ERROR_CODES.UNAUTHENTICATED
+  | typeof API_ERROR_CODES.SESSION_EXPIRED
+  | typeof API_ERROR_CODES.SESSION_UNKNOWN
+  | typeof API_ERROR_CODES.INVALID_CREDENTIALS
+  | typeof API_ERROR_CODES.FORBIDDEN
+  | typeof API_ERROR_CODES.DUPLICATE_EMAIL
+  | typeof API_ERROR_CODES.VALIDATION_FAILED;
 
-/** The status each {@link AuthFailureCode} answers with, read off the seam's table: `401` without a
- * usable session, `403` short of authority, `409` for an email address already taken, `422` for a body
- * that broke a field rule. */
-const AUTH_FAILURE_STATUS: Readonly<Record<AuthFailureCode, number>> = {
-  unauthenticated: 401,
-  "session-expired": 401,
-  "session-unknown": 401,
-  "invalid-credentials": 401,
-  forbidden: 403,
-  "duplicate-email": 409,
-  "validation-failed": 422,
-};
-
-/** The paths this service calls, matching the seam's route table entry for entry. Held here so no
- * method repeats one and a path change is a change to this table alone. */
-const AUTH_ENDPOINTS = {
-  /** Creates an account and opens a session with it. */
-  REGISTER: "/api/auth/register",
-  /** Opens a session for credentials the seam proves. */
-  LOGIN: "/api/auth/login",
-  /** Ends the session the token names. */
-  LOGOUT: "/api/auth/logout",
-  /** Reports the session a stored token still names. */
-  SESSION: "/api/auth/session",
-} as const;
+/** The codes of {@link AuthFailureCode}, in the order the union names them, so a code read off a
+ * failure can be recognised as one this module has wording for. */
+const AUTH_FAILURE_CODES: readonly AuthFailureCode[] = [
+  API_ERROR_CODES.UNAUTHENTICATED,
+  API_ERROR_CODES.SESSION_EXPIRED,
+  API_ERROR_CODES.SESSION_UNKNOWN,
+  API_ERROR_CODES.INVALID_CREDENTIALS,
+  API_ERROR_CODES.FORBIDDEN,
+  API_ERROR_CODES.DUPLICATE_EMAIL,
+  API_ERROR_CODES.VALIDATION_FAILED,
+];
 
 /** Whether a `code` read off a failure is one of the authentication codes, narrowing it so the tables
  * of wording and of fields below can be indexed without a cast. */
 function isAuthFailureCode(value: string): value is AuthFailureCode {
-  return Object.prototype.hasOwnProperty.call(AUTH_FAILURE_STATUS, value);
-}
-
-/**
- * Shapes a failure the way the seam shapes every one of its own: the code's own status, the code, the
- * sentence to show, and `field` naming the offending control only where the failure belongs to one.
- */
-function authFailure(code: AuthFailureCode, message: string, field?: string): ApiError {
-  const status = AUTH_FAILURE_STATUS[code];
-  return field === undefined ? { status, code, message } : { status, code, message, field };
+  return (AUTH_FAILURE_CODES as readonly string[]).includes(value);
 }
 
 // Who may do what ---------------------------------------------------------------------------------
@@ -193,10 +169,10 @@ export function assertRole(
   required: Role | readonly Role[],
 ): Result<Session> {
   if (!isAuthenticated(session)) {
-    return { ok: false, error: authFailure("unauthenticated", FEEDBACK_COPY.SIGN_IN_REQUIRED) };
+    return failure(API_ERROR_CODES.UNAUTHENTICATED, FEEDBACK_COPY.SIGN_IN_REQUIRED);
   }
   if (!hasRole(session, required)) {
-    return { ok: false, error: authFailure("forbidden", ADMIN_COPY.NOT_AUTHORIZED_BODY) };
+    return failure(API_ERROR_CODES.FORBIDDEN, ADMIN_COPY.NOT_AUTHORIZED_BODY);
   }
   return { ok: true, value: session };
 }
@@ -347,13 +323,14 @@ export function toAuthFieldErrors(error: ApiError): FieldErrors {
 
 // The client surface ------------------------------------------------------------------------------
 
-/** The `422` a locally refused input becomes: the first field the map names and its sentence, shaped
- * exactly as the seam shapes the same refusal, which is the rule the seam re-applies to whatever does
- * reach it, so a form cannot tell a local refusal from a server one. */
-function refusedInput(errors: FieldErrors): ApiError {
+/** The `422` a locally refused input becomes: the first field the map names and its sentence, asked of
+ * the seam's own shaper at the status the published vocabulary gives that code — the same refusal the
+ * seam would answer the same body with, which is the rule the seam re-applies to whatever does reach
+ * it, so a form cannot tell a local refusal from a server one. */
+function refusedInput(errors: FieldErrors): Result<never> {
   const field = Object.keys(errors)[0] ?? FORM_ERROR_KEY;
   const message = firstError(errors) ?? VALIDATION_MESSAGES.REQUIRED;
-  return authFailure("validation-failed", message, field);
+  return failure(API_ERROR_CODES.VALIDATION_FAILED, message, field);
 }
 
 /**
@@ -373,8 +350,8 @@ function refusedInput(errors: FieldErrors): ApiError {
  */
 export async function register(input: RegistrationInput): Promise<Result<RegistrationResult>> {
   const errors = validateRegistration(input);
-  if (hasErrors(errors)) return { ok: false, error: refusedInput(errors) };
-  return await postJson<RegistrationResult, RegistrationInput>(AUTH_ENDPOINTS.REGISTER, input);
+  if (hasErrors(errors)) return refusedInput(errors);
+  return await postJson<RegistrationResult, RegistrationInput>(API_PATHS.AUTH_REGISTER, input);
 }
 
 /**
@@ -392,7 +369,7 @@ export async function register(input: RegistrationInput): Promise<Result<Registr
  * whose two members are not both text.
  */
 export async function signIn(credentials: Credentials): Promise<Result<Session>> {
-  return await postJson<Session, Credentials>(AUTH_ENDPOINTS.LOGIN, credentials);
+  return await postJson<Session, Credentials>(API_PATHS.AUTH_LOGIN, credentials);
 }
 
 /**
@@ -406,7 +383,7 @@ export async function signIn(credentials: Credentials): Promise<Result<Session>>
  * @returns Nothing on success — the seam answers `204` with an empty payload — or the shaped failure.
  */
 export async function signOut(token: SessionToken): Promise<Result<void>> {
-  return await postJson<void>(AUTH_ENDPOINTS.LOGOUT, undefined, { sessionToken: token });
+  return await postJson<void>(API_PATHS.AUTH_LOGOUT, undefined, { sessionToken: token });
 }
 
 /**
@@ -424,5 +401,5 @@ export async function signOut(token: SessionToken): Promise<Result<void>> {
  * other failure the transport reports.
  */
 export async function restoreSession(token: SessionToken): Promise<Result<Session>> {
-  return await getJson<Session>(AUTH_ENDPOINTS.SESSION, { sessionToken: token });
+  return await getJson<Session>(API_PATHS.AUTH_SESSION, { sessionToken: token });
 }

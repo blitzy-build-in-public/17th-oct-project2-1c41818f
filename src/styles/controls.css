@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 536
+ * Lines: 573
  */
 
 /* ==== Buttons ====
@@ -533,4 +533,41 @@
 }
 .sp-switch[aria-disabled="true"] .sp-switch__track {
   opacity: var(--opacity-disabled);
+}
+
+/* The states the family was missing. Hover is offered only to a device that can hover, so a tap never leaves a
+ * control in a state the finger has already left; active sits outside the query, because press feedback
+ * matters most where there is no pointer. Neither row rule paints a row whose control is disabled — the
+ * switch is itself the control and a box sits inside its row — because a disabled control answers no pointer,
+ * as the button, field and disclosure families already exclude one. */
+@media (hover: hover) {
+  /* The row, not the box, is the touch target, so an approach to the control paints the row. */
+  .sp-choice:hover:not(:disabled, [aria-disabled="true"], :has(:disabled, [aria-disabled="true"])) {
+    background-color: var(--color-surface-sunken);
+  }
+  /* The field family's hover darkens a control's boundary; a checked or indeterminate box keeps its accent
+   * fill, which is why those states are excluded rather than repainted. */
+  .sp-checkbox:hover:not(:disabled):not(:checked):not(:indeterminate),
+  .sp-radio:hover:not(:disabled):not(:checked) {
+    border-color: var(--color-text-muted);
+  }
+  /* An off switch's track darkens the same way; an on one keeps the accent that says it is on. */
+  .sp-switch:hover:not(:disabled):not([aria-checked="true"]) .sp-switch__track {
+    background-color: var(--color-text-muted);
+  }
+}
+/* The same three treatments outside the query, so a press reads on a device that cannot hover. */
+.sp-choice:active:not(:disabled, [aria-disabled="true"], :has(:disabled, [aria-disabled="true"])) {
+  background-color: var(--color-surface-sunken);
+}
+.sp-checkbox:active:not(:disabled):not(:checked):not(:indeterminate),
+.sp-radio:active:not(:disabled):not(:checked) {
+  border-color: var(--color-text-muted);
+}
+.sp-switch:active:not(:disabled):not([aria-checked="true"]) .sp-switch__track {
+  background-color: var(--color-text-muted);
+}
+/* A pressed on switch keeps the accent and deepens it, so the thumb's side and the hue still say "on". */
+.sp-switch[aria-checked="true"]:active:not(:disabled) .sp-switch__track {
+  background-color: var(--color-accent-active);
 }

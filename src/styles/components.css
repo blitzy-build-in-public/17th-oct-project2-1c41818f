@@ -1,29 +1,33 @@
 /* Path: src/styles/components.css
- * Purpose: Styles for the shared primitives: buttons, fields, cards, tables, overlays, badges and feedback states
- * Lines: 474
+ * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded through controls.css and data-display.css
+ * Lines: 479
  */
 
-/* The twelve primitive families every page composes are defined across the three sheets this one loads:
+/* The twelve primitive families every page composes are defined across the four sheets this chain loads:
  * this file keeps rating, price and quantity, the tooltip and popover, and the data-page feedback states,
  * and imports src/styles/controls.css (buttons, form fields and selection controls) and
- * src/styles/data-display.css (cards and badges, the data table, pagination, overlays, toasts and tabs and
- * accordion) above every rule it declares. A CSS @import is inlined at the position it occupies, so the
- * built sheet still reads in one order — tokens, base, layout, controls, data-display, components, then the
- * four area sheets — and every rule holds the cascade position it held when one file carried all twelve
- * families. Loading the two sheets from this mapped path, and not from the entry point, is what keeps the
- * eight-sheet load contract: the application imports the same eight mapped paths it always did, and no
- * other file imports either of the two. This file defines no shell class (layout.css owns .sp-container,
- * .sp-app*, .sp-page*, .sp-header*, .sp-footer*, .sp-sidebar*, .sp-page-header*) and no area class (the
+ * src/styles/data-display.css (cards and badges, the data table, pagination, overlays and toasts, whose tab
+ * and accordion families are src/styles/tabs-accordion.css, which data-display.css loads in turn) above
+ * every rule it declares. A CSS @import is inlined at the position it occupies, so the built sheet still
+ * reads in one order — tokens, base, layout, controls, data-display, components, then the four area sheets —
+ * and every rule holds the cascade position it held when one file carried all twelve families, apart from
+ * the page-header family and the tab and accordion family, which the later splits moved to the head of their
+ * own parent sheet's contribution: each is still behind base.css and ahead of every later sheet, and no rule
+ * of another family meets either there. Loading the two sheets from this mapped path, and not from the entry
+ * point, is what keeps the eight-sheet load contract: the application imports the same eight mapped paths it
+ * always did, and no other file imports either of the two. This file defines no shell class (layout.css owns
+ * .sp-container, .sp-app*, .sp-page*, .sp-header*, .sp-footer* and .sp-sidebar*, and .sp-page-header* is
+ * src/styles/page-header.css, which layout.css loads) and no area class (the
  * .sp-product*, .sp-facet*, .sp-search*, .sp-cart*, .sp-summary*, .sp-checkout*, .sp-steps*, .sp-account*,
  * .sp-chart*, .sp-kpi* and .sp-report* families belong to the four sheets that follow).
- * The contract, shared by the three sheets: state is carried by attributes, never by a second class —
+ * The contract, shared by these sheets: state is carried by attributes, never by a second class —
  * [aria-current], [aria-selected], [aria-checked], [aria-invalid], [aria-sort], [aria-expanded],
  * [aria-busy], [disabled], [hidden], [inert], :checked, :indeterminate, :focus-visible, :hover and
  * :active — and the only state classes are .is-loading (a submit in flight), .is-open (a drawer, a popover
  * or a tooltip revealed) and .sp-card--interactive. Select renders .sp-select__wrap around the native
  * select, because the chevron is that wrapper's ::after and a pseudo-element does not render on a <select>;
  * Drawer, Popover and Tooltip carry .is-open while revealed; the Switch is a <button role="switch"> whose
- * state is aria-checked. Every value comes from tokens.css, in whichever of the three sheets it is written:
+ * state is aria-checked. Every value comes from tokens.css, in whichever of these sheets it is written:
  * no sheet invents a colour, a size, a radius, a shadow, a duration or a breakpoint of its own.
  *
  * BLITZY [BUDGET]: the twelve families are 1,291 lines, past the 500-line budget and the 600-line ceiling
@@ -32,7 +36,8 @@
  * split by primitive family into the two sheets imported above, every rule, declaration and comment moved
  * verbatim and in its original order, and the split is recorded in generation-manifest.md, in its Part 1
  * rows and its Part 4 ledger. Both new sheets are inside the ceiling, this file is inside it again, and the
- * three together hold exactly what the one file held, so the plan's 50,000-line allocation is unchanged.
+ * three together hold exactly what the one file held, so the plan's 50,000-line allocation is unchanged; a
+ * later split of the tab and accordion family out of data-display.css was recorded the same way.
  * The two objections this note first raised against a second stylesheet are answered by that direction: the
  * plan maps no ninth path and the application loads exactly the eight sheets it lists, and an @import from
  * this mapped path loads the additions without adding an entry to anyone's import list.

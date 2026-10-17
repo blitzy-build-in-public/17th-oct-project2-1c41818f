@@ -1,14 +1,14 @@
 /**
  * Path: src/utils/statistics.ts
- * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports
- * Lines: 489
+ * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports.
+ * Lines: 512
  */
 
 import type { BaselineKind, ChartPoint } from "@/types/analytics";
 import type { DateRange, MinorUnits } from "@/types/common";
 import type { Order } from "@/types/commerce";
 import { averageOf, clampNumber, sum } from "@/utils/collections";
-import { isWithinRange } from "@/utils/dates";
+import { isWithinPreparedRange, prepareRange } from "@/utils/dates";
 import { roundMinorUnits, type ChangeDirection } from "@/utils/format";
 
 /**
@@ -74,8 +74,8 @@ function sortedFiniteValues(values: readonly number[]): number[] {
  * A cancelled order is the only status left out, because it is the one that sold nothing: its lines
  * were voided and no surface should state them as trade. A refunded order keeps every line it sold,
  * because the sale stands and only the money came back afterwards. Both ends of `range` are inclusive,
- * through `isWithinRange` in `src/utils/dates.ts`, which is the same boundary the period's buckets are
- * cut on. The orders come back in input order, as a new array: the caller's collection is read and
+ * through `prepareRange` and `isWithinPreparedRange` in `src/utils/dates.ts`, which resolve the
+ * period's two ends once for the whole scan and cut the same boundary the period's buckets are cut on. The orders come back in input order, as a new array: the caller's collection is read and
  * never mutated.
  *
  * @param orders - Every order to select the period's population from; never mutated.
@@ -83,8 +83,9 @@ function sortedFiniteValues(values: readonly number[]): number[] {
  * @returns The orders placed in the period that were not cancelled, in input order.
  */
 export function periodOrders(orders: readonly Order[], range: DateRange): Order[] {
+  const bounds = prepareRange(range);
   return orders.filter(
-    (order) => order.status !== "cancelled" && isWithinRange(order.placedAt, range),
+    (order) => order.status !== "cancelled" && isWithinPreparedRange(order.placedAt, bounds),
   );
 }
 
@@ -373,11 +374,17 @@ export function summarise(values: readonly number[]): SeriesSummary {
  * point is its own average, the second the mean of the first two, and so on until the window is full —
  * while a window longer than the series keeps widening to the whole of it rather than reporting nothing.
  *
+ * **One pass, and no window copied per point**, because a chart smooths its whole series on every
+ * render: the figures are read once while a running total and a count of the usable ones stand in for
+ * the window, the figure leaving it subtracted as it advances, so the work is a traversal of the series
+ * rather than a traversal per point.
+ *
  * A window of one or less leaves every figure as it stands, as a copy the caller cannot reach the input
  * through, and a fractional or non-finite window is read as a whole number of at least one. Each mean is
- * `averageOf` over the window's finite figures, so a window holding none averages to `0`; a smoothed
- * value stays unrounded, because it is drawn rather than totalled and every total the product shows
- * comes from the unsmoothed figures.
+ * the average of the window's finite figures — a figure that is not finite is skipped rather than
+ * counted, exactly as `averageOf` over the output of `finiteValues` reports it — so a window holding
+ * none averages to `0`; a smoothed value stays unrounded, because it is drawn rather than totalled and
+ * every total the product shows comes from the unsmoothed figures.
  *
  * @param points - The series in time order, as a chart consumes it; never mutated.
  * @param window - How many figures one average covers.
@@ -386,10 +393,26 @@ export function summarise(values: readonly number[]): SeriesSummary {
 export function movingAverage(points: readonly ChartPoint[], window: number): ChartPoint[] {
   const period = Number.isFinite(window) ? Math.max(1, Math.floor(window)) : 1;
   const figures = points.map((point) => point.y);
-  return points.map((point, index) => ({
-    ...point,
-    y: averageOf(finiteValues(figures.slice(Math.max(0, index - period + 1), index + 1))),
-  }));
+  const smoothed: ChartPoint[] = [];
+  let total = 0;
+  let usable = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const figure = figures[index];
+    if (Number.isFinite(figure)) {
+      total += figure;
+      usable += 1;
+    }
+    const leavingIndex = index - period;
+    if (leavingIndex >= 0) {
+      const leaving = figures[leavingIndex];
+      if (Number.isFinite(leaving)) {
+        total -= leaving;
+        usable -= 1;
+      }
+    }
+    smoothed.push({ ...points[index], y: usable === 0 ? 0 : total / usable });
+  }
+  return smoothed;
 }
 
 /**

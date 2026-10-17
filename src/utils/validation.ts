@@ -1,13 +1,14 @@
 /**
  * Path: src/utils/validation.ts
  * Purpose: Every field and form validator, each returning a field-keyed error map
- * Lines: 586
+ * Lines: 596
  */
 
 import { PASSWORD_POLICY, SHIPPING_METHODS } from "@/constants/config";
 import {
   FEEDBACK_COPY,
   VALIDATION_MESSAGES,
+  nameLengthMessage,
   postalCodeFormatMessage,
   quantityRangeMessage,
   reviewBodyLengthMessage,
@@ -25,13 +26,16 @@ import type { ApiError, FieldErrors, Result } from "@/types/common";
 import type { CardInput, PaymentInput } from "@/types/commerce";
 
 /**
- * The contract every rule here keeps: a validator returns a message or a map and never throws, so a blank,
- * absent or wrongly typed value is judged rather than crashing the render that asked; a map's key is the
- * field name its control binds to; every sentence comes from `src/constants/content.ts` and every limit from
- * `src/constants/config.ts` or the taxonomy module; and the price-range, rating and paging normalisation
- * (`src/utils/queryParams.ts`) and the date-range rule (`src/utils/dates.ts`) live elsewhere, reused as they
- * stand. Consumers: every submit path in the product, and `src/lib/mockServer.ts`, which runs these rules
- * over an untrusted body so a hand-made request cannot be accepted where the form itself would have refused.
+ * The contract every rule here keeps: a validator returns a field-keyed error map and never throws, so a
+ * blank, absent or wrongly typed value is judged rather than crashing the render that asked. A field rule
+ * accepts with an empty map and refuses with one entry keyed by the member name its control binds to, so a
+ * control meets the same shape whether a rule or the seam refused it. A rule that judges more than one
+ * control — {@link validateRequired}, {@link validateName} — takes that member name as its first parameter,
+ * and {@link validateCardExpiry} keys the expiry half in fault. Every sentence comes from
+ * `src/constants/content.ts`, every limit from `src/constants/config.ts` or the taxonomy, and the
+ * query-state, date-range and paging rules live in their own modules, reused as they stand. Consumers: every
+ * submit path in the product, and `src/lib/mockServer.ts`, which runs these rules over an untrusted body so a
+ * hand-made request cannot be accepted where the form itself would have refused.
  */
 
 // Rule limits ------------------------------------------------------------------------------------
@@ -51,6 +55,10 @@ export const REVIEW_LIMITS = {
 
 /** Fewest characters a name may hold, so a stray keystroke is not accepted as one. */
 const NAME_MIN_LENGTH = 2;
+/** The most characters a person's name may hold, so no name can be stored unbounded. Exported for the
+ * reason the review bounds are: a name control reads the number for its own `maxLength`, so the ceiling a
+ * visitor meets cannot drift from the rule that refuses them. */
+export const NAME_MAX_LENGTH = 80;
 /** The digits a phone number may hold (seven to fifteen, the E.164 ceiling), a card number (thirteen to
  * nineteen, across the major schemes) and a security code (three, or four where four is printed). */
 const PHONE_MIN_DIGITS = 7;
@@ -136,9 +144,6 @@ export interface ShippingSubmission {
   readonly shippingMethodId: string;
 }
 
-/** One field's outcome: the field's own name and the message it broke, or `undefined` when it holds. */
-type FieldRule = readonly [field: string, message: string | undefined];
-
 /** Whether a value counts as missing: `null`, `undefined`, or text with nothing in it once trimmed.
  * `0` and `false` are values. Reads a value of any type without assuming one. */
 function isBlank(value: FieldValue): boolean {
@@ -164,12 +169,11 @@ function integerOf(value: FieldValue): number | undefined {
 const isReportable = (message: string | undefined): message is string =>
   typeof message === "string" && message.length > 0;
 
-/** Collects the outcomes of the rules a form validator ran into one map, holding a key only for a field
- * that broke a rule, so an absent key means that field is valid. */
-function collectFieldErrors(rules: readonly FieldRule[]): FieldErrors {
-  const errors: FieldErrors = {};
-  for (const [field, message] of rules) if (isReportable(message)) errors[field] = message;
-  return errors;
+/** What a field rule returns: one entry keyed by the control the rule judged, carrying the message it
+ * broke, or an empty map when the value was accepted. Every rule below returns through this one builder,
+ * so the map's shape has a single home. */
+function ruleErrors(field: string, message: string | undefined): FieldErrors {
+  return isReportable(message) ? { [field]: message } : {};
 }
 
 /** The digits of a value, with every space, hyphen, dot, bracket and letter dropped. */
@@ -183,74 +187,86 @@ function findCountry(code: string): CountryOption | undefined {
 
 // Primitive field rules --------------------------------------------------------------------------
 
-/** The rule a required field is accepted by: something must have been entered, whitespace-only text
- * counting as nothing. `message` defaults to the generic required sentence, and a caller passes its own
- * only where `content.ts` holds a more specific one. Returns the message when empty, else `undefined`. */
+/** The rule a required field is accepted by: something must have been entered, whitespace-only text counting
+ * as nothing. `field` is the control's own member name and keys the map, which is how one rule serves every
+ * required control; `message` defaults to the generic required sentence, and a caller passes its own only
+ * where `content.ts` holds a more specific one. */
 export function validateRequired(
+  field: string,
   value: FieldValue,
   message: string = VALIDATION_MESSAGES.REQUIRED,
-): string | undefined {
-  return isBlank(value) ? message : undefined;
+): FieldErrors {
+  return isBlank(value) ? ruleErrors(field, message) : {};
 }
 
 /** The rule an email address is accepted by: something before a single `@` and a dotted domain whose
  * last label is two letters or more, neither part opening, closing or doubling on a dot. The address is
- * not lower-cased, so the form keeps what was typed. Returns the message it breaks, else `undefined`. */
-export function validateEmail(value: FieldValue): string | undefined {
+ * not lower-cased, so the form keeps what was typed. Returns the `email` map it breaks, else an empty one. */
+export function validateEmail(value: FieldValue): FieldErrors {
   const address = textOf(value);
-  if (address.length === 0) return VALIDATION_MESSAGES.REQUIRED;
-  if (address.length > EMAIL_MAX_LENGTH) return VALIDATION_MESSAGES.EMAIL_FORMAT;
-  return EMAIL_PATTERN.test(address) ? undefined : VALIDATION_MESSAGES.EMAIL_FORMAT;
+  if (address.length === 0) return ruleErrors("email", VALIDATION_MESSAGES.REQUIRED);
+  const malformed = address.length > EMAIL_MAX_LENGTH || !EMAIL_PATTERN.test(address);
+  return malformed ? ruleErrors("email", VALIDATION_MESSAGES.EMAIL_FORMAT) : {};
 }
 
 /** The rule a password is accepted by: the length and classes `PASSWORD_POLICY` in
  * `src/constants/config.ts` requires, read from there so the form, the seeds and this rule agree. It is
- * never trimmed, kept, echoed or altered; blank reports as missing, not as short. Returns the message
- * it breaks, else `undefined` when it meets the policy. */
-export function validatePassword(value: FieldValue): string | undefined {
+ * never trimmed, kept, echoed or altered; blank reports as missing, not as short. Returns the `password`
+ * map it breaks, else an empty one when it meets the policy. */
+export function validatePassword(value: FieldValue): FieldErrors {
   const password = typeof value === "string" ? value : "";
-  if (password.trim().length === 0) return VALIDATION_MESSAGES.REQUIRED;
+  if (password.trim().length === 0) return ruleErrors("password", VALIDATION_MESSAGES.REQUIRED);
   const short = password.length < PASSWORD_POLICY.MIN_LENGTH;
   const missingLetter = PASSWORD_POLICY.REQUIRE_LETTER && !LETTER_PATTERN.test(password);
   const missingDigit = PASSWORD_POLICY.REQUIRE_DIGIT && !DIGIT_PATTERN.test(password);
-  return short || missingLetter || missingDigit ? VALIDATION_MESSAGES.PASSWORD_POLICY : undefined;
+  return short || missingLetter || missingDigit
+    ? ruleErrors("password", VALIDATION_MESSAGES.PASSWORD_POLICY)
+    : {};
 }
 
 /** The rule a postal code is accepted by: the pattern its country declares in
- * `src/constants/taxonomy.ts`, compared without regard to case because two of the five countries write
- * codes with letters. `country` is the code the address names; a blank or unsupported one leaves the
- * pattern unjudged, that failure belonging to the country field. Returns the message, else `undefined`. */
-export function validatePostalCode(value: FieldValue, country: FieldValue): string | undefined {
+ * `src/constants/taxonomy.ts`, compared without regard to case because two of the five countries write codes
+ * with letters. `country` is the code the address names; a blank or unsupported one leaves the pattern
+ * unjudged, that failure belonging to the country field. Returns the `postalCode` map it breaks, else an
+ * empty one. */
+export function validatePostalCode(value: FieldValue, country: FieldValue): FieldErrors {
   const postalCode = textOf(value);
-  if (postalCode.length === 0) return VALIDATION_MESSAGES.REQUIRED;
+  if (postalCode.length === 0) return ruleErrors("postalCode", VALIDATION_MESSAGES.REQUIRED);
   const entry = typeof country === "string" ? findCountry(country) : undefined;
-  if (entry === undefined) return undefined;
+  if (entry === undefined) return {};
   const pattern = POSTAL_CODE_PATTERNS.get(entry.code);
-  if (pattern === undefined || pattern.test(postalCode.toUpperCase())) return undefined;
-  return postalCodeFormatMessage(COUNTRY_LABELS.get(entry.code) ?? entry.label);
+  if (pattern === undefined || pattern.test(postalCode.toUpperCase())) return {};
+  const message = postalCodeFormatMessage(COUNTRY_LABELS.get(entry.code) ?? entry.label);
+  return ruleErrors("postalCode", message);
 }
 
 /** The rule a phone number is accepted by: seven to fifteen digits, with an optional leading `+` and
  * nothing around them but spaces, brackets, dots and hyphens. Optional on an address, so an empty value
- * passes and the field is judged once typed. Returns the message it breaks, else `undefined`. */
-export function validatePhone(value: FieldValue): string | undefined {
+ * passes and the field is judged once typed. Returns the `phone` map it breaks, else an empty one. */
+export function validatePhone(value: FieldValue): FieldErrors {
   const phone = textOf(value);
-  if (phone.length === 0) return undefined;
+  if (phone.length === 0) return {};
   const digits = digitsOf(phone).length;
   const phoneShaped = PHONE_PATTERN.test(phone) && digits >= PHONE_MIN_DIGITS;
-  return phoneShaped && digits <= PHONE_MAX_DIGITS ? undefined : VALIDATION_MESSAGES.PHONE_FORMAT;
+  if (phoneShaped && digits <= PHONE_MAX_DIGITS) return {};
+  return ruleErrors("phone", VALIDATION_MESSAGES.PHONE_FORMAT);
 }
 
-/** The rule a name is accepted by: at least two characters, at least one of them a letter, so a lone
- * keystroke, a punctuation mark or a row of digits is not a person's name. `message` defaults to the required
- * sentence, which is also what too short a name breaks, `content.ts` holding no sentence of its own for one.
- * Returns that message, else `undefined` when the value is a name. */
+/** The rule a name is accepted by: two to {@link NAME_MAX_LENGTH} characters with at least one letter, so a
+ * lone keystroke, a punctuation mark or a row of digits is not a person's name and neither is a value long
+ * enough to bloat whatever stores it. `field` is the control's own member name — `firstName`, `lastName`,
+ * `fullName`, `nameOnCard` — and keys the map; `message` defaults to the sentence a name too short breaks,
+ * while a name past the ceiling breaks the length sentence `content.ts` builds from the bound. */
 export function validateName(
+  field: string,
   value: FieldValue,
   message: string = VALIDATION_MESSAGES.REQUIRED,
-): string | undefined {
+): FieldErrors {
   const name = textOf(value);
-  return name.length < NAME_MIN_LENGTH || !LETTER_PATTERN.test(name) ? message : undefined;
+  if (name.length < NAME_MIN_LENGTH || !LETTER_PATTERN.test(name)) {
+    return ruleErrors(field, message);
+  }
+  return name.length > NAME_MAX_LENGTH ? ruleErrors(field, nameLengthMessage(NAME_MAX_LENGTH)) : {};
 }
 
 /** The Luhn check a card number carries: from the rightmost digit leftward, every second digit is doubled
@@ -274,87 +290,95 @@ export function isLuhnValid(digits: string): boolean {
 /** The rule a card number is accepted by: thirteen to nineteen digits, spaces and hyphens allowed between
  * them, and a correct Luhn check digit. Approval is not decided here — that is the demonstration seam's
  * answer in `src/lib/mockServer.ts` — and the number is read, validated and discarded, never stored. Returns
- * the message it breaks, else `undefined` when its shape is acceptable. */
-export function validateCardNumber(value: FieldValue): string | undefined {
+ * the `number` map it breaks, else an empty one when its shape is acceptable. */
+export function validateCardNumber(value: FieldValue): FieldErrors {
   const typed = textOf(value);
-  if (typed.length === 0) return VALIDATION_MESSAGES.REQUIRED;
-  if (!CARD_TEXT_PATTERN.test(typed)) return VALIDATION_MESSAGES.CARD_NUMBER;
+  if (typed.length === 0) return ruleErrors("number", VALIDATION_MESSAGES.REQUIRED);
+  if (!CARD_TEXT_PATTERN.test(typed)) {
+    return ruleErrors("number", VALIDATION_MESSAGES.CARD_NUMBER);
+  }
   const digits = digitsOf(typed);
   if (digits.length < CARD_MIN_DIGITS || digits.length > CARD_MAX_DIGITS) {
-    return VALIDATION_MESSAGES.CARD_NUMBER;
+    return ruleErrors("number", VALIDATION_MESSAGES.CARD_NUMBER);
   }
-  return isLuhnValid(digits) ? undefined : VALIDATION_MESSAGES.CARD_NUMBER;
+  return isLuhnValid(digits) ? {} : ruleErrors("number", VALIDATION_MESSAGES.CARD_NUMBER);
 }
 
 /** The rule a card expiry is accepted by: an integer month from 1 to 12, a four-digit year, and a pair that
  * has not passed — a card stays valid to the end of its expiry month, so one expiring in the month `now`
  * falls in is still accepted. `value` holds the two expiry members, either possibly absent while the form is
- * filled; `now` is the injectable instant measured against. Returns the expiry message when the pair is
- * absent, impossible or already past, else `undefined` when it holds. */
+ * filled; `now` is the injectable instant measured against. The map is keyed by the half in fault:
+ * `expiryMonth` for a month absent, unreadable or outside 1-12, and `expiryYear` for a year absent or
+ * unreadable as well as for a pair whose halves are both well formed but which has passed — the coarser half,
+ * and the one a correction usually changes. Empty when the pair holds. */
 export function validateCardExpiry(
   value: FormValues<CardExpiryInput>,
   now: Date = new Date(),
-): string | undefined {
+): FieldErrors {
   const month = integerOf(value?.expiryMonth);
   const year = integerOf(value?.expiryYear);
   const monthUsable = month !== undefined && month >= MONTH_MIN && month <= MONTH_MAX;
   const yearUsable = year !== undefined && year >= EXPIRY_YEAR_MIN && year <= EXPIRY_YEAR_MAX;
-  if (!monthUsable || !yearUsable) return VALIDATION_MESSAGES.CARD_EXPIRY;
+  if (!monthUsable) return ruleErrors("expiryMonth", VALIDATION_MESSAGES.CARD_EXPIRY);
+  if (!yearUsable) return ruleErrors("expiryYear", VALIDATION_MESSAGES.CARD_EXPIRY);
   const expiresAfter = new Date(year, month, 1).getTime();
-  return now.getTime() < expiresAfter ? undefined : VALIDATION_MESSAGES.CARD_EXPIRY;
+  if (now.getTime() >= expiresAfter) {
+    return ruleErrors("expiryYear", VALIDATION_MESSAGES.CARD_EXPIRY);
+  }
+  return {};
 }
 
-/** The rule a security code is accepted by: three or four digits and nothing else. Returns the message
- * it breaks, else `undefined` when it fits. */
-export function validateCvc(value: FieldValue): string | undefined {
+/** The rule a security code is accepted by: three or four digits and nothing else. Returns the `cvc` map
+ * it breaks, else an empty one when it fits. */
+export function validateCvc(value: FieldValue): FieldErrors {
   const cvc = textOf(value);
-  if (cvc.length === 0) return VALIDATION_MESSAGES.REQUIRED;
+  if (cvc.length === 0) return ruleErrors("cvc", VALIDATION_MESSAGES.REQUIRED);
   const wrongShape = !DIGITS_PATTERN.test(cvc);
   const wrongLength = cvc.length < CVC_MIN_DIGITS || cvc.length > CVC_MAX_DIGITS;
-  return wrongShape || wrongLength ? VALIDATION_MESSAGES.CARD_SECURITY_CODE : undefined;
+  return wrongShape || wrongLength ? ruleErrors("cvc", VALIDATION_MESSAGES.CARD_SECURITY_CODE) : {};
 }
 
 /** The rule a promo code's shape is accepted by: four to sixteen characters, all an upper-case letter or a
- * digit. The value is not upper-cased here, because the rule states what an accepted code is rather than
- * what a typed one must be: the entry field normalises as the shopper types, while this rule still refuses a
- * lower-case code arriving at the order seam from anywhere else. Returns the message, else `undefined`. */
-export function validatePromoCodeShape(value: FieldValue): string | undefined {
+ * digit. The value is not upper-cased here, because the rule states what an accepted code is rather than what
+ * a typed one must be: the entry field normalises as the shopper types, while this rule still refuses a
+ * lower-case code arriving at the order seam from anywhere else. Returns the `promoCode` map it breaks. */
+export function validatePromoCodeShape(value: FieldValue): FieldErrors {
   const code = textOf(value);
-  if (code.length === 0) return VALIDATION_MESSAGES.REQUIRED;
-  return PROMO_CODE_PATTERN.test(code) ? undefined : VALIDATION_MESSAGES.PROMO_CODE_FORMAT;
+  if (code.length === 0) return ruleErrors("promoCode", VALIDATION_MESSAGES.REQUIRED);
+  return PROMO_CODE_PATTERN.test(code)
+    ? {}
+    : ruleErrors("promoCode", VALIDATION_MESSAGES.PROMO_CODE_FORMAT);
 }
 
-/** The rule a quantity is accepted by: a whole number from one to `maxQuantity`, which is what is still
- * in stock, read from a number or from typed text. The message names that ceiling, so a stepper bounded
- * by stock and this rule tell a shopper the same thing. Returns the message it breaks, else `undefined`. */
-export function validateQuantity(value: FieldValue, maxQuantity: number): string | undefined {
+/** The rule a quantity is accepted by: a whole number from one to `maxQuantity`, which is what is still in
+ * stock, read from a number or from typed text. The message names that ceiling, so a stepper bounded by stock
+ * and this rule tell a shopper the same thing. Returns the `quantity` map it breaks, else an empty one. */
+export function validateQuantity(value: FieldValue, maxQuantity: number): FieldErrors {
   const quantity = integerOf(value);
-  if (quantity === undefined || quantity < 1 || quantity > maxQuantity) {
-    return quantityRangeMessage(maxQuantity);
-  }
-  return undefined;
+  const outOfRange = quantity === undefined || quantity < 1 || quantity > maxQuantity;
+  return outOfRange ? ruleErrors("quantity", quantityRangeMessage(maxQuantity)) : {};
 }
 
 /** The rule a review's title is accepted by: 3 to 80 characters once trimmed, the bounds in
- * {@link REVIEW_LIMITS}; an empty title reports as missing rather than as badly sized. Returns the
- * message it breaks, else `undefined` when it is within the bounds. */
-export function validateReviewTitle(value: FieldValue): string | undefined {
+ * {@link REVIEW_LIMITS}; an empty title reports as missing rather than as badly sized. Returns the `title`
+ * map it breaks, else an empty one when it is within the bounds. */
+export function validateReviewTitle(value: FieldValue): FieldErrors {
   const title = textOf(value);
-  if (title.length === 0) return VALIDATION_MESSAGES.REQUIRED;
+  if (title.length === 0) return ruleErrors("title", VALIDATION_MESSAGES.REQUIRED);
   const { TITLE_MIN, TITLE_MAX } = REVIEW_LIMITS;
   const wrongLength = title.length < TITLE_MIN || title.length > TITLE_MAX;
-  return wrongLength ? reviewTitleLengthMessage(TITLE_MIN, TITLE_MAX) : undefined;
+  return wrongLength ? ruleErrors("title", reviewTitleLengthMessage(TITLE_MIN, TITLE_MAX)) : {};
 }
 
 /** The rule a review's body is accepted by: 10 to 1,200 characters once trimmed, the bounds in
- * {@link REVIEW_LIMITS}; an empty body reports as missing rather than as badly sized. Returns the
- * message it breaks, else `undefined` when it is within the bounds. */
-export function validateReviewBody(value: FieldValue): string | undefined {
+ * {@link REVIEW_LIMITS}; an empty body reports as missing rather than as badly sized. Returns the `body`
+ * map it breaks, else an empty one when it is within the bounds. */
+export function validateReviewBody(value: FieldValue): FieldErrors {
   const body = textOf(value);
-  if (body.length === 0) return VALIDATION_MESSAGES.REQUIRED;
+  if (body.length === 0) return ruleErrors("body", VALIDATION_MESSAGES.REQUIRED);
   const { BODY_MIN, BODY_MAX } = REVIEW_LIMITS;
   const wrongLength = body.length < BODY_MIN || body.length > BODY_MAX;
-  return wrongLength ? reviewBodyLengthMessage(BODY_MIN, BODY_MAX) : undefined;
+  return wrongLength ? ruleErrors("body", reviewBodyLengthMessage(BODY_MIN, BODY_MAX)) : {};
 }
 
 /** Whether a value is one of the five ratings, the guard a form narrows its own state with before it
@@ -363,34 +387,38 @@ export function isRatingValue(value: unknown): value is RatingValue {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
 }
 
-/** The rule a rating is accepted by: one of the five whole numbers, read from a number or from text. A
- * value outside the five reports as missing rather than as out of range, because the star control offers
- * the whole domain and nothing else, so the failure a visitor can reach is an unchosen rating: a hand-made
- * request carrying a sixth star is re-rejected by the seam with `422` naming this field. Returns the
- * message when no rating was chosen, else `undefined`. */
-export function validateRating(value: FieldValue): string | undefined {
+/** The rule a rating is accepted by: one of the five whole numbers, read from a number or from text. A value
+ * outside the five reports as missing rather than as out of range, because the star control offers the whole
+ * domain and nothing else, so the failure a visitor can reach is an unchosen rating; a hand-made request
+ * carrying a sixth star is re-rejected by the seam with `422` naming this field. Returns the `rating` map. */
+export function validateRating(value: FieldValue): FieldErrors {
   const rating = integerOf(value);
-  return rating !== undefined && isRatingValue(rating) ? undefined : VALIDATION_MESSAGES.REQUIRED;
+  if (rating !== undefined && isRatingValue(rating)) return {};
+  return ruleErrors("rating", VALIDATION_MESSAGES.REQUIRED);
 }
 
 // Form rules -------------------------------------------------------------------------------------
 
 /** The rule the country field is accepted by: one of the countries `src/constants/taxonomy.ts` declares. A
  * code outside the set reports as a missing country, since the control offers the configured set as its only
- * choices and a hand-made request carrying another code is re-rejected by the seam with `422`. */
-function validateCountry(value: FieldValue): string | undefined {
-  return findCountry(textOf(value)) !== undefined ? undefined : VALIDATION_MESSAGES.REQUIRED;
+ * choices and a hand-made request carrying another code is re-rejected by the seam with `422`. Returns the
+ * `country` map, empty when the value names a configured country. */
+function validateCountry(value: FieldValue): FieldErrors {
+  return findCountry(textOf(value)) !== undefined
+    ? {}
+    : ruleErrors("country", VALIDATION_MESSAGES.REQUIRED);
 }
 
 /** The rule the delivery method is accepted by: one of the methods `src/constants/config.ts` declares. An
  * unknown id reports as an unchosen method, for the same reason a country outside the set does: the radios
- * offer the configured methods, and the seam re-checks the id it is sent. */
-function validateShippingMethod(value: FieldValue): string | undefined {
-  if (isBlank(value)) return VALIDATION_MESSAGES.REQUIRED;
+ * offer the configured methods, and the seam re-checks the id it is sent. Returns the `shippingMethodId`
+ * map, empty when the value names a configured method. */
+function validateShippingMethod(value: FieldValue): FieldErrors {
+  if (isBlank(value)) return ruleErrors("shippingMethodId", VALIDATION_MESSAGES.REQUIRED);
   const id = textOf(value);
   return SHIPPING_METHODS.some((method) => method.id === id)
-    ? undefined
-    : VALIDATION_MESSAGES.REQUIRED;
+    ? {}
+    : ruleErrors("shippingMethodId", VALIDATION_MESSAGES.REQUIRED);
 }
 
 /** The rule the registration form is submitted by: a well-formed email, a password meeting the policy, and
@@ -399,12 +427,12 @@ function validateShippingMethod(value: FieldValue): string | undefined {
  * body `POST /api/auth/register` accepts; the result keys errors by its member names, empty when it may be
  * submitted. */
 export function validateRegistration(input: FormValues<RegistrationInput>): FieldErrors {
-  return collectFieldErrors([
-    ["email", validateEmail(input?.email)],
-    ["password", validatePassword(input?.password)],
-    ["firstName", validateName(input?.firstName)],
-    ["lastName", validateName(input?.lastName)],
-  ]);
+  return mergeErrors(
+    validateEmail(input?.email),
+    validatePassword(input?.password),
+    validateName("firstName", input?.firstName),
+    validateName("lastName", input?.lastName),
+  );
 }
 
 /** The rule the sign-in form is submitted by: both members present, and nothing more. The email's shape
@@ -415,10 +443,10 @@ export function validateRegistration(input: FormValues<RegistrationInput>): Fiel
  * empty. The rejected sign-in is answered by the seam with one generic message that
  * {@link fieldErrorsFromApiError} lands in this same map. */
 export function validateSignIn(input: FormValues<Credentials>): FieldErrors {
-  return collectFieldErrors([
-    ["email", validateRequired(input?.email)],
-    ["password", validateRequired(input?.password)],
-  ]);
+  return mergeErrors(
+    validateRequired("email", input?.email),
+    validateRequired("password", input?.password),
+  );
 }
 
 /** The rule the profile form is submitted by: a first and last name, and a phone number judged only when one
@@ -426,11 +454,11 @@ export function validateSignIn(input: FormValues<Credentials>): FieldErrors {
  * editable here and carry no rule. `input` is the body `PATCH /api/customers/:id` accepts; the result keys
  * errors by its member names, empty when the form may be submitted. */
 export function validateProfileUpdate(input: FormValues<ProfileUpdateInput>): FieldErrors {
-  return collectFieldErrors([
-    ["firstName", validateName(input?.firstName)],
-    ["lastName", validateName(input?.lastName)],
-    ["phone", validatePhone(input?.phone)],
-  ]);
+  return mergeErrors(
+    validateName("firstName", input?.firstName),
+    validateName("lastName", input?.lastName),
+    validatePhone(input?.phone),
+  );
 }
 
 /** The one address rule, used unchanged by the checkout's shipping step and the account address book, so a
@@ -439,51 +467,35 @@ export function validateProfileUpdate(input: FormValues<ProfileUpdateInput>): Fi
  * judged once typed and the label carrying no rule. `input` is the address as entered; the result keys
  * errors by `AddressInput`'s members, so a form attaches each message to its own control. */
 export function validateAddress(input: FormValues<AddressInput>): FieldErrors {
-  return collectFieldErrors([
-    ["fullName", validateName(input?.fullName)],
-    ["line1", validateRequired(input?.line1)],
-    ["city", validateRequired(input?.city)],
-    ["region", validateRequired(input?.region)],
-    ["postalCode", validatePostalCode(input?.postalCode, input?.country)],
-    ["country", validateCountry(input?.country)],
-    ["phone", validatePhone(input?.phone)],
-  ]);
-}
-
-/** Files {@link validateCardExpiry}'s message on the half of the expiry carrying the fault: an absent or
- * impossible month on `expiryMonth`, and both an absent or impossible year and a pair whose halves are
- * each well formed but which has passed on `expiryYear` — the coarser half, and the one a correction
- * usually changes — so exactly one control is marked. */
-function expiryFieldErrors(
-  card: CardValidationInput | undefined,
-  now: Date,
-): { readonly month?: string; readonly year?: string } {
-  const message = validateCardExpiry(card, now);
-  if (message === undefined) return {};
-  const month = integerOf(card?.expiryMonth);
-  if (month === undefined || month < MONTH_MIN || month > MONTH_MAX) return { month: message };
-  return { year: message };
+  return mergeErrors(
+    validateName("fullName", input?.fullName),
+    validateRequired("line1", input?.line1),
+    validateRequired("city", input?.city),
+    validateRequired("region", input?.region),
+    validatePostalCode(input?.postalCode, input?.country),
+    validateCountry(input?.country),
+    validatePhone(input?.phone),
+  );
 }
 
 /** The rule the payment step is submitted by: a `card` must hold the cardholder's name, a number passing
  * the Luhn check, an expiry that has not passed and a three-to-four digit security code, while an
  * `invoice` carries no card and passes. Approval is not decided here — that is the demonstration seam's
  * answer, which discards the number once it has read it. `input` is the method and card as typed; `now` is
- * the instant the expiry is measured against. The result keys errors by `CardInput`'s members. */
+ * the instant the expiry is measured against. The result keys errors by `CardInput`'s members, the expiry
+ * filed by {@link validateCardExpiry} on the half carrying the fault. */
 export function validatePayment(
   input: FormValues<PaymentValidationInput>,
   now: Date = new Date(),
 ): FieldErrors {
   if (input?.method !== "card") return {};
   const card = input.card;
-  const expiry = expiryFieldErrors(card, now);
-  return collectFieldErrors([
-    ["number", validateCardNumber(card?.number)],
-    ["nameOnCard", validateName(card?.nameOnCard)],
-    ["expiryMonth", expiry.month],
-    ["expiryYear", expiry.year],
-    ["cvc", validateCvc(card?.cvc)],
-  ]);
+  return mergeErrors(
+    validateCardNumber(card?.number),
+    validateName("nameOnCard", card?.nameOnCard),
+    validateCardExpiry(card, now),
+    validateCvc(card?.cvc),
+  );
 }
 
 /** The rule the review form is submitted by: a rating chosen from the five, a title of 3 to 80 characters
@@ -491,11 +503,11 @@ export function validatePayment(
  * it, with the rating possibly unchosen; the result is an error map keyed by `rating`, `title` and `body`,
  * empty when the review may be submitted. */
 export function validateReview(input: FormValues<ReviewDraft>): FieldErrors {
-  return collectFieldErrors([
-    ["rating", validateRating(input?.rating)],
-    ["title", validateReviewTitle(input?.title)],
-    ["body", validateReviewBody(input?.body)],
-  ]);
+  return mergeErrors(
+    validateRating(input?.rating),
+    validateReviewTitle(input?.title),
+    validateReviewBody(input?.body),
+  );
 }
 
 /** The composite the checkout's shipping step is submitted by: the address rule, the contact email the order
@@ -505,10 +517,8 @@ export function validateReview(input: FormValues<ReviewDraft>): FieldErrors {
 export function validateShippingSubmission(input: FormValues<ShippingSubmission>): FieldErrors {
   return mergeErrors(
     validateAddress(input?.address),
-    collectFieldErrors([
-      ["email", validateEmail(input?.email)],
-      ["shippingMethodId", validateShippingMethod(input?.shippingMethodId)],
-    ]),
+    validateEmail(input?.email),
+    validateShippingMethod(input?.shippingMethodId),
   );
 }
 

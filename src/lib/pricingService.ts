@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/pricingService.ts
  * Purpose: Line and order totals, promo application, shipping and tax for the cart and checkout
- * Lines: 599
+ * Lines: 578
  */
 
 import {
@@ -11,9 +11,9 @@ import {
   SHIPPING_METHODS,
   TAX_RATE,
 } from "@/constants/config";
-import { PROMO_REJECTION_MESSAGES } from "@/constants/content";
+import { PROMO_REJECTION_MESSAGES, VALIDATION_MESSAGES } from "@/constants/content";
 import { PROMO_KIND_LABELS } from "@/constants/taxonomy";
-import { getJson, postJson } from "@/lib/apiClient";
+import { API_ERROR_CODES, API_PATHS, failure, getJson, postJson } from "@/lib/apiClient";
 import type { ApiError, CategoryId, MinorUnits, Result } from "@/types/common";
 import type {
   AppliedPromo,
@@ -29,7 +29,7 @@ import type {
 } from "@/types/commerce";
 import { clampNumber, sumBy } from "@/utils/collections";
 import { roundMinorUnits } from "@/utils/format";
-import { validatePromoCodeShape } from "@/utils/validation";
+import { firstError, hasErrors, validatePromoCodeShape } from "@/utils/validation";
 
 // The order of operations -------------------------------------------------------------------------
 
@@ -47,26 +47,13 @@ import { validatePromoCodeShape } from "@/utils/validation";
  * is the tax rate, rounded once through `src/utils/format.ts`'s single rounding rule.
  */
 
-// Paths, spellings and fixed values ---------------------------------------------------------------
-
-/** The three endpoints this module reads and writes, as the seam's route table names them. */
-const CART_PRICE_PATH = "/api/cart/price";
-const PROMO_VALIDATION_PATH = "/api/cart/validate-promo";
-const SHIPPING_METHODS_PATH = "/api/shipping-methods";
+// Spellings and fixed values ----------------------------------------------------------------------
 
 /** The hundred a percentage is expressed in: a `percent` promo's value and the tax rate alike. */
 const PERCENT_DENOMINATOR = 100;
 
 /** The control a promo failure belongs to, as the field every surface renders it against. */
 const PROMO_CODE_FIELD = "promoCode";
-
-/**
- * What the shape check answers with when it is made here rather than at the seam: the status and code the
- * transport gives a body that broke a field rule. Spelled rather than imported because the module that
- * owns them is not a dependency of this one, and a check made before a request is sent has to fail
- * exactly as the same check made at the seam would.
- */
-const VALIDATION_FAILURE = { status: 422, code: "validation-failed" } as const;
 
 /**
  * The method a basket is priced with before the buyer has chosen one: the first configured method, store
@@ -310,7 +297,7 @@ export interface PromoDecisionInput {
  */
 export function decidePromo(input: PromoDecisionInput): PromoRejectionReason | undefined {
   const code = normalisePromoCode(input.code);
-  if (code === null || validatePromoCodeShape(code) !== undefined) return "unknown";
+  if (code === null || hasErrors(validatePromoCodeShape(code))) return "unknown";
   const { promo } = input;
   if (promo === undefined) return "unknown";
   if (!promo.active) return "inactive";
@@ -539,7 +526,7 @@ export function priceCart(
     promoCode: normalisePromoCode(promoCode),
     shippingMethodId,
   };
-  return postJson<PricedCart, CartPricingRequest>(CART_PRICE_PATH, body, options);
+  return postJson<PricedCart, CartPricingRequest>(API_PATHS.CART_PRICE, body, options);
 }
 
 /**
@@ -563,21 +550,13 @@ export function validatePromoCode(
   options: PricingRequestOptions = {},
 ): Promise<Result<PromoCode>> {
   const normalisedCode = normalisePromoCode(code) ?? "";
-  const shapeMessage = validatePromoCodeShape(normalisedCode);
-  if (shapeMessage !== undefined) {
-    const failure: Result<PromoCode> = {
-      ok: false,
-      error: {
-        status: VALIDATION_FAILURE.status,
-        code: VALIDATION_FAILURE.code,
-        message: shapeMessage,
-        field: PROMO_CODE_FIELD,
-      },
-    };
-    return Promise.resolve(failure);
+  const shapeErrors = validatePromoCodeShape(normalisedCode);
+  if (hasErrors(shapeErrors)) {
+    const message = firstError(shapeErrors) ?? VALIDATION_MESSAGES.REQUIRED;
+    return Promise.resolve(failure(API_ERROR_CODES.VALIDATION_FAILED, message, PROMO_CODE_FIELD));
   }
   const body: PromoValidationRequest = { code: normalisedCode, lines };
-  return postJson<PromoCode, PromoValidationRequest>(PROMO_VALIDATION_PATH, body, options);
+  return postJson<PromoCode, PromoValidationRequest>(API_PATHS.CART_VALIDATE_PROMO, body, options);
 }
 
 /**
@@ -595,5 +574,5 @@ export function validatePromoCode(
 export function listShippingMethods(
   options: PricingRequestOptions = {},
 ): Promise<Result<ShippingMethod[]>> {
-  return getJson<ShippingMethod[]>(SHIPPING_METHODS_PATH, options);
+  return getJson<ShippingMethod[]>(API_PATHS.SHIPPING_METHODS, options);
 }

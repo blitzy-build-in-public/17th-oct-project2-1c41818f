@@ -1,13 +1,14 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 457
+ * Lines: 496
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
 import { ADMIN_COPY, FEEDBACK_COPY, NOT_FOUND_COPY } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Common from "@/types/common";
+import { createAbortError, delay, isAbortError } from "@/utils/async";
 import { parseIso } from "@/utils/dates";
 
 import {
@@ -33,9 +34,47 @@ import { clearRememberedOrders, routeTable, type RouteId } from "@/lib/apiRoutes
 // rather than held in one file, and the split is recorded in `generation-manifest.md` (Part 1 and
 // Part 4).
 
-export { API_ERROR_CODES, API_ERROR_STATUS } from "@/lib/apiContract";
+/**
+ * The seam's error vocabulary and the shaper that turns one of its codes into a `Result`: the names
+ * every machine-readable failure is spelled with, the status each answers with, and the two builders
+ * a caller uses instead of writing a status and a code of its own. `src/lib/apiContract.ts` owns them
+ * and this file republishes them, so a domain service asks the transport for its refusal — the same
+ * vocabulary, the same statuses and the same shape the seam itself answers with.
+ */
+export { API_ERROR_CODES, API_ERROR_STATUS, failure, shapeError } from "@/lib/apiContract";
+
+/**
+ * Every endpoint path, and the builder that fills one of them from the values its captured segments
+ * take. Published here for the same reason as the vocabulary above: a domain service builds its
+ * request target from the table the route table's patterns come from, so no path literal is written
+ * in two places and a path change is a change to one table.
+ */
+export { API_PATHS, fillApiPath } from "@/lib/apiContract";
+
+/**
+ * The neutral sentence every unexpected failure is worded with.
+ *
+ * `src/constants/content.ts` owns the wording and this file republishes it, so `src/lib/apiClient.ts`
+ * reads the sentence through the seam it dispatches to rather than importing the copy module behind
+ * it: the transport's own failures and the seam's unreachable-data-source failure say the same thing
+ * to a reader, and one module publishes both.
+ */
+export const FALLBACK_FAILURE_MESSAGE = FEEDBACK_COPY.ERROR_STATE_BODY;
+
+/**
+ * The wait that carries the configured simulator latency, the cancellation it settles with, and the
+ * predicate that recognises any cancellation — the wait's own error or the platform's `DOMException`.
+ *
+ * All three are re-exported from `src/utils/async.ts` rather than restated, so an aborted request means
+ * one thing in the seam and in the transport above it. `src/lib/apiClient.ts` reads them from here,
+ * because the seam is the single module the transport is allowed to depend on: it waits
+ * {@link getApiLatencyMs} out through this `delay` before asking the seam for an answer.
+ */
+export { createAbortError, delay, isAbortError };
+
 export type {
   ApiErrorCode,
+  ApiPath,
   CustomerOrderQuery,
   NewProductReviewInput,
   OrderCreationRequest,

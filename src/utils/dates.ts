@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/dates.ts
- * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use
- * Lines: 597
+ * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use.
+ * Lines: 578
  */
 
 import { DEFAULT_REPORT_RANGE_DAYS, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -13,6 +13,28 @@ import type {
   IsoDateTimeString,
   SortDirection,
 } from "@/types/common";
+import {
+  addDaysToDate,
+  isIsoDateText,
+  isWithinPreparedRange,
+  parseIso,
+  prepareRange,
+  startOfLocalDay,
+} from "@/utils/isoInstants";
+
+// The public surface ------------------------------------------------------------------------------
+// The instant level of the date foundation — what an ISO text parses to, and whether an instant falls
+// inside a range that has been resolved once — lives in `src/utils/isoInstants.ts`, because this file's
+// own surface reaches the plan's 600-line ceiling and re-parsing both range ends for every record is
+// exactly what the comparison below stops doing. Every name a consumer imports stays at this path, as
+// `src/lib/mockServer.ts` repeats the names of the modules its own concern is split into.
+
+export {
+  isWithinPreparedRange,
+  parseIso,
+  prepareRange,
+  type PreparedRange,
+} from "@/utils/isoInstants";
 
 /**
  * The conventions every date decision here shares. **Local time:** timestamps are ISO 8601 in the
@@ -33,13 +55,6 @@ const SECONDS = {
   MONTH: 2_592_000,
   YEAR: 31_536_000,
 } as const;
-/** The two ISO 8601 forms this module reads: a calendar date, and a local date-time whose captures
- * after it are the hour, minute, second and milliseconds. */
-const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-const DATE_TIME_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
-/** An explicit `Z` or `±hh:mm` suffix, which marks a value as an instant rather than as local time. */
-const OFFSET_SUFFIX_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/;
 /** The two bucket keys that are not a plain date: an ISO week and a calendar month. */
 const WEEK_KEY_PATTERN = /^(\d{4})-W(\d{2})$/;
 const MONTH_KEY_PATTERN = /^(\d{4})-(\d{2})$/;
@@ -51,12 +66,8 @@ const MAX_BUCKETS: Readonly<Record<BucketGranularity, number>> = {
 };
 /** Pads a component to two digits, as every ISO string this module emits requires. */
 const pad2 = (value: number): string => String(value).padStart(2, "0");
-/** Local midnight of the day an instant falls on: the anchor every range end is normalised to. */
-const startOfLocalDay = (date: Date): Date =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate());
-/** An instant moved by whole local days, across month, year and daylight-saving boundaries. */
-const addDaysToDate = (date: Date, amount: number): Date =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
+/** Pads a year to four digits, so an emitted `YYYY-MM-DD` date keeps the shape its pattern requires. */
+const padYear = (value: number): string => String(value).padStart(4, "0");
 /** The Monday that opens the ISO week an instant falls in. */
 const startOfWeekDate = (date: Date): Date => addDaysToDate(date, -((date.getDay() + 6) % 7));
 /** Whole days from one instant to another, counted between local midnights. */
@@ -65,33 +76,15 @@ const daysBetweenDates = (from: Date, to: Date): number =>
 /** How many days the given month of the given year holds. */
 const lastDayOfMonth = (year: number, monthIndex: number): number =>
   new Date(year, monthIndex + 1, 0).getDate();
-/** The `YYYY-MM-DD` text of a local instant. */
+/** The `YYYY-MM-DD` text of a local instant, its year padded to the four digits that shape requires. */
 const isoOf = (date: Date): IsoDateString =>
-  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  `${padYear(date.getFullYear())}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 /** The `YYYY-MM-DDTHH:mm:ss` text of a local instant; it carries no offset, being local time. */
 const isoDateTimeOf = (date: Date): IsoDateTimeString =>
   `${isoOf(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
 /** The Monday of ISO week 1 of a year: Jan 4 always falls in it, by the ISO week rule. */
 const weekOneMonday = (year: number): Date => startOfWeekDate(new Date(year, 0, 4));
 
-/** The instant an ISO date or local date-time names, or `null` when the text names neither. The round
- * trip proves validity — what the constructor kept must match what the text asked for — so
- * `2025-02-30`, Feb 29 in a common year and any out-of-range time are rejected, not rolled over. */
-function parseLocalIso(value: string): Date | null {
-  const match = DATE_PATTERN.exec(value) ?? DATE_TIME_PATTERN.exec(value);
-  if (!match) return null;
-  const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
-  const millis = match[7] ? Number(match[7].padEnd(3, "0")) : 0;
-  const date = new Date(+year, +month - 1, +day, +hour, +minute, +second, millis);
-  const kept =
-    date.getFullYear() === +year &&
-    date.getMonth() === +month - 1 &&
-    date.getDate() === +day &&
-    date.getHours() === +hour &&
-    date.getMinutes() === +minute &&
-    date.getSeconds() === +second;
-  return kept ? date : null;
-}
 /** The ISO week-numbering year and 1-based week an instant falls in. */
 function isoWeekParts(date: Date): { readonly year: number; readonly week: number } {
   const thursday = addDaysToDate(startOfWeekDate(date), 3);
@@ -123,15 +116,6 @@ function bucketSpan(start: Date, granularity: BucketGranularity): DateBucket {
 
 // Parsing and emitting ---------------------------------------------------------------------------
 
-/** Parses the ISO `value` as local time unless it carries an offset or `Z`; `null` when the text is
- * not ISO 8601 or names no real day, and never throwing, so a caller branches on `null`. */
-export function parseIso(value: string): Date | null {
-  const local = parseLocalIso(value);
-  if (local) return local;
-  if (!OFFSET_SUFFIX_PATTERN.test(value)) return null;
-  const instant = new Date(value);
-  return Number.isNaN(instant.getTime()) ? null : instant;
-}
 /** Whether `value` is a string this module can parse: the guard for `unknown` from storage or a form. */
 export function isValidIso(value: unknown): boolean {
   return typeof value === "string" && parseIso(value) !== null;
@@ -153,7 +137,7 @@ export function toDateInputValue(iso: IsoDateString): IsoDateString {
 /** The stored date an `<input type="date">` `value` names, the inverse of {@link toDateInputValue}:
  * the value when it is exactly a parsable date and `""` for an emptied or half-typed control. */
 export function fromDateInputValue(value: string): IsoDateString {
-  return DATE_PATTERN.test(value) && parseIso(value) !== null ? value : "";
+  return isIsoDateText(value) && parseIso(value) !== null ? value : "";
 }
 
 // Display ----------------------------------------------------------------------------------------
@@ -309,14 +293,11 @@ export function daysInRange(range: DateRange): number {
   const span = differenceInDays(range.from, range.to);
   return span < 0 ? 0 : span + 1;
 }
-/** Whether the ISO `iso` falls inside the closed `range`, both ends included; `false` when either is bad. */
+/** Whether the ISO `iso` falls inside the closed `range`, both ends included; `false` when either is bad.
+ * The range is resolved here, so a caller scanning a whole collection prepares it once through
+ * {@link prepareRange} and compares with {@link isWithinPreparedRange} instead. */
 export function isWithinRange(iso: IsoDateString, range: DateRange): boolean {
-  const date = parseIso(iso);
-  const start = parseIso(range.from);
-  const end = parseIso(range.to);
-  if (!date || !start || !end) return false;
-  const time = date.getTime();
-  return time >= startOfLocalDay(start).getTime() && time < addDaysToDate(end, 1).getTime();
+  return isWithinPreparedRange(iso, prepareRange(range));
 }
 /** Clamps `range` into `bounds`, so a preset or a persisted range cannot reach past the data it queries.
  * An unparsable input yields `bounds`; a range outside them collapses to the nearest bound day. */

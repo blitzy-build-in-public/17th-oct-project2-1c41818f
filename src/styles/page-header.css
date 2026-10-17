@@ -1,0 +1,83 @@
+/* Path: src/styles/page-header.css
+ * Purpose: Styles for the page header and its breadcrumb trail that src/components/layout/PageHeader.tsx renders, split out of src/styles/layout.css, which loads this sheet with @import
+ * Lines: 83
+ */
+
+/* The page-header family, and the sole definition site of the .sp-page-header* classes
+ * src/components/layout/PageHeader.tsx renders: the header frame, the crumb trail, the page's one <h1>, the
+ * optional description and the page's primary control. Split out of src/styles/layout.css, which loads this
+ * sheet with @import above its first rule, because that sheet stood at 598 lines against the request's
+ * 600-line ceiling before the crumb hover rule the breadcrumb contract requires; the plan's remedy for a
+ * concern that cannot fit is the split, never the ceiling. A CSS @import is inlined where it sits, so these
+ * rules hold the cascade position they held inside layout.css: src/main.tsx still imports the eight mapped
+ * stylesheets, no file under src/components/** imports a stylesheet, and every class here is consumed by name.
+ * The current crumb's colour is carried by aria-current="page" — and by the --current modifier the component
+ * writes for the same thing — while the crumbs before it are links, which take their hover from here because
+ * base.css's `:where(a):hover` ties this rule's specificity and loses the load order. Every value is a var()
+ * from tokens.css.
+ */
+
+/* ==== Page header ====
+ * PageHeader.tsx renders the trail inside `.sp-page-header__breadcrumbs` (a <nav> needing no rule), the page's
+ * one <h1>, an optional description and the page's primary control. The current crumb is a text span carrying
+ * aria-current="page"; the crumbs before it are links. */
+.sp-page-header {
+  display: grid;
+  gap: var(--space-2);
+  /* Tighter on a phone than from --breakpoint-md, where a page has more room above its first block. */
+  padding-block: var(--space-4) var(--space-5);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-page-header__breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-page-header__breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The separator is drawn between items, so a trail of one crumb cannot end on a stray mark. */
+.sp-page-header__breadcrumb-item + .sp-page-header__breadcrumb-item::before {
+  content: "/";
+  color: var(--color-text-subtle);
+}
+.sp-page-header__crumb {
+  color: var(--color-text-muted);
+  text-decoration-line: none;
+}
+/* The crumb links hover from here — base.css's `:where(a):hover` ties this rule's specificity and loses the
+ * load order — and the anchor is named because the same class also paints an unlinked crumb as plain text. */
+@media (hover: hover) {
+  a.sp-page-header__crumb:hover {
+    color: var(--color-accent-hover);
+  }
+}
+.sp-page-header__crumb--current,
+.sp-page-header__crumb[aria-current="page"] {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+.sp-page-header__description {
+  max-inline-size: var(--layout-measure);
+  color: var(--color-text-muted);
+}
+/* The page's primary control: stacked on a phone, closed to the end of the row from --breakpoint-md. */
+.sp-page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-page-header {
+    gap: var(--space-3);
+    padding-block: var(--space-5) var(--space-6);
+  }
+  .sp-page-header__actions {
+    justify-content: end;
+  }
+}

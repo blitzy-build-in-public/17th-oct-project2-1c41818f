@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiContract.ts
  * Purpose: The contract the in-process API is built on: its error vocabulary, the failure it shapes and the data-source interface it asks for
- * Lines: 308
+ * Lines: 424
  */
 
 import type * as Account from "@/types/account";
@@ -139,6 +139,122 @@ export type OrderCreationRequest = Omit<Commerce.CreateOrderRequest, "payment"> 
   readonly customerId: Common.CustomerId | null;
   readonly payment: Commerce.PaymentSummary;
 };
+
+// Endpoint paths ----------------------------------------------------------------------------------
+
+/**
+ * Every endpoint path the product calls, one entry per path, written once: `src/lib/apiRoutes.ts`
+ * builds its route table's patterns from these strings and the eight domain services build their
+ * request targets from them, so the vocabulary a request is named with has a single home and a path
+ * change is a change to this table alone.
+ *
+ * A pattern is the path as §0.6.3 states it, with a captured segment written `:name` — the name a
+ * handler reads out of `RouteContext.params` and the name a caller fills through {@link fillApiPath}.
+ * Two methods that share one path (`GET` and `POST /api/orders`, the two
+ * `/api/products/:id/reviews` and the two `/api/customers/:id/addresses` forms) share one entry,
+ * because the pattern is what is written here and the method belongs to the route that answers it.
+ */
+export const API_PATHS = {
+  /** The catalogue listing, with search and filtering as its parameters. */
+  PRODUCTS: "/api/products",
+  /** One product's detail resource. */
+  PRODUCT_DETAIL: "/api/products/:id",
+  /** One product's same-category suggestions, nearest in price first. */
+  PRODUCT_RELATED: "/api/products/:id/related",
+  /** One product's reviews: listed, and the target a new review is posted to. */
+  PRODUCT_REVIEWS: "/api/products/:id/reviews",
+  /** The five facet values and their counts for a filter. */
+  FACETS: "/api/facets",
+  /** Type-ahead suggestions drawn from product names, brands and categories. */
+  SEARCH_SUGGEST: "/api/search/suggest",
+  /** The category tree with its product counts. */
+  CATEGORIES: "/api/categories",
+  /** The brands with their product counts. */
+  BRANDS: "/api/brands",
+  /** Prices a basket: line totals, discounts, shipping, tax and the grand total. */
+  CART_PRICE: "/api/cart/price",
+  /** Validates a promo code against the basket it would discount. */
+  CART_VALIDATE_PROMO: "/api/cart/validate-promo",
+  /** The configured delivery methods and their prices. */
+  SHIPPING_METHODS: "/api/shipping-methods",
+  /** Order creation, and the signed-in customer's own order history. */
+  ORDERS: "/api/orders",
+  /** One order's detail resource. */
+  ORDER_DETAIL: "/api/orders/:id",
+  /** Creates an account and opens a session with it. */
+  AUTH_REGISTER: "/api/auth/register",
+  /** Opens a session for credentials the seam proves. */
+  AUTH_LOGIN: "/api/auth/login",
+  /** Ends the session a token names. */
+  AUTH_LOGOUT: "/api/auth/logout",
+  /** Reports the session a stored token still names. */
+  AUTH_SESSION: "/api/auth/session",
+  /** One account's profile: read, and updated by `PATCH`. */
+  CUSTOMER_DETAIL: "/api/customers/:id",
+  /** One account's address book: listed, and added to by `POST`. */
+  CUSTOMER_ADDRESSES: "/api/customers/:id/addresses",
+  /** One address of that book: replaced by `PATCH` and removed by `DELETE`. */
+  CUSTOMER_ADDRESS: "/api/customers/:id/addresses/:addressId",
+  /** Nominates the address the path names as the default of the kind its body states. */
+  CUSTOMER_ADDRESS_DEFAULT: "/api/customers/:id/addresses/:addressId/default",
+  /** The KPI summary for a period, with the comparison baseline the query names. */
+  ANALYTICS_KPIS: "/api/analytics/kpis",
+  /** The revenue series for a period, split by the grouping the query names. */
+  ANALYTICS_REVENUE: "/api/analytics/revenue",
+  /** The best-performing products in a period, ranked by the metric asked for. */
+  ANALYTICS_TOP_PRODUCTS: "/api/analytics/top-products",
+  /** The most recently placed orders. */
+  ANALYTICS_RECENT_ORDERS: "/api/analytics/recent-orders",
+  /** The report catalogue and the columns each report is built from. */
+  REPORT_DEFINITIONS: "/api/reports/definitions",
+  /** Runs the report the captured kind names (`sales`, `products` or `customers`). */
+  REPORT_RUN: "/api/reports/:kind",
+} as const;
+
+/** One path of {@link API_PATHS}, captured segments included. */
+export type ApiPath = (typeof API_PATHS)[keyof typeof API_PATHS];
+
+/**
+ * Builds the target of one request from a pattern of {@link API_PATHS} and the values its captured
+ * segments take: `/api/products/:id` filled with `{ id: "prod_1" }` is `/api/products/prod_1`.
+ *
+ * Every captured value is percent-encoded, so an identifier that carries a character a path segment
+ * cannot carry verbatim still fills exactly one segment instead of splitting the path or naming a
+ * different resource. A pattern with no captured segment is returned unchanged, so a caller needs no
+ * knowledge of which shape of pattern it holds.
+ *
+ * @param pattern - The path pattern to fill, as {@link API_PATHS} declares it.
+ * @param params - The value of each captured segment, keyed by the name the pattern gives it.
+ * @returns The concrete path a request is dispatched with, every captured value encoded.
+ * @throws Error when `pattern` names a captured segment `params` holds no value for: a target with a
+ * segment left unfilled names no resource, and dispatching it as though it did would turn a caller's
+ * mistake into a `404` no reader can trace back to its cause.
+ */
+export function fillApiPath(
+  pattern: string,
+  params: Readonly<Record<string, string>> = {},
+): string {
+  return pattern
+    .split("/")
+    .map((segment) => (segment.startsWith(":") ? capturedValue(segment, pattern, params) : segment))
+    .join("/");
+}
+
+/** One captured segment's value, encoded, or the reason the pattern cannot be filled. */
+function capturedValue(
+  segment: string,
+  pattern: string,
+  params: Readonly<Record<string, string>>,
+): string {
+  const name = segment.slice(1);
+  const value = params[name];
+  if (value === undefined) {
+    throw new Error(
+      `Cannot build ${pattern}: no value was given for the captured segment "${name}".`,
+    );
+  }
+  return encodeURIComponent(value);
+}
 
 // How a handler is called ------------------------------------------------------------------------
 

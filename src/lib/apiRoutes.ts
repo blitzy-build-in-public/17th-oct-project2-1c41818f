@@ -1,17 +1,18 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 453
+ * Lines: 459
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
-import { ACCOUNT_COPY, FEEDBACK_COPY } from "@/constants/content";
+import { ACCOUNT_COPY, FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Analytics from "@/types/analytics";
 import type * as Catalog from "@/types/catalog";
 import type * as Common from "@/types/common";
 import { verifyCredential } from "@/utils/strings";
 import {
+  firstError,
   hasErrors,
   isRatingValue,
   validateAddress,
@@ -24,6 +25,7 @@ import {
 
 import {
   API_ERROR_CODES,
+  API_PATHS,
   failure,
   ok,
   shapeError,
@@ -172,11 +174,18 @@ function listFacets(context: RouteContext): Common.Result<unknown> {
   return query.ok ? ok(context.source.buildFacets(query.value)) : query;
 }
 
+/** Answers `GET /api/search/suggest`, parsing the request into `Catalog.SuggestionQuery` — the one shape
+ * `src/types/catalog.ts` declares for this endpoint's parameters and both sides of the seam read — with
+ * its optional `limit` resolved from the endpoint's declared default for the data source it asks. */
 function listSuggestions(context: RouteContext): Common.Result<unknown> {
+  const query: Catalog.SuggestionQuery = {
+    q: memberText(context.query, "q") ?? "",
+    limit: readLimit(context.query, "limit", SEARCH_SUGGESTION_LIMIT, SEARCH_SUGGESTION_LIMIT),
+  };
   const response: Catalog.SearchSuggestionResponse = {
     suggestions: context.source.listSuggestions({
-      q: memberText(context.query, "q") ?? "",
-      limit: readLimit(context.query, "limit", SEARCH_SUGGESTION_LIMIT, SEARCH_SUGGESTION_LIMIT),
+      q: query.q,
+      limit: query.limit ?? SEARCH_SUGGESTION_LIMIT,
     }),
   };
   return ok(response);
@@ -208,9 +217,10 @@ function priceCart(context: RouteContext): Common.Result<unknown> {
 function validatePromoCode(context: RouteContext): Common.Result<unknown> {
   const body = bodyOf(context);
   const code = memberTextOrEmpty(body, "code");
-  const shape = validatePromoCodeShape(code);
-  if (shape !== undefined) {
-    return failure(API_ERROR_CODES.VALIDATION_FAILED, shape, "promoCode");
+  const shapeErrors = validatePromoCodeShape(code);
+  if (hasErrors(shapeErrors)) {
+    const message = firstError(shapeErrors) ?? VALIDATION_MESSAGES.REQUIRED;
+    return failure(API_ERROR_CODES.VALIDATION_FAILED, message, "promoCode");
   }
   const lines = readCartLines(memberValue(body, "lines"));
   if (!lines.ok) return lines;
@@ -385,65 +395,61 @@ function runReport(context: RouteContext): Common.Result<unknown> {
 
 // The route table --------------------------------------------------------------------------------
 
-/** Every endpoint the in-process API answers, with the level its caller needs. A static segment always
- * beats a captured one, so the table's order never decides which route matches. */
+/** Every endpoint the in-process API answers, with the level its caller needs. Each row takes its
+ * pattern from `API_PATHS`, the table the callers of these endpoints also build their targets from, so
+ * a path has one home. A static segment always beats a captured one, so the table's order never
+ * decides which route matches. */
 const ROUTES = [
-  route("products.list", "GET", "/api/products", "anonymous", listProducts),
-  route("products.detail", "GET", "/api/products/:id", "anonymous", getProduct),
-  route("products.related", "GET", "/api/products/:id/related", "anonymous", listRelatedProducts),
-  route("reviews.list", "GET", "/api/products/:id/reviews", "anonymous", listProductReviews),
-  route("reviews.create", "POST", "/api/products/:id/reviews", "customer", insertProductReview),
-  route("facets.list", "GET", "/api/facets", "anonymous", listFacets),
-  route("search.suggest", "GET", "/api/search/suggest", "anonymous", listSuggestions),
-  route("categories.list", "GET", "/api/categories", "anonymous", listCategories),
-  route("brands.list", "GET", "/api/brands", "anonymous", listBrands),
-  route("cart.price", "POST", "/api/cart/price", "anonymous", priceCart),
-  route("cart.validatePromo", "POST", "/api/cart/validate-promo", "anonymous", validatePromoCode),
-  route("shipping.list", "GET", "/api/shipping-methods", "anonymous", listShippingMethods),
-  route("orders.create", "POST", "/api/orders", "anonymous", createOrder),
-  route("orders.list", "GET", "/api/orders", "customer", listOrders),
-  route("orders.detail", "GET", "/api/orders/:id", "anonymous", getOrder),
-  route("auth.register", "POST", "/api/auth/register", "anonymous", registerCustomer),
-  route("auth.login", "POST", "/api/auth/login", "anonymous", signIn),
-  route("auth.logout", "POST", "/api/auth/logout", "anonymous", signOut),
-  route("auth.session", "GET", "/api/auth/session", "anonymous", readSession),
-  route("customers.detail", "GET", "/api/customers/:id", "customer", getCustomer),
-  route("customers.update", "PATCH", "/api/customers/:id", "customer", updateCustomer),
-  route("addresses.list", "GET", "/api/customers/:id/addresses", "customer", listAddresses),
-  route("addresses.create", "POST", "/api/customers/:id/addresses", "customer", addAddress),
+  route("products.list", "GET", API_PATHS.PRODUCTS, "anonymous", listProducts),
+  route("products.detail", "GET", API_PATHS.PRODUCT_DETAIL, "anonymous", getProduct),
+  route("products.related", "GET", API_PATHS.PRODUCT_RELATED, "anonymous", listRelatedProducts),
+  route("reviews.list", "GET", API_PATHS.PRODUCT_REVIEWS, "anonymous", listProductReviews),
+  route("reviews.create", "POST", API_PATHS.PRODUCT_REVIEWS, "customer", insertProductReview),
+  route("facets.list", "GET", API_PATHS.FACETS, "anonymous", listFacets),
+  route("search.suggest", "GET", API_PATHS.SEARCH_SUGGEST, "anonymous", listSuggestions),
+  route("categories.list", "GET", API_PATHS.CATEGORIES, "anonymous", listCategories),
+  route("brands.list", "GET", API_PATHS.BRANDS, "anonymous", listBrands),
+  route("cart.price", "POST", API_PATHS.CART_PRICE, "anonymous", priceCart),
   route(
-    "addresses.update",
-    "PATCH",
-    "/api/customers/:id/addresses/:addressId",
-    "customer",
-    updateAddress,
+    "cart.validatePromo",
+    "POST",
+    API_PATHS.CART_VALIDATE_PROMO,
+    "anonymous",
+    validatePromoCode,
   ),
-  route(
-    "addresses.remove",
-    "DELETE",
-    "/api/customers/:id/addresses/:addressId",
-    "customer",
-    removeAddress,
-  ),
+  route("shipping.list", "GET", API_PATHS.SHIPPING_METHODS, "anonymous", listShippingMethods),
+  route("orders.create", "POST", API_PATHS.ORDERS, "anonymous", createOrder),
+  route("orders.list", "GET", API_PATHS.ORDERS, "customer", listOrders),
+  route("orders.detail", "GET", API_PATHS.ORDER_DETAIL, "anonymous", getOrder),
+  route("auth.register", "POST", API_PATHS.AUTH_REGISTER, "anonymous", registerCustomer),
+  route("auth.login", "POST", API_PATHS.AUTH_LOGIN, "anonymous", signIn),
+  route("auth.logout", "POST", API_PATHS.AUTH_LOGOUT, "anonymous", signOut),
+  route("auth.session", "GET", API_PATHS.AUTH_SESSION, "anonymous", readSession),
+  route("customers.detail", "GET", API_PATHS.CUSTOMER_DETAIL, "customer", getCustomer),
+  route("customers.update", "PATCH", API_PATHS.CUSTOMER_DETAIL, "customer", updateCustomer),
+  route("addresses.list", "GET", API_PATHS.CUSTOMER_ADDRESSES, "customer", listAddresses),
+  route("addresses.create", "POST", API_PATHS.CUSTOMER_ADDRESSES, "customer", addAddress),
+  route("addresses.update", "PATCH", API_PATHS.CUSTOMER_ADDRESS, "customer", updateAddress),
+  route("addresses.remove", "DELETE", API_PATHS.CUSTOMER_ADDRESS, "customer", removeAddress),
   route(
     "addresses.setDefault",
     "POST",
-    "/api/customers/:id/addresses/:addressId/default",
+    API_PATHS.CUSTOMER_ADDRESS_DEFAULT,
     "customer",
     setDefaultAddress,
   ),
-  route("analytics.kpis", "GET", "/api/analytics/kpis", "administrator", getKpis),
-  route("analytics.revenue", "GET", "/api/analytics/revenue", "administrator", getRevenueSeries),
-  route("analytics.top", "GET", "/api/analytics/top-products", "administrator", getTopProducts),
+  route("analytics.kpis", "GET", API_PATHS.ANALYTICS_KPIS, "administrator", getKpis),
+  route("analytics.revenue", "GET", API_PATHS.ANALYTICS_REVENUE, "administrator", getRevenueSeries),
+  route("analytics.top", "GET", API_PATHS.ANALYTICS_TOP_PRODUCTS, "administrator", getTopProducts),
   route(
     "analytics.recent",
     "GET",
-    "/api/analytics/recent-orders",
+    API_PATHS.ANALYTICS_RECENT_ORDERS,
     "administrator",
     getRecentOrders,
   ),
-  route("reports.list", "GET", "/api/reports/definitions", "administrator", listReports),
-  route("reports.run", "GET", "/api/reports/:kind", "administrator", runReport),
+  route("reports.list", "GET", API_PATHS.REPORT_DEFINITIONS, "administrator", listReports),
+  route("reports.run", "GET", API_PATHS.REPORT_RUN, "administrator", runReport),
 ] as const satisfies readonly RouteDefinition[];
 
 /** The table the dispatcher matches a request against. */

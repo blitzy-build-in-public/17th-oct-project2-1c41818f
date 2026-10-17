@@ -1,18 +1,23 @@
 /* Path: src/styles/layout.css
  * Purpose: Page shell, containers, grid, and the header, footer and sidebar skeletons
- * Lines: 599
+ * Lines: 556
  */
 /* The application frame, the container and page rhythm, three layout primitives, and the skeletons of the
- * five layout components — AppLayout, Header, Footer, AdminSidebar and PageHeader. Every class below is
- * defined here and nowhere else, and each component renders these names verbatim. Loaded third: it
- * consumes tokens.css properties and base.css's two utilities and declares no colour, length, radius,
- * shadow, z-index or duration itself. No component primitive (components.css) and no area style: the
- * product grid, the facet column, the dashboard grid and the checkout steps belong to catalog.css,
- * commerce.css and admin-reports.css; mobile-first throughout. Four parts of that contract carry no rule
- * of their own — `.sp-sidebar__nav`, `.sp-sidebar__item`, `.sp-footer__column` and
- * `.sp-page-header__breadcrumbs` — each being a plain wrapper the rules above already cover, and are named
- * here so a component rendering them reads the contract complete.
+ * five layout components — AppLayout, Header, Footer, AdminSidebar and PageHeader, the fifth of which is
+ * declared in src/styles/page-header.css and loaded from here with @import. Every class below is defined
+ * here and nowhere else, and each component renders these names verbatim. Loaded third: it consumes
+ * tokens.css properties and base.css's two utilities and declares no colour, length, radius, shadow,
+ * z-index or duration itself. No component primitive (components.css) and no area style: the product grid,
+ * the facet column, the dashboard grid and the checkout steps belong to catalog.css, commerce.css and
+ * admin-reports.css; mobile-first throughout. Four parts of that contract carry no rule of their own —
+ * `.sp-sidebar__nav`, `.sp-sidebar__item`, `.sp-footer__column` and `.sp-page-header__breadcrumbs` — each
+ * being a plain wrapper the rules around it already cover; a fifth, `.sp-page-header__title`, carries no
+ * rule either, because base.css paints the heading-1 role on the `h1` element itself, so the page's title
+ * takes its type from the element and not from a class. All five are named here so a component rendering
+ * them reads the contract complete.
  */
+
+@import "./page-header.css";
 
 /* ==== Application shell ==== */
 /* #root is the element index.html declares and src/main.tsx mounts into. */
@@ -380,6 +385,10 @@
     text-decoration-line: underline;
   }
 }
+/* Pressed: the accent deepens, and the rule sits outside the hover query so a touch device paints it too. */
+.sp-footer__link:active {
+  color: var(--color-accent-active);
+}
 /* The storefront description, capped at the prose measure so its lines stay readable. */
 .sp-footer__contact {
   display: grid;
@@ -483,6 +492,12 @@
   inline-size: var(--border-width-thick);
   background-color: var(--color-accent);
 }
+/* Pressed: the row sinks and the accent deepens. Written after the current-section rule, which it ties on
+ * specificity, so a pressed current link still shows the press rather than keeping its accent-subtle fill. */
+.sp-sidebar__link:active {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-accent-active);
+}
 /* The glyph takes the link's own colour through currentColor, and the fixed square keeps the rail even. */
 .sp-sidebar__icon {
   flex: none;
@@ -530,64 +545,6 @@
   .sp-sidebar__link {
     justify-content: start;
     padding-inline: var(--space-2);
-  }
-}
-
-/* ==== Page header ====
- * PageHeader.tsx renders the trail inside `.sp-page-header__breadcrumbs` (a <nav> needing no rule), the page's
- * one <h1>, an optional description and the page's primary control. The current crumb is a text span carrying
- * aria-current="page"; the crumbs before it are links. */
-.sp-page-header {
-  display: grid;
-  gap: var(--space-2);
-  /* Tighter on a phone than from --breakpoint-md, where a page has more room above its first block. */
-  padding-block: var(--space-4) var(--space-5);
-  border-block-end: var(--border-width) solid var(--color-border-subtle);
-}
-.sp-page-header__breadcrumb-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  list-style: none;
-}
-.sp-page-header__breadcrumb-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-/* The separator is drawn between items, so a trail of one crumb cannot end on a stray mark. */
-.sp-page-header__breadcrumb-item + .sp-page-header__breadcrumb-item::before {
-  content: "/";
-  color: var(--color-text-subtle);
-}
-.sp-page-header__crumb {
-  color: var(--color-text-muted);
-  text-decoration-line: none;
-}
-.sp-page-header__crumb--current,
-.sp-page-header__crumb[aria-current="page"] {
-  color: var(--color-text);
-  font-weight: var(--font-weight-medium);
-}
-.sp-page-header__description {
-  max-inline-size: var(--layout-measure);
-  color: var(--color-text-muted);
-}
-/* The page's primary control: stacked on a phone, closed to the end of the row from --breakpoint-md. */
-.sp-page-header__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-@media (min-width: 768px) {
-  /* --breakpoint-md */
-  .sp-page-header {
-    gap: var(--space-3);
-    padding-block: var(--space-5) var(--space-6);
-  }
-  .sp-page-header__actions {
-    justify-content: end;
   }
 }
 

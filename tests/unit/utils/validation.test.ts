@@ -1,17 +1,18 @@
 /**
  * Path: tests/unit/utils/validation.test.ts
  * Purpose: Each validator's accept and reject cases, and the form-level error maps
- * Lines: 518
+ * Lines: 570
  */
 
 // A pure-function suite: it runs in the node project, reaches no DOM, mocks no module and touches no
-// storage, so every assertion observes a returned message or map rather than an internal.
+// storage, so every assertion observes a returned error map rather than an internal.
 import { describe, expect, it } from "vitest";
 
 import { MAX_REPORT_RANGE_DAYS, PASSWORD_POLICY, SHIPPING_METHODS } from "@/constants/config";
 import {
   FEEDBACK_COPY,
   VALIDATION_MESSAGES,
+  nameLengthMessage,
   postalCodeFormatMessage,
   quantityRangeMessage,
   reviewBodyLengthMessage,
@@ -22,6 +23,7 @@ import type { FieldErrors } from "@/types/common";
 import { addDays, validateDateRange } from "@/utils/dates";
 import {
   FORM_ERROR_KEY,
+  NAME_MAX_LENGTH,
   REVIEW_LIMITS,
   clearFieldError,
   fieldErrored,
@@ -36,14 +38,17 @@ import {
   validateCardNumber,
   validateCvc,
   validateEmail,
+  validateName,
   validatePassword,
   validatePayment,
+  validatePhone,
   validatePostalCode,
   validateProfileUpdate,
   validatePromoCodeShape,
   validateQuantity,
   validateRating,
   validateRegistration,
+  validateRequired,
   validateReview,
   validateReviewBody,
   validateReviewTitle,
@@ -105,13 +110,13 @@ function expectRejectedWith(errors: FieldErrors, fields: readonly string[]): voi
 }
 
 describe("field rules", () => {
-  it("accepts a well-formed email address", () => {
-    expect(validateEmail("dana.okafor@example.com")).toBeUndefined();
-    expect(validateEmail("dana+orders@mail.example.co.uk")).toBeUndefined();
+  it("accepts a well-formed email address, keyed empty", () => {
+    expect(validateEmail("dana.okafor@example.com")).toEqual({});
+    expect(validateEmail("dana+orders@mail.example.co.uk")).toEqual({});
   });
 
   it("reports an absent email as missing and every malformed shape as misformatted", () => {
-    expect(validateEmail("   ")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validateEmail("   ")).toEqual({ email: VALIDATION_MESSAGES.REQUIRED });
     for (const malformed of [
       "dana.okafor.example.com",
       "dana@@example.com",
@@ -120,13 +125,13 @@ describe("field rules", () => {
       "@example.com",
       `${"a".repeat(250)}@example.com`,
     ]) {
-      expect(validateEmail(malformed)).toBe(VALIDATION_MESSAGES.EMAIL_FORMAT);
+      expect(validateEmail(malformed)).toEqual({ email: VALIDATION_MESSAGES.EMAIL_FORMAT });
     }
   });
 
   it("accepts a password of exactly the policy's minimum length", () => {
     expect(MINIMUM_PASSWORD).toHaveLength(PASSWORD_POLICY.MIN_LENGTH);
-    expect(validatePassword(MINIMUM_PASSWORD)).toBeUndefined();
+    expect(validatePassword(MINIMUM_PASSWORD)).toEqual({});
   });
 
   it("rejects a password that is short, letters only or digits only", () => {
@@ -135,22 +140,51 @@ describe("field rules", () => {
       "a".repeat(PASSWORD_POLICY.MIN_LENGTH),
       "1".repeat(PASSWORD_POLICY.MIN_LENGTH),
     ]) {
-      expect(validatePassword(rejected)).toBe(VALIDATION_MESSAGES.PASSWORD_POLICY);
+      expect(validatePassword(rejected)).toEqual({ password: VALIDATION_MESSAGES.PASSWORD_POLICY });
     }
-    expect(validatePassword("")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validatePassword("")).toEqual({ password: VALIDATION_MESSAGES.REQUIRED });
+  });
+
+  it("keys a required control and an optional phone number by the member name they judge", () => {
+    expect(validateRequired("city", "  ")).toEqual({ city: VALIDATION_MESSAGES.REQUIRED });
+    expect(validateRequired("line1", "1120 NW Marshall St")).toEqual({});
+    expect(validatePhone("+1 (503) 555-0134")).toEqual({});
+    expect(validatePhone("")).toEqual({});
+    expect(validatePhone("503")).toEqual({ phone: VALIDATION_MESSAGES.PHONE_FORMAT });
+  });
+
+  it("accepts a name at each end of its bounds, judged for the control it is given", () => {
+    expect(validateName("firstName", "Da")).toEqual({});
+    expect(validateName("fullName", "x".repeat(NAME_MAX_LENGTH))).toEqual({});
+    expect(validateName("nameOnCard", "Dana Okafor")).toEqual({});
+  });
+
+  it("rejects a name one character past the ceiling, keyed by the control it was given", () => {
+    const oversized = "x".repeat(NAME_MAX_LENGTH + 1);
+    const message = nameLengthMessage(NAME_MAX_LENGTH);
+    expect(validateName("firstName", oversized)).toEqual({ firstName: message });
+    expect(validateName("lastName", oversized)).toEqual({ lastName: message });
+  });
+
+  it("keeps the caller's sentence for a name too short or holding no letter", () => {
+    expect(validateName("fullName", "1")).toEqual({ fullName: VALIDATION_MESSAGES.REQUIRED });
+    expect(validateName("firstName", "", "Enter your first name.")).toEqual({
+      firstName: "Enter your first name.",
+    });
+    expect(validateName("firstName", "Dana", "Enter your first name.")).toEqual({});
   });
 
   it("accepts a quantity at the lower bound and at the caller's ceiling, typed or numeric", () => {
-    expect(validateQuantity(1, 4)).toBeUndefined();
-    expect(validateQuantity(4, 4)).toBeUndefined();
-    expect(validateQuantity("3", 4)).toBeUndefined();
+    expect(validateQuantity(1, 4)).toEqual({});
+    expect(validateQuantity(4, 4)).toEqual({});
+    expect(validateQuantity("3", 4)).toEqual({});
   });
 
   it("rejects a quantity outside one to the ceiling, naming that ceiling", () => {
     for (const rejected of [0, -2, 1.5, Number.POSITIVE_INFINITY, 5, "", "many"]) {
-      expect(validateQuantity(rejected, 4)).toBe(quantityRangeMessage(4));
+      expect(validateQuantity(rejected, 4)).toEqual({ quantity: quantityRangeMessage(4) });
     }
-    expect(validateQuantity(2, 1)).toBe(quantityRangeMessage(1));
+    expect(validateQuantity(2, 1)).toEqual({ quantity: quantityRangeMessage(1) });
   });
 
   it("accepts a complete address whose postal code matches its country", () => {
@@ -171,13 +205,15 @@ describe("field rules", () => {
 
   it("reports every configured country's own pattern, so one added to the taxonomy is judged too", () => {
     for (const country of SUPPORTED_COUNTRIES) {
-      expect(validatePostalCode("!!", country.code)).toBe(postalCodeFormatMessage(country.label));
+      expect(validatePostalCode("!!", country.code)).toEqual({
+        postalCode: postalCodeFormatMessage(country.label),
+      });
     }
   });
 
   it("rejects an unsupported country and leaves the postal pattern unjudged behind it", () => {
     expectRejectedWith(validateAddress({ ...VALID_ADDRESS, country: "ZZ" }), ["country"]);
-    expect(validatePostalCode(VALID_ADDRESS.postalCode, "ZZ")).toBeUndefined();
+    expect(validatePostalCode(VALID_ADDRESS.postalCode, "ZZ")).toEqual({});
   });
 
   it("judges the optional phone number only once one is typed", () => {
@@ -188,41 +224,41 @@ describe("field rules", () => {
   });
 
   it("accepts every whole rating from one to five, numeric or typed", () => {
-    for (const rating of [1, 2, 3, 4, 5, "5"]) expect(validateRating(rating)).toBeUndefined();
+    for (const rating of [1, 2, 3, 4, 5, "5"]) expect(validateRating(rating)).toEqual({});
   });
 
   it("rejects an unchosen, out-of-range or fractional rating as missing", () => {
     for (const rejected of [0, 6, 4.5, "4.5", undefined, ""]) {
-      expect(validateRating(rejected)).toBe(VALIDATION_MESSAGES.REQUIRED);
+      expect(validateRating(rejected)).toEqual({ rating: VALIDATION_MESSAGES.REQUIRED });
     }
   });
 
   it("accepts a review title at each end of its configured bounds", () => {
     const { TITLE_MIN, TITLE_MAX } = REVIEW_LIMITS;
-    expect(validateReviewTitle("x".repeat(TITLE_MIN))).toBeUndefined();
-    expect(validateReviewTitle("x".repeat(TITLE_MAX))).toBeUndefined();
+    expect(validateReviewTitle("x".repeat(TITLE_MIN))).toEqual({});
+    expect(validateReviewTitle("x".repeat(TITLE_MAX))).toEqual({});
   });
 
   it("rejects a review title one character outside those bounds", () => {
     const { TITLE_MIN, TITLE_MAX } = REVIEW_LIMITS;
     const message = reviewTitleLengthMessage(TITLE_MIN, TITLE_MAX);
-    expect(validateReviewTitle("x".repeat(TITLE_MIN - 1))).toBe(message);
-    expect(validateReviewTitle("x".repeat(TITLE_MAX + 1))).toBe(message);
-    expect(validateReviewTitle("")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validateReviewTitle("x".repeat(TITLE_MIN - 1))).toEqual({ title: message });
+    expect(validateReviewTitle("x".repeat(TITLE_MAX + 1))).toEqual({ title: message });
+    expect(validateReviewTitle("")).toEqual({ title: VALIDATION_MESSAGES.REQUIRED });
   });
 
   it("accepts a review body at each end of its configured bounds", () => {
     const { BODY_MIN, BODY_MAX } = REVIEW_LIMITS;
-    expect(validateReviewBody("x".repeat(BODY_MIN))).toBeUndefined();
-    expect(validateReviewBody("x".repeat(BODY_MAX))).toBeUndefined();
+    expect(validateReviewBody("x".repeat(BODY_MIN))).toEqual({});
+    expect(validateReviewBody("x".repeat(BODY_MAX))).toEqual({});
   });
 
   it("rejects a review body one character outside those bounds", () => {
     const { BODY_MIN, BODY_MAX } = REVIEW_LIMITS;
     const message = reviewBodyLengthMessage(BODY_MIN, BODY_MAX);
-    expect(validateReviewBody("x".repeat(BODY_MIN - 1))).toBe(message);
-    expect(validateReviewBody("x".repeat(BODY_MAX + 1))).toBe(message);
-    expect(validateReviewBody("  ")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validateReviewBody("x".repeat(BODY_MIN - 1))).toEqual({ body: message });
+    expect(validateReviewBody("x".repeat(BODY_MAX + 1))).toEqual({ body: message });
+    expect(validateReviewBody("  ")).toEqual({ body: VALIDATION_MESSAGES.REQUIRED });
   });
 });
 
@@ -240,73 +276,89 @@ describe("card rules", () => {
   });
 
   it("accepts a card number at each end of the documented thirteen to nineteen digits", () => {
-    expect(validateCardNumber("4222222222222")).toBeUndefined();
-    expect(validateCardNumber("4000000000000000006")).toBeUndefined();
-    expect(validateCardNumber("4242 4242 4242 4242")).toBeUndefined();
-    expect(validateCardNumber("4242-4242-4242-4242")).toBeUndefined();
+    expect(validateCardNumber("4222222222222")).toEqual({});
+    expect(validateCardNumber("4000000000000000006")).toEqual({});
+    expect(validateCardNumber("4242 4242 4242 4242")).toEqual({});
+    expect(validateCardNumber("4242-4242-4242-4242")).toEqual({});
   });
 
   it("rejects a card number of the wrong length, a wrong check digit or a non-numeric one", () => {
     for (const rejected of ["424242424242", "42424242424242424242", "4242424242424241", "4242x"]) {
-      expect(validateCardNumber(rejected)).toBe(VALIDATION_MESSAGES.CARD_NUMBER);
+      expect(validateCardNumber(rejected)).toEqual({ number: VALIDATION_MESSAGES.CARD_NUMBER });
     }
-    expect(validateCardNumber("")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validateCardNumber("")).toEqual({ number: VALIDATION_MESSAGES.REQUIRED });
   });
 
   it("accepts a card expiring in the month it is used or later", () => {
     expect(
       validateCardExpiry({ expiryMonth: CURRENT_MONTH, expiryYear: CURRENT_YEAR }, NOW),
-    ).toBeUndefined();
-    expect(
-      validateCardExpiry({ expiryMonth: CURRENT_MONTH, expiryYear: NEXT_YEAR }, NOW),
-    ).toBeUndefined();
+    ).toEqual({});
+    expect(validateCardExpiry({ expiryMonth: CURRENT_MONTH, expiryYear: NEXT_YEAR }, NOW)).toEqual(
+      {},
+    );
   });
 
-  it("rejects a card whose expiry month has passed", () => {
+  it("rejects a card whose expiry month has passed, on the year a correction changes", () => {
     const expiry = {
       expiryMonth: PREVIOUS_MONTH.getMonth() + 1,
       expiryYear: PREVIOUS_MONTH.getFullYear(),
     };
-    expect(validateCardExpiry(expiry, NOW)).toBe(VALIDATION_MESSAGES.CARD_EXPIRY);
+    expect(validateCardExpiry(expiry, NOW)).toEqual({
+      expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY,
+    });
   });
 
-  it("rejects an absent, impossible or unreadable expiry", () => {
+  it("rejects an absent, impossible or unreadable month on the month control", () => {
     for (const rejected of [
       undefined,
       {},
       { expiryMonth: 0, expiryYear: CURRENT_YEAR },
       { expiryMonth: 13, expiryYear: CURRENT_YEAR },
       { expiryMonth: "x", expiryYear: NEXT_YEAR },
-      { expiryMonth: CURRENT_MONTH, expiryYear: 1999 },
       { expiryMonth: "", expiryYear: "" },
     ]) {
-      expect(validateCardExpiry(rejected, NOW)).toBe(VALIDATION_MESSAGES.CARD_EXPIRY);
+      expect(validateCardExpiry(rejected, NOW)).toEqual({
+        expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY,
+      });
+    }
+  });
+
+  it("rejects an absent or unreadable year on the year control", () => {
+    for (const rejected of [
+      { expiryMonth: CURRENT_MONTH, expiryYear: 1999 },
+      { expiryMonth: CURRENT_MONTH, expiryYear: "x" },
+    ]) {
+      expect(validateCardExpiry(rejected, NOW)).toEqual({
+        expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY,
+      });
     }
   });
 
   it("accepts a three or four digit security code", () => {
-    expect(validateCvc("123")).toBeUndefined();
-    expect(validateCvc("1234")).toBeUndefined();
+    expect(validateCvc("123")).toEqual({});
+    expect(validateCvc("1234")).toEqual({});
   });
 
   it("rejects a security code that is too short, too long or not numeric", () => {
     for (const rejected of ["12", "12345", "12a", " 1 2"]) {
-      expect(validateCvc(rejected)).toBe(VALIDATION_MESSAGES.CARD_SECURITY_CODE);
+      expect(validateCvc(rejected)).toEqual({ cvc: VALIDATION_MESSAGES.CARD_SECURITY_CODE });
     }
-    expect(validateCvc("")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validateCvc("")).toEqual({ cvc: VALIDATION_MESSAGES.REQUIRED });
   });
 
   it("accepts a promo code from four to sixteen upper-case alphanumerics", () => {
-    expect(validatePromoCodeShape("SAVE")).toBeUndefined();
-    expect(validatePromoCodeShape("SAVE2025SPRING10")).toBeUndefined();
-    expect(validatePromoCodeShape("1234")).toBeUndefined();
+    expect(validatePromoCodeShape("SAVE")).toEqual({});
+    expect(validatePromoCodeShape("SAVE2025SPRING10")).toEqual({});
+    expect(validatePromoCodeShape("1234")).toEqual({});
   });
 
   it("rejects a promo code of the wrong length, in lower case or punctuated", () => {
     for (const rejected of ["SAV", "SAVE2025SPRING101", "save10", "SAVE 10", "SAVE-10"]) {
-      expect(validatePromoCodeShape(rejected)).toBe(VALIDATION_MESSAGES.PROMO_CODE_FORMAT);
+      expect(validatePromoCodeShape(rejected)).toEqual({
+        promoCode: VALIDATION_MESSAGES.PROMO_CODE_FORMAT,
+      });
     }
-    expect(validatePromoCodeShape("")).toBe(VALIDATION_MESSAGES.REQUIRED);
+    expect(validatePromoCodeShape("")).toEqual({ promoCode: VALIDATION_MESSAGES.REQUIRED });
   });
 });
 

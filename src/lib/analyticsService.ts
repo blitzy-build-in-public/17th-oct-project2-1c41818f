@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/analyticsService.ts
  * Purpose: Period bucketing, KPI aggregation, comparison baselines and top-product performance
- * Lines: 594
+ * Lines: 595
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -43,14 +43,16 @@ import {
   eachBucket,
   formatBucketLabel,
   formatDateRange,
-  isWithinRange,
+  isWithinPreparedRange,
+  prepareRange,
   resolveBaselineRange,
   type DateBucket,
+  type PreparedRange as Bounds,
 } from "@/utils/dates";
 import { roundMinorUnits } from "@/utils/format";
 import { averageOrderValue, percentChange, periodOrders, shareOf } from "@/utils/statistics";
 
-import { getJson } from "@/lib/apiClient";
+import { API_PATHS, getJson } from "@/lib/apiClient";
 
 /**
  * Aggregation for the sales dashboard and the reports: a bucket, a period total, a comparison against a
@@ -88,14 +90,6 @@ const CATEGORY_NAME_BY_SLUG: Readonly<Record<string, string>> = Object.fromEntri
 /** The category a ranked line reports when the caller's lookup does not hold its product — one the
  * catalogue no longer carries; it resolves to no category and no seeded line produces one. */
 const UNKNOWN_CATEGORY_ID = "cat_unknown" as CategoryId;
-
-/** The four endpoints this module reads; the seam owns the same patterns in `src/lib/apiRoutes.ts`. */
-const ANALYTICS_PATHS = {
-  KPIS: "/api/analytics/kpis",
-  REVENUE: "/api/analytics/revenue",
-  TOP_PRODUCTS: "/api/analytics/top-products",
-  RECENT_ORDERS: "/api/analytics/recent-orders",
-} as const;
 
 /** What an analytics read may carry beside its parameters: the signal that cancels a superseded request,
  * and the session token the seam authorises the read with. */
@@ -211,14 +205,13 @@ interface PeriodFigures {
   readonly units: number;
 }
 
-/** The net revenue, orders and units the fact rows of `range` carry, in one pass; the money passes
- * through the single rounding rule, so no KPI states a fraction of a cent. */
-function periodFigures(records: readonly SalesRecord[], range: DateRange): PeriodFigures {
+/** The figures a prepared range's fact rows total, in one pass, with the money rounded once. */
+function periodFigures(records: readonly SalesRecord[], bounds: Bounds | null): PeriodFigures {
   let revenueMinor = 0;
   let orders = 0;
   let units = 0;
   for (const record of records) {
-    if (!isWithinRange(record.date, range)) continue;
+    if (!isWithinPreparedRange(record.date, bounds)) continue;
     revenueMinor += record.netRevenueMinor;
     orders += record.orders;
     units += record.units;
@@ -226,23 +219,21 @@ function periodFigures(records: readonly SalesRecord[], range: DateRange): Perio
   return { revenueMinor: roundMinorUnits(revenueMinor), orders, units };
 }
 
-/** The accounts that placed an order in `range`: an anonymous order carries no account, so only an
- * identified buyer counts as a visitor who converted. */
-function convertedVisitors(orders: readonly Order[], range: DateRange): number {
+/** The accounts that ordered in a prepared range: an order without an account converts nobody. */
+function convertedVisitors(orders: readonly Order[], bounds: Bounds | null): number {
   const converted = new Set<string>();
   for (const order of orders) {
-    if (order.customerId === null || !isWithinRange(order.placedAt, range)) continue;
+    if (order.customerId === null || !isWithinPreparedRange(order.placedAt, bounds)) continue;
     converted.add(order.customerId);
   }
   return converted.size;
 }
 
-/** The share of the account base that ordered in the period, as the fraction `KpiSummary` declares. No
- * traffic is collected, so the base is the only visitor-side figure to divide by; it converts nobody when
- * empty, and the ratio is confined to `0..1`. */
-function conversionRate(orders: readonly Order[], visitorBase: number, range: DateRange): number {
+/** The share of the account base that ordered: no traffic is collected, so the base is the only
+ * visitor-side figure to divide by, it converts nobody when empty, and it stays in `0..1`. */
+function conversionRate(converted: number, visitorBase: number): number {
   if (visitorBase <= 0) return 0;
-  return clampNumber(convertedVisitors(orders, range) / visitorBase, 0, 1);
+  return clampNumber(converted / visitorBase, 0, 1);
 }
 
 /** The signed change of one figure against the same figure a period earlier. */
@@ -262,15 +253,15 @@ function changeAgainst(current: number, baseline: number): number {
 export function computeKpis(input: KpiInput): KpiSummary {
   const { records, orders, customers, query } = input;
   const baseline = query.baseline ?? DEFAULT_BASELINE_KIND;
-  const range: DateRange = { from: query.from, to: query.to };
+  const bounds = prepareRange({ from: query.from, to: query.to });
   const baselineRange = resolveBaseline(query.from, query.to, baseline);
-  const current = periodFigures(records, range);
-  const previous = periodFigures(records, baselineRange);
+  const current = periodFigures(records, bounds);
+  const previous = periodFigures(records, prepareRange(baselineRange));
   const averageOrderValueMinor = averageOrderValue(current.revenueMinor, current.orders);
   const previousAverageOrderValueMinor = averageOrderValue(previous.revenueMinor, previous.orders);
   let newCustomers = 0;
   for (const customer of customers) {
-    if (isWithinRange(customer.createdAt, range)) newCustomers += 1;
+    if (isWithinPreparedRange(customer.createdAt, bounds)) newCustomers += 1;
   }
   return {
     from: query.from,
@@ -280,7 +271,7 @@ export function computeKpis(input: KpiInput): KpiSummary {
     units: current.units,
     averageOrderValueMinor,
     newCustomers,
-    conversionRate: conversionRate(orders, customers.length, range),
+    conversionRate: conversionRate(convertedVisitors(orders, bounds), customers.length),
     baseline: {
       kind: baseline,
       from: baselineRange.from,
@@ -380,6 +371,7 @@ function seriesPoint(
 export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
   const { records, query } = input;
   const range: DateRange = { from: query.from, to: query.to };
+  const bounds = prepareRange(range);
   const granularity = query.bucket ?? DEFAULT_BUCKET_GRANULARITY;
   const buckets = eachBucket(range, granularity);
   const totals = new Map<string, Map<string, number>>();
@@ -387,7 +379,7 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
   // zero line rather than an absent chart.
   if (query.groupBy === undefined) totals.set(TOTAL_SERIES_ID, new Map<string, number>());
   for (const record of records) {
-    if (!isWithinRange(record.date, range)) continue;
+    if (!isWithinPreparedRange(record.date, bounds)) continue;
     const group = seriesKeyOf(record, query.groupBy);
     let byBucket = totals.get(group);
     if (byBucket === undefined) {
@@ -405,8 +397,7 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
   }));
 }
 
-/** One product's running totals while a period's orders are scanned: mutable because it is written once
- * per line, and private to {@link computeTopProducts}. */
+/** One product's running totals while a period's orders are scanned: mutable because a line writes it, private to {@link computeTopProducts}, and `netRevenueMinor` is derived once from {@link netRevenueOf} after the scan. */
 interface ProductTally {
   readonly productId: ProductId;
   readonly productName: string;
@@ -415,6 +406,7 @@ interface ProductTally {
   units: number;
   grossRevenueMinor: MinorUnits;
   discountMinor: MinorUnits;
+  netRevenueMinor: MinorUnits;
 }
 
 /** What one product's lines came to, rounded once through the single money rule. */
@@ -422,15 +414,14 @@ function netRevenueOf(tally: ProductTally): MinorUnits {
   return roundMinorUnits(tally.grossRevenueMinor - tally.discountMinor);
 }
 
-/** The order a ranking is stated in: the requested metric descending, then the revenue those lines came
- * to, then the name and the id, so one period produces one table. */
+/** The order a ranking is stated in: the requested metric descending, then the net revenue those lines came to, then the name and the id, so one period produces one table. */
 function rankingOrder(metric: Metric) {
   return createComparator<ProductTally>([
     {
-      select: (tally) => (metric === "units" ? tally.units : netRevenueOf(tally)),
+      select: (tally) => (metric === "units" ? tally.units : tally.netRevenueMinor),
       direction: "desc",
     },
-    { select: (tally) => netRevenueOf(tally), direction: "desc" },
+    { select: (tally) => tally.netRevenueMinor, direction: "desc" },
     { select: (tally) => tally.productName },
     { select: (tally) => tally.productId },
   ]);
@@ -474,6 +465,7 @@ export function computeTopProducts(input: TopProductsInput): ProductPerformance[
           units: line.quantity,
           grossRevenueMinor,
           discountMinor,
+          netRevenueMinor: 0,
         });
         continue;
       }
@@ -483,8 +475,9 @@ export function computeTopProducts(input: TopProductsInput): ProductPerformance[
       tally.discountMinor += discountMinor;
     }
   }
+  for (const tally of tallies.values()) tally.netRevenueMinor = netRevenueOf(tally);
   const ranked = sortBy([...tallies.values()], rankingOrder(metric));
-  const periodRevenueMinor = sum(ranked.map(netRevenueOf));
+  const periodRevenueMinor = sum(ranked.map((tally) => tally.netRevenueMinor));
   return ranked.slice(0, limit).map((tally, index) => ({
     productId: tally.productId,
     productName: tally.productName,
@@ -494,9 +487,9 @@ export function computeTopProducts(input: TopProductsInput): ProductPerformance[
     orders: tally.orderIds.size,
     grossRevenueMinor: roundMinorUnits(tally.grossRevenueMinor),
     discountMinor: roundMinorUnits(tally.discountMinor),
-    netRevenueMinor: netRevenueOf(tally),
+    netRevenueMinor: tally.netRevenueMinor,
     rank: index + 1,
-    sharePercent: shareOf(netRevenueOf(tally), periodRevenueMinor),
+    sharePercent: shareOf(tally.netRevenueMinor, periodRevenueMinor),
   }));
 }
 
@@ -534,16 +527,17 @@ export function getKpis(
   if (typeof rangeOrQuery !== "string") {
     const carried = typeof toOrOptions === "string" ? {} : (toOrOptions ?? {});
     const params = analyticsParams(rangeOrQuery);
-    return getJson<KpiSummary>(ANALYTICS_PATHS.KPIS, callOptions(params, carried));
+    return getJson<KpiSummary>(API_PATHS.ANALYTICS_KPIS, callOptions(params, carried));
   }
   const to = typeof toOrOptions === "string" ? toOrOptions : rangeOrQuery;
   const carried = typeof toOrOptions === "string" ? options : toOrOptions;
   const params = analyticsParams(toAnalyticsQuery(rangeOrQuery, to));
-  return getJson<KpiSummary>(ANALYTICS_PATHS.KPIS, callOptions(params, carried ?? {}));
+  return getJson<KpiSummary>(API_PATHS.ANALYTICS_KPIS, callOptions(params, carried ?? {}));
 }
 
 /** Reads a period's net revenue as one series per group: per category, per channel, or one whole-period
- * series when the query asks for no split, ordered as {@link computeRevenueSeries} orders it. */
+ * series when the query asks for no split, ordered as {@link computeRevenueSeries} orders it.
+ * The range, the bucket and the grouping travel as one named object, not four positional arguments. */
 export async function getRevenueSeries(
   query: RevenueQuery,
   options?: AnalyticsRequestOptions,
@@ -555,28 +549,35 @@ export async function getRevenueSeries(
     groupBy: query.groupBy,
   };
   const result = await getJson<ChartSeriesResponse>(
-    ANALYTICS_PATHS.REVENUE,
+    API_PATHS.ANALYTICS_REVENUE,
     callOptions(params, options),
   );
   return result.ok ? { ok: true, value: [...result.value.series] } : result;
 }
 
 /** Reads the period's best-performing products, ranked by the requested metric and capped at its limit.
- * Administrator-only; the rows are the ones {@link computeTopProducts} builds. */
-export async function getTopProducts(
+ * Both call forms are supported: `(query, options?)`, and `(from, to, limit?)` resolving the documented
+ * defaults. Administrator-only; the rows are the ones {@link computeTopProducts} builds. */
+export function getTopProducts(
   query: TopProductsQuery,
   options?: AnalyticsRequestOptions,
+): Promise<Result<ProductPerformance[]>>;
+export function getTopProducts(
+  from: IsoDateString,
+  to: IsoDateString,
+  limit?: number,
+): Promise<Result<ProductPerformance[]>>;
+export async function getTopProducts(
+  queryOrFrom: TopProductsQuery | IsoDateString,
+  toOrOptions?: IsoDateString | AnalyticsRequestOptions,
+  limit?: number,
 ): Promise<Result<ProductPerformance[]>> {
-  const params: QueryParams = {
-    from: query.from,
-    to: query.to,
-    limit: query.limit,
-    metric: query.metric,
-  };
-  const result = await getJson<TopProductsResponse>(
-    ANALYTICS_PATHS.TOP_PRODUCTS,
-    callOptions(params, options),
-  );
+  const query =
+    typeof queryOrFrom === "string"
+      ? toTopProductsQuery(queryOrFrom, toOrOptions as IsoDateString, limit)
+      : queryOrFrom;
+  const call = callOptions({ ...query }, typeof toOrOptions === "string" ? undefined : toOrOptions);
+  const result = await getJson<TopProductsResponse>(API_PATHS.ANALYTICS_TOP_PRODUCTS, call);
   return result.ok ? { ok: true, value: [...result.value.items] } : result;
 }
 
@@ -587,7 +588,7 @@ export async function getRecentOrders(
   options?: AnalyticsRequestOptions,
 ): Promise<Result<Order[]>> {
   const result = await getJson<RecentOrdersResponse>(
-    ANALYTICS_PATHS.RECENT_ORDERS,
+    API_PATHS.ANALYTICS_RECENT_ORDERS,
     callOptions({ limit }, options),
   );
   return result.ok ? { ok: true, value: [...result.value.items] } : result;

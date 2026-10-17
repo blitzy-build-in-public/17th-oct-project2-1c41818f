@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/reportService.ts
  * Purpose: The report catalogue, row building, summaries, chart series and the CSV matrix for export
- * Lines: 592
+ * Lines: 598
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -13,7 +13,7 @@ import {
   resolvedRangeLabel,
 } from "@/constants/content";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
-import { getJson } from "@/lib/apiClient";
+import { API_ERROR_CODES, API_PATHS, failure, fillApiPath, getJson } from "@/lib/apiClient";
 import type { Customer } from "@/types/account";
 import type {
   BucketGranularity,
@@ -30,7 +30,7 @@ import type {
   ReportSummaryItem,
   SalesRecord,
 } from "@/types/analytics";
-import type { ApiError, DateRange, IsoDateString, MinorUnits, Result } from "@/types/common";
+import type { DateRange, IsoDateString, MinorUnits, Result } from "@/types/common";
 import type { Order } from "@/types/commerce";
 import { createComparator, groupBy, sortBy, sumBy, uniqueBy } from "@/utils/collections";
 import {
@@ -39,7 +39,8 @@ import {
   defaultReportRange,
   eachBucket,
   formatDate,
-  isWithinRange,
+  isWithinPreparedRange,
+  prepareRange,
   startOfDay,
   toFieldErrors,
   toIsoDateTime,
@@ -133,15 +134,17 @@ export function summarisePeriodLabel(query: ReportQuery): string {
 
 // Rows --------------------------------------------------------------------------------------------
 
-/** The total of one column over `rows`: a cell that is absent or holds text reads as `0`, and the sum
- *  goes through the one rounding rule for minor units, which leaves a count unmoved. */
-function columnTotal(rows: readonly ReportRow[], key: string): MinorUnits {
-  return roundMinorUnits(
-    sumBy(rows, (row) => {
-      const value = row.cells[key];
-      return typeof value === "number" && Number.isFinite(value) ? value : 0;
-    }),
-  );
+/** The totals of the named columns over `rows`, in one pass: a cell that is absent or holds text reads
+ *  as `0`, only a finite number contributes, and every total passes through the one rounding rule. */
+function sumColumns(rows: readonly ReportRow[], keys: readonly string[]): MinorUnits[] {
+  const totals = keys.map(() => 0);
+  for (const row of rows) {
+    for (let index = 0; index < keys.length; index += 1) {
+      const value = row.cells[keys[index]];
+      if (typeof value === "number" && Number.isFinite(value)) totals[index] += value;
+    }
+  }
+  return totals.map((total) => roundMinorUnits(total));
 }
 
 /** The scale a share is converted across: a `percent` cell is a ratio, `shareOf` states a percentage. */
@@ -162,23 +165,29 @@ export function buildSalesRows(
   granularity: BucketGranularity,
 ): ReportRow[] {
   const range: DateRange = { from: query.from, to: query.to };
-  const records = input.salesRecords.filter((record) => isWithinRange(record.date, range));
+  const bounds = prepareRange(range);
+  const records = input.salesRecords.filter((record) => isWithinPreparedRange(record.date, bounds));
   const byPeriod = groupBy(records, (record) => bucketKey(record.date, granularity));
   const rows: ReportRow[] = [];
   for (const bucket of eachBucket(range, granularity)) {
     const periodRecords = byPeriod.get(bucket.key);
     if (periodRecords === undefined) continue;
+    const sums = { orders: 0, units: 0, grossRevenue: 0, discounts: 0, refunds: 0, netRevenue: 0 };
+    for (const record of periodRecords) {
+      sums.orders += record.orders;
+      sums.units += record.units;
+      sums.grossRevenue += record.grossRevenueMinor;
+      sums.discounts += record.discountMinor;
+      sums.refunds += record.refundMinor;
+      sums.netRevenue += record.netRevenueMinor;
+    }
+    sums.grossRevenue = roundMinorUnits(sums.grossRevenue);
+    sums.discounts = roundMinorUnits(sums.discounts);
+    sums.refunds = roundMinorUnits(sums.refunds);
+    sums.netRevenue = roundMinorUnits(sums.netRevenue);
     rows.push({
       id: bucket.key,
-      cells: {
-        period: bucketStart(bucket.key, granularity),
-        orders: sumBy(periodRecords, (record) => record.orders),
-        units: sumBy(periodRecords, (record) => record.units),
-        grossRevenue: roundMinorUnits(sumBy(periodRecords, (record) => record.grossRevenueMinor)),
-        discounts: roundMinorUnits(sumBy(periodRecords, (record) => record.discountMinor)),
-        refunds: roundMinorUnits(sumBy(periodRecords, (record) => record.refundMinor)),
-        netRevenue: roundMinorUnits(sumBy(periodRecords, (record) => record.netRevenueMinor)),
-      },
+      cells: { period: bucketStart(bucket.key, granularity), ...sums },
     });
   }
   return rows;
@@ -255,10 +264,13 @@ export function buildCustomerRows(
   granularity: BucketGranularity,
 ): ReportRow[] {
   const range: DateRange = { from: query.from, to: query.to };
+  const bounds = prepareRange(range);
   const dayOf = (value: string): string => bucketKey(startOfDay(value), granularity);
   const ordered = periodOrders(input.orders, range);
   const ordersByPeriod = groupBy(ordered, (order) => dayOf(order.placedAt));
-  const newcomers = input.customers.filter((customer) => isWithinRange(customer.createdAt, range));
+  const newcomers = input.customers.filter((customer) =>
+    isWithinPreparedRange(customer.createdAt, bounds),
+  );
   const newcomersByPeriod = groupBy(newcomers, (customer) => dayOf(customer.createdAt));
   const rows: ReportRow[] = [];
   for (const bucket of eachBucket(range, granularity)) {
@@ -321,21 +333,18 @@ function summariseSales(
   definition: ReportDefinition,
 ): ReportSummaryItem[] {
   const keys = ["orders", "units", "grossRevenue", "discounts", "refunds", "netRevenue"];
-  return summaryItems(
-    definition,
-    keys.map((key) => [key, columnTotal(rows, key)] as const),
-  );
+  const totals = sumColumns(rows, keys);
+  const items = keys.map((key, index) => [key, totals[index]] as const);
+  return summaryItems(definition, items);
 }
 
 /** The totals a product report states: units and revenue summed, and the average unit price over the
- *  range. `revenueShare` is absent deliberately — a share of the range's revenue cannot be totalled into
- *  a figure that means anything, and the revenue total states the whole. */
+ *  range; `revenueShare` is absent deliberately, because a share of the range's revenue says nothing. */
 function summariseProducts(
   rows: readonly ReportRow[],
   definition: ReportDefinition,
 ): ReportSummaryItem[] {
-  const units = columnTotal(rows, "unitsSold");
-  const revenueMinor = columnTotal(rows, "revenue");
+  const [units, revenueMinor] = sumColumns(rows, ["unitsSold", "revenue"]);
   return summaryItems(definition, [
     ["unitsSold", units],
     ["revenue", revenueMinor],
@@ -349,10 +358,9 @@ function summariseCustomers(
   rows: readonly ReportRow[],
   definition: ReportDefinition,
 ): ReportSummaryItem[] {
-  const orders = columnTotal(rows, "orders");
-  const revenueMinor = columnTotal(rows, "revenue");
+  const [newCount, orders, revenueMinor] = sumColumns(rows, ["newCustomers", "orders", "revenue"]);
   return summaryItems(definition, [
-    ["newCustomers", columnTotal(rows, "newCustomers")],
+    ["newCustomers", newCount],
     ["orders", orders],
     ["revenue", revenueMinor],
     ["averageOrderValue", averageOrderValue(revenueMinor, orders)],
@@ -520,9 +528,6 @@ export function runReportDefinition(
 
 // The client API ----------------------------------------------------------------------------------
 
-/** The endpoint that answers the report catalogue itself, with the definitions as the payload. */
-const DEFINITIONS_PATH = "/api/reports/definitions";
-
 /** The wording for each rule a range can break, from the copy module, so a range refused here reads as
  *  the seam words the same refusal. */
 const RANGE_MESSAGES: Readonly<Record<DateRangeErrorCode, string>> = {
@@ -532,15 +537,16 @@ const RANGE_MESSAGES: Readonly<Record<DateRangeErrorCode, string>> = {
   "range-too-long": rangeTooLongMessage(MAX_REPORT_RANGE_DAYS),
 };
 
-/** The refusal `query` earns for a range that breaks a rule, or `null` when it is usable: the status and
- *  code the seam assigns a broken field rule, mirrored because `validateDateRange`'s rules are applied
- *  here before the request leaves, so a picker gets its field error without a round trip. */
-function unusableRange(query: ReportQuery): ApiError | null {
+/** The refusal `query` earns for a range that breaks a rule, or `null` when it is usable: the seam's own
+ *  field-rule failure, built through the vocabulary the seam publishes, because `validateDateRange`'s
+ *  rules are applied here before the request leaves, so a picker gets its field error without a round
+ *  trip. */
+function unusableRange(query: ReportQuery): Result<never> | null {
   const validation = validateDateRange(query.from, query.to);
   if (validation.valid) return null;
   const errors = toFieldErrors(validation, RANGE_MESSAGES);
   const field = Object.keys(errors)[0] ?? "range";
-  return { status: 422, code: "validation-failed", message: errors[field] ?? "", field };
+  return failure(API_ERROR_CODES.VALIDATION_FAILED, errors[field] ?? "", field);
 }
 
 /** The report catalogue as the server offers it. The endpoint is administrator-only, so a caller without
@@ -548,7 +554,7 @@ function unusableRange(query: ReportQuery): ApiError | null {
 export function listReportDefinitions(
   options: ReportRequestOptions = {},
 ): Promise<Result<ReportDefinition[]>> {
-  return getJson<ReportDefinition[]>(DEFINITIONS_PATH, {
+  return getJson<ReportDefinition[]>(API_PATHS.REPORT_DEFINITIONS, {
     sessionToken: options.sessionToken,
     signal: options.signal,
   });
@@ -583,8 +589,8 @@ export async function runReport(
   const settings: ReportRequestOptions =
     typeof fromOrOptions === "object" ? fromOrOptions : (options ?? {});
   const refusal = unusableRange(request);
-  if (refusal !== null) return { ok: false, error: refusal };
-  return getJson<ReportResult>(`/api/reports/${encodeURIComponent(request.kind)}`, {
+  if (refusal !== null) return refusal;
+  return getJson<ReportResult>(fillApiPath(API_PATHS.REPORT_RUN, { kind: request.kind }), {
     query: { from: request.from, to: request.to, bucket: request.bucket },
     sessionToken: settings.sessionToken,
     signal: settings.signal,

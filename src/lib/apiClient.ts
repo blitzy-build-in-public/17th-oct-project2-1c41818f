@@ -1,14 +1,20 @@
 /**
  * Path: src/lib/apiClient.ts
  * Purpose: The single transport seam: one typed request function with latency, abort, error shaping and a test double
- * Lines: 341
+ * Lines: 371
  */
 
-import { FEEDBACK_COPY } from "@/constants/content";
 import type { ApiError, ApiRequestOptions, HttpMethod, QueryParams, Result } from "@/types/common";
-import { createAbortError, delay, isAbortError } from "@/utils/async";
 
-import { getApiLatencyMs, handleRequest, resetMockServer } from "@/lib/mockServer";
+import {
+  FALLBACK_FAILURE_MESSAGE,
+  createAbortError,
+  delay,
+  getApiLatencyMs,
+  handleRequest,
+  isAbortError,
+  resetMockServer,
+} from "@/lib/mockServer";
 
 // The transport's own failures --------------------------------------------------------------------
 
@@ -33,11 +39,11 @@ const TRANSPORT_FAILURES = {
 /** One of the transport's own failures, named by its key in {@link TRANSPORT_FAILURES}. */
 type TransportFailureKind = keyof typeof TRANSPORT_FAILURES;
 
-/** Shapes one of the transport's own failures, worded by the copy module so no sentence is written
- * here and every surface that renders it reads the same. */
+/** Shapes one of the transport's own failures, worded by the sentence the seam publishes so no sentence
+ * is written here and every surface that renders it reads the same. */
 function transportFailure(kind: TransportFailureKind): ApiError {
   const { status, code } = TRANSPORT_FAILURES[kind];
-  return { status, code, message: FEEDBACK_COPY.ERROR_STATE_BODY };
+  return { status, code, message: FALLBACK_FAILURE_MESSAGE };
 }
 
 // Request targets ---------------------------------------------------------------------------------
@@ -172,8 +178,8 @@ function refuse(error: ApiError): Result<never> {
  * `ApiError` fields — the shape the seam and the data source raise — is returned unchanged, `field`
  * included, which is what lets a form place a server-side failure on the control that caused it. A
  * target the transport could not dispatch is a `400`, because the caller handed over a URL rather
- * than a path. Everything else is the transport's `500`, worded by the copy module rather than by a
- * sentence written here.
+ * than a path. Everything else is the transport's `500`, worded by the sentence the seam publishes
+ * rather than by one written here.
  *
  * @param cause - What went wrong: the value a request threw, the value the dispatcher settled with
  * instead of a `Result`, or `null` when the transport refused the target before dispatching anything.
@@ -306,6 +312,30 @@ export function deleteJson<TValue>(
 ): Promise<Result<TValue>> {
   return request<TValue>(path, { ...options, method: "DELETE" });
 }
+
+// The seam's published vocabulary -----------------------------------------------------------------
+
+/**
+ * The error vocabulary and the failure shaper a domain service asks for its own refusal, republished
+ * from the seam this file dispatches to, so `src/lib/*Service.ts` reaches both through the one module
+ * they already import.
+ *
+ * The words are the same everywhere by construction: `API_ERROR_CODES` names every machine-readable
+ * reason a request can fail, `API_ERROR_STATUS` gives the status each of those codes answers with, and
+ * {@link failure}/{@link shapeError} build the `Result` a caller resolves in place of a request that
+ * breaks a rule before it is sent. A service therefore refuses a malformed body in exactly the shape
+ * the seam refuses the same body with, and no status or code literal is written outside the contract
+ * module that owns them.
+ */
+export { API_ERROR_CODES, API_ERROR_STATUS, failure, shapeError } from "@/lib/mockServer";
+
+/**
+ * Every endpoint path, and the builder that fills one from the values its captured segments take,
+ * republished from the seam for the same reason as the vocabulary above: a domain service reads its
+ * request target from the one table the route table's patterns also come from, so a path change is a
+ * change to that table and to nothing else.
+ */
+export { API_PATHS, fillApiPath } from "@/lib/mockServer";
 
 // The test double ---------------------------------------------------------------------------------
 

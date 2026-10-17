@@ -1,16 +1,15 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 599
+ * Lines: 600
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
 
 /**
- * Picks the singular or plural noun a count needs, so no message below writes its own plural, and
- * states the two boundaries every export here holds: money and dates arrive already formatted from
- * `src/utils/format.ts` and `src/utils/dates.ts`, and every threshold, cap and limit arrives as an
- * argument from `src/constants/config.ts` rather than being written into a sentence.
+ * Picks the singular or plural noun a count needs, and states the two boundaries every export here
+ * holds: money and dates arrive already formatted from `src/utils/format.ts` and `src/utils/dates.ts`,
+ * and every threshold, cap and limit arrives as an argument from `src/constants/config.ts`.
  */
 const noun = (count: number, singular: string, plural: string): string =>
   count === 1 ? singular : plural;
@@ -582,6 +581,8 @@ export const reviewTitleLengthMessage = (minValue: number, maxValue: number): st
   `Use between ${minValue} and ${maxValue} characters for the title.`;
 export const reviewBodyLengthMessage = (minValue: number, maxValue: number): string =>
   `Write between ${minValue} and ${maxValue} characters.`;
+/** States the ceiling a name may not pass, from the bound `src/utils/validation.ts` owns. */
+export const nameLengthMessage = (max: number): string => `Use ${max} characters or fewer.`;
 
 /** What a shopper is told when a promo code will not apply, per `PromoRejectionReason`. */
 export const PROMO_REJECTION_MESSAGES: Readonly<Record<PromoRejectionReason, string>> = {

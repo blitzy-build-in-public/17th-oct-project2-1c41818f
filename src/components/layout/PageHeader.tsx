@@ -1,7 +1,7 @@
 /**
  * Path: src/components/layout/PageHeader.tsx
  * Purpose: Breadcrumbs with page title, description and action slot
- * Lines: 174
+ * Lines: 179
  */
 
 import type { ReactElement, ReactNode } from "react";
@@ -132,8 +132,13 @@ function renderCrumb(item: BreadcrumbItem, isCurrent: boolean): ReactElement {
  * from the current location. A trail of a single crumb is not drawn at all: a route with nowhere to
  * go back to — the landing page — shows its heading alone, and one crumb would only repeat it.
  *
- * Every class it renders is defined once in `src/styles/layout.css`, which `src/main.tsx` is the
- * only file to import; nothing here reads the stylesheets or adds a class of its own.
+ * Every class it renders belongs to the page-header contract `src/styles/page-header.css` publishes as the
+ * family's sole definition site, and `src/styles/layout.css` — which loads that sheet with
+ * `@import "./page-header.css";` — names the two parts carrying no rule of their own:
+ * `sp-page-header__breadcrumbs`, a plain wrapper, and `sp-page-header__title`, whose heading-1 type
+ * `src/styles/base.css` paints on the `h1` element. `src/main.tsx` is the only file to import a
+ * stylesheet and no file under `src/components/**` imports one, so nothing here reads the stylesheets or
+ * adds a class of its own.
  */
 export function PageHeader({
   breadcrumbs,

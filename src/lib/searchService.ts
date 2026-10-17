@@ -1,11 +1,11 @@
 /**
  * Path: src/lib/searchService.ts
  * Purpose: Tokenising, weighted scoring and type-ahead suggestions for product search
- * Lines: 599
+ * Lines: 598
  */
 
 import { SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
-import { getJson } from "@/lib/apiClient";
+import { API_PATHS, getJson } from "@/lib/apiClient";
 import type {
   Brand,
   Category,
@@ -14,21 +14,13 @@ import type {
   SearchSuggestion,
   SearchSuggestionResponse,
   SuggestionKind,
+  SuggestionQuery,
 } from "@/types/catalog";
 import type { BrandId, CategoryId, PageResult, QueryParams, Result } from "@/types/common";
 import { clampNumber, createComparator, groupBy, sortBy, uniqueBy } from "@/utils/collections";
 import type { Comparator } from "@/utils/collections";
 import { FILTER_PARAMS } from "@/utils/queryParams";
 import { normaliseForMatch } from "@/utils/strings";
-
-// Endpoints --------------------------------------------------------------------------------------
-
-/** The catalogue listing endpoint, which is also the search endpoint: `q` is one of its filter
- *  parameters, so a searched listing and a filtered listing are one request, answered by one rule. */
-const PRODUCTS_PATH = "/api/products";
-
-/** The type-ahead endpoint, which answers `{ suggestions }`. */
-const SUGGESTIONS_PATH = "/api/search/suggest";
 
 // Matching weights -------------------------------------------------------------------------------
 
@@ -568,7 +560,7 @@ export async function search(
   query: FilterState,
   signal?: AbortSignal,
 ): Promise<Result<PageResult<Product>>> {
-  return getJson<PageResult<Product>>(PRODUCTS_PATH, { query: listingQuery(query), signal });
+  return getJson<PageResult<Product>>(API_PATHS.PRODUCTS, { query: listingQuery(query), signal });
 }
 
 /**
@@ -579,6 +571,10 @@ export async function search(
  * does hold tokens is asked for with the cap the endpoint and the list share, and the caller's signal
  * travels with it, because a newer keystroke cancels this request rather than letting two lists race.
  * The answers arrive already ranked, as {@link buildSuggestions} left them, so nothing is reordered.
+ *
+ * The request's parameters are typed as {@link SuggestionQuery}, the one shape `src/types/catalog.ts`
+ * declares for this endpoint — the seam parses the same request into it — so the endpoint's parameter
+ * vocabulary is written once rather than as a literal on each side of the seam.
  *
  * @param query - The term typed so far.
  * @param limit - The most suggestions to ask for; defaults to and is capped at the shared limit.
@@ -591,8 +587,11 @@ export async function suggest(
   signal?: AbortSignal,
 ): Promise<Result<SearchSuggestion[]>> {
   if (isBlankQuery(query)) return { ok: true, value: [] };
-  const result = await getJson<SearchSuggestionResponse>(SUGGESTIONS_PATH, {
-    query: { q: query, limit: resolveSuggestionLimit(limit) },
+  // Declared as the endpoint's own parameter shape and as the transport's query record both: a named
+  // interface does not satisfy `QueryParams`' index signature on its own.
+  const params: SuggestionQuery & QueryParams = { q: query, limit: resolveSuggestionLimit(limit) };
+  const result = await getJson<SearchSuggestionResponse>(API_PATHS.SEARCH_SUGGEST, {
+    query: params,
     signal,
   });
   return result.ok ? { ok: true, value: [...result.value.suggestions] } : result;

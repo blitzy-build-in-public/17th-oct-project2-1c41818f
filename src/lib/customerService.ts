@@ -1,11 +1,20 @@
 /**
  * Path: src/lib/customerService.ts
  * Purpose: Profile updates and the address-book rules, including at most one default of each kind
- * Lines: 504
+ * Lines: 493
  */
 
 import { FEEDBACK_COPY } from "@/constants/content";
-import { deleteJson, getJson, patchJson, postJson } from "@/lib/apiClient";
+import {
+  API_ERROR_CODES,
+  API_PATHS,
+  deleteJson,
+  failure,
+  fillApiPath,
+  getJson,
+  patchJson,
+  postJson,
+} from "@/lib/apiClient";
 import type {
   Address,
   AddressInput,
@@ -47,31 +56,6 @@ import {
  * `try`/`catch`.
  */
 
-// Endpoint paths ----------------------------------------------------------------------------------
-
-/** The collection every customer and address endpoint hangs off, as `src/lib/apiRoutes.ts` routes it. */
-const CUSTOMERS_PATH = "/api/customers";
-
-/** The path of one account's record: `GET` reads it, `PATCH` writes its editable members. */
-function customerPath(id: CustomerId): string {
-  return `${CUSTOMERS_PATH}/${encodeURIComponent(id)}`;
-}
-
-/** The path of one account's address book: `GET` lists it, `POST` adds to it. */
-function addressesPath(id: CustomerId): string {
-  return `${customerPath(id)}/addresses`;
-}
-
-/** The path of one address of that book: `PATCH` replaces its members, `DELETE` removes it. */
-function addressPath(id: CustomerId, addressId: AddressId): string {
-  return `${addressesPath(id)}/${encodeURIComponent(addressId)}`;
-}
-
-/** The path that nominates one address as a default of the kind its body names. */
-function defaultAddressPath(id: CustomerId, addressId: AddressId): string {
-  return `${addressPath(id, addressId)}/default`;
-}
-
 // What a caller forwards --------------------------------------------------------------------------
 
 /**
@@ -92,24 +76,17 @@ export type CustomerRequestOptions = Pick<ApiRequestOptions, "sessionToken" | "s
 // A body refused before it was sent ---------------------------------------------------------------
 
 /**
- * The failure a body refused before it was sent answers with: the status and code
- * `src/lib/apiContract.ts` declares for a field-rule failure, repeated here because the transport's
- * contract module is deliberately not a dependency of a service.
- *
- * The message and the `field` come from the rule that refused the body, so a form shows the same
- * sentence and marks the same control as it would for the seam's own `422`. The seam re-validates
- * every body it is sent, so this refusal is a courtesy that saves a round trip rather than the
- * control.
- */
-const LOCAL_VALIDATION_FAILURE = { status: 422, code: "validation-failed" } as const;
-
-/**
- * Shapes the refusal of a body whose rule reported errors.
+ * Shapes the refusal of a body whose rule reported errors, asking the seam for it rather than writing
+ * a status and a code here: the vocabulary's field-rule code, at the status it answers with, is the
+ * same `422` the seam answers the same body with, so a form cannot tell a local refusal from a server
+ * one.
  *
  * The first field a validator's map holds is the control to mark and its message the sentence to
  * show; the map a validator returns holds no empty message, so the fallbacks below — the form key for
  * a map with no field at all and the neutral sentence for one with no message — are unreachable from
- * a rule of `src/utils/validation.ts` and exist so the refusal is total rather than conditional.
+ * a rule of `src/utils/validation.ts` and exist so the refusal is total rather than conditional. The
+ * seam re-validates every body it is sent, so this refusal is a courtesy that saves a round trip
+ * rather than the control.
  *
  * @param errors - The field-keyed map a rule returned.
  * @returns The refusal, ready to resolve in place of a request.
@@ -119,7 +96,7 @@ function invalidInput(errors: FieldErrors): Result<never> {
     FORM_ERROR_KEY,
     FEEDBACK_COPY.ERROR_STATE_BODY,
   ];
-  return { ok: false, error: { ...LOCAL_VALIDATION_FAILURE, message, field } };
+  return failure(API_ERROR_CODES.VALIDATION_FAILED, message, field);
 }
 
 // Profile -----------------------------------------------------------------------------------------
@@ -138,7 +115,7 @@ export function getProfile(
   id: CustomerId,
   options: CustomerRequestOptions = {},
 ): Promise<Result<Customer>> {
-  return getJson<Customer>(customerPath(id), options);
+  return getJson<Customer>(fillApiPath(API_PATHS.CUSTOMER_DETAIL, { id }), options);
 }
 
 /**
@@ -165,7 +142,11 @@ export async function updateProfile(
 ): Promise<Result<Customer>> {
   const errors = validateProfileUpdate(input);
   if (hasErrors(errors)) return invalidInput(errors);
-  return patchJson<Customer, ProfileUpdateInput>(customerPath(id), input, options);
+  return patchJson<Customer, ProfileUpdateInput>(
+    fillApiPath(API_PATHS.CUSTOMER_DETAIL, { id }),
+    input,
+    options,
+  );
 }
 
 /**
@@ -219,7 +200,7 @@ export function listAddresses(
   id: CustomerId,
   options: CustomerRequestOptions = {},
 ): Promise<Result<Address[]>> {
-  return getJson<Address[]>(addressesPath(id), options);
+  return getJson<Address[]>(fillApiPath(API_PATHS.CUSTOMER_ADDRESSES, { id }), options);
 }
 
 /**
@@ -243,7 +224,11 @@ export async function addAddress(
 ): Promise<Result<Address>> {
   const errors = validateAddressInput(input);
   if (hasErrors(errors)) return invalidInput(errors);
-  return postJson<Address, AddressInput>(addressesPath(id), input, options);
+  return postJson<Address, AddressInput>(
+    fillApiPath(API_PATHS.CUSTOMER_ADDRESSES, { id }),
+    input,
+    options,
+  );
 }
 
 /**
@@ -269,7 +254,11 @@ export async function updateAddress(
 ): Promise<Result<Address>> {
   const errors = validateAddressInput(input);
   if (hasErrors(errors)) return invalidInput(errors);
-  return patchJson<Address, AddressInput>(addressPath(id, addressId), input, options);
+  return patchJson<Address, AddressInput>(
+    fillApiPath(API_PATHS.CUSTOMER_ADDRESS, { id, addressId }),
+    input,
+    options,
+  );
 }
 
 /**
@@ -294,7 +283,7 @@ export function removeAddress(
   addressId: AddressId,
   options: CustomerRequestOptions = {},
 ): Promise<Result<void>> {
-  return deleteJson<void>(addressPath(id, addressId), options);
+  return deleteJson<void>(fillApiPath(API_PATHS.CUSTOMER_ADDRESS, { id, addressId }), options);
 }
 
 /**
@@ -319,7 +308,7 @@ export function setDefaultAddress(
 ): Promise<Result<Address>> {
   const request: DefaultAddressRequest = { kind };
   return postJson<Address, DefaultAddressRequest>(
-    defaultAddressPath(id, addressId),
+    fillApiPath(API_PATHS.CUSTOMER_ADDRESS_DEFAULT, { id, addressId }),
     request,
     options,
   );

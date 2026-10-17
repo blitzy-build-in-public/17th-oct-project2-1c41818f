@@ -1,15 +1,16 @@
 /**
  * Path: src/components/ui/Tabs.tsx
  * Purpose: Tabs with roving focus, and the accordion used for disclosure sections
- * Lines: 512
+ * Lines: 513
  */
 
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 
 /*
- * Class contract. `src/styles/data-display.css` is the sole definition site of this family — it is the
- * sheet `src/styles/components.css` loads with `@import "./data-display.css";`, and no file under
+ * Class contract. `src/styles/tabs-accordion.css` is the sole definition site of this family — it is the
+ * sheet `src/styles/data-display.css` loads with `@import "./tabs-accordion.css";`, and `data-display.css`
+ * is in turn the sheet `src/styles/components.css` loads with `@import "./data-display.css";`. No file under
  * `src/components/**` may import a stylesheet, because `src/main.tsx` is the only importer of
  * `src/styles/**`. Every class below is therefore consumed by name, and this comment is the list that
  * sheet owes the file: `sp-tabs` for the set, `sp-tabs__list` for the strip that scrolls sideways at a
