@@ -83,7 +83,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── admin-reports.css  # 480 · P8 · Pending · —
 │   │   └── account.css  # 310 · P8 · Pending · —
 │   ├── lib/
-│   │   ├── apiClient.ts  # 350 · P9 · Pending · —
+│   │   ├── apiClient.ts  # 350 · P9 · Done · 336
 │   │   ├── mockServer.ts  # 500 · P9 · Done · 353
 │   │   ├── apiContract.ts  # split of mockServer.ts (P9) · Done · 296
 │   │   ├── apiRequests.ts  # split of mockServer.ts (P9) · Done · 594
@@ -112,7 +112,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── ToastContext.tsx  # 250 · P13 · Pending · —
 │   │   ├── cartReducer.ts  # 310 · P14 · Pending · —
 │   │   ├── checkoutReducer.ts  # 350 · P14 · Done · 538
-│   │   ├── catalogReducer.ts  # 270 · P14 · Pending · —
+│   │   ├── catalogReducer.ts  # 270 · P14 · Done · 266
 │   │   └── hooks.ts  # 480 · P14 · Done · 592
 │   ├── components/
 │   │   ├── layout/
