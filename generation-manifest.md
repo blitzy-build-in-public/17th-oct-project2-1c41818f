@@ -44,7 +44,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 ├── vite.config.ts  # 60 · P1 · Pending · 21 on disk
 ├── vitest.config.ts  # 85 · P1 · Pending · 50 on disk
 ├── index.html  # 60 · P1 · Pending · —
-├── eslint.config.js  # 55 · P2 · Pending · 47 on disk
+├── eslint.config.js  # 55 · P2 · Done · 58
 ├── .prettierrc.json  # 12 · P2 · Done · 8
 ├── .gitignore  # 25 · P2 · Pending · 37 on disk
 ├── .env.example  # 18 · P2 · Pending · —
@@ -315,7 +315,7 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 | `.prettierrc.json` | 12     | 8      | -4 (-33.3%)  | six formatting options cover the specified posture, and the JSON format permits no comment                                                                                                                                              |
 | `vite.config.ts`   | 60     | 21     | -39 (-65.0%) | provisional: the setup baseline (React plugin, `@` alias, build target and output, preview port) with the three-field header still to come; the owning phase completes it in place and re-records the count                             |
 | `vitest.config.ts` | 85     | 50     | -35 (-41.2%) | provisional: the two-project configuration, setup file, globals, `passWithNoTests` and the V8 thresholds are all present, with the header still to come                                                                                 |
-| `eslint.config.js` | 55     | 47     | -8 (-14.5%)  | provisional: flat configuration with the recommended JavaScript rules, type-aware TypeScript rules and the hooks rules, with the header still to come                                                                                   |
+| `eslint.config.js` | 55     | 58     | +3 (+5.5%)   | the composition the plan names — ignore block, recommended JavaScript rules, type-checked TypeScript rules, the hooks flat preset, the scoped `languageOptions` and the self-scoped JavaScript block — plus the three-field header and the three `react-hooks` advisory rules raised from warn to error, because the plan's style gate requires lint to pass with no warnings and `package.json`'s plain `eslint .` cannot fail on one; three lines over budget, taken from the remainder |
 | `.gitignore`       | 25     | 37     | +12 (+48.0%) | provisional: the setup baseline enumerates every documented ignore group — dependencies, build output, test and coverage output, environment files, tooling caches, logs and editor files; the owning phase completes and re-records it |
 
 Remainder carried forward at Phase 0: **+111 lines** freed for files not yet generated (-19 - 18 - 4 - 39 - 35 - 8 + 12), pending the four provisional counts above, which are replaced with final figures when their phases complete. `README.md` is not listed: the two lines at that path are a setup placeholder rather than the 310-line phase-39 deliverable, so no deviation is recorded against its budget. The repository is otherwise empty of the plan's content, so the remaining 150 counted files have no actual count yet.
