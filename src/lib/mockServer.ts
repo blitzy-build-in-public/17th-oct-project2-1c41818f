@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 496
+ * Lines: 508
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
@@ -105,13 +105,25 @@ export function isDataSourceRegistered(): boolean {
   return dataSource !== null;
 }
 
-/** Returns the seam to its unbound state and forgets every injected failure and remembered order key,
- * which is what a test does between cases: until a source is bound again, every request answers
- * `503 data-source-unavailable`. */
-export function resetMockServer(): void {
-  dataSource = null;
+/**
+ * Forgets the per-case state a test leaves behind in the seam: the failures armed and not yet consumed
+ * ({@link failNext}) and every remembered order key, so a later case is answered by its own request
+ * rather than by an earlier case's arm or replayed submission. The bound data source stays bound, which
+ * is what lets the test harness's per-case teardown call it between cases of one file: the source every
+ * later case is answered from is bound once and must survive that reset. {@link resetMockServer} is the
+ * stronger reset, and returns the seam to its unbound state as well.
+ */
+export function resetMockServerState(): void {
   injectedFailures = [];
   clearRememberedOrders();
+}
+
+/** Returns the seam to its unbound state and forgets every injected failure and remembered order key,
+ * which is what a test does between cases: until a source is bound again, every request answers
+ * `503 data-source-unavailable`. The per-case state has one home, {@link resetMockServerState}. */
+export function resetMockServer(): void {
+  dataSource = null;
+  resetMockServerState();
 }
 
 /** The longest delay the host timer applies: `setTimeout` clamps anything above it to roughly a

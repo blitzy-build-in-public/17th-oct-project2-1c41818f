@@ -1,13 +1,14 @@
 /**
  * Path: tests/setup.ts
  * Purpose: Loads the jest-dom matchers and clears state between tests
- * Lines: 135
+ * Lines: 149
  */
 
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 
 import { BREAKPOINTS } from "@/constants/config";
+import { resetMockServerState } from "@/lib/mockServer";
 
 // Stubbed at module scope rather than in a hook: a setup file is evaluated before any test
 // module, so this is the only point that lands before the mock server reads the value it turns
@@ -95,6 +96,12 @@ function createMediaQueryList(query: string): MediaQueryList {
  * Installs the DOM surface the planned modules reach but jsdom provides unusably or not at all:
  * media queries, a quiet window scroll, and the object-URL and anchor-click pair the CSV export
  * needs. Skipped where no DOM exists, so a DOM-less project can load this file too.
+ *
+ * Called once at module scope and again from the per-case teardown, because what it writes is both
+ * replaceable and cumulative: a test needing a breakpoint replaces `window.matchMedia` with its own
+ * mock, and every download advances the object-URL counter below. Without a fresh install the case
+ * after such a test would answer media queries through the replacement and hand out a URL numbered
+ * from the earlier test's downloads, so a case would depend on which cases ran before it.
  */
 function installDomShims(): void {
   if (typeof window === "undefined" || typeof document === "undefined") return;
@@ -121,8 +128,13 @@ installDomShims();
 
 /**
  * Restores the environment between tests: unmounts what the DOM project rendered, drops the
- * cart, session and report range persisted outside a component, clears spy call history so a
- * later test cannot observe an earlier test's export, and returns to real timers.
+ * cart, session and report range persisted outside a component, forgets the seam's per-case state
+ * so a failure an earlier test armed and never triggered cannot answer a later test's request and
+ * an order key an earlier test remembered cannot replay its order, clears spy call history so a
+ * later test cannot observe an earlier test's export, returns to real timers, and reinstalls the
+ * DOM shims last: a test that replaced `window.matchMedia` or spent object URLs would otherwise
+ * hand the next test an environment the first test of the file never saw. The installer runs after
+ * the clear so the mocks it writes begin with empty call history of their own.
  */
 afterEach(async () => {
   if (typeof window !== "undefined") {
@@ -130,6 +142,8 @@ afterEach(async () => {
     cleanup();
     window.localStorage.clear();
   }
+  resetMockServerState();
   vi.clearAllMocks();
   vi.useRealTimers();
+  installDomShims();
 });
