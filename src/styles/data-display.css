@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays, toasts and tabs and accordion, loaded from src/styles/components.css
- * Lines: 540
+ * Lines: 593
  */
 
 /* ==== Cards and badges ==== */
@@ -18,10 +18,30 @@
   padding: var(--space-5);
   border-block-end: var(--border-width) solid var(--color-border-subtle);
 }
+/* The title and the line supporting it stack, so a long title wraps instead of pushing the action out. */
+.sp-card__heading {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+/* The title carries the heading-3 role in every card, whatever level it is announced at: the level belongs
+ * to the document outline and the size to the card, so an <h2> title and an <h4> one read alike. */
 .sp-card__title {
   font-size: var(--text-heading-3-size);
   font-weight: var(--text-heading-3-weight);
   line-height: var(--text-heading-3-line-height);
+}
+.sp-card__description {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+/* The card-level control closes the header row whatever the title beside it takes. */
+.sp-card__action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin-inline-start: auto;
 }
 .sp-card__body {
   padding: var(--space-5);
@@ -35,6 +55,26 @@
 /* A card that carries a table of its own gives the body no padding, so the table meets the frame. */
 .sp-card--flush .sp-card__body {
   padding: 0;
+}
+/* The same removal asked for by the body itself, for a card whose header the caller still wants padded. */
+.sp-card__body--flush {
+  padding: 0;
+}
+/* A footer whose content belongs to the body above it, so the rule between the two regions is dropped. */
+.sp-card__footer--undivided {
+  border-block-start: 0;
+}
+/* The selected card of a set: the heavier accent frame, the raised surface and the bolder title say which
+ * one is chosen, and the words the card carries name the choice beside them, so the state never rests on
+ * the hue alone. The attribute is the state — `src/components/ui/Card.tsx` writes `aria-selected`. */
+.sp-card[aria-selected="true"] {
+  border-color: var(--color-accent);
+  border-width: var(--border-width-thick);
+  box-shadow: var(--shadow-2);
+}
+.sp-card[aria-selected="true"] .sp-card__title {
+  color: var(--color-accent-contrast);
+  font-weight: var(--font-weight-bold);
 }
 .sp-card--interactive {
   cursor: pointer;
@@ -62,6 +102,9 @@
   border-radius: var(--radius-pill);
   font-size: var(--text-caption-size);
   font-weight: var(--font-weight-medium);
+  /* A badge takes its text's width and never the width of a grid track it happens to sit in, because a pill
+   * stretched across a column reads as a bar rather than as the label beside a value. */
+  justify-self: start;
 }
 .sp-badge--info {
   background-color: var(--color-info-surface);
@@ -78,6 +121,17 @@
 .sp-badge--danger {
   background-color: var(--color-danger-surface);
   color: var(--color-danger-text);
+}
+/* The small badge: the same pill with no vertical padding, for a dense table cell or a chart legend. */
+.sp-badge--sm {
+  padding: var(--space-0) var(--space-2);
+}
+/* The outline badge: the variant's own ink on whatever surface it sits on, for a badge on a tinted band
+ * where a tinted pill would not separate from it. Declared after the variants, so the transparent surface
+ * wins over the variant's tint at equal specificity. */
+.sp-badge--outline {
+  background-color: transparent;
+  border: var(--border-width) solid currentColor;
 }
 
 /* ==== Data table ==== */
@@ -537,4 +591,3 @@
   color: var(--color-text-muted);
   font-size: var(--text-body-sm-size);
 }
-

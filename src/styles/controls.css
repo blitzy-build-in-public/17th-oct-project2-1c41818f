@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 432
+ * Lines: 495
  */
 
 /* ==== Buttons ====
@@ -95,6 +95,10 @@
 }
 .sp-btn--sm {
   min-block-size: var(--control-height-sm);
+  /* BLITZY [LAYOUT]: the block padding drops to the smallest step so a small control reaches the 32px its
+   * token declares — at the base rule's `--space-2` the label's own line box made it 36px tall, because a
+   * minimum only sets a floor. The three sizes now land exactly on `--control-height-sm`, `-md` and `-lg`. */
+  padding-block: var(--space-1);
   padding-inline: var(--space-3);
   font-size: var(--text-body-sm-size);
 }
@@ -107,6 +111,11 @@
   min-inline-size: var(--touch-target-min);
   min-block-size: var(--touch-target-min);
   padding-inline: var(--space-2);
+}
+/* BLITZY [CONTRACT]: the pill shape `IconButton.isRound` asks for, so a floating or circular glyph control
+ * is a shape this sheet decides rather than a radius a component declares. */
+.sp-btn--round {
+  border-radius: var(--radius-pill);
 }
 .sp-btn--block {
   inline-size: 100%;
@@ -126,7 +135,11 @@
   --spinner-size: var(--space-4);
 }
 /* In flight the pointer is off and the control dims, while the label stays in the box: its text is what a
- * screen reader announces for the button. */
+ * screen reader announces for the button.
+ * The wrapper is a flex box rather than a block so the spinner contributes no line box to the control's
+ * height, and the glyph is held at the size the declaration above gives it — `.sp-spinner` otherwise sets
+ * its own size and won, being read from the element that carries it. Together they keep an in-flight
+ * control exactly as tall as the same control at rest, at every size. */
 .sp-btn.is-loading,
 .sp-btn[aria-busy="true"] {
   pointer-events: none;
@@ -134,15 +147,21 @@
 }
 .sp-btn.is-loading .sp-btn__spinner,
 .sp-btn[aria-busy="true"] .sp-btn__spinner {
-  display: block;
+  display: flex;
 }
-/* Opacity only: base.css supplies the not-allowed cursor and the hover rules above exclude a disabled control,
- * so nothing changes under the pointer. */
+.sp-btn.is-loading .sp-btn__spinner .sp-spinner,
+.sp-btn[aria-busy="true"] .sp-btn__spinner .sp-spinner {
+  --spinner-size: var(--space-4);
+}
+/* Opacity and the cursor together: base.css supplies the not-allowed pointer, but its selector holds zero
+ * specificity, so the class rule here is the one that decides it and the base rule's intent is honoured
+ * only if it is stated again. The hover and active rules above exclude a disabled control either way. */
 .sp-btn:disabled,
 .sp-btn[aria-disabled="true"],
 .sp-button:disabled,
 .sp-button[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
+  cursor: not-allowed;
 }
 .sp-btn-group {
   display: inline-flex;
@@ -161,6 +180,51 @@
 .sp-btn-group > .sp-btn:last-child {
   border-start-end-radius: var(--radius-md);
   border-end-end-radius: var(--radius-md);
+}
+/* BLITZY [CONTRACT]: the vertical group and the three alignments `ButtonGroup` asks for; the row above is
+ * already the horizontal group and a group naming no alignment keeps hugging its controls.
+ * BLITZY [A11Y]: the group is a `role="group"` container with an accessible name, and the overlap of one
+ * border keeps the segmented control from looking like two separate controls to a sighted user. */
+.sp-btn-group--vertical {
+  flex-direction: column;
+}
+.sp-btn-group--vertical > .sp-btn:not(:first-child) {
+  margin-inline-start: 0;
+  margin-block-start: calc(-1 * var(--border-width));
+}
+/* The stacked group rounds the block ends and squares the inline ones. First and last are written apart
+ * from each other and the single-control group is named outright, because the two would otherwise set the
+ * same corners in turn and leave a group of one rounded on two sides only. */
+.sp-btn-group--vertical > .sp-btn:first-child:not(:last-child) {
+  border-start-start-radius: var(--radius-md);
+  border-start-end-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-none);
+  border-end-end-radius: var(--radius-none);
+}
+.sp-btn-group--vertical > .sp-btn:last-child:not(:first-child) {
+  border-end-start-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  border-start-start-radius: var(--radius-none);
+  border-start-end-radius: var(--radius-none);
+}
+.sp-btn-group--vertical > .sp-btn:only-child {
+  border-radius: var(--radius-md);
+}
+/* Naming an alignment widens the group to the inline space it is given, which is what gives the packing
+ * room to act; a group that names none stays only as wide as its controls. */
+.sp-btn-group--align-start,
+.sp-btn-group--align-center,
+.sp-btn-group--align-end {
+  inline-size: 100%;
+}
+.sp-btn-group--align-start {
+  justify-content: flex-start;
+}
+.sp-btn-group--align-center {
+  justify-content: center;
+}
+.sp-btn-group--align-end {
+  justify-content: flex-end;
 }
 
 /* ==== Forms and fields ====
@@ -429,4 +493,3 @@
 .sp-switch[aria-disabled="true"] .sp-switch__track {
   opacity: var(--opacity-disabled);
 }
-

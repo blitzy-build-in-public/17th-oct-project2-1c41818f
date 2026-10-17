@@ -1,0 +1,446 @@
+/**
+ * Path: src/components/ui/Input.tsx
+ * Purpose: Input, text area and form field wrapper with label, hint, required and error handling
+ * Lines: 446
+ */
+
+import { useId, useState } from "react";
+import type { ChangeEvent, ComponentPropsWithRef, ReactElement, ReactNode } from "react";
+
+import { VALIDATION_MESSAGES } from "@/constants/content";
+import type { FieldErrors } from "@/types/common";
+
+// The field contract ------------------------------------------------------------------------------
+
+/**
+ * What {@link FormField} hands to the control it wraps.
+ *
+ * The field can hand this over only because it does not render the control itself: the render prop's
+ * caller does. `id` is what the label points at with `htmlFor`, `describedBy` is the id list the
+ * control puts on `aria-describedby`, and the three flags map onto `aria-invalid`, the native
+ * `required` and the native `disabled` attributes. `isDisabled` completes the pair `isRequired`
+ * starts, for the same reason: the field cannot set either attribute on a control it does not own.
+ *
+ * The individual ids travel alongside the joined list so that a control carrying auxiliary text of
+ * its own — the text area's character counter — extends the described-by list in the field's order
+ * instead of guessing it.
+ *
+ * Exported because every control family that renders inside a field shares this one contract:
+ * `Select.tsx` declares its controls against it rather than inventing a second shape.
+ */
+export interface FieldControlProps {
+  /** The identifier the control carries and the label points at. */
+  readonly id: string;
+  /** The ids the control puts on `aria-describedby`, or `undefined` when it has none. */
+  readonly describedBy: string | undefined;
+  /** Whether the control marks itself `aria-invalid`. */
+  readonly isInvalid: boolean;
+  /** Whether the control carries the native `required` attribute. */
+  readonly isRequired: boolean;
+  /** Whether the control carries the native `disabled` attribute. */
+  readonly isDisabled: boolean;
+  /** The hint element's id, or `undefined` when the field renders no hint. */
+  readonly hintId: string | undefined;
+  /** The error element's id, or `undefined` when the field renders no error. */
+  readonly errorId: string | undefined;
+}
+
+/** Everything {@link FormField} accepts. */
+export interface FormFieldProps {
+  /** The control's id; a generated one is used when it is omitted, so two fields cannot collide. */
+  readonly id?: string;
+  /** The field's label, which is the control's accessible name. */
+  readonly label: string;
+  /** A supporting line under the control, read after the name. */
+  readonly hint?: string;
+  /** The field's message; its presence is what marks the control invalid. */
+  readonly error?: string;
+  /** Renders the visible required marker and the accessible required wording. */
+  readonly required?: boolean;
+  /** Renders the control in its disabled state. */
+  readonly isDisabled?: boolean;
+  /** Class names added to the field's own, for the layout the caller places it in. */
+  readonly className?: string;
+  /** The control to render, given the contract above. */
+  readonly children: (field: FieldControlProps) => ReactNode;
+}
+
+/**
+ * Everything {@link Input} accepts: every attribute of a native `<input>` except the two the field
+ * owns, plus the label, the auxiliary text, the form-wide error map and the addon slots.
+ */
+export interface InputProps extends Omit<ComponentPropsWithRef<"input">, "id" | "children"> {
+  /** The control's id; a generated one is used when it is omitted. */
+  readonly id?: string;
+  /** The field's label. */
+  readonly label: string;
+  /** A supporting line under the control. */
+  readonly hint?: string;
+  /** This field's message, which wins over {@link InputProps.errors}. */
+  readonly error?: string;
+  /** A whole form's error map, read through {@link InputProps.name}. */
+  readonly errors?: FieldErrors;
+  /** Disables the control; wins over a native `disabled` passed alongside it. */
+  readonly isDisabled?: boolean;
+  /** Content rendered before the control inside the field's control slot. */
+  readonly leadingAddon?: ReactNode;
+  /** Content rendered after the control inside the field's control slot. */
+  readonly trailingAddon?: ReactNode;
+  /** Class names added to the field wrapper's own, for a form's field grid. */
+  readonly containerClassName?: string;
+}
+
+/**
+ * Everything {@link TextArea} accepts: every attribute of a native `<textarea>` except the two the
+ * field owns, plus the same label, auxiliary text, error map and addon slots an input takes, and the
+ * two properties a multi-line field adds — its row count and its character counter.
+ */
+export interface TextAreaProps extends Omit<ComponentPropsWithRef<"textarea">, "id" | "children"> {
+  /** The control's id; a generated one is used when it is omitted. */
+  readonly id?: string;
+  /** The field's label. */
+  readonly label: string;
+  /** A supporting line under the control. */
+  readonly hint?: string;
+  /** This field's message, which wins over {@link TextAreaProps.errors}. */
+  readonly error?: string;
+  /** A whole form's error map, read through {@link TextAreaProps.name}. */
+  readonly errors?: FieldErrors;
+  /** Disables the control; wins over a native `disabled` passed alongside it. */
+  readonly isDisabled?: boolean;
+  /** Rows to render before the field scrolls; four when it is omitted. */
+  readonly rows?: number;
+  /** Renders a counter of the characters written, counted against `maxLength`. */
+  readonly showCount?: boolean;
+  /** Content rendered before the control inside the field's control slot. */
+  readonly leadingAddon?: ReactNode;
+  /** Content rendered after the control inside the field's control slot. */
+  readonly trailingAddon?: ReactNode;
+  /** Class names added to the field wrapper's own, for a form's field grid. */
+  readonly containerClassName?: string;
+}
+
+// Private helpers ---------------------------------------------------------------------------------
+
+/** True for a string that holds something a visitor can read: neither absent nor blank. */
+function isPresent(value: string | undefined): value is string {
+  return value !== undefined && value.trim() !== "";
+}
+
+/** Joins the class names a component renders, dropping the absent ones so no stray space is emitted. */
+function classNames(...names: readonly (string | undefined)[]): string {
+  return names.filter(isPresent).join(" ");
+}
+
+/** The ids one field can describe its control by, in the order a screen reader reads them. */
+interface DescribedByIds {
+  /** The hint's element id, when the field renders one. */
+  readonly hintId?: string | undefined;
+  /** The error's element id, when the field renders one. */
+  readonly errorId?: string | undefined;
+  /** A control's own auxiliary element — the text area's counter — when it renders one. */
+  readonly countId?: string | undefined;
+}
+
+/**
+ * Builds an `aria-describedby` value from the ids a control is currently described by, in reading
+ * order — the hint, then the error, then any auxiliary count — so the complaint about a field is
+ * never read before the help for it, and an absent id contributes nothing at all.
+ *
+ * The result is `undefined` rather than an empty string when nothing describes the control, because
+ * an empty `aria-describedby` is a wiring mistake a reader cannot see. Called by {@link FormField}
+ * for the contract it hands its control, and again by {@link TextArea} once it holds a count id.
+ */
+function composeDescribedBy(ids: DescribedByIds): string | undefined {
+  const described = [ids.hintId, ids.errorId, ids.countId].filter(isPresent);
+  return described.length === 0 ? undefined : described.join(" ");
+}
+
+/**
+ * Picks the message a field shows: the one passed to the field, or the one a form's error map holds
+ * under the field's own name. The field's own message wins, so a page can override a single field of
+ * a form-wide map without rebuilding the map around it.
+ *
+ * Both are read as absent when blank, because an empty message would render an error paragraph with
+ * nothing in it and mark the control invalid for no reason a visitor could act on.
+ */
+function resolveErrorMessage(
+  explicit: string | undefined,
+  fromMap: string | undefined,
+): string | undefined {
+  if (isPresent(explicit)) return explicit;
+  return isPresent(fromMap) ? fromMap : undefined;
+}
+
+/**
+ * Counts the characters a text field holds, for the counter a field with both `showCount` and
+ * `maxLength` renders. An absent value is nothing written yet, and the array form a native control
+ * allows is joined before it is counted, so the counter can never be a frame behind the field.
+ */
+function textLengthOf(value: string | number | readonly string[] | undefined): number {
+  if (typeof value === "string") return value.length;
+  if (typeof value === "number") return String(value).length;
+  if (value === undefined) return 0;
+  return value.join("").length;
+}
+
+/**
+ * Renders one addon slot of a field — a unit, a prefix, or a small control the field carries beside
+ * its own.
+ *
+ * BLITZY [DESIGN_SYSTEM_GAP]: `src/styles/controls.css` declares the field, its label, its required
+ * marker, its hint, its error and its control slot, and no class for an addon. No class is invented
+ * here for one: the addon borrows the field's auxiliary-text register, which is the register the
+ * stylesheets give text that stands beside a control, and it sits in the control slot. That sheet
+ * owns adding an inline arrangement for the slot; no caller in the product passes an addon today.
+ */
+function renderAddon(addon: ReactNode): ReactElement | null {
+  return addon === undefined || addon === null ? null : (
+    <span className="sp-field__hint">{addon}</span>
+  );
+}
+
+// The field ---------------------------------------------------------------------------------------
+
+/**
+ * Renders one field's anatomy around whatever control its caller supplies: the label bound to the
+ * control's id, the required marker, the control's slot, the hint and the error.
+ *
+ * The control arrives through a render prop because the field cannot reach into it — only the caller
+ * knows whether it renders an `<input>`, a `<textarea>` or a group of controls, and the control is
+ * the element that has to carry `id`, `aria-describedby` and `aria-invalid`. Handing the contract
+ * back this way is what lets every control family share one label, hint and error treatment instead
+ * of restating it, and it is why {@link FieldControlProps} is exported.
+ *
+ * A required field states it three ways, each with one home: the native `required` attribute on the
+ * control carries the state, the asterisk beside the label is hidden from assistive technology, and
+ * the wording a screen reader hears comes from the message `src/constants/content.ts` owns. That
+ * wording is part of the label, so a query for a required field's name has to match the label as a
+ * pattern rather than as the exact string.
+ *
+ * @param props - The field's label, optional hint and error, the required and disabled flags, an
+ *   optional class name and the control to render; `id` falls back to a generated one.
+ * @returns The field's markup, with the caller's control inside it.
+ */
+export function FormField({
+  id,
+  label,
+  hint,
+  error,
+  required = false,
+  isDisabled = false,
+  className,
+  children,
+}: FormFieldProps): ReactElement {
+  const generatedId = useId();
+  const controlId = id ?? generatedId;
+  const hintId = isPresent(hint) ? `${controlId}-hint` : undefined;
+  const errorId = isPresent(error) ? `${controlId}-error` : undefined;
+  const field: FieldControlProps = {
+    id: controlId,
+    describedBy: composeDescribedBy({ hintId, errorId }),
+    isInvalid: errorId !== undefined,
+    isRequired: required,
+    isDisabled,
+    hintId,
+    errorId,
+  };
+
+  return (
+    <div className={classNames("sp-field", className)}>
+      <label className="sp-field__label" htmlFor={controlId}>
+        {label}
+        {required ? (
+          <>
+            {" "}
+            <span className="sp-field__required" aria-hidden="true">
+              *
+            </span>
+            <span className="sp-visually-hidden">{VALIDATION_MESSAGES.REQUIRED}</span>
+          </>
+        ) : null}
+      </label>
+      <div className="sp-field__control">{children(field)}</div>
+      {hintId === undefined ? null : (
+        <p className="sp-field__hint" id={hintId}>
+          {hint ?? ""}
+        </p>
+      )}
+      {errorId === undefined ? null : (
+        <p className="sp-field__error" id={errorId} role="alert">
+          {error ?? ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// The controls ------------------------------------------------------------------------------------
+
+/**
+ * A single-line text field: the `<input>` itself with its label, hint, error and addon slots.
+ *
+ * Every attribute of a native `<input>` passes straight through, `ref` included — React 19 takes a
+ * ref as an ordinary prop, so no wrapper stands between the caller and the element, and the element
+ * a caller holds is the one the browser focuses. What this component adds is the wiring an input
+ * cannot do alone: the id its label points at, `aria-describedby` for the hint and the error,
+ * `aria-invalid` for the invalid state, and the required and disabled attributes.
+ *
+ * The field's message is `error` when it is given, and otherwise `errors[name]` — the field-keyed map
+ * every validator in `src/utils/validation.ts` returns — so a form spreads one map over its fields
+ * and no page has to thread a message per field. No rule is applied and no message is written here:
+ * this component renders the message it is handed.
+ *
+ * @param props - The field's label and auxiliary text, the form-wide error map, the addon slots and
+ *   the control's own native attributes. `isDisabled` is this component's name for the disabled
+ *   state; a native `disabled` works too and is overridden by `isDisabled` when both are given.
+ * @returns The field, with the input inside it.
+ */
+export function Input({
+  id,
+  label,
+  hint,
+  error,
+  errors,
+  name,
+  required,
+  isDisabled,
+  disabled,
+  leadingAddon,
+  trailingAddon,
+  containerClassName,
+  className,
+  ...rest
+}: InputProps): ReactElement {
+  const isFieldDisabled = isDisabled ?? disabled ?? false;
+  const message = resolveErrorMessage(error, name === undefined ? undefined : errors?.[name]);
+
+  return (
+    <FormField
+      id={id}
+      label={label}
+      hint={hint}
+      error={message}
+      required={required ?? false}
+      isDisabled={isFieldDisabled}
+      className={containerClassName}
+    >
+      {(field) => (
+        <>
+          {renderAddon(leadingAddon)}
+          <input
+            {...rest}
+            id={field.id}
+            name={name}
+            className={classNames("sp-input", className)}
+            disabled={field.isDisabled}
+            required={field.isRequired}
+            aria-invalid={field.isInvalid}
+            aria-describedby={field.describedBy}
+          />
+          {renderAddon(trailingAddon)}
+        </>
+      )}
+    </FormField>
+  );
+}
+
+/**
+ * A multi-line text field: the `<textarea>` itself with the same label, hint, error and addon
+ * treatment an input gets, plus the row count it opens at and, on request, a counter of the
+ * characters written against the field's `maxLength`.
+ *
+ * The counter follows the field whether the caller holds the value or the browser does. A controlled
+ * field is counted from the `value` it is given on every render, and an uncontrolled one keeps the
+ * length it read from the change event in state of its own, so no field needs the counter forced on
+ * it to report its length. An absent `maxLength` means there is nothing to count against and no
+ * counter is rendered.
+ *
+ * @param props - The field's label and auxiliary text, the form-wide error map, the row count, the
+ *   counter flag and the control's own native attributes. `isDisabled` is this component's name for
+ *   the disabled state; a native `disabled` works too and is overridden by `isDisabled` when both
+ *   are given.
+ * @returns The field, with the text area inside it.
+ */
+export function TextArea({
+  id,
+  label,
+  hint,
+  error,
+  errors,
+  name,
+  required,
+  isDisabled,
+  disabled,
+  rows = 4,
+  showCount = false,
+  maxLength,
+  leadingAddon,
+  trailingAddon,
+  containerClassName,
+  className,
+  value,
+  defaultValue,
+  onChange,
+  ...rest
+}: TextAreaProps): ReactElement {
+  const isControlled = value !== undefined;
+  const [typedLength, setTypedLength] = useState<number>(() => textLengthOf(defaultValue));
+  const usedLength = isControlled ? textLengthOf(value) : typedLength;
+  const isFieldDisabled = isDisabled ?? disabled ?? false;
+  const message = resolveErrorMessage(error, name === undefined ? undefined : errors?.[name]);
+
+  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
+    // An uncontrolled field keeps its own value, so its length is read from the event; a controlled
+    // one is counted from the value the caller renders, which the event has already asked for.
+    if (!isControlled) setTypedLength(event.target.value.length);
+    onChange?.(event);
+  };
+
+  return (
+    <FormField
+      id={id}
+      label={label}
+      hint={hint}
+      error={message}
+      required={required ?? false}
+      isDisabled={isFieldDisabled}
+      className={containerClassName}
+    >
+      {(field) => {
+        const countId =
+          showCount && typeof maxLength === "number" ? `${field.id}-count` : undefined;
+        return (
+          <>
+            {renderAddon(leadingAddon)}
+            <textarea
+              {...rest}
+              id={field.id}
+              name={name}
+              rows={rows}
+              maxLength={maxLength}
+              value={value}
+              defaultValue={defaultValue}
+              onChange={handleChange}
+              className={classNames("sp-textarea", className)}
+              disabled={field.isDisabled}
+              required={field.isRequired}
+              aria-invalid={field.isInvalid}
+              aria-describedby={composeDescribedBy({
+                hintId: field.hintId,
+                errorId: field.errorId,
+                countId,
+              })}
+            />
+            {countId === undefined ? null : (
+              <p className="sp-field__hint" id={countId} aria-live="polite">
+                {`${usedLength} / ${maxLength}`}
+              </p>
+            )}
+            {renderAddon(trailingAddon)}
+          </>
+        );
+      }}
+    </FormField>
+  );
+}
