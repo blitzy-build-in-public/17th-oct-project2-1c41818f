@@ -1,0 +1,541 @@
+/* Path: src/styles/catalog.css
+ * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
+ * Lines: 541
+ */
+
+/* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
+ * the filter panel with its active chips, the search bar with its suggestions, and the result summary. Loaded
+ * fifth — after tokens, base, layout, controls, data-display and components — so it composes the primitives those
+ * sheets own (.sp-btn/.sp-button, .sp-input, .sp-select and .sp-select__wrap, .sp-choice, .sp-card and
+ * .sp-card--interactive, .sp-badge, .sp-drawer, .sp-tabs, .sp-rating, .sp-price, .sp-quantity, .sp-empty,
+ * .sp-alert, .sp-skeleton) and restates no rule of theirs. Every value is a var() from tokens.css; the only
+ * literals are the media-query stops and the documented structural numbers (the artboard ratios, the clamp).
+ *
+ * The families defined here are the contract the feature files adopt: a tile composes sp-card
+ * sp-card--interactive sp-product-card, its flag composes sp-badge with a variant, the quick-add composes sp-btn
+ * sp-btn--secondary sp-btn--sm, the facet drawer composes sp-drawer sp-facets--drawer, a stock value is the variant
+ * __stock--low or __stock--out, and .sp-catalog-layout is the facet column layout that layout.css's own header
+ * delegates to this sheet. Two shared rules are kept here because they belong to both catalogue surfaces and the
+ * single-product surfaces: the availability text state, and the treatment every image in a fixed box takes.
+ *
+ * BLITZY [BUDGET]: the concern this path owns is about 1,120 lines — the landing bands, the browse surfaces and the
+ * single-product surfaces — against the plan's 400-line budget and the request's 600-line ceiling. The ceiling is
+ * never raised and no line was cut to reach a number, so the plan's remedy for a concern that cannot fit was
+ * applied instead, as it was for the shared primitives and the chart mathematics: the concern is split by surface,
+ * order-preserving, into two further sheets — catalog-landing.css (the landing page's bands) and
+ * catalog-detail.css (one product's gallery, specifications, related strip and reviews) — while this mapped path
+ * keeps the catalogue and search surfaces and loads the other two with @import ahead of its own rules. A CSS
+ * @import is inlined where it sits, so the built cascade still reads tokens, base, layout, controls, data-display,
+ * components, landing, detail, catalogue; the eight-sheet load contract is unchanged, because the entry point
+ * imports the same eight mapped paths it always did and no other file imports either new sheet. Both additions and
+ * this split are recorded in generation-manifest.md.
+ */
+
+@import "./catalog-landing.css";
+@import "./catalog-detail.css";
+
+/* ==== Result presentation ==== */
+.sp-product-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+/* The strip runs as one row: a snapped horizontal scroller below --breakpoint-md, where the row is a pointer
+ * convenience only — the same products are all in the catalogue, so none is reachable by scrolling alone — and up
+ * to four equal cards per row from there. It is a flex line rather than a grid track list, so the grid's column
+ * rules cannot reach into it and leave a slide with no track to sit in. */
+.sp-product-grid--strip {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.sp-product-grid--strip > * {
+  flex: 0 0 80%;
+  scroll-snap-align: start;
+}
+/* The list variant, for where a grid is wrong: rows of a fixed media column with the body beside it. */
+.sp-product-list {
+  display: grid;
+  gap: var(--space-4);
+}
+/* Every image this area places in a fixed box fills it and crops rather than distorting, so the tile, the card and
+ * the gallery thumbnail take one rule: the boxes themselves are the landing sheet's and the detail sheet's. */
+.sp-category-tile__media img,
+.sp-product-card__media img,
+.sp-gallery__thumb img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sp-product-list > .sp-product-card {
+    grid-template-columns: var(--space-20) minmax(0, 1fr);
+  }
+  .sp-product-list > .sp-product-card > .sp-product-card__media {
+    aspect-ratio: auto;
+    block-size: 100%;
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-product-grid {
+    gap: var(--space-6);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .sp-product-grid--strip {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  /* Four to a row at most: a fifth card wraps rather than squeezing the four that fit. */
+  .sp-product-grid--strip > * {
+    flex: 1 1 0;
+    min-inline-size: calc((100% - 3 * var(--space-6)) / 4);
+  }
+  /* The related strip is four across from here, where the catalogue itself is three. */
+  .sp-product-grid--related {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ==== Product card ====
+ * The tile composes .sp-card and .sp-card--interactive, which own its surface, hairline border and hover elevation;
+ * this sheet adds the tile's own column layout, its media box, its clamped name and its quick-add reveal. __rating
+ * carries the .sp-rating primitive and takes the alignment below; __price carries the .sp-price primitive and needs
+ * no rule of its own. */
+.sp-product-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  overflow: hidden;
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+.sp-product-card__media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background-color: var(--color-surface-sunken);
+}
+/* The flag composes .sp-badge, which paints it, so this rule only places it over the media. */
+.sp-product-card__flag {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-2);
+}
+.sp-product-card__body {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-4);
+}
+/* The name is an h3 in markup and takes the heading-3 role from base.css. Two lines, clamped: the -webkit-box form
+ * is the only spelling every engine renders, so the fallback pair travels with it, and min-block-size reserves both
+ * lines so a clamped tile and a short one align. */
+.sp-product-card__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-block-size: calc(var(--text-heading-3-line-height) * 2em);
+  color: var(--color-text);
+  text-decoration-line: none;
+}
+/* Whether the name class sits on the heading or on the link inside it, that link takes the heading's colour and
+ * carries no underline of its own. */
+.sp-product-card__name > a {
+  color: inherit;
+  text-decoration-line: none;
+}
+.sp-product-card__brand {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  letter-spacing: var(--text-caption-tracking);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sp-product-card__rating {
+  justify-self: start;
+}
+/* The availability text state, in one home for both surfaces that render it: the tile and the detail's buy column.
+ * The value is text first and colour second — the low and out states carry the warning and danger tokens and their
+ * own words — so the state survives a greyscale rendering and a colour-blind one. */
+.sp-product-card__stock,
+.sp-product-detail__stock {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+.sp-product-card__stock--low,
+.sp-product-detail__stock--low {
+  color: var(--color-warning-text);
+}
+.sp-product-card__stock--out,
+.sp-product-detail__stock--out {
+  color: var(--color-danger-text);
+}
+/* The quick-add slot is present at every width and is never display: none, so it keeps its place in the tab order;
+ * from --breakpoint-md on a device with a pointer it waits on the tile's hover or on focus anywhere inside it. */
+.sp-product-card__actions {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+  transition:
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
+}
+@media (hover: hover) {
+  .sp-product-card:hover,
+  .sp-product-card:focus-within {
+    transform: translateY(calc(var(--space-1) * -1));
+  }
+}
+@media (hover: hover) and (min-width: 768px) {
+  /* --breakpoint-md, where a pointer can hover and the tile has room to hold the action back */
+  .sp-product-card__actions {
+    opacity: 0;
+    transform: translateY(var(--space-1));
+    pointer-events: none;
+  }
+  .sp-product-card:hover .sp-product-card__actions,
+  .sp-product-card:focus-within .sp-product-card__actions {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+/* ==== Catalogue layout and facet panel ====
+ * Below --breakpoint-md the panel is not in the page flow: FilterPanel renders it inside the .sp-drawer that
+ * data-display.css owns, opened by .sp-facets__toggle. From --breakpoint-md it is this sheet's sticky first column
+ * and the toggle leaves the layout. */
+.sp-catalog-layout {
+  display: grid;
+  gap: var(--space-6);
+  align-items: start;
+}
+.sp-facets {
+  display: none;
+}
+/* A two-column grid, so the panel's heading and its clear action share the first row while every facet group below
+ * spans both tracks. */
+.sp-facets__panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+.sp-facets__group,
+.sp-facets__range {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+.sp-facets__legend {
+  padding-block-end: var(--space-2);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+}
+.sp-facets__values {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+}
+/* Each value composes .sp-choice, which owns the box and its row target; the label and its count sit beside it. */
+.sp-facets__value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sp-facets__value .sp-choice {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+.sp-facets__label {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: var(--text-body-sm-size);
+}
+.sp-facets__count {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+/* A value with no matches is disabled in markup and its count stays visible as text; the dim only reinforces what
+ * that count already says, so nothing is communicated by colour alone. */
+.sp-facets__value:has(:disabled) {
+  color: var(--color-text-subtle);
+}
+/* Two bounds and the dash between them: stacked below --breakpoint-sm, one row above it. */
+.sp-facets__range > :nth-child(2) {
+  align-self: center;
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+.sp-facets__clear {
+  justify-self: end;
+}
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-facets__range {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-catalog-layout {
+    grid-template-columns: var(--layout-facet-width) minmax(0, 1fr);
+  }
+  .sp-facets {
+    position: sticky;
+    inset-block-start: calc(var(--layout-header-height) + var(--space-4));
+    display: block;
+    max-block-size: calc(100vh - var(--layout-header-height) - var(--space-8));
+    max-block-size: calc(100dvh - var(--layout-header-height) - var(--space-8));
+    overflow-y: auto;
+  }
+  /* A long brand list scrolls inside the column instead of pushing the page's height. */
+  .sp-facets__values {
+    max-block-size: calc(var(--space-20) * 3);
+    overflow-y: auto;
+  }
+  .sp-facets__toggle {
+    display: none;
+  }
+}
+/* The in-drawer variant: no sticky positioning, no fixed width and no scroll of its own, because the drawer's body
+ * is what scrolls. Written last in this section, so it holds at every width. */
+.sp-facets--drawer {
+  position: static;
+  display: grid;
+  gap: var(--space-4);
+  max-block-size: none;
+  overflow-y: visible;
+}
+
+/* ==== Active filters and sorting ==== */
+.sp-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-active-filters__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-body-sm-size);
+}
+/* The chip's remove control is a real button with an accessible name of its own, so only its look is set here. */
+.sp-active-filters__chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--control-height-sm);
+  min-block-size: var(--control-height-sm);
+  color: var(--color-text-subtle);
+  border-radius: var(--radius-pill);
+}
+/* The clear-all action is a .sp-btn--link, so only its place in the row is written here. */
+.sp-active-filters__clear-all {
+  margin-inline-start: auto;
+}
+@media (hover: hover) {
+  .sp-active-filters__chip:hover {
+    border-color: var(--color-border-strong);
+  }
+  .sp-active-filters__chip button:hover {
+    background-color: var(--color-danger-surface);
+    color: var(--color-danger-text);
+  }
+}
+/* The sort control: a labelled select at full width on a phone, capped at the facet width from --breakpoint-md,
+ * where .sp-result-meta closes it to the end of its row. */
+.sp-sort {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-sort {
+    grid-template-columns: auto minmax(0, var(--layout-facet-width));
+    align-items: center;
+    justify-content: end;
+  }
+}
+
+/* ==== Search bar and suggestions ====
+ * The bar holds the input, the clear action and the submit button in one row, and the suggestion panel is
+ * positioned against it, which is what position: relative below is for. */
+.sp-search-bar {
+  position: relative;
+}
+.sp-search-bar__form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sp-search-bar__input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  /* The page's own control, so it stands at the large control height rather than the field default. */
+  min-block-size: var(--control-height-lg);
+}
+.sp-search-bar__submit {
+  flex: none;
+}
+/* Present only while a value is typed: the component sets the hidden attribute, which base.css makes win wherever
+ * it is applied, so no display rule is needed for the hidden state. */
+.sp-search-bar__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--touch-target-min);
+  min-block-size: var(--touch-target-min);
+  color: var(--color-text-subtle);
+  border-radius: var(--radius-pill);
+}
+.sp-search-suggestions {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-1));
+  inset-inline: 0;
+  z-index: var(--z-dropdown);
+  max-block-size: 60vh;
+  max-block-size: 60dvh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background-color: var(--color-surface-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+}
+.sp-search-suggestions__list,
+.sp-search-history {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+}
+/* One muted heading per match kind, so a product, a brand and a category are told apart by their labels. */
+.sp-search-suggestions__group {
+  padding-block: var(--space-1);
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption-size);
+  letter-spacing: var(--text-caption-tracking);
+  text-transform: uppercase;
+}
+.sp-search-suggestions__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-block-size: var(--touch-target-min);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+/* The keyboard's current row carries a leading accent bar as well as the tint, and the pointer gets the same tint,
+ * so which suggestion is selected never rests on colour alone. */
+.sp-search-suggestions__item[aria-selected="true"] {
+  background-color: var(--color-surface-sunken);
+}
+.sp-search-suggestions__item[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-1);
+  inset-inline-start: 0;
+  inline-size: var(--border-width-thick);
+  background-color: var(--color-accent);
+}
+.sp-search-suggestions__kind {
+  flex: none;
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption-size);
+}
+.sp-search-suggestions__empty {
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+/* The recent searches sit in the same panel, under a rule and above their clear action. */
+.sp-search-history {
+  padding-block-start: var(--space-2);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-search-history .sp-btn--link {
+  justify-self: end;
+}
+@media (hover: hover) {
+  .sp-search-suggestions__item:hover {
+    background-color: var(--color-surface-sunken);
+  }
+  .sp-search-bar__clear:hover {
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text);
+  }
+}
+
+/* ==== Result meta and empty results ==== */
+.sp-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* The result count is a polite live region in markup and needs only its own look here. */
+.sp-result-count {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+/* Composes .sp-empty, which centres the icon, the title and the body, and adds the way out of the empty state. */
+.sp-no-results {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-result-meta {
+    flex-wrap: nowrap;
+  }
+  /* The sort closes the row once there is room for the count, the toggle and the sort together. */
+  .sp-result-meta > .sp-sort {
+    margin-inline-start: auto;
+  }
+}
+
+/* ==== Responsive summary ====
+ * At --breakpoint-sm: two product columns, the facet range's two bounds side by side, a list row's media fixed at
+ * one token's width. At --breakpoint-md: three product columns with the featured strip and the related strip four
+ * to a row, the panel a sticky
+ * first column with the drawer toggle gone and a scrolling value list, the sort closed to the end of the result
+ * row, and the result meta on a single line. At --breakpoint-lg: four product columns.
+ */

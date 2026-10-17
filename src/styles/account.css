@@ -1,0 +1,478 @@
+/* Path: src/styles/account.css
+ * Purpose: Styles for the account screens: profile form, order history and address cards
+ * Lines: 478
+ */
+
+/* The account layer: the sign-in and registration screens, the account shell with its section navigation and
+ * the three views behind it — profile, order history and the address book. It composes the primitives declared
+ * in controls.css, data-display.css and components.css and restates none of them, and it is the sole definition
+ * site of the .sp-auth*, .sp-account*, .sp-profile*, .sp-order-history*, .sp-order-detail* and .sp-address-*
+ * blocks, which the account feature files adopt. It loads eighth and last, so nothing may depend on it. Two
+ * markup hooks carry what the fixed class list cannot: data-span="full" on the profile field that crosses the
+ * form grid, and aria-current on the order-detail timeline step the order has reached. It declares no
+ * transition, so prefers-reduced-motion has nothing to neutralise here, and it defines no .sp-auth__aside,
+ * because LoginPage and RegisterPage are single-panel forms and the block would have no consumer.
+ */
+
+/* ==== Sign-in and registration ====
+ * One centred panel. Both screens render the same shell with a different title, lede, fields and submit, and
+ * the return path they preserve is the router's business rather than this sheet's. The panel takes the narrow
+ * container's measure, because a sign-in form reads better at the page's prose width than at the catalogue's;
+ * its surface, border, radius and --shadow-1 all come from .sp-card. Both screens align the title and the lede
+ * at the start of the panel, and the submit fills the column through .sp-btn--block, so no width rule is needed
+ * here for it.
+ */
+.sp-auth {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-6);
+  padding-block: var(--space-16);
+}
+.sp-auth__panel {
+  display: grid;
+  gap: var(--space-6);
+  inline-size: min(var(--layout-container-narrow), 100%);
+  padding: var(--space-8);
+}
+.sp-auth__header {
+  display: grid;
+  gap: var(--space-2);
+}
+.sp-auth__title {
+  font-size: var(--text-heading-1-size);
+  font-weight: var(--text-heading-1-weight);
+  line-height: var(--text-heading-1-line-height);
+  letter-spacing: var(--text-heading-1-tracking);
+}
+.sp-auth__lede {
+  max-inline-size: var(--layout-measure);
+  color: var(--color-text-muted);
+}
+.sp-auth__form {
+  display: grid;
+  gap: var(--space-5);
+}
+/* The form-level failure: a wrapper holding the danger alert and the recovery link under it. The wording is
+ * deliberately generic — it names no field — so this block only leaves room for a sentence that wraps. */
+.sp-auth__alert {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+/* One line of body text under a rule, so the two screens are a click apart without a second navigation block. */
+.sp-auth__switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+
+/* ==== Account shell ====
+ * One column on a phone, with the section navigation in a row above the routed view; from --breakpoint-md the
+ * navigation becomes the fixed column the facet width sets and the view takes what is left. The current section
+ * is marked by the aria-current NavLink applies, by the accent text and by a leading bar, so the state survives
+ * a greyscale rendering and a colour-blind one — the technique the administrator sidebar uses in layout.css.
+ */
+.sp-account {
+  display: grid;
+  gap: var(--space-6);
+}
+.sp-account__nav {
+  overflow-x: auto;
+  padding: var(--space-2);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+.sp-account__nav-list {
+  display: flex;
+  gap: var(--space-1);
+  list-style: none;
+}
+/* Each destination keeps its content width, so a narrow viewport scrolls the row rather than squeezing the
+ * labels; the list carries role="list" in markup, which is what keeps its semantics once the markers go. */
+.sp-account__nav-list > li {
+  flex: none;
+}
+.sp-account__nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--touch-target-min);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+  text-decoration-line: none;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .sp-account__nav-link:hover {
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text);
+  }
+}
+.sp-account__nav-link[aria-current="page"] {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-account__nav-link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: 0;
+  inline-size: var(--border-width-thick);
+  background-color: var(--color-accent);
+}
+/* The glyph takes the link's own colour through currentColor, and the fixed square keeps the rows even. */
+.sp-account__nav-icon {
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+.sp-account__content {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-account {
+    grid-template-columns: var(--layout-facet-width) minmax(0, 1fr);
+    gap: var(--space-8);
+    align-items: start;
+  }
+  /* The navigation holds its place beside the view while the view scrolls, and its row of links becomes a list
+   * of full-width rows. */
+  .sp-account__nav {
+    position: sticky;
+    inset-block-start: calc(var(--layout-header-height) + var(--space-4));
+    overflow-x: visible;
+  }
+  .sp-account__nav-list {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ==== Profile ====
+ * The identity header, then the editable sections. The form composes .sp-form and .sp-form__grid from
+ * controls.css, so the two-column layout from --breakpoint-md is that sheet's, and the email field crosses both
+ * columns through the data-span hook published above. A field the account cannot change is readonly rather than
+ * disabled — it stays focusable, so its value can be selected and copied — and controls.css resets :disabled
+ * alone, which leaves this treatment to be declared here. The confirmation the form writes into an aria-live
+ * region is the success register of the alert family, composed by token because that family's first column is
+ * its icon.
+ */
+.sp-profile {
+  display: grid;
+  gap: var(--space-6);
+}
+.sp-profile__header {
+  display: grid;
+  gap: var(--space-2);
+}
+.sp-profile__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+}
+.sp-profile__form {
+  display: grid;
+  gap: var(--space-6);
+}
+.sp-profile__form .sp-form__grid > [data-span="full"] {
+  grid-column: 1 / -1;
+}
+.sp-profile__form .sp-input[readonly] {
+  background-color: var(--color-surface-sunken);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+}
+.sp-profile__section {
+  display: grid;
+  gap: var(--space-4);
+}
+.sp-profile__section + .sp-profile__section {
+  padding-block-start: var(--space-5);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-profile__success {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-success-surface);
+  border: var(--border-width) solid var(--color-success);
+  border-radius: var(--radius-md);
+  color: var(--color-success-text);
+  font-size: var(--text-body-sm-size);
+}
+.sp-profile__success > :first-child {
+  flex: none;
+}
+
+/* ==== Order history ====
+ * The customer's own orders: the filters above the table, the table itself composing .sp-table with its sticky
+ * header, its numeric column and its empty row, and a status badge that carries its own word, so the hue only
+ * reinforces what the text already says.
+ */
+.sp-order-history {
+  display: grid;
+  gap: var(--space-5);
+}
+.sp-order-history__filters {
+  display: grid;
+  gap: var(--space-3);
+}
+.sp-order-history__table {
+  min-inline-size: var(--layout-table-min-width);
+}
+/* The order number is the row's link, and the one figure that has to line up from row to row. */
+.sp-order-history__table a {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium);
+}
+/* The badge slot in a row or in the order header: the status word and the icon or link beside it keep one line. */
+.sp-order-history__status,
+.sp-order-detail__status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+/* Nothing ordered yet: the shared empty state on a surface of its own, with the link into the catalogue the
+ * component places in .sp-empty__action. */
+.sp-order-history__empty {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* Inline and wrapping from the medium stop: each control takes at least three quarters of a facet column, so
+   * the row fills with as many as the content column holds and the rest wrap under it. */
+  .sp-order-history__filters {
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(100%, calc(var(--layout-facet-width) * 3 / 4)), 1fr)
+    );
+    align-items: end;
+  }
+}
+
+/* ==== Order detail ====
+ * One order read top to bottom: the number with its date and status, the itemised lines, the totals, the two
+ * addresses and the status history. The number is monospaced and explicitly selectable, because a customer reads
+ * it out or pastes it into a support conversation. commerce.css owns .sp-summary and is not generated yet, so
+ * the totals block is declared here rather than composed from a class this folder does not define.
+ */
+.sp-order-detail {
+  display: grid;
+  gap: var(--space-6);
+}
+.sp-order-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+}
+.sp-order-detail__number {
+  font-family: var(--font-family-mono);
+  font-size: var(--text-heading-2-size);
+  font-weight: var(--text-heading-2-weight);
+  line-height: var(--text-heading-2-line-height);
+  user-select: text;
+}
+/* Every figure in the itemised lines is a digit-aligned column, so the numeric variant is set once, on the list,
+ * and both money columns inherit it; the list carries role="list" in markup. */
+.sp-order-detail__lines {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.sp-order-detail__totals {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: end;
+  padding-block-start: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+/* The grand total is the block's last row: larger, heavier and set off by the wider rule above it. */
+.sp-order-detail__totals > :last-child {
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width-thick) solid var(--color-border);
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-order-detail__addresses {
+  display: grid;
+  gap: var(--space-5);
+}
+/* The status history is an ordered list whose markers carry the sequence as well as the shade: a check for every
+ * step the order has already taken, a filled dot for the one it is at. The words carry the state too, so the
+ * timeline reads without colour, and the connector between two markers is drawn as a border. */
+.sp-order-detail__timeline {
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+}
+.sp-order-detail__step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+}
+/* Both text slots sit in the body column, beside the marker rather than under it. */
+.sp-order-detail__step > * {
+  grid-column: 2;
+}
+.sp-order-detail__step::before {
+  content: "\2713";
+  display: grid;
+  place-items: center;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: start;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  background-color: var(--color-success-surface);
+  border: var(--border-width) solid var(--color-success);
+  border-radius: var(--radius-pill);
+  color: var(--color-success-text);
+  font-size: var(--text-caption-size);
+}
+.sp-order-detail__step:not(:last-child)::after {
+  content: "";
+  grid-column: 1;
+  grid-row: 1 / -1;
+  justify-self: center;
+  margin-block-start: calc(var(--space-5) + var(--space-1));
+  border-inline-start: var(--border-width) solid var(--color-border);
+}
+.sp-order-detail__step[aria-current]::before {
+  content: "";
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.sp-order-detail__step-date,
+.sp-order-detail__step-label {
+  color: var(--color-text-muted);
+}
+.sp-order-detail__step-date {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  font-variant-numeric: tabular-nums;
+}
+.sp-order-detail__step[aria-current] .sp-order-detail__step-label {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* Shipping and billing side by side, each a labelled block of its own. */
+  .sp-order-detail__addresses {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ==== Address book ====
+ * One card per address: the label with its default badges, the formatted lines, the set-default controls and the
+ * actions. The card composes .sp-card for its surface, and the controls inside it are .sp-choice and .sp-btn, so
+ * their 44px targets and their states stay in controls.css. The removal confirmation is .sp-confirm from
+ * data-display.css, which this sheet neither styles nor restates.
+ */
+.sp-address-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+.sp-address-card {
+  align-content: start;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+.sp-address-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+/* A label the customer wrote and the generic default label are the same text to this sheet, so neither of them
+ * needs a rule of its own. */
+.sp-address-card__label {
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--text-heading-3-weight);
+  line-height: var(--text-heading-3-line-height);
+}
+.sp-address-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+/* The formatted address keeps the line breaks it was entered with, and any line after the first — a phone
+ * number, a delivery note — is secondary to the address itself. */
+.sp-address-card__body {
+  font-size: var(--text-body-sm-size);
+  white-space: pre-line;
+}
+.sp-address-card__body > :not(:first-child) {
+  color: var(--color-text-muted);
+}
+.sp-address-card__defaults {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+/* The actions wrap in source order, so the destructive removal stays last and the tab order matches what is on
+ * screen; the rule above them separates them from the address itself. */
+.sp-address-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  /* Room for the label's badges and for the actions to hold one line each, where a phone wraps them. */
+  .sp-address-card__badges,
+  .sp-address-card__actions {
+    flex-wrap: nowrap;
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-address-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-address-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ==== Responsive summary ====
+ * 480 (--breakpoint-sm): the address card's badge row and action row hold one line each. 768 (--breakpoint-md):
+ * the account navigation becomes a sticky side column, the address grid runs two abreast, the order filters take
+ * one wrapping line and the order detail's two addresses sit side by side. 1024 (--breakpoint-lg): the address
+ * grid gains its third column.
+ */

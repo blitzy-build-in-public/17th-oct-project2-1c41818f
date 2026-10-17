@@ -1,0 +1,590 @@
+/* Path: src/styles/commerce.css
+ * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
+ * Lines: 590
+ */
+/* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
+ * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
+ * quantity stepper — and restates none of them. It loads sixth; the cart and checkout roots also carry
+ * layout.css's `.sp-split`, whose track gives them their two columns.
+ * BLITZY [BUDGET]: the sixty-odd names of this contract do not fit the 460-line budget, and the plan fixes the
+ * folder's file list and import order, so the concern is not split: the sheet stays inside the 600-line ceiling.
+ */
+
+/* ==== Cart layout ==== */
+/* Rows stacked with the summary below them; the two-column frame is `.sp-split`'s. */
+.sp-cart {
+  row-gap: var(--space-8);
+}
+/* One frame around the rows, each row drawing its own separator, so a list of one row or of none shows no rule. */
+.sp-cart__lines {
+  display: grid;
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+/* The cart's and the checkout's summary column: the aside track's width, and a panel that sticks below the header at
+ * the large stop, bounded to the viewport so its actions never fall past the fold. */
+.sp-cart__aside,
+.sp-checkout__aside {
+  min-inline-size: 0;
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-cart__aside,
+  .sp-checkout__aside {
+    position: sticky;
+    inset-block-start: calc(var(--layout-header-height) + var(--space-4));
+    max-block-size: calc(100dvh - var(--layout-header-height) - var(--space-8));
+    overflow-y: auto;
+  }
+}
+/* The empty cart and the empty drawer: the shared empty-state primitive, tightened to the panel and the drawer. */
+.sp-cart__empty,
+.sp-minicart__empty {
+  padding-block: var(--space-8);
+}
+
+/* ==== Cart row ==== */
+/* Named grid areas: five children share the row and the phone form moves only two of them. */
+.sp-cart-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "media body remove"
+    "media qty total"
+    "media price price"
+    "warn warn warn";
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+}
+.sp-cart-row + .sp-cart-row {
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+/* The square thumbnail: an <img> the row sizes, with object-fit holding the product image inside it. */
+.sp-cart-row__media {
+  grid-area: media;
+  inline-size: calc(var(--space-20) + var(--space-4));
+  block-size: calc(var(--space-20) + var(--space-4));
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+.sp-cart-row__body {
+  grid-area: body;
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+/* One line with an ellipsis, so a long name stays inside its column and every row keeps one height. */
+.sp-cart-row__name {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  text-decoration-line: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+.sp-cart-row__sku {
+  color: var(--color-text-subtle);
+  font-family: var(--font-family-mono);
+  font-size: var(--text-caption-size);
+}
+.sp-cart-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+.sp-cart-row__qty {
+  grid-area: qty;
+  justify-self: start;
+}
+.sp-cart-row__price {
+  grid-area: price;
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+.sp-cart-row__line-total {
+  grid-area: total;
+  align-self: end;
+  justify-self: end;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+/* A ghost icon button named by the accessible label in markup: muted until hovered or focused. */
+.sp-cart-row__remove {
+  grid-area: remove;
+  justify-self: end;
+  color: var(--color-text-subtle);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+@media (hover: hover) {
+  .sp-cart-row__name:hover {
+    color: var(--color-accent-hover);
+    text-decoration-line: underline;
+  }
+  .sp-cart-row__remove:hover {
+    color: var(--color-danger);
+  }
+}
+.sp-cart-row__remove:focus-visible {
+  color: var(--color-danger);
+}
+/* An availability warning is a sentence, not a coloured dot: the text carries the state. */
+.sp-cart-row__warning {
+  grid-area: warn;
+  display: flex;
+  gap: var(--space-2);
+  color: var(--color-danger-text);
+  font-size: var(--text-body-sm-size);
+}
+.sp-cart-row__warning > svg {
+  flex: none;
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+}
+
+/* ==== Order summary panel ==== */
+/* The card register — surface, hairline, radius, first elevation — as one grid, for cart and checkout alike. */
+.sp-summary {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+.sp-summary__title {
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--text-heading-3-weight);
+}
+.sp-summary__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block-end: var(--space-2);
+  border-block-end: var(--border-width) dashed var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+.sp-summary__row > :last-child {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+/* The saving stays legible as text: the success pair on the value, with the minus sign the row itself carries. */
+.sp-summary__row--discount > :last-child {
+  color: var(--color-success-text);
+}
+.sp-summary__row--total {
+  padding-block-start: var(--space-2);
+  border-block-start: var(--border-width-thick) solid var(--color-border);
+  border-block-end: 0;
+  color: var(--color-text);
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-summary__note,
+.sp-summary__progress-label {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+}
+/* The promo entry: the field first, the apply button second, and a rejected code's reason spanning both columns. */
+.sp-summary__promo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+}
+.sp-summary__promo > .sp-field__error,
+.sp-summary__promo > .sp-alert {
+  grid-column: 1 / -1;
+}
+/* The free-shipping band and the shipping-method list: the band's well, fill and sentence, and one row per method. */
+.sp-summary__progress,
+.sp-summary__shipping {
+  display: grid;
+  gap: var(--space-2);
+}
+.sp-summary__progress-track {
+  block-size: var(--progress-height);
+  background-color: var(--color-surface-sunken);
+  border-radius: var(--radius-pill);
+}
+.sp-summary__progress-fill {
+  display: block;
+  block-size: 100%;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-pill);
+}
+/* One card frame for the methods and the addresses; the selected row's accent frame and its filled radio agree. */
+.sp-summary__method,
+.sp-address-picker__option {
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.sp-summary__method:has(.sp-radio:checked),
+.sp-address-picker__option:has(.sp-radio:checked) {
+  background-color: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+}
+/* The auto margin pushes the price past the room a wrapping name takes, which gap alone cannot do. */
+.sp-summary__method > :last-child {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+/* The actions, stacked over a rule; the markup gives each of them `.sp-btn--block`. */
+.sp-summary__actions {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+
+/* ==== Mini-cart ==== */
+/* The drawer's content, not the drawer: `.sp-drawer` in data-display.css owns the panel, backdrop and focus. */
+.sp-minicart {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+.sp-minicart__list {
+  flex: 1;
+  display: grid;
+  align-content: start;
+  min-block-size: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+/* A compact line that wraps, so a long name never squeezes the controls; the confirmation reuses this form. */
+.sp-minicart__item,
+.sp-review__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+.sp-minicart__item {
+  padding-block: var(--space-3);
+}
+.sp-minicart__item + .sp-minicart__item {
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-minicart__item > img {
+  flex: none;
+  inline-size: var(--space-10);
+  block-size: var(--space-10);
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+.sp-minicart__item > :not(img):not(.sp-quantity):not(.sp-btn) {
+  flex: 1 1 calc(var(--space-20) + var(--space-4));
+  min-inline-size: 0;
+}
+.sp-minicart__footer {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+
+/* ==== Checkout layout ==== */
+/* The cart's frame from the same `.sp-split`; the aside takes `.sp-cart__aside`'s sticky rule and holds the summary. */
+.sp-checkout {
+  row-gap: var(--space-8);
+}
+.sp-checkout__main {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+  max-inline-size: var(--layout-container-narrow);
+}
+
+/* ==== Step indicator ==== */
+/* An ordered list read as a sequence: numbered markers, the current step's label on a phone, every label from
+ * --breakpoint-md. Each item's "current"/"completed" wording is `.sp-steps__status` + base.css's hidden utility. */
+.sp-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-steps__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The number always sits in the disc, so a step is identifiable by its position and never by hue alone. */
+.sp-steps__marker {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--control-height-sm);
+  block-size: var(--control-height-sm);
+  color: var(--color-text-muted);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption-size);
+}
+.sp-steps__label {
+  display: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+}
+.sp-steps__item--current .sp-steps__label,
+.sp-steps__item[aria-current="true"] .sp-steps__label {
+  display: block;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+/* The line between two markers takes the colour of the step it leaves, so only a completed run turns green. */
+.sp-steps__connector {
+  flex: 1;
+  block-size: var(--border-width-thick);
+  background-color: var(--color-border);
+}
+.sp-steps__item--done .sp-steps__connector {
+  background-color: var(--color-success);
+}
+/* The current step: the filled accent marker, the semibold label and the attribute the component sets. */
+.sp-steps__item--current .sp-steps__marker,
+.sp-steps__item[aria-current="true"] .sp-steps__marker {
+  color: var(--color-text-on-accent);
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+/* A completed step carries the success disc and the tick glyph, which a greyscale rendering still shows. */
+.sp-steps__item--done .sp-steps__marker {
+  color: var(--color-text-inverse);
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+}
+.sp-steps__item--done .sp-steps__marker > svg {
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+}
+
+/* ==== Step shell ==== */
+.sp-step,
+.sp-step__body,
+.sp-payment,
+.sp-review {
+  display: grid;
+  gap: var(--space-5);
+}
+.sp-step__header {
+  display: grid;
+  gap: var(--space-1);
+  padding-block-end: var(--space-4);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-step__title {
+  font-size: var(--text-heading-2-size);
+  font-weight: var(--text-heading-2-weight);
+}
+.sp-step__count {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+}
+/* The error summary takes `.sp-alert .sp-alert--danger` in markup for the danger pair and border, keeps the anchor's
+ * own colour on each link, and gives its title and list the full width, having no icon for the alert's first column. */
+.sp-step__errors {
+  font-size: var(--text-body-sm-size);
+}
+.sp-step__errors > .sp-alert__title,
+.sp-step__errors > .sp-alert__body {
+  grid-column: 1 / -1;
+}
+/* Stacked full width on a phone: the grid stretches both actions across the step. */
+.sp-step__actions {
+  display: grid;
+  gap: var(--space-2);
+}
+/* In flight the fields dim and refuse the pointer, while the working control dims through its own busy state. */
+.sp-step[aria-busy="true"] .sp-step__body {
+  opacity: var(--opacity-disabled);
+  pointer-events: none;
+}
+
+/* ==== Address entry and reuse ==== */
+/* Saved addresses as `.sp-choice` radio cards on the summary section's card frame; their lines sit below the radio. */
+.sp-address-picker {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+}
+.sp-address-picker__body {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+/* The field grid the step body, the payment row and the confirmation's meta block share; its first two span both. */
+.sp-address-form,
+.sp-payment__row,
+.sp-confirmation__meta {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* ==== Payment ==== */
+.sp-payment__methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+.sp-payment__card {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+/* The demonstration notice, which the markup composes with `.sp-alert .sp-alert--info`, at the prose measure. */
+.sp-payment__note {
+  max-inline-size: var(--layout-measure);
+}
+
+/* ==== Review and submit ==== */
+/* A heading, the edit action returning to the step it came from, and the content across the width beneath them. */
+.sp-review__section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  padding-block-end: var(--space-5);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-review__section:last-child {
+  padding-block-end: 0;
+  border-block-end: 0;
+}
+.sp-review__edit {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+.sp-review__section > :not(:first-child):not(.sp-review__edit) {
+  grid-column: 1 / -1;
+}
+/* The reviewed items in their compact form — no stepper, because the review restates what is already agreed. */
+.sp-review__list {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+}
+.sp-review__item > :last-child {
+  margin-inline-start: auto;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+/* The totals in the summary's own row register, held to the aside width so they sit under the items. */
+.sp-review__totals {
+  display: grid;
+  gap: var(--space-2);
+  justify-self: end;
+  inline-size: min(100%, var(--layout-aside-width));
+}
+
+/* ==== Confirmation ==== */
+.sp-confirmation {
+  display: grid;
+  gap: var(--space-5);
+  max-inline-size: var(--layout-container-narrow);
+  margin-inline: auto;
+  padding-block: var(--space-10);
+}
+.sp-confirmation__header {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+/* The order number: monospace, at the heading role, and selectable in one gesture, because a reader copies it. */
+.sp-confirmation__number {
+  font-family: var(--font-family-mono);
+  font-size: var(--text-heading-2-size);
+  font-weight: var(--font-weight-semibold);
+  user-select: all;
+}
+.sp-confirmation__estimate {
+  color: var(--color-text-muted);
+}
+/* The itemised lines, in the review's own list form, ruled off above and below with `.sp-review__totals` under them. */
+.sp-confirmation__lines {
+  padding-block: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) var(--space-3);
+}
+.sp-confirmation__actions[aria-busy="true"] {
+  opacity: var(--opacity-disabled);
+  pointer-events: none;
+}
+
+/* ==== The medium stop ==== */
+/* The step from one column to two, in the order of the sections above: the cart row, the labels, the grids. */
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-cart-row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "media body  qty   total remove"
+      ".     price price price price"
+      ".     warn  warn  warn  warn";
+    gap: var(--space-2) var(--space-5);
+    padding: var(--space-5);
+  }
+  .sp-cart-row__price {
+    justify-self: end;
+  }
+  .sp-cart-row__line-total {
+    align-self: center;
+  }
+  .sp-steps {
+    gap: var(--space-3);
+  }
+  .sp-steps__label {
+    display: block;
+  }
+  .sp-step__actions {
+    grid-auto-flow: column;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .sp-step__actions > :first-child {
+    grid-column: 2;
+  }
+  .sp-step__actions > :last-child {
+    grid-column: 1;
+  }
+  .sp-address-picker,
+  .sp-address-form,
+  .sp-payment__row,
+  .sp-confirmation__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sp-address-form > :nth-child(-n + 2) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ==== Responsive summary ====
+ * At --breakpoint-sm the checkout's actions and the cart row's controls take their own full-width lines; at
+ * --breakpoint-md the rules above fold the cart row onto two lines and set the grids and option cards; at
+ * --breakpoint-lg `.sp-split` sets the cart and the checkout two abreast with a sticky aside. */

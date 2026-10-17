@@ -1,0 +1,590 @@
+/* Path: src/styles/admin-reports.css
+ * Purpose: Styles for the dashboard, the report tables and the chart frames
+ * Lines: 590
+ */
+
+/* The administrator register: denser than the storefront, one question answered in a screenful. This sheet
+ * owns the administrator content column, the dashboard and KPI grids, the chart frame with its axes, series,
+ * legend, readout, centre total and paired data table, the report shell with its range control, summary
+ * strip, export action and scrolling table, and the two notes those screens owe the reader.
+ * It loads seventh, after components.css and before account.css, composes the primitives rather than
+ * restating them, and publishes the class contract the three chart renderers (phases 19-20) and the
+ * administrator and report views (phases 30-32) adopt verbatim. Every series colour is a
+ * var(--chart-series-N) reference, so no colour literal is written here and none exists in a TypeScript file. */
+
+/* ==== Administrator content area ====
+ * The sidebar grid and its placement are layout.css's `.sp-app--admin`; this block styles the content column
+ * beside it. min-inline-size: 0 on both the column and its main region is what lets a 960px table scroll
+ * inside its own container instead of widening the page, and either element can be the grid item depending
+ * on how the shell nests the two. */
+.sp-admin {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+.sp-admin__main {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+/* The row above a dashboard's blocks: the page heading, the range control and the export action. Below
+ * --breakpoint-md the heading takes a line of its own and the controls wrap under it, because three controls
+ * sharing one narrow line each end up too small to read at 375px. */
+.sp-admin__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+  min-inline-size: 0;
+}
+.sp-admin__heading {
+  flex: 1 1 100%;
+  min-inline-size: 0;
+  font-size: var(--text-heading-1-size);
+  font-weight: var(--text-heading-1-weight);
+  line-height: var(--text-heading-1-line-height);
+  letter-spacing: var(--text-heading-1-tracking);
+}
+
+/* ==== Dashboard grid ==== */
+/* A dashboard is a column of blocks at one rhythm, and a pair of panels that answer related questions shares
+ * a row once there is width for two. A titled block composes `.sp-card` in markup, so this sheet adds only
+ * the rhythm inside it. */
+.sp-dashboard {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+.sp-dashboard__row {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+.sp-dashboard__section {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+
+/* ==== KPI cards ====
+ * One figure per card with its name, its change and the wording of the comparison that change is measured
+ * against. The card repeats the four declarations the card primitive is built from, so it is whole whether
+ * or not the markup also carries `.sp-card`. */
+.sp-kpi-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+.sp-kpi-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+.sp-kpi-card__label {
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  line-height: var(--text-label-line-height);
+  color: var(--color-text-muted);
+}
+.sp-kpi-card__value {
+  font-size: var(--text-display-size);
+  font-weight: var(--text-display-weight);
+  line-height: var(--text-display-line-height);
+  letter-spacing: var(--text-display-tracking);
+  font-variant-numeric: tabular-nums;
+}
+/* The change is carried by the arrow glyph and the change text the component renders, and the two variants
+ * below only reinforce that meaning with a colour, so a greyscale rendering loses no direction. */
+.sp-kpi-card__delta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-kpi-card__delta--up {
+  color: var(--color-success-text);
+}
+.sp-kpi-card__delta--down {
+  color: var(--color-danger-text);
+}
+/* The comparison is named in words, because a dashboard that implies its baseline invites a wrong guess. */
+.sp-kpi-card__baseline {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-subtle);
+}
+
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-admin__toolbar {
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sp-admin__heading {
+    flex: 1 1 auto;
+  }
+  .sp-dashboard__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ==== Chart frame, axes and series ====
+ * The three renderers draw their own SVG inside `.sp-chart__svg`; this block styles the frame, the paint of
+ * every mark, the legend, the hover readout, the donut's centre and the paired data table that repeats the
+ * same numbers. Series colours are the eight --chart-series-N tokens tokens.css declares, mapped onto the
+ * `.sp-chart__series-N` classes chartGeometry.ts emits, so no renderer writes a colour.
+ * Hue is never the only separation: the even series carry four distinct stroke patterns, their legend
+ * swatches repeat that rhythm as a bar of gaps, and bars step down in fill opacity, while every legend entry
+ * pairs its swatch with the series name and value. */
+.sp-chart {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+/* The title beside the controls that change what is plotted — a bucket control and a series toggle — in one
+ * wrapping row, so a narrow screen stacks them instead of squeezing either. */
+.sp-chart__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+}
+.sp-chart__title {
+  min-inline-size: 0;
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--text-heading-3-weight);
+  line-height: var(--text-heading-3-line-height);
+  letter-spacing: var(--text-heading-3-tracking);
+}
+.sp-chart__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+/* The frame holds the plot alone, so its centre is the ring's centre for `.sp-chart__center` below and its
+ * minimum height is the plot's: the space-20 token three and four times over, 240px on a phone and 320px from
+ * --breakpoint-lg. It is also the readout's containing block. */
+.sp-chart__frame {
+  position: relative;
+  min-block-size: calc(var(--space-20) * 3);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+/* A tick label at the top of the plot paints outside the SVG's own box; clipping it would cut the axis. */
+.sp-chart__svg {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  overflow: visible;
+}
+/* The hairlines stay one device pixel however far the plot's viewBox scales: without the non-scaling stroke a
+ * 1px grid line blurs into the surface. */
+.sp-chart__grid-line {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.sp-chart__axis-line {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+/* Labels take the chart-label token and inherit the document's own typeface, so a label stays legible
+ * against the surface whatever transform the renderer applies to it. */
+.sp-chart__tick,
+.sp-chart__label {
+  fill: var(--chart-label);
+  font-size: var(--font-size-xs);
+}
+/* Every series shares the line treatment and the light wash an area lays over its grid: 0.18 keeps the grid
+ * lines visible under the area, and a bar, a slice or a point raises the opacity back below. The paint is
+ * currentColor, so a series class declares only its `color` — which also lets an HTML legend swatch paint
+ * itself with no colour written in this sheet. */
+.sp-chart__series-1,
+.sp-chart__series-2,
+.sp-chart__series-3,
+.sp-chart__series-4,
+.sp-chart__series-5,
+.sp-chart__series-6,
+.sp-chart__series-7,
+.sp-chart__series-8 {
+  stroke: currentColor;
+  fill: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  fill-opacity: 0.18;
+}
+/* The eight positions, each naming its own token. Every series carries the opacity its bars paint at,
+ * stepping down from the first, so two bar series separate by lightness wherever their hues sit close
+ * together; the four even ones add a stroke pattern, and the rest differ by hue and lightness. */
+.sp-chart__series-1 {
+  color: var(--chart-series-1);
+  --sp-chart-bar-opacity: 1;
+}
+.sp-chart__series-2 {
+  color: var(--chart-series-2);
+  --sp-chart-bar-opacity: 0.86;
+  stroke-dasharray: 6 3;
+}
+.sp-chart__series-3 {
+  color: var(--chart-series-3);
+  --sp-chart-bar-opacity: 0.74;
+}
+.sp-chart__series-4 {
+  color: var(--chart-series-4);
+  --sp-chart-bar-opacity: 0.64;
+  stroke-dasharray: 1 3;
+}
+.sp-chart__series-5 {
+  color: var(--chart-series-5);
+  --sp-chart-bar-opacity: 0.56;
+}
+.sp-chart__series-6 {
+  color: var(--chart-series-6);
+  --sp-chart-bar-opacity: 0.48;
+  stroke-dasharray: 10 3 2 3;
+}
+.sp-chart__series-7 {
+  color: var(--chart-series-7);
+  --sp-chart-bar-opacity: 0.4;
+}
+.sp-chart__series-8 {
+  color: var(--chart-series-8);
+  --sp-chart-bar-opacity: 0.32;
+  stroke-dasharray: 4 2 1 2;
+}
+/* A hovered or active point marker is solid in its series colour behind a solid surface-coloured ring, so it
+ * reads as a marker over the line rather than as the line thickening; the dash a series carries is reset
+ * here and on the slice below. */
+.sp-chart__point {
+  stroke: var(--color-surface);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  fill-opacity: 1;
+}
+/* A bar paints solid — the dashed line treatment a series class carries is not a bar's — at the opacity its
+ * series sets, which steps every series down from the first so two of them stay apart in greyscale. Grouping
+ * and stacking are layout, and that maths belongs to BarChart.tsx. */
+.sp-chart__bar {
+  stroke: none;
+  fill-opacity: var(--sp-chart-bar-opacity, 1);
+}
+/* A donut's segment gap: a solid surface-coloured stroke separates two touching arcs, which no border can do
+ * for a path, and the dash a series carries is reset so the gap is continuous on every slice. */
+.sp-chart__slice {
+  stroke: var(--color-surface);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  fill-opacity: 1;
+}
+/* The readout's placement travels in two custom properties — the offset the component computed for the
+ * hovered point and the width it measured — because a stylesheet cannot clamp an inline inset and may not
+ * reach for !important. The frame clamps the box inside its own padding box, and a value too long for the
+ * space left is ellipsised rather than painted past the chart's edge. */
+.sp-chart__readout {
+  position: absolute;
+  inset-block-start: var(--sp-chart-readout-y, 0px);
+  inset-inline-start: clamp(
+    0px,
+    var(--sp-chart-readout-x, 0px),
+    max(0px, calc(100% - var(--space-2) - var(--sp-chart-readout-w, 0px)))
+  );
+  max-inline-size: calc(100% - 2 * var(--space-2));
+  z-index: var(--z-dropdown);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-2);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.sp-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+.sp-chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* A swatch samples its series through currentColor and a dashed series repeats its stroke rhythm as a bar of
+ * gaps, so the legend still matches its mark once hue is gone. The gaps paint the surface. */
+.sp-chart__legend-swatch {
+  flex: none;
+  inline-size: calc(var(--space-4) + var(--space-1));
+  block-size: var(--space-2);
+  background-color: currentColor;
+  border-radius: var(--radius-xs);
+}
+.sp-chart__legend-swatch.sp-chart__series-2 {
+  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  background-size: 9px 100%;
+}
+.sp-chart__legend-swatch.sp-chart__series-4 {
+  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  background-size: 4px 100%;
+}
+.sp-chart__legend-swatch.sp-chart__series-6 {
+  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  background-size: 13px 100%;
+}
+.sp-chart__legend-swatch.sp-chart__series-8 {
+  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  background-size: 6px 100%;
+}
+.sp-chart__legend-label {
+  font-size: var(--text-body-sm-size);
+  color: var(--color-text-muted);
+}
+.sp-chart__legend-value {
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+/* The donut's centre total, centred over the plot the frame holds. */
+.sp-chart__center {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.sp-chart__center-value {
+  font-size: var(--text-heading-2-size);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-heading-2-line-height);
+  font-variant-numeric: tabular-nums;
+}
+/* The paired data table composes `.sp-table` with `.sp-table--compact` in markup, so the primitive owns its
+ * rows; this block adds the space above it and a quieter caption. */
+.sp-chart__data {
+  margin-block-start: var(--space-2);
+}
+.sp-chart__data .sp-table__caption {
+  color: var(--color-text-subtle);
+  font-weight: var(--font-weight-regular);
+}
+/* A range that sold nothing renders `.sp-empty` here and keeps the frame's height through the same token. */
+.sp-chart__empty {
+  display: grid;
+  place-items: center;
+  min-block-size: calc(var(--space-20) * 3);
+}
+
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-chart__frame {
+    min-block-size: calc(var(--space-20) * 4);
+  }
+}
+
+/* ==== Report shell ====
+ * A selector over the three report definitions, a header carrying the range and the baseline, then a body of
+ * summary figures, a paired chart and the table the export reproduces. */
+.sp-report {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+/* The selector composes `.sp-tabs` in markup, which already scrolls its own list; this block gives that
+ * scroll a container of its own, so a long set of report names never widens the page. */
+.sp-report__selector {
+  overflow-x: auto;
+}
+.sp-report__header {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+/* The range picker, the baseline select and the export action: stacked full width below --breakpoint-md. */
+.sp-report__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sp-report__body {
+  display: grid;
+  gap: var(--space-6);
+  min-inline-size: 0;
+}
+.sp-report__summary {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+.sp-report__summary-item {
+  display: grid;
+  gap: var(--space-1);
+}
+.sp-report__summary-label {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-subtle);
+}
+.sp-report__summary-value {
+  font-size: var(--text-heading-2-size);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+/* A range that recorded no activity composes `.sp-empty` here, with the action that widens the range. */
+.sp-report__empty {
+  padding-block: var(--space-6);
+}
+
+/* ==== Report table ====
+ * A wide report keeps its columns and travels sideways inside its own box, because a table squeezed to
+ * legibility at 375px is not legible at all. The 960px floor is --layout-table-min-width, applied through a
+ * descendant selector rather than by asking the component for a second class. The totals row is deliberately
+ * not sticky: this container scrolls sideways only, so a sticky bottom edge would resolve against the page. */
+.sp-report-table {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+.sp-report-table__scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+.sp-report-table__scroll > .sp-table {
+  min-inline-size: var(--layout-table-min-width);
+}
+/* The totals row closes the table: a thicker rule in the strong border token sets it apart from the last data
+ * row, while the row's own treatment — raised surface, semibold figures — stays the primitive's. Qualified by
+ * the block because the primitive's `.sp-table tfoot td` rule out-specifies a two-part selector. */
+.sp-report-table .sp-report-table__totals td {
+  border-block-start: var(--border-width-thick) solid var(--color-border-strong);
+}
+/* The money and count column aligns on its digits, qualified by the block so it also out-specifies the
+ * sticky header's text-align. */
+.sp-report-table .sp-report-table__num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==== Date-range control ====
+ * Presets, the two date fields, the resolved range in words and the baseline every change is measured
+ * against; the range rule itself belongs to src/utils/dates.ts and this block styles the message it returns. */
+.sp-date-range {
+  display: grid;
+  gap: var(--space-3);
+}
+.sp-date-range__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* A preset composes `.sp-btn--secondary` at the small size, which supplies its height, padding and type;
+ * naming it here is what makes it chip-shaped. The active one is marked by a fill, a heavier border, a
+ * heavier weight and the pressed state the button carries, so the choice never rests on colour alone. */
+.sp-date-range__preset {
+  border-radius: var(--radius-pill);
+}
+.sp-date-range__preset[aria-pressed="true"] {
+  background-color: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+  border-width: var(--border-width-thick);
+  color: var(--color-accent-contrast);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-date-range__fields {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+.sp-date-range__summary {
+  font-size: var(--text-body-sm-size);
+  color: var(--color-text-muted);
+}
+.sp-date-range__error {
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-danger-text);
+}
+/* The baseline selector with its label: previous period or previous year. Whichever is chosen is named in
+ * words beside every figure that used it, so a comparison is never left to be inferred. */
+.sp-date-range__baseline {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* ==== Export and notes ==== */
+/* The CSV action beside a status slot: the export reproduces the rows on screen and is capped by
+ * src/constants/config.ts and src/utils/csv.ts, which is the count the note beside it states. */
+.sp-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.sp-export__note {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-subtle);
+}
+/* Every figure here is bucketed in the browser, so a period boundary is the visitor's own clock. */
+.sp-range-note {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-subtle);
+}
+
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-date-range__fields,
+  .sp-report__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-report__toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-report__summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ==== Responsive summary ====
+ * At --breakpoint-sm: two KPI cards and two summary figures across, date fields side by side. At
+ * --breakpoint-md: the toolbars inline with their heading and a pair of dashboard panels sharing a row. At
+ * --breakpoint-lg: four KPI cards and four summary figures across, and the plot at its full height. */

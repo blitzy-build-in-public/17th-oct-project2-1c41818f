@@ -1,0 +1,282 @@
+/* Path: src/styles/catalog-landing.css
+ * Purpose: Styles for the landing page's bands: the hero with its illustration, the promotional banner, the trust strip, the category showcase and the featured strip
+ * Lines: 282
+ */
+
+/* The landing surface: the hero band with its drawing, the promotional band, the trust strip, the category
+ * showcase with its chips, and the section header the featured strip shares with the related strip in
+ * catalog-detail.css. Split out of src/styles/catalog.css, which the plan maps, because the catalogue and search
+ * family does not fit one file inside the request's 600-line ceiling; catalog.css loads this sheet with @import
+ * ahead of its own rules, so the entry point still imports the eight mapped stylesheets and the cascade order is
+ * unchanged. It composes the primitives the component sheets own (.sp-btn/.sp-button, .sp-card) and restates none
+ * of their rules, and every value is a var() from tokens.css.
+ *
+ * The hero and trust names are the ones the committed src/features/home/HeroSection.tsx renders — it carries its
+ * own __inner rather than layout.css's .sp-container, which is why that container geometry is written here
+ * instead. The featured strip's cards take .sp-product-grid--strip from catalog.css, which loads after this sheet.
+ */
+
+/* ==== Hero ====
+ * A full-bleed tinted band; __inner carries the container geometry, because HeroSection.tsx renders its own inner
+ * rather than the shared .sp-container. */
+.sp-hero {
+  display: grid;
+  gap: var(--space-8);
+  padding-block: var(--space-6) var(--space-8);
+  background-color: var(--color-surface-sunken);
+}
+.sp-hero__inner {
+  display: grid;
+  gap: var(--space-8);
+  inline-size: 100%;
+  max-inline-size: var(--layout-container-max);
+  margin-inline: auto;
+  padding-inline: var(--layout-gutter);
+}
+.sp-hero__copy {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  max-inline-size: var(--layout-measure);
+}
+/* The overline role: the accent at the caption size, which is what puts the band above the title in the hierarchy. */
+.sp-hero__eyebrow {
+  color: var(--color-accent);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
+}
+/* The h1 the page owns takes the display role; tokens.css raises it at --breakpoint-md, so no query is needed. */
+.sp-hero__title {
+  font-size: var(--text-display-size);
+  font-weight: var(--text-display-weight);
+  line-height: var(--text-display-line-height);
+  letter-spacing: var(--text-display-tracking);
+}
+.sp-hero__body {
+  color: var(--color-text-muted);
+}
+/* One column on a phone, where each action takes the full row; the row itself arrives at --breakpoint-sm. */
+.sp-hero__actions {
+  display: grid;
+  gap: var(--space-2);
+}
+.sp-hero__action {
+  inline-size: 100%;
+}
+/* The artboard's own ratio, so the band reserves the drawing's height before it paints. */
+.sp-hero__media {
+  position: relative;
+  aspect-ratio: 424 / 300;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+}
+/* The drawing supplies geometry only: its weight, colour and fill come from here, and any stroke without a class
+ * of its own paints in the accent through currentColor. */
+.sp-hero__art {
+  inline-size: 100%;
+  block-size: 100%;
+  color: var(--color-accent);
+  stroke-width: var(--border-width-thick);
+}
+.sp-hero__art-frame,
+.sp-hero__art-tile {
+  stroke: var(--color-border-strong);
+}
+.sp-hero__art-bar,
+.sp-hero__art-line {
+  stroke: var(--color-border);
+}
+.sp-hero__art-media,
+.sp-hero__art-column {
+  fill: var(--color-accent-subtle);
+  stroke: var(--color-accent);
+}
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-hero__actions {
+    grid-auto-flow: column;
+    justify-content: start;
+  }
+  .sp-hero__action {
+    inline-size: auto;
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-hero {
+    padding-block: var(--space-10) var(--space-12);
+  }
+  /* The media takes the larger share of the row and the copy keeps the prose measure. */
+  .sp-hero__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: var(--space-10);
+  }
+}
+
+/* ==== Promotional band and trust strip ==== */
+.sp-promo-banner {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding-block: var(--space-6);
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
+}
+.sp-promo-banner__body {
+  max-inline-size: var(--layout-measure);
+  font-weight: var(--font-weight-medium);
+}
+.sp-promo-banner__action {
+  justify-self: start;
+}
+/* The strip closes the hero band, separated from the copy by a rule rather than by spacing alone. */
+.sp-trust {
+  padding-block-start: var(--space-6);
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+.sp-trust__inner {
+  inline-size: 100%;
+  max-inline-size: var(--layout-container-max);
+  margin-inline: auto;
+  padding-inline: var(--layout-gutter);
+}
+.sp-trust__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  list-style: none;
+}
+.sp-trust__item {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+.sp-trust__icon {
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  color: var(--color-accent);
+}
+.sp-trust__claim {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  letter-spacing: var(--text-caption-tracking);
+}
+
+/* ==== Category showcase ==== */
+.sp-category-showcase {
+  display: grid;
+  gap: var(--space-4);
+}
+.sp-category-tiles {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* The tile is a link that takes the card's frame in markup, so only its own grid and padding are written here. */
+.sp-category-tile {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  color: var(--color-text);
+  text-decoration-line: none;
+}
+.sp-category-tile__media {
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-sunken);
+}
+/* The tile's name is an h3 in markup, so base.css supplies the heading-3 role and this sheet adds nothing to it
+ * beyond the colour and the removed underline a link would otherwise take. */
+.sp-category-tile__name {
+  color: var(--color-text);
+  text-decoration-line: none;
+}
+.sp-category-tile__count {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  letter-spacing: var(--text-caption-tracking);
+}
+/* The subcategory chips under a category heading; the current one is marked by the router's attribute and marks
+ * itself with its tint, its border and its weight rather than with hue alone. */
+.sp-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-category-chip {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-3);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  text-decoration-line: none;
+}
+.sp-category-chip[aria-current="page"] {
+  background-color: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: var(--font-weight-semibold);
+}
+@media (hover: hover) {
+  .sp-category-chip:hover {
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text);
+  }
+}
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-category-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-category-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .sp-promo-banner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-6);
+  }
+  .sp-trust__item {
+    flex: 1 1 0;
+  }
+}
+
+/* ==== Featured strip ==== */
+/* The strip's own cards and its --strip modifier are .sp-product-grid's, in catalog.css, which loads after this
+ * sheet; only the section's own rhythm and its heading row belong here. */
+.sp-featured {
+  display: grid;
+  gap: var(--space-4);
+}
+/* A section heading row with its action closed to the end, shared by the featured strip and the related strip. */
+.sp-featured__header,
+.sp-related__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* ==== Responsive summary ====
+ * At --breakpoint-sm: the hero's two actions sit inline and the category tiles run three across. At
+ * --breakpoint-md: the hero becomes two columns with the media taking the larger share, the tiles four across and
+ * the promotional band's copy and action share one row.
+ */
