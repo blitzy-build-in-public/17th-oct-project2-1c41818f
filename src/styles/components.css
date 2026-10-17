@@ -1,6 +1,6 @@
 /* Path: src/styles/components.css
  * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded through controls.css and data-display.css
- * Lines: 479
+ * Lines: 488
  */
 
 /* The twelve primitive families every page composes are defined across the four sheets this chain loads:
@@ -122,7 +122,11 @@ button.sp-rating__star {
   color: var(--color-text-muted);
   cursor: pointer;
 }
-.sp-quantity__button[disabled] {
+/* A control sitting on a bound dims whether it reports itself unavailable through the native attribute or through
+ * `aria-disabled`; the stepper uses the ARIA spelling at its ceiling and its floor, so a keyboard user keeps the
+ * focus they stepped with, and the native one when the whole control is disabled. */
+.sp-quantity__button[disabled],
+.sp-quantity__button[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
 }
 .sp-quantity__input {
@@ -142,6 +146,11 @@ button.sp-rating__star {
 .sp-quantity__input::-webkit-inner-spin-button {
   appearance: none;
   margin: 0;
+}
+/* A disabled field dims with the controls beside it, so the whole stepper reads as one unavailable control
+ * rather than as a live field between two dimmed buttons. */
+.sp-quantity__input[disabled] {
+  opacity: var(--opacity-disabled);
 }
 
 /* ==== Tooltip and popover ====

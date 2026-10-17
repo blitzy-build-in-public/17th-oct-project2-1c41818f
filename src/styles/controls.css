@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 573
+ * Lines: 593
  */
 
 /* ==== Buttons ====
@@ -246,13 +246,25 @@
   gap: var(--space-2);
 }
 /* BLITZY [CONTRACT]: the horizontal arrangement `RadioGroup` asks for with its `orientation="horizontal"` prop.
- * The group declared above stacks its rows, so the modifier is what puts them in one line: the grid flows
- * along the row, packed to the start and centred row against row, keeping the base gap between them. */
+ * The group declared above stacks its rows, so the modifier is what lays the choices in one line: a wrapped row
+ * of them, packed to the start and centred row against row, keeping the base gap between them. The group's own
+ * text takes a line of its own instead of joining that row, in the order `RadioGroup` renders it — the legend,
+ * then the hint, then the choices, then the error.
+ * BLITZY [LAYOUT]: the arrangement was a grid flowing along one unwrappable column row, which laid the legend,
+ * the hint and the error inside the choices' line. Five choices beside a legend, a hint and an error measured
+ * 362px of min-content, so a page holding that group scrolled 3px sideways at 375px and 58px at 320px, and the
+ * hint was crushed to one word per line. The choices wrap and the text owns its lines, so the arrangement holds
+ * from 320px up; the row a phone can fit is unchanged. */
 .sp-radio-group--horizontal {
-  grid-auto-flow: column;
-  justify-content: start;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+}
+.sp-radio-group--horizontal > legend,
+.sp-radio-group--horizontal > .sp-field__hint,
+.sp-radio-group--horizontal > .sp-field__error {
+  flex-basis: 100%;
 }
 .sp-form__grid {
   display: grid;
@@ -429,6 +441,14 @@
 .sp-switch:disabled,
 .sp-switch[aria-disabled="true"] {
   cursor: not-allowed;
+}
+/* A star drawn inside a choice row is that row's own content, so it dims with the control it belongs to: the box
+ * and the switch each dim while unavailable, and a row whose glyph stayed at full strength read as half-disabled.
+ * The rule names the rating family's class because that is the glyph a choice row carries; nothing else in the
+ * family's sheet reaches a choice. */
+.sp-choice:has(> :disabled) .sp-rating__star,
+.sp-choice:has(> [aria-disabled="true"]) .sp-rating__star {
+  opacity: var(--opacity-disabled);
 }
 .sp-checkbox,
 .sp-radio {

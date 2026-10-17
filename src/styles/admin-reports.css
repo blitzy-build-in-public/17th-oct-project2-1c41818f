@@ -1,6 +1,6 @@
 /* Path: src/styles/admin-reports.css
  * Purpose: Styles for the dashboard, the report tables and the chart frames
- * Lines: 592
+ * Lines: 600
  */
 
 /* The administrator register: denser than the storefront, one question answered in a screenful. This sheet
@@ -154,6 +154,8 @@
  * swatches repeat that rhythm as a bar of gaps, and bars step down in fill opacity, while every legend entry
  * pairs its swatch with the series name and value. */
 .sp-chart {
+  /* A flexible track: an implicit auto column is sized by the paired table's min-content, so it would widen. */
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: var(--space-4);
   min-inline-size: 0;
@@ -293,6 +295,11 @@
   stroke: none;
   fill-opacity: var(--sp-chart-bar-opacity, 1);
 }
+/* The region a renderer takes the pointer over, one per band: it paints nothing and covers the plot, so a
+ * hover readout follows a band instead of the bars in it and the gaps between grouped bars clear nothing. */
+.sp-chart__hit {
+  fill: transparent;
+}
 /* A donut's segment gap: a solid surface-coloured stroke separates two touching arcs, which no border can do
  * for a path, and the dash a series carries is reset so the gap is continuous on every slice. */
 .sp-chart__slice {
@@ -392,6 +399,7 @@
 /* The paired data table composes `.sp-table` with `.sp-table--compact` in markup, so the primitive owns its
  * rows; this block adds the space above it and a quieter caption. */
 .sp-chart__data {
+  min-inline-size: 0;
   margin-block-start: var(--space-2);
 }
 .sp-chart__data .sp-table__caption {
