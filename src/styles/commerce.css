@@ -1,6 +1,6 @@
 /* Path: src/styles/commerce.css
  * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
- * Lines: 599
+ * Lines: 607
  */
 /* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
  * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
@@ -451,6 +451,14 @@
 }
 
 /* ==== Payment ==== */
+/* BLITZY [LAYOUT]: the payment panel's fields align to the top of their row. The grid above stretches every
+ * cell to the tallest in the row, and a stretched `.sp-field` grows its own auto rows with it: beside the
+ * card number, whose hint adds a line, the name field's label and control each rendered 10px taller, so the
+ * two controls of one row sat 10px apart and the label register changed between neighbours. Alignment
+ * declared here, scoped to this grid, so no other field grid's geometry moves. */
+.sp-payment__row {
+  align-items: start;
+}
 .sp-payment__methods {
   display: flex;
   flex-wrap: wrap;
