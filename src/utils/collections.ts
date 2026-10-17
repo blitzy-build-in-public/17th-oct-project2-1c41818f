@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/collections.ts
  * Purpose: Grouping, sorting, uniqueness, chunking, indexing and pagination helpers for collections
- * Lines: 544
+ * Lines: 585
  */
 
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, type PageSize } from "@/constants/config";
@@ -402,6 +402,12 @@ export function frequencyOf<TItem, TValue>(
  * order, an item whose value is absent is taken last, a count below one takes nothing and a fractional
  * count is floored. The direction travels in an options object rather than as a fourth positional argument.
  *
+ * It reads the collection once, keeping a window of at most `count` items best first beside the values
+ * `select` read for them, so `select` runs once per item rather than once per comparison: a candidate's
+ * place in the window is found by bisection over those cached values, and one ranked at or past the last
+ * place is passed over rather than taken and dropped. The cost is one pass with O(log count) comparisons
+ * per item, so a caller taking a few rows of a long collection never pays for ordering the whole of it.
+ *
  * @param items - The collection to rank; never mutated.
  * @param select - Reads the numeric value to rank by off one item.
  * @param count - How many items to take.
@@ -415,9 +421,28 @@ export function topN<TItem>(
   options: TopNOptions = {},
 ): TItem[] {
   if (!Number.isFinite(count) || count < 1) return [];
+  const capacity = Math.floor(count);
   const direction = options.direction ?? "desc";
-  const ranked = sortBy(items, createComparator<TItem>([{ select, direction }]));
-  return ranked.slice(0, Math.floor(count));
+  const best: TItem[] = [];
+  const values: SortValue[] = [];
+  for (const item of items) {
+    const value = select(item);
+    let low = 0;
+    let high = values.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (compareOrdered(value, values[middle], direction) < 0) high = middle;
+      else low = middle + 1;
+    }
+    if (low >= capacity) continue;
+    if (best.length === capacity) {
+      best.pop();
+      values.pop();
+    }
+    best.splice(low, 0, item);
+    values.splice(low, 0, value);
+  }
+  return best;
 }
 
 // Paging ----------------------------------------------------------------------------------------
@@ -471,11 +496,28 @@ export function clampPage(page: number, pageCount: number): number {
 }
 
 /**
+ * Derives the two flags every paging surface publishes, from the page being shown and the pages
+ * that exist as {@link clampPage} and {@link pageCountFor} produce them: a next page exists while
+ * the current one is before the last, and a previous page exists once it is past the first. This
+ * is the rule's only implementation, so the payload {@link paginate} builds and the pagination
+ * control hook in `src/state/hooks.ts` cannot answer "is there another page" differently.
+ *
+ * @param currentPage - The page being shown, clamped to the pages that exist.
+ * @param pageCount - The pages that exist, as {@link pageCountFor} reports them; never below `1`.
+ * @returns Whether a next page and a previous page exist.
+ */
+export function pageFlagsFor(
+  currentPage: number,
+  pageCount: number,
+): Pick<PageResult<never>, "hasNext" | "hasPrevious"> {
+  return { hasNext: currentPage < pageCount, hasPrevious: currentPage > 1 };
+}
+
+/**
  * Slices one page out of `items` and reports the paging that produced it: the single implementation behind
  * the catalogue, the search results, the order history and every report table, and the only place a
- * `PageResult` is built. Page and size are normalised before the slice, and `hasNext` and `hasPrevious` are
- * reported here so two surfaces cannot disagree about whether another page exists. The returned `items` is
- * a new array.
+ * `PageResult` is built. Page and size are normalised before the slice, and the next and previous flags
+ * come from {@link pageFlagsFor}, that rule's single home. The returned `items` is a new array.
  *
  * @param items - The whole collection to page over; never mutated.
  * @param page - The requested 1-based page.
@@ -499,8 +541,7 @@ export function paginate<TItem>(
     page: currentPage,
     pageSize: size,
     pageCount,
-    hasNext: currentPage < pageCount,
-    hasPrevious: currentPage > 1,
+    ...pageFlagsFor(currentPage, pageCount),
   };
 }
 

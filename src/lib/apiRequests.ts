@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRequests.ts
  * Purpose: Reads a request for the in-process API: the members a query carries, the vocabularies they are validated against and the refusals they produce
- * Lines: 599
+ * Lines: 600
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -28,6 +28,7 @@ import type * as Common from "@/types/common";
 import { clampNumber, normalisePageSize } from "@/utils/collections";
 import { toFieldErrors, validateDateRange, type DateRangeErrorCode } from "@/utils/dates";
 import { isValidIso } from "@/utils/dates";
+import { FILTER_PARAMS } from "@/utils/queryParams";
 import {
   FORM_ERROR_KEY,
   firstError,
@@ -275,10 +276,10 @@ export function readPaging(query: QueryRecord): {
   readonly page: number;
   readonly pageSize: number;
 } {
-  const page = memberInteger(query, "page");
+  const page = memberInteger(query, FILTER_PARAMS.PAGE);
   return {
     page: page !== undefined && page > 0 ? page : 1,
-    pageSize: normalisePageSize(memberInteger(query, "pageSize")),
+    pageSize: normalisePageSize(memberInteger(query, FILTER_PARAMS.PAGE_SIZE)),
   };
 }
 
@@ -298,26 +299,26 @@ export function readRange(
 /** The filter half of a catalogue or facet query, refused when a member is outside the domain it
  * declares. Paging and sort are absent because `GET /api/facets` takes neither. */
 export function readFilterFields(query: QueryRecord): Common.Result<Catalog.FacetQuery> {
-  const rawRating = memberInteger(query, "minRating");
+  const rawRating = memberInteger(query, FILTER_PARAMS.MIN_RATING);
   const minRating: Catalog.RatingValue | null = isRatingValue(rawRating) ? rawRating : null;
-  if (rawRating !== undefined && minRating === null) return fieldProblem("minRating");
-  const minPriceMinor = memberInteger(query, "minPrice");
-  const maxPriceMinor = memberInteger(query, "maxPrice");
-  if (minPriceMinor !== undefined && minPriceMinor < 0) return fieldProblem("minPrice");
-  if (maxPriceMinor !== undefined && maxPriceMinor < 0) return fieldProblem("maxPrice");
+  if (rawRating !== undefined && minRating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
+  const minPriceMinor = memberInteger(query, FILTER_PARAMS.MIN_PRICE);
+  const maxPriceMinor = memberInteger(query, FILTER_PARAMS.MAX_PRICE);
+  if ((minPriceMinor ?? 0) < 0) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
+  if ((maxPriceMinor ?? 0) < 0) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
   const inverted = minPriceMinor !== undefined && maxPriceMinor !== undefined;
-  if (inverted && minPriceMinor > maxPriceMinor) return fieldProblem("minPrice");
-  const inStockOnly = memberBoolean(query, "inStock");
-  if (inStockOnly === null) return fieldProblem("inStock");
+  if (inverted && minPriceMinor > maxPriceMinor) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
+  const inStockOnly = memberBoolean(query, FILTER_PARAMS.IN_STOCK);
+  if (inStockOnly === null) return fieldProblem(FILTER_PARAMS.IN_STOCK);
   return ok({
-    q: memberText(query, "q") ?? "",
-    categoryIds: memberTextList(query, "categoryIds") as readonly Common.CategoryId[],
-    brandIds: memberTextList(query, "brandIds") as readonly Common.BrandId[],
+    q: memberText(query, FILTER_PARAMS.QUERY) ?? "",
+    categoryIds: memberTextList(query, FILTER_PARAMS.CATEGORY_IDS) as readonly Common.CategoryId[],
+    brandIds: memberTextList(query, FILTER_PARAMS.BRAND_IDS) as readonly Common.BrandId[],
     minPriceMinor: minPriceMinor ?? null,
     maxPriceMinor: maxPriceMinor ?? null,
     minRating,
     inStockOnly: inStockOnly ?? false,
-    tags: memberTextList(query, "tags"),
+    tags: memberTextList(query, FILTER_PARAMS.TAGS),
   });
 }
 
@@ -326,8 +327,8 @@ export function readFilterFields(query: QueryRecord): Common.Result<Catalog.Face
 export function readFilterState(query: QueryRecord): Common.Result<Catalog.FilterState> {
   const fields = readFilterFields(query);
   if (!fields.ok) return fields;
-  const sort = readVocabulary(query, "sort", SORT_KEYS);
-  if (sort === null) return fieldProblem("sort");
+  const sort = readVocabulary(query, FILTER_PARAMS.SORT, SORT_KEYS);
+  if (sort === null) return fieldProblem(FILTER_PARAMS.SORT);
   return ok({ ...fields.value, ...readPaging(query), sort: sort ?? "relevance" });
 }
 

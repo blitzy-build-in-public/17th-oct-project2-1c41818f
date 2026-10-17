@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays, toasts and tabs and accordion, loaded from src/styles/components.css
- * Lines: 593
+ * Lines: 595
  */
 
 /* ==== Cards and badges ==== */
@@ -390,10 +390,12 @@
 /* Only the drawer travels: it is fixed to the viewport edge and slides in when the component adds .is-open,
  * which is the state that also resolves a Popover and a Tooltip. The global reduced-motion rule in base.css
  * removes the travel, and the panel is then simply present. */
+/* A fixed element makes no scrollable overflow, so the panel is clamped to the viewport the way the modal
+ * widths are: at the raw 380px token a 360px phone loses the strip past its inline-start edge for good. */
 .sp-drawer {
   position: fixed;
   inset-block: 0;
-  inline-size: var(--drawer-width);
+  inline-size: min(var(--drawer-width), 100%);
   border-radius: var(--radius-none);
   transition: transform var(--duration-base) var(--ease-decelerate);
 }

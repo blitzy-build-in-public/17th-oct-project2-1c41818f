@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/queryParams.ts
- * Purpose: Reads and writes filter, sort and page state to the URL, normalising defaults away
- * Lines: 587
+ * Purpose: Reads and writes filter, sort and page state to the URL, normalising defaults away.
+ * Lines: 598
  */
 
 /**
@@ -19,8 +19,8 @@
  * | `q`           | `q`             | any text, trimmed                      | `""`    | blank        | the first occurrence wins, then trimmed |
  * | `categoryIds` | `categoryIds`   | category ids, repeated or comma-joined | `[]`    | none applied | blank parts dropped, de-duplicated, sorted |
  * | `brandIds`    | `brandIds`      | brand ids, repeated or comma-joined    | `[]`    | none applied | as `categoryIds` |
- * | `minPrice`    | `minPriceMinor` | integer minor units above the floor    | no bound | no bound    | rounded by `roundMinorUnits`; at or below the floor, or not a safe integer, becomes no bound |
- * | `maxPrice`    | `maxPriceMinor` | integer minor units, swapped if below the minimum | no bound | no bound | as `minPrice` |
+ * | `minPrice`    | `minPriceMinor` | integer minor units from the floor to the catalogue's top price | no bound | no bound | rounded by `roundMinorUnits`; at or below the floor, or not a safe integer, becomes no bound; above the catalogue's ceiling becomes that ceiling |
+ * | `maxPrice`    | `maxPriceMinor` | integer minor units, swapped if below the minimum, read as the ceiling above it | no bound | no bound | as `minPrice` |
  * | `minRating`   | `minRating`     | an integer star, 1 to 5                | no filter | no filter   | a fraction, or a value off the scale, becomes no filter |
  * | `inStock`     | `inStockOnly`   | `true` or `1`                          | `false` | false        | any other value is false |
  * | `tags`        | `tags`          | tags, repeated or comma-joined         | `[]`    | none applied | as `categoryIds` |
@@ -33,7 +33,7 @@
  * `src/lib/catalogService.ts`, which knows the result total. No user-facing sentence is written here.
  */
 
-import { DEFAULT_PAGE_SIZE } from "@/constants/config";
+import { CATALOGUE_PRICE_CEILING_MINOR, DEFAULT_PAGE_SIZE } from "@/constants/config";
 import {
   FACET_DEFINITIONS,
   SORT_OPTIONS,
@@ -184,12 +184,15 @@ function normaliseRating(value: number | null): RatingFilter {
   return value as NonNullable<RatingFilter>;
 }
 
-/** A price bound in whole minor units, or `null` for one that is absent, unrepresentable or at the floor. */
+/**
+ * A price bound in whole minor units: `null` for one that is absent, unrepresentable or at or below the
+ * floor, and the catalogue's ceiling for one above it, so no bound names a range the catalogue cannot fill.
+ */
 function normalisePriceBound(value: number | null): PriceBound {
   if (value === null) return null;
   const rounded = roundMinorUnits(value);
   if (!Number.isSafeInteger(rounded) || rounded <= PRICE_FILTER_FLOOR_MINOR) return null;
-  return rounded;
+  return Math.min(rounded, CATALOGUE_PRICE_CEILING_MINOR);
 }
 
 /** A price range with each bound normalised and the two ordered: an inverted range is swapped, not rejected. */
@@ -439,9 +442,17 @@ export function toFacetQuery(state: FilterState): FacetQuery {
   return { q, categoryIds, brandIds, minPriceMinor, maxPriceMinor, minRating, inStockOnly, tags };
 }
 
-/** Reports whether any filter is applied: a facet value or a tag, but not a query term, a sort or a page. */
+/**
+ * Reports whether any filter is applied: a facet value or a tag, but not a query term, a sort or a page.
+ * Each branch mirrors the emptiness rule of that facet's own accessor in `FACET_ACCESSORS`, so the boolean
+ * and the chip count cannot disagree, and no chip descriptor or label lookup is built to answer it.
+ */
 export function hasActiveFilters(state: FilterState): boolean {
-  return countActiveFilters(state) > 0;
+  if (state.categoryIds.length > 0 || state.brandIds.length > 0) return true;
+  if (state.tags.length > 0 || state.inStockOnly) return true;
+  if (state.minRating !== null) return true;
+  const range = normalisePriceRange(state.minPriceMinor, state.maxPriceMinor);
+  return range.minPriceMinor !== null || range.maxPriceMinor !== null;
 }
 
 /** How many filters are applied, which is the number of chips `activeFilterEntries` returns. */

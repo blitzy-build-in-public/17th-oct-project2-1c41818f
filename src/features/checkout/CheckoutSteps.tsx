@@ -1,9 +1,10 @@
 /**
  * Path: src/features/checkout/CheckoutSteps.tsx
  * Purpose: The ordered step indicator with aria-current and per-step headings
- * Lines: 218
+ * Lines: 249
  */
 
+import { useEffect, useRef } from "react";
 import type { ReactElement } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -20,18 +21,20 @@ import type { CheckoutStep } from "@/state/checkoutReducer";
  * `sp-steps__item--current` and `sp-steps__item--done` for the two marked states, the sheet styling
  * the current item by that modifier and by the `[aria-current="true"]` attribute this component sets,
  * exactly as `src/components/layout/PageHeader.tsx` pairs a crumb's modifier with its attribute;
- * `sp-steps__marker` for the disc that holds the position number or the tick, whose size the sheet
- * sets on its `> svg` child; `sp-steps__label` for the step's name, which the sheet shows on the
- * current step at every width and on the other steps from --breakpoint-md; `sp-steps__connector` for
- * the rule between two markers; and `sp-steps__status` for the hidden state wording, a hook the sheet
- * names and leaves to `.sp-visually-hidden` in base.css to hide.
+ * `sp-steps__marker` for the disc that holds the position number or the tick, whose size and line
+ * weight the sheet sets on its `> svg` child; `sp-steps__label` for the step's name, which the sheet
+ * paints on every step at every width, so the row wraps onto a second line rather than losing a name
+ * to the viewport; `sp-steps__connector` for the rule between two markers; and `sp-steps__status` for
+ * the hidden state wording, a hook the sheet names and leaves to `.sp-visually-hidden` in base.css to
+ * hide.
  *
  * The return control borrows controls.css's link variant, because the step contract declares no
- * interactive class of its own: `.sp-btn--link` drops the padding and the minimum height so the
- * control is the label's own line box, while `sp-steps__label` keeps the label's typography and its
- * phone hiding, since commerce.css loads after controls.css and wins every property both declare. The
- * variant contributes the transparent hairline border, the pointer and the hover underline that give
- * a returnable step the affordance an inert label would not have.
+ * interactive class of its own: `.sp-btn--link` drops the padding and the minimum height, and
+ * `sp-steps__label` supplies the box — the label's typography, its place in the row, and the
+ * block padding that puts the control on the touch-target floor its action's only hit area takes
+ * — because commerce.css loads after controls.css and wins every property both declare. The
+ * variant contributes the transparent hairline border, the pointer and the hover underline that
+ * give a returnable step the affordance an inert label would not have.
  */
 
 /**
@@ -105,19 +108,12 @@ const ITEM_CLASSES: Readonly<Record<StepIndicatorStatus, string>> = {
  * The mark a completed step carries in place of its position number: a tick whose shape survives a
  * greyscale rendering or a colour-blind reader, so the state never rests on the disc's colour alone.
  *
- * The stroke is `currentColor` and the sheet sizes the element, so the glyph is geometry only — no
- * design value is written into this file.
+ * The stroke is `currentColor` and the sheet sizes the element and sets its line weight from
+ * `--border-width-thick`, so the glyph is geometry only — no design value is written into this file.
  */
 function CompletedTick(): ReactElement {
   return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-      focusable="false"
-    >
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
       <path d="M3.2 8.4 6.3 11.5 12.8 4.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -162,30 +158,52 @@ export interface CheckoutStepsProps {
  * them, each marked with the state it is in.
  *
  * It is an ordered list, so a screen reader announces the position as it announces the words, and the
- * current step carries `aria-current="true"`. Every state is conveyed twice over — by the marker's
+ * current step carries `aria-current="true"`. The sheet strips the list markers, so the element
+ * carries `role="list"` as well — the pairing `src/styles/base.css` documents as what keeps the list
+ * semantics once `list-style` is removed. Every state is conveyed twice over — by the marker's
  * filled disc and tick, and by the hidden status wording `stepIndicatorStatusLabel` words — so
  * nothing here rests on colour, and a greyscale rendering reads the same sequence.
  *
- * It holds no state and runs no effect: the current step arrives as a prop and the completed run is
- * derived from it on every render. It reads no context, because the step it needs is one the route
- * already holds, and it never advances or submits the checkout — those are the checkout context's
- * transitions, run from the step's own actions.
+ * It holds no state: the current step arrives as a prop and the completed run is derived from it on
+ * every render. Its one effect answers a return control, which the step change it asks for unmounts —
+ * the control is drawn only for a completed step while the form flow is live — by handing the focus it held to the marker of the
+ * step that just became current, so the keyboard is not dropped back at the top of the document. It
+ * reads no context, because the step it needs is one the route already holds, and it never advances
+ * or submits the checkout — those are the checkout context's transitions, run from the step's own
+ * actions.
  *
  * @param props - The current step and the optional return handler.
  * @returns The ordered step list.
  */
 export function CheckoutSteps({ currentStep, onStepSelect }: CheckoutStepsProps): ReactElement {
   const lastStep = CHECKOUT_FORM_STEPS[CHECKOUT_FORM_STEPS.length - 1];
+  const markerRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  // The step a return control was activated for. The effect below hands the focus to that step's
+  // marker once the step change it asked for has rendered, because the control itself leaves the
+  // document with that change. Written from the handler and read in the effect, never during render.
+  const pendingStepRef = useRef<CheckoutFormStep | null>(null);
+
+  useEffect(() => {
+    const pending = pendingStepRef.current;
+    // A run whose rendered step is not the one the control asked for leaves the hand-off pending, so the
+    // effect that follows the matching step change still finds it.
+    if (pending === null || pending !== currentStep) return;
+    // The step is marked current by the render that follows the change, so its marker can take focus; the
+    // pending value is consumed here alone, on the run that rendered that step.
+    pendingStepRef.current = null;
+    markerRefs.current[CHECKOUT_FORM_STEPS.indexOf(pending)]?.focus();
+  }, [currentStep]);
+
   /**
    * Whether the shopper still has a step to work on. A return control follows the reducer's own
-   * rule — a direct move reaches an earlier form step only — so at the confirmation, which is no form
-   * step and which `checkout/set-step` will not leave, every step is a progress mark rather than a
-   * destination and no control is offered for a move the state machine refuses.
+   * rule — a direct move reaches an earlier form step only — so at the confirmation, which is
+   * no form step and which `checkout/set-step` will not leave, every step is a progress mark rather
+   * than a destination and no control is offered for a move the state machine refuses.
    */
   const isFlowLive = CHECKOUT_FORM_STEPS.some((formStep) => formStep === currentStep);
 
   return (
-    <ol className="sp-steps">
+    <ol className="sp-steps" role="list">
       {CHECKOUT_FORM_STEPS.map((step, position) => {
         const status = statusOf(step, currentStep);
         const isReturnable = onStepSelect !== undefined && isFlowLive && status === "completed";
@@ -196,11 +214,24 @@ export function CheckoutSteps({ currentStep, onStepSelect }: CheckoutStepsProps)
             className={ITEM_CLASSES[status]}
             aria-current={status === "current" ? "true" : undefined}
           >
-            <span className="sp-steps__marker">
+            <span
+              className="sp-steps__marker"
+              ref={(element) => {
+                markerRefs.current[position] = element;
+              }}
+              tabIndex={status === "current" ? -1 : undefined}
+            >
               {status === "completed" ? <CompletedTick /> : position + 1}
             </span>
             {isReturnable ? (
-              <Button variant="link" className="sp-steps__label" onClick={() => onStepSelect(step)}>
+              <Button
+                variant="link"
+                className="sp-steps__label"
+                onClick={() => {
+                  pendingStepRef.current = step;
+                  onStepSelect(step);
+                }}
+              >
                 {CHECKOUT_STEP_TITLES[position]}
               </Button>
             ) : (

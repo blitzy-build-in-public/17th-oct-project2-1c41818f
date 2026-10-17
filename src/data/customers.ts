@@ -158,10 +158,10 @@ const COUNTRY_DIAL_CODES: Readonly<Record<CountryCode, string>> = {
 };
 const POSTAL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const STREET_NAMES = (
-  "Beacon Street Alder Way Cedar Lane Dover Road Elm Court Fenwick Avenue Garden Row " +
-  "Harbour Street Ivy Terrace Juniper Close Kingsway Larkspur Drive Maple Crescent " +
-  "Norwood Lane Orchard Street Pine Walk"
-).split(" ");
+  "Beacon Street|Alder Way|Cedar Lane|Dover Road|Elm Court|Fenwick Avenue|Garden Row|" +
+  "Harbour Street|Ivy Terrace|Juniper Close|Kingsway|Larkspur Drive|Maple Crescent|" +
+  "Norwood Lane|Orchard Street|Pine Walk"
+).split("|");
 
 /** The numbers and chances the rest of an address's members are drawn with: the house numbers a first
  *  line runs between, the longest unit number a second line names, and the share of addresses with a

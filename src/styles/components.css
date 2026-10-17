@@ -1,6 +1,6 @@
 /* Path: src/styles/components.css
  * Purpose: Styles for the shared primitives: buttons, fields, cards, tables, overlays, badges and feedback states
- * Lines: 448
+ * Lines: 474
  */
 
 /* The twelve primitive families every page composes are defined across the three sheets this one loads:
@@ -384,7 +384,12 @@ button.sp-rating__star {
 /* The danger pair is declared with the form summary above, so the two surfaces cannot drift apart. */
 .sp-alert {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  /* The mark column is pinned to the `--space-5` floor instead of `auto`, and the mark centres inside it,
+   * because the tone marks are glyphs whose advance widths differ: an `auto` first track took each register's
+   * own mark width (4.14px for "i", 13.4px for "✓"), which moved the text column — and with it every title and
+   * body — up to 9.27px further right in the success and danger registers. The floor clears the widest mark, so
+   * all four registers hold one mark column and one text start position. */
+  grid-template-columns: minmax(var(--space-5), auto) minmax(0, 1fr);
   gap: var(--space-2) var(--space-3);
   padding: var(--space-4);
   border-inline-start: var(--border-width-thick) solid currentColor;
@@ -392,6 +397,7 @@ button.sp-rating__star {
 }
 .sp-alert__icon {
   grid-row: 1 / -1;
+  text-align: center;
 }
 /* The icon's `grid-row: 1 / -1` collapses onto the first row, because the grid declares no explicit row
  * track list for `-1` to count back from. Every region that is not the icon is therefore placed in the
@@ -414,6 +420,11 @@ button.sp-rating__star {
   grid-column: 2;
   justify-self: start;
 }
+/* The action group takes the touch-target floor, so an action standing alone pads up to the height the
+ * dismiss control beside it already reaches through .sp-btn--icon. */
+.sp-alert__action .sp-btn {
+  min-block-size: var(--touch-target-min);
+}
 .sp-alert--info {
   background-color: var(--color-info-surface);
   color: var(--color-info-text);
@@ -426,8 +437,9 @@ button.sp-rating__star {
   background-color: var(--color-warning-surface);
   color: var(--color-warning-text);
 }
-/* The progress fill's width is set inline by the component: a transition on it would animate a layout
- * property, which this sheet confines to opacity, transform, colour and shadow. */
+/* The progress fill's width is the ratio the component publishes as `--sp-progress-value` on the fill,
+ * multiplied into a percentage here: a transition on it would animate a layout property, which this sheet
+ * confines to opacity, transform, colour and shadow. */
 .sp-progress {
   display: grid;
   gap: var(--space-2);
@@ -443,6 +455,20 @@ button.sp-rating__star {
 .sp-progress__fill {
   display: block;
   block-size: 100%;
+  inline-size: calc(var(--sp-progress-value, 0) * 100%);
   background-color: var(--color-accent);
   border-radius: var(--radius-pill);
+}
+/* In this mode the user agent replaces the author background of both the track and the fill with the same
+ * system colour, so the filled portion would vanish and the caption alone would carry the value. The system
+ * keywords are the one colour this sheet cannot take from src/styles/tokens.css, because here the
+ * environment rather than the design decides it; the track keeps a CanvasText boundary so the bar's extent
+ * stays visible around a Highlight fill. */
+@media (forced-colors: active) {
+  .sp-progress__track {
+    border: var(--border-width) solid CanvasText;
+  }
+  .sp-progress__fill {
+    background-color: Highlight;
+  }
 }

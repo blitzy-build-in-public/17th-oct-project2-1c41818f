@@ -1,40 +1,25 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 600
+ * Lines: 453
  */
 
-import {
-  DEMO_CARD_NUMBERS,
-  RELATED_PRODUCTS_LIMIT,
-  SEARCH_SUGGESTION_LIMIT,
-} from "@/constants/config";
-import {
-  ACCOUNT_COPY,
-  FEEDBACK_COPY,
-  VALIDATION_MESSAGES,
-  demoPaymentNote,
-} from "@/constants/content";
+import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
+import { ACCOUNT_COPY, FEEDBACK_COPY } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Analytics from "@/types/analytics";
 import type * as Catalog from "@/types/catalog";
-import type * as Commerce from "@/types/commerce";
 import type * as Common from "@/types/common";
-import { toIsoDateTime } from "@/utils/dates";
 import { verifyCredential } from "@/utils/strings";
 import {
   hasErrors,
   isRatingValue,
-  mergeErrors,
   validateAddress,
-  validatePayment,
   validateProfileUpdate,
   validateRegistration,
   validateReview,
   validatePromoCodeShape,
-  validateShippingSubmission,
   validateSignIn,
-  type PaymentValidationInput,
 } from "@/utils/validation";
 
 import {
@@ -44,18 +29,16 @@ import {
   shapeError,
   type AuthorizationLevel,
   type NewProductReviewInput,
-  type OrderCreationRequest,
   type RouteContext,
   type RouteDefinition,
   type RouteHandler,
 } from "@/lib/apiContract";
+import { createOrder, forgetRememberedOrders } from "@/lib/apiOrders";
 import {
   fieldProblem,
   invalidFields,
   isMembers,
-  memberBoolean,
   memberInteger,
-  memberObject,
   memberText,
   memberTextOrEmpty,
   memberValue,
@@ -69,9 +52,7 @@ import {
   readFilterFields,
   readFilterState,
   readOrderHistory,
-  readOrderSnapshot,
   readPaging,
-  readPaymentInput,
   readProfileUpdate,
   readRegistration,
   readReportKind,
@@ -97,79 +78,9 @@ function route<TId extends string>(
   return { id, method, pattern, authorize, handle };
 }
 
-// Settling a payment and remembering an order ----------------------------------------------------
+// Republished here because its only caller reaches the store through this module, beside the route table.
+export { clearRememberedOrders } from "@/lib/apiOrders";
 
-/** The card brand a demonstration payment is recorded as, read from the number's leading digits, or a
- * plain `"Card"` for a scheme the demonstration does not recognise. */
-function cardBrand(digits: string): string {
-  if (digits.startsWith("4")) return "Visa";
-  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return "Mastercard";
-  if (/^3[47]/.test(digits)) return "Amex";
-  if (digits.startsWith("6")) return "Discover";
-  return "Card";
-}
-
-/**
- * The payment an order records, decided here and not by the store: the number is read, validated and
- * reduced to its brand, its last four digits and a decision, so no number reaches the data module, an
- * order or a payload. One configured number is declined, with the demonstration note as its message,
- * and every other card that passed the payment rules is authorised; an invoice is recorded as accepted
- * with no card and no authorisation instant, because nothing authorised anything.
- */
-function settlePayment(payment: PaymentValidationInput): Common.Result<Commerce.PaymentSummary> {
-  if (payment.method !== "card") {
-    return ok({
-      method: "invoice",
-      status: "authorised",
-      brand: null,
-      last4: null,
-      authorisedAt: null,
-    });
-  }
-  const digits = (payment.card?.number ?? "").replace(/\D/g, "");
-  if (digits === DEMO_CARD_NUMBERS.DECLINED) {
-    return failure(
-      API_ERROR_CODES.PAYMENT_DECLINED,
-      demoPaymentNote(DEMO_CARD_NUMBERS.APPROVED, DEMO_CARD_NUMBERS.DECLINED),
-    );
-  }
-  return ok({
-    method: "card",
-    status: "authorised",
-    brand: cardBrand(digits),
-    last4: digits.slice(-4),
-    authorisedAt: toIsoDateTime(new Date()),
-  });
-}
-
-/** The orders already created, by the key they were submitted with and the identity of that
- * submission. Only a created order is remembered, so a declined attempt can be corrected and resent
- * under the same key — which the checkout's retained key needs — while a repeat of a submission that
- * did create an order replays it instead of placing a second. */
-const rememberedOrders = new Map<
-  string,
-  { readonly fingerprint: string; readonly outcome: Common.Result<Commerce.Order> }
->();
-
-/** Forgets every remembered order, so a fresh case cannot replay an order an earlier one created. */
-export function clearRememberedOrders(): void {
-  rememberedOrders.clear();
-}
-
-/** The identity of a submission for the idempotency store: everything an order is built from, except
- * the card, whose digits must not be retained anywhere, and except the authorisation instant, which
- * differs between two identical submissions. */
-function orderFingerprint(request: OrderCreationRequest): string {
-  return JSON.stringify({
-    snapshot: request.snapshot,
-    email: request.email,
-    shippingAddress: request.shippingAddress,
-    billingAddress: request.billingAddress,
-    shippingMethodId: request.shippingMethodId,
-    customerId: request.customerId,
-    payment: { ...request.payment, authorisedAt: null },
-  });
-}
 // Reading what a path names ----------------------------------------------------------------------
 
 /** The acting session of an authorised route: the one assertion a `customer` or `administrator` handler
@@ -220,7 +131,7 @@ function getProduct(context: RouteContext): Common.Result<unknown> {
 }
 
 function listRelatedProducts(context: RouteContext): Common.Result<unknown> {
-  const limit = readLimit(context.query, "limit", RELATED_PRODUCTS_LIMIT);
+  const limit = readLimit(context.query, "limit", RELATED_PRODUCTS_LIMIT, RELATED_PRODUCTS_LIMIT);
   const response: Catalog.RelatedProductsResponse = {
     items: context.source.listRelatedProducts(context.params.id as Common.ProductId, limit),
   };
@@ -311,68 +222,6 @@ function validatePromoCode(context: RouteContext): Common.Result<unknown> {
   return { ok: false, error: shapeError(409, outcome.error.code, message, "promoCode") };
 }
 
-/** The address snapshot an order carries, read by the same readers the address book uses. */
-function readSubmittedAddress(members: RequestMembers | undefined): Account.Address {
-  return {
-    id: memberTextOrEmpty(members, "id") as Common.AddressId,
-    ...readAddressInput(members),
-    isDefaultShipping: memberBoolean(members, "isDefaultShipping") ?? false,
-    isDefaultBilling: memberBoolean(members, "isDefaultBilling") ?? false,
-  };
-}
-
-/** The order a submission asks for: the shipping half judged by the shipping rule, the payment by the
- * payment rule, the snapshot by its amounts and the key by its presence. The customer comes from the
- * session, never the body. */
-function readOrderRequest(context: RouteContext): Common.Result<OrderCreationRequest> {
-  const body = bodyOf(context);
-  const shippingAddress = readSubmittedAddress(memberObject(body, "shippingAddress"));
-  const billingAddress = readSubmittedAddress(memberObject(body, "billingAddress"));
-  const email = memberTextOrEmpty(body, "email");
-  const shippingMethodId = memberTextOrEmpty(body, "shippingMethodId");
-  const idempotencyKey = memberTextOrEmpty(body, "idempotencyKey");
-  const payment = readPaymentInput(memberObject(body, "payment"));
-  const snapshot = readOrderSnapshot(memberValue(body, "snapshot"));
-  const errors = mergeErrors(
-    validateShippingSubmission({ address: shippingAddress, email, shippingMethodId }),
-    payment === undefined ? { method: VALIDATION_MESSAGES.REQUIRED } : validatePayment(payment),
-    snapshot === undefined ? { snapshot: VALIDATION_MESSAGES.REQUIRED } : {},
-    idempotencyKey.trim() === "" ? { idempotencyKey: VALIDATION_MESSAGES.REQUIRED } : {},
-  );
-  if (hasErrors(errors) || payment === undefined || snapshot === undefined) {
-    return invalidFields(errors);
-  }
-  const settled = settlePayment(payment);
-  if (!settled.ok) return settled;
-  return ok({
-    snapshot,
-    email,
-    shippingAddress,
-    billingAddress,
-    shippingMethodId,
-    idempotencyKey,
-    customerId: context.session?.customerId ?? null,
-    payment: settled.value,
-  });
-}
-
-function createOrder(context: RouteContext): Common.Result<unknown> {
-  const request = readOrderRequest(context);
-  if (!request.ok) return request;
-  const fingerprint = orderFingerprint(request.value);
-  const remembered = rememberedOrders.get(request.value.idempotencyKey);
-  if (remembered !== undefined) {
-    return remembered.fingerprint === fingerprint
-      ? remembered.outcome
-      : failure(API_ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT, FEEDBACK_COPY.ERROR_STATE_BODY);
-  }
-  const created = context.source.createOrder(request.value);
-  if (created.ok) {
-    rememberedOrders.set(request.value.idempotencyKey, { fingerprint, outcome: created });
-  }
-  return created;
-}
-
 function listOrders(context: RouteContext): Common.Result<unknown> {
   const query = readOrderHistory(context.query, sessionOf(context).customerId);
   return query.ok ? ok(context.source.listOrders(query.value)) : query;
@@ -416,7 +265,11 @@ function signIn(context: RouteContext): Common.Result<unknown> {
 
 function signOut(context: RouteContext): Common.Result<unknown> {
   const token = context.token;
-  if (token !== undefined) context.source.signOut(token as Common.SessionToken);
+  if (token !== undefined) {
+    context.source.signOut(token as Common.SessionToken);
+    // The session ended here, so what its submissions were retained for ends with it.
+    forgetRememberedOrders(token);
+  }
   return ok(undefined);
 }
 

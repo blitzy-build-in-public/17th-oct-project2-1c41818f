@@ -1,11 +1,11 @@
 /**
  * Path: src/lib/analyticsService.ts
  * Purpose: Period bucketing, KPI aggregation, comparison baselines and top-product performance
- * Lines: 599
+ * Lines: 594
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
-import { ADMIN_COPY } from "@/constants/content";
+import { ADMIN_COPY, CHANNEL_LABELS as SALES_CHANNEL_LABELS } from "@/constants/content";
 import { BASELINE_OPTIONS, CATEGORY_DEFINITIONS } from "@/constants/taxonomy";
 import type { Customer } from "@/types/account";
 import type {
@@ -48,7 +48,7 @@ import {
   type DateBucket,
 } from "@/utils/dates";
 import { roundMinorUnits } from "@/utils/format";
-import { averageOrderValue, percentChange, shareOf } from "@/utils/statistics";
+import { averageOrderValue, percentChange, periodOrders, shareOf } from "@/utils/statistics";
 
 import { getJson } from "@/lib/apiClient";
 
@@ -77,13 +77,8 @@ const TOTAL_SERIES_ID = "total";
 /** What separates a comparison's name from its days; the words come from the vocabulary module. */
 const BASELINE_RANGE_SEPARATOR = ": ";
 
-/** The wording of the three channels the fact table spans, declared here because the vocabulary module
- * declares no channel labels and this service is the only module that groups by channel. */
-const CHANNEL_LABELS: Readonly<Record<SalesChannel, string>> = {
-  web: "Web",
-  mobile: "Mobile app",
-  store: "Store",
-};
+/** The wording of the three channels, owned by the copy module and read here by the fact table's id. */
+const CHANNEL_LABELS: Readonly<Record<SalesChannel, string>> = SALES_CHANNEL_LABELS;
 
 /** The category names of the vocabulary by slug: how a fact row's category id becomes a series label. */
 const CATEGORY_NAME_BY_SLUG: Readonly<Record<string, string>> = Object.fromEntries(
@@ -447,10 +442,11 @@ function rankingOrder(metric: Metric) {
  * Read from the order collection and never from the fact table, which is keyed by category and channel and
  * carries no product key: an order line names the product it sold, its quantity and the price it went for.
  * An amount is the line's own — the subtotal and the discount the order's priced cart snapshotted, and
- * their difference as its net revenue — so a later price change cannot move what a placed order earned, and
- * a line the priced cart did not record falls back to its unit price. A cancelled order is skipped and a
- * refunded one keeps its lines, and each row states its share of the period's revenue across every product
- * sold, so the shares of a full ranking add up to 100.
+ * their difference as its net revenue — so a later price change cannot move what a placed order earned,
+ * and a line the priced cart did not record falls back to its unit price. The orders it ranks are a
+ * period's population from `periodOrders` in `src/utils/statistics.ts`, the one home for the status
+ * rule, so a refunded order keeps its lines, a cancelled one is in no surface's figures, and each row
+ * states its share of the period's revenue across every product sold, adding to 100 across the ranking.
  */
 export function computeTopProducts(input: TopProductsInput): ProductPerformance[] {
   const { orders, categoryIds, query } = input;
@@ -462,8 +458,7 @@ export function computeTopProducts(input: TopProductsInput): ProductPerformance[
     Number.MAX_SAFE_INTEGER,
   );
   const tallies = new Map<ProductId, ProductTally>();
-  for (const order of orders) {
-    if (order.status === "cancelled" || !isWithinRange(order.placedAt, range)) continue;
+  for (const order of periodOrders(orders, range)) {
     const pricedLines = indexBy(order.pricedCart.lines, (line) => line.id);
     for (const line of order.lines) {
       const priced = pricedLines.get(line.id);

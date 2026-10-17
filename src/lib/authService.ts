@@ -193,7 +193,7 @@ export function assertRole(
   required: Role | readonly Role[],
 ): Result<Session> {
   if (!isAuthenticated(session)) {
-    return { ok: false, error: authFailure("unauthenticated", ACCOUNT_COPY.SIGN_IN_HEADING) };
+    return { ok: false, error: authFailure("unauthenticated", FEEDBACK_COPY.SIGN_IN_REQUIRED) };
   }
   if (!hasRole(session, required)) {
     return { ok: false, error: authFailure("forbidden", ADMIN_COPY.NOT_AUTHORIZED_BODY) };
@@ -279,13 +279,13 @@ export function roleHomePath(role: Role): string {
  *
  * One deliberate absence: `validation-failed` has no entry, because its sentence belongs to the field
  * rule that produced it and travels in the failure's own message — a fixed sentence here would replace
- * a specific complaint with a generic one. `forbidden` and `session-expired` carry the sentences the
- * seam answers those conditions with, so a guard and an endpoint word one refusal the same way.
+ * a specific complaint with a generic one. Every other entry carries the sentence the seam answers its
+ * condition with, so a guard and an endpoint word one refusal the same way.
  */
 const AUTH_FAILURE_MESSAGES: Readonly<Partial<Record<AuthFailureCode, string>>> = {
-  unauthenticated: ACCOUNT_COPY.SIGN_IN_HEADING,
+  unauthenticated: FEEDBACK_COPY.SIGN_IN_REQUIRED,
   "session-expired": FEEDBACK_COPY.TOAST_SESSION_EXPIRED,
-  "session-unknown": ACCOUNT_COPY.SIGN_IN_HEADING,
+  "session-unknown": FEEDBACK_COPY.SIGN_IN_REQUIRED,
   "invalid-credentials": ACCOUNT_COPY.SIGN_IN_FAILED_MESSAGE,
   forbidden: ADMIN_COPY.NOT_AUTHORIZED_BODY,
   "duplicate-email": ACCOUNT_COPY.DUPLICATE_EMAIL_MESSAGE,

@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog-landing.css
  * Purpose: Styles for the landing page's bands: the hero with its illustration, the promotional banner, the trust strip, the category showcase and the featured strip
- * Lines: 282
+ * Lines: 287
  */
 
 /* The landing surface: the hero band with its drawing, the promotional band, the trust strip, the category
@@ -110,9 +110,13 @@
   .sp-hero {
     padding-block: var(--space-10) var(--space-12);
   }
-  /* The media takes the larger share of the row and the copy keeps the prose measure. */
+  /* The media takes the larger share of the row and the copy keeps the prose measure. The copy track's floor
+   * is its own content rather than 0: the action row above is a row of nowrap buttons whose min-content
+   * (about 309px) is wider than the copy's 1fr share at the narrow end of this stop, so a 0 floor lets the
+   * copy's four children overhang the column by the difference. Only the media track keeps a 0 floor, so it
+   * yields that width instead and stays the wider of the two. */
   .sp-hero__inner {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    grid-template-columns: minmax(min-content, 1fr) minmax(0, 1.2fr);
     align-items: center;
     gap: var(--space-10);
   }
@@ -163,6 +167,7 @@
   inline-size: var(--space-5);
   block-size: var(--space-5);
   color: var(--color-accent);
+  stroke-width: var(--border-width-thick);
 }
 .sp-trust__claim {
   color: var(--color-text-muted);

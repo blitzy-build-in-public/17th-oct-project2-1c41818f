@@ -1,15 +1,17 @@
 /**
  * Path: src/state/hooks.ts
  * Purpose: Shared hooks: storage-backed state, debounced value, pagination, media query, async data, document title, outside click
- * Lines: 600
+ * Lines: 599
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { BREAKPOINTS, type Breakpoint } from "@/constants/config";
+import { FEEDBACK_COPY } from "@/constants/content";
 import type { ApiError, AsyncStatus, PageResult, Result } from "@/types/common";
 import { debounce, isAbortError } from "@/utils/async";
 import { clampPage, normalisePageSize, pageCountFor, pageWindow } from "@/utils/collections";
+import { pageFlagsFor } from "@/utils/collections";
 import { readStored, removeStored, writeStored, type StorageKey } from "@/utils/storage";
 
 /**
@@ -43,12 +45,11 @@ function isApiErrorShape(value: unknown): value is ApiError {
  */
 function failureFrom(error: unknown): ApiError {
   if (isApiErrorShape(error)) return error;
-  const message = error instanceof Error && error.message.length > 0 ? error.message : "";
-  return {
-    status: 500,
-    code: "unexpected-error",
-    message: message.length > 0 ? message : "The request failed unexpectedly.",
-  };
+  const message =
+    error instanceof Error && error.message.length > 0
+      ? error.message
+      : FEEDBACK_COPY.ERROR_STATE_BODY;
+  return { status: 500, code: "unexpected-error", message };
 }
 
 /**
@@ -198,13 +199,12 @@ export interface PaginationInput extends Pick<PageResult<never>, "page" | "pageS
 /**
  * Everything the pagination control needs, derived from the paging a caller holds.
  *
- * The arithmetic is not restated here: `pageCountFor`, `clampPage`, `pageWindow` and
- * `normalisePageSize` in `src/utils/collections.ts` are its single implementation, which is why the
- * control in `src/components/ui/Pagination.tsx` and the collections it pages over can never disagree
- * about how many pages exist. A page outside the range is confined to the nearest that does, and a page
- * size outside the configured set falls back to `DEFAULT_PAGE_SIZE`, so an unvalidated query parameter
- * cannot reach a request. Changing the page size returns to the first page, because the page a reader
- * was on rarely means the same rows at a different size.
+ * No paging rule is restated here: `pageCountFor`, `clampPage`, `pageFlagsFor`, `pageWindow` and
+ * `normalisePageSize` live in `src/utils/collections.ts`, so the control in
+ * `src/components/ui/Pagination.tsx` and the collections it pages over cannot disagree about how many
+ * pages exist or about whether another page does. A page outside the range is confined to the nearest
+ * that exists, a size outside the configured set falls back to `DEFAULT_PAGE_SIZE` so an unvalidated
+ * query parameter cannot reach a request, and changing the page size returns to the first page.
  *
  * @param input - The paging in force and the callback that reports a change; see {@link PaginationInput}.
  * @returns The current paging, the page buttons to draw and the actions that change them.
@@ -248,8 +248,7 @@ export function usePagination(input: PaginationInput): PaginationState {
     pageSize,
     total,
     pageCount,
-    hasNext: currentPage < pageCount,
-    hasPrevious: currentPage > 1,
+    ...pageFlagsFor(currentPage, pageCount),
     slots,
     goTo,
     first,

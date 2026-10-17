@@ -1,6 +1,6 @@
 /* Path: src/styles/tokens.css
  * Purpose: Declares every colour, spacing, typography, radius, shadow and z-index token the stylesheets consume
- * Lines: 260
+ * Lines: 296
  */
 
 /* The single source of every design value in SalesPro: the other seven stylesheets consume these
@@ -10,6 +10,15 @@
  * One theme only — no dark-mode block, no theme class — and a system font stack, because the product
  * issues no network request. Breakpoints are documented here yet cannot be used in a media query,
  * since CSS does not evaluate var() there: every query names the token and repeats its literal.
+ *
+ * Every declaration below is either consumed by a sheet that needs it, or one of a set this file
+ * deliberately declares whole so a surface picks a member by name instead of writing one: the radius
+ * scale, the raw type scale and the role tuples composed from it, the z-index ladder, the semantic hue
+ * series, the chart palette, and the drawer's two widths. The four breakpoints are the one group a
+ * media query cannot read — CSS does not evaluate var() there — which is why every query repeats the
+ * literal and names the token. A declaration that neither a sheet nor a surface in the plan could reach
+ * is filler and is not kept: the avatar dimensions and the instant duration and the accelerate curve
+ * were removed for that reason.
  */
 
 :root {
@@ -47,7 +56,9 @@
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
-  /* ==== Semantic — each hue as a solid, a tinted surface and its legible text pair ==== */
+  /* ==== Semantic — each hue of the series as a solid, a tinted surface and its legible text pair, so a
+   * register paints the part it needs; the alerts, the badges and the toasts paint the tint and the
+   * text pair. ==== */
   --color-success: #067647; /* white on it: 5.69:1 */
   --color-success-surface: #ecfdf3;
   --color-success-text: #05603a; /* on --color-success-surface: 7.26:1 */
@@ -81,8 +92,32 @@
   --chart-grid: #eaecf0;
   --chart-axis: #d0d5dd;
   --chart-label: #475467; /* 7.69:1 on --color-surface */
+  /* The palette's direction pair, for a mark whose sign carries its meaning. */
   --chart-positive: #067647;
   --chart-negative: #b42318;
+
+  /* Chart separation — what keeps two series apart once hue is gone: the bar opacities step a bar down
+   * from solid, so two bars whose hues sit close together still differ in lightness, and the area wash
+   * is light enough to leave the grid visible beneath it. */
+  --chart-bar-opacity-1: 1;
+  --chart-bar-opacity-2: 0.86;
+  --chart-bar-opacity-3: 0.74;
+  --chart-bar-opacity-4: 0.64;
+  --chart-bar-opacity-5: 0.56;
+  --chart-bar-opacity-6: 0.48;
+  --chart-bar-opacity-7: 0.4;
+  --chart-bar-opacity-8: 0.32;
+  --chart-area-opacity: 0.18;
+  /* The four even series' stroke rhythms, each paired with the period its legend swatch samples, so a
+   * mark and its swatch are one fact rather than two numbers free to drift apart. */
+  --chart-dash-2: 6 3;
+  --chart-dash-2-period: 9px;
+  --chart-dash-4: 1 3;
+  --chart-dash-4-period: 4px;
+  --chart-dash-6: 10 3 2 3;
+  --chart-dash-6-period: 13px;
+  --chart-dash-8: 4 2 1 2;
+  --chart-dash-8-period: 6px;
 
   /* ==== Spacing — a 4px scale in rem, so every step follows the reader's root font size ==== */
   --space-0: 0;
@@ -98,7 +133,8 @@
   --space-16: 4rem;
   --space-20: 5rem;
 
-  /* ==== Typography — system families and the raw scale the roles below compose from ==== */
+  /* ==== Typography — system families and the raw scale the roles below compose from. The scale is
+   * declared whole, so a surface picks a step by name instead of writing one. ==== */
   --font-family-base:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-family-mono:
@@ -123,8 +159,10 @@
   --letter-spacing-normal: 0;
   --letter-spacing-wide: 0.04em;
 
-  /* ==== Type roles — a rule consumes a role, never a raw size or weight; the size of the two
-   * largest roles rises at --breakpoint-md, in the block at the foot of this file ==== */
+  /* ==== Type roles — a rule consumes a role, never a raw size or weight. A role is a four-part tuple
+   * of size, line height, weight and tracking, and the tuple is declared whole, so a part that happens
+   * to equal the document's own default is in force with its siblings rather than missing. The size of
+   * the two largest roles rises at --breakpoint-md, in the block at the foot of this file ==== */
   --text-display-size: var(--font-size-3xl);
   --text-display-line-height: var(--line-height-tight);
   --text-display-weight: var(--font-weight-bold);
@@ -158,7 +196,7 @@
   --text-caption-weight: var(--font-weight-regular);
   --text-caption-tracking: var(--letter-spacing-wide);
 
-  /* ==== Radius ==== */
+  /* ==== Radius — the scale is declared whole, so a surface picks a step by name instead of writing one ==== */
   --radius-none: 0;
   --radius-xs: 2px;
   --radius-sm: 4px;
@@ -180,7 +218,9 @@
   --shadow-3: 0 var(--shadow-offset-y-3) var(--shadow-blur-3) var(--color-shadow);
 
   /* ==== Z-index ladder — the entire z-index vocabulary of the product, so no other sheet writes a
-   * bare number. The table header rises above its own rows and stays below every overlay. ==== */
+   * bare number. The table header rises above its own rows and stays below every overlay. The ladder is
+   * declared whole: --z-base is its floor and --z-sidebar the rail's rung, both reading as rungs of one
+   * scale even where a surface names neither. ==== */
   --z-base: 0;
   --z-table-header: 10;
   --z-sidebar: 40;
@@ -227,23 +267,19 @@
   --modal-width-md: 560px;
   --modal-width-lg: 800px;
   --drawer-width: 380px;
-  --drawer-width-sm: 320px;
+  --drawer-width-sm: 320px; /* the drawer's narrow width, paired with --drawer-width above */
   --tooltip-max-width: 280px;
   --progress-height: 6px;
-  --avatar-size-sm: 24px;
-  --avatar-size-md: 40px;
   --border-width: 1px;
   --border-width-thick: 2px;
 
   /* ==== Motion and opacity — short and functional; base.css removes every transition under
    * prefers-reduced-motion, which is where that rule belongs rather than here ==== */
-  --duration-instant: 0ms;
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 320ms;
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
-  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
   --opacity-disabled: 0.5;
   --opacity-inert: 0.6; /* the visible dimming of an inert background behind a drawer */
 }

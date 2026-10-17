@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/searchService.ts
  * Purpose: Tokenising, weighted scoring and type-ahead suggestions for product search
- * Lines: 573
+ * Lines: 599
  */
 
 import { SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -17,15 +17,14 @@ import type {
 } from "@/types/catalog";
 import type { BrandId, CategoryId, PageResult, QueryParams, Result } from "@/types/common";
 import { clampNumber, createComparator, groupBy, sortBy, uniqueBy } from "@/utils/collections";
+import type { Comparator } from "@/utils/collections";
+import { FILTER_PARAMS } from "@/utils/queryParams";
 import { normaliseForMatch } from "@/utils/strings";
 
 // Endpoints --------------------------------------------------------------------------------------
 
-/**
- * The catalogue listing endpoint, which is also the search endpoint: full-text search has no route of
- * its own, because `q` is one of `GET /api/products`' filter parameters. A searched listing and a
- * filtered catalogue listing are therefore one request, answered by one rule.
- */
+/** The catalogue listing endpoint, which is also the search endpoint: `q` is one of its filter
+ *  parameters, so a searched listing and a filtered listing are one request, answered by one rule. */
 const PRODUCTS_PATH = "/api/products";
 
 /** The type-ahead endpoint, which answers `{ suggestions }`. */
@@ -84,7 +83,7 @@ const SUGGESTION_KIND_ORDER: readonly SuggestionKind[] = ["product", "brand", "c
 
 /** The splitter {@link highlightSegments} walks a value with: every run of letters and digits is a
  *  candidate word and the runs between them can never match. Written without the global flag, so it
- *  carries no mutable `lastIndex` and this module holds no state at all. */
+ *  carries no mutable `lastIndex` and a split never depends on an earlier call. */
 const WORD_SPLIT_PATTERN = /([\p{L}\p{N}]+)/u;
 
 /** What a split part must look like to be a candidate word rather than the punctuation between two. */
@@ -92,13 +91,8 @@ const WORD_RUN_PATTERN = /^[\p{L}\p{N}]+$/u;
 
 // Shapes -----------------------------------------------------------------------------------------
 
-/**
- * The two names {@link scoreProduct} needs and cannot import.
- *
- * The data layer satisfies this from its seeded brands and categories, which is what lets scoring
- * measure a product against the brand and category it belongs to without this module importing the
- * seeded collections: the data module composes these rules, so the dependency runs one way only.
- */
+/** The two names {@link scoreProduct} needs and cannot import — the data layer supplies them from its
+ *  seeded brands and categories, so the dependency runs one way only. */
 export interface SearchLookup {
   /** The display name of a brand. */
   brandName(id: BrandId): string;
@@ -106,16 +100,9 @@ export interface SearchLookup {
   categoryName(id: CategoryId): string;
 }
 
-/**
- * The route builders a caller supplies so {@link buildSuggestions} can point a suggestion at its
- * destination without this module knowing a single path.
- *
- * `src/constants/routes.ts` is the one home of every route path, and this module is not a place a
- * second copy of one may appear, so the builder arrives with the call: `src/data/repositories.ts`
- * satisfies it from `productPath`, `categoryPath` and the search route scoped to a brand. The same
- * inversion as {@link SearchLookup}, for the same reason — one owner per concern, one direction of
- * dependency.
- */
+/** The route builders a caller supplies so {@link buildSuggestions} points a suggestion at its
+ *  destination without this module knowing a path: `src/constants/routes.ts` owns every route path, so
+ *  the builder arrives with the call — the same inversion as {@link SearchLookup}. */
 export interface SearchTargets {
   /** The detail path of the product with this slug. */
   productTarget(slug: string): string;
@@ -135,16 +122,10 @@ export interface SuggestionSources {
   readonly brands: readonly Brand[];
 }
 
-/**
- * Everything {@link buildSuggestions} reads: the collections to search, the term typed so far, the
- * route builders its targets come from and how many suggestions to return at most.
- *
- * A brand or category *name* lookup is deliberately absent: every suggestion carries the wording it
- * is ranked by — a product's own name, a brand's name, a category's own name — so the candidate
- * builder never asks for a name it does not already hold. {@link SearchLookup} is needed only where a
- * *product* must be measured against the brand or the category it belongs to, which is
- * {@link scoreProduct} and {@link applyTextMatch}.
- */
+/** Everything {@link buildSuggestions} reads: the collections to search, the term typed so far, the
+ *  route builders its targets come from and how many suggestions to return at most. A brand or
+ *  category *name* lookup is deliberately absent — every suggestion carries the wording it is ranked
+ *  by, so {@link SearchLookup} serves only {@link scoreProduct} and {@link applyTextMatch}. */
 export interface BuildSuggestionsInput {
   /** The collections to draw candidates from. */
   readonly sources: SuggestionSources;
@@ -156,13 +137,9 @@ export interface BuildSuggestionsInput {
   readonly limit?: number;
 }
 
-/**
- * One run of a value, marked with whether a query token matched it: what the suggestion list and the
- * results header render as highlighted text.
- *
- * Concatenating a value's segments reproduces that value exactly — segmentation never rewrites the
- * text it marks — so a caller may render the parts inside one element and read the whole.
- */
+/** One run of a value, marked with whether a query token matched it: what the suggestion list and the
+ *  results header render as highlighted text. Concatenating the segments reproduces the value exactly —
+ *  segmentation never rewrites the text it marks — so a caller may render the parts and read the whole. */
 export interface SearchSegment {
   /** The literal text of this run. */
   readonly text: string;
@@ -234,10 +211,34 @@ export function isBlankQuery(text: string): boolean {
   return tokenise(text).length === 0;
 }
 
-/** Splits a value into the words it compares by; a value with nothing sluggable in it has no words. */
-function wordsOf(value: string): readonly string[] {
-  const normalised = normaliseForMatch(value);
-  return normalised === "" ? [] : normalised.split(" ");
+/** One value's derived match form: its normalised comparison key and the words split from it. */
+interface NameMatch {
+  /** The value's comparison key: lowercased, accent-folded, single-spaced and trimmed. */
+  readonly normalised: string;
+  /** The key's words; empty when the key is, so nothing sluggable means no words. */
+  readonly words: readonly string[];
+}
+
+/** The derived match form of every value this module compares, one entry per distinct text.
+ *
+ *  The seeded catalogue and taxonomy are immutable while the application runs, so a value's key and
+ *  its words are derived once and reused by every later call that reads them, whatever the query.
+ *  Only derived word tables are held — no request, response or query result, and no query text: it
+ *  is `tokenise`, `normaliseQuery` and `highlightSegments` that normalise the shopper's input. */
+const NAME_MATCHES = new Map<string, NameMatch>();
+
+/** The derived form of one value: derived on first sight and memoised from then on. The one home
+ *  of the word-splitting rule, so every field and every candidate splits words the same way.
+ *
+ *  @param text - The value to derive: a product field or a suggestion's wording.
+ *  @returns The memoised entry, carrying the value's comparison key and its words. */
+function nameMatchOf(text: string): NameMatch {
+  const memoised = NAME_MATCHES.get(text);
+  if (memoised !== undefined) return memoised;
+  const normalised = normaliseForMatch(text);
+  const derived: NameMatch = { normalised, words: normalised === "" ? [] : normalised.split(" ") };
+  NAME_MATCHES.set(text, derived);
+  return derived;
 }
 
 /** Whether `token` is one of `words`, compared as whole words so "desk" never matches "desktop". */
@@ -269,8 +270,8 @@ function isExactName(nameWords: readonly string[], tokens: readonly string[]): b
  * what {@link applyTextMatch} drops, and a blank token list scores `0` for every product, because an
  * absent query says nothing about any of them.
  *
- * Pure and deterministic: the score is a sum of integers over normalised text, so equal inputs always
- * produce an equal number, and neither the product nor the lookup is mutated.
+ * Pure and deterministic: a sum of integers over the words {@link nameMatchOf} derived, so equal
+ * inputs always score equal, and neither the product nor the lookup is mutated.
  *
  * @param product - The product to score.
  * @param tokens - The query's tokens, as {@link tokenise} produced them.
@@ -283,11 +284,11 @@ export function scoreProduct(
   lookup: SearchLookup,
 ): number {
   if (tokens.length === 0) return 0;
-  const nameWords = wordsOf(product.name);
-  const brandWords = wordsOf(lookup.brandName(product.brandId));
-  const categoryWords = wordsOf(lookup.categoryName(product.categoryId));
-  const tagWords = product.tags.flatMap((tag) => wordsOf(tag));
-  const summaryWords = wordsOf(product.summary);
+  const nameWords = nameMatchOf(product.name).words;
+  const brandWords = nameMatchOf(lookup.brandName(product.brandId)).words;
+  const categoryWords = nameMatchOf(lookup.categoryName(product.categoryId)).words;
+  const tagWords = product.tags.flatMap((tag) => nameMatchOf(tag).words);
+  const summaryWords = nameMatchOf(product.summary).words;
   let score = isExactName(nameWords, tokens) ? MATCH_WEIGHT.NAME_EXACT : 0;
   for (const token of tokens) {
     if (holdsWord(nameWords, token)) score += MATCH_WEIGHT.NAME_TOKEN;
@@ -345,23 +346,52 @@ export function applyTextMatch(
 
 // Type-ahead ranking -----------------------------------------------------------------------------
 
-/** The tier a suggestion ranks in: its kind, and for a product how its name answered the query. A
- *  product that matched neither way ranks with the product-token tier, because a caller may offer a
- *  suggestion this module's candidate builder would not itself have admitted. */
-function suggestionTier(suggestion: SearchSuggestion, normalisedQuery: string): number {
-  if (suggestion.kind === "brand") return SUGGESTION_TIER.BRAND;
-  if (suggestion.kind === "category") return SUGGESTION_TIER.CATEGORY;
-  if (normaliseForMatch(suggestion.text).startsWith(normalisedQuery)) {
-    return SUGGESTION_TIER.PRODUCT_PREFIX;
-  }
-  return SUGGESTION_TIER.PRODUCT_TOKEN;
+/** The term a candidate is admitted and ranked by: the shopper's normalised key and its tokens. */
+interface QueryMatch {
+  readonly normalised: string;
+  readonly tokens: readonly string[];
 }
 
+/** One suggestion carried with the keys ranking compares it by — its normalised text and its tier —
+ *  derived once, because a sort compares a candidate many times and re-deriving costs each one. */
+interface RankedSuggestion {
+  readonly suggestion: SearchSuggestion;
+  readonly normalised: string;
+  readonly tier: number;
+}
+
+/** The tier a suggestion ranks in, from keys already derived: a brand, a category, or a product that
+ *  leads with the query (`PRODUCT_PREFIX`) rather than only holding one of its tokens; a suggestion a
+ *  caller offers that answered neither way ranks with the token tier. */
+function tierOf(kind: SuggestionKind, leadsWithQuery: boolean): number {
+  if (kind === "brand") return SUGGESTION_TIER.BRAND;
+  if (kind === "category") return SUGGESTION_TIER.CATEGORY;
+  return leadsWithQuery ? SUGGESTION_TIER.PRODUCT_PREFIX : SUGGESTION_TIER.PRODUCT_TOKEN;
+}
+
+/** Carries a suggestion with its comparison keys: the one home of the derivation, taking the reading
+ *  the candidate was admitted by. */
+function rankableOf(
+  suggestion: SearchSuggestion,
+  match: NameMatch,
+  term: QueryMatch,
+): RankedSuggestion {
+  const tier = tierOf(suggestion.kind, match.normalised.startsWith(term.normalised));
+  return { suggestion, normalised: match.normalised, tier };
+}
+
+/** The ranking order both callers share: tier, then the text, then the target, all by code unit. */
+const RANK_ORDER: Comparator<RankedSuggestion> = createComparator<RankedSuggestion>([
+  { select: (entry) => entry.tier },
+  { select: (entry) => entry.suggestion.text },
+  { select: (entry) => entry.suggestion.target },
+]);
+
 /**
- * Orders suggestions best first by the tiers in {@link SUGGESTION_TIER}, ties broken by the
- * suggestion's text and then by its target — both by code unit, so equal input always yields the same
- * list. A term with no token gives the ranking nothing to work from, so the suggestions come back
- * unchanged, as a copy.
+ * Orders suggestions best first by the tiers of {@link SUGGESTION_TIER}, ties broken by the
+ * suggestion's text and then its target — both by code unit, so equal input yields the same list; a
+ * term with no token ranks nothing and gives the list back as a copy, and each suggestion's keys are
+ * derived once, ahead of the sort.
  *
  * @param suggestions - The suggestions to rank; never mutated.
  * @param query - The term the ranking is relative to.
@@ -374,44 +404,43 @@ export function rankSuggestions(
   const normalised = normaliseQuery(query);
   const tokens = tokenise(query);
   if (normalised === "" || tokens.length === 0) return [...suggestions];
-  return sortBy(
-    suggestions,
-    createComparator<SearchSuggestion>([
-      { select: (suggestion) => suggestionTier(suggestion, normalised) },
-      { select: (suggestion) => suggestion.text },
-      { select: (suggestion) => suggestion.target },
-    ]),
+  const term: QueryMatch = { normalised, tokens };
+  const decorated = suggestions.map((suggestion) =>
+    rankableOf(suggestion, nameMatchOf(suggestion.text), term),
   );
-}
-
-/** Whether a candidate's wording answers the term: it begins with what was typed — how an unfinished
- *  word completes — or holds one of the term's tokens as a whole word. */
-function admitsSuggestion(
-  text: string,
-  normalisedQuery: string,
-  tokens: readonly string[],
-): boolean {
-  if (normaliseForMatch(text).startsWith(normalisedQuery)) return true;
-  const words = wordsOf(text);
-  return tokens.some((token) => holdsWord(words, token));
+  return sortBy(decorated, RANK_ORDER).map((entry) => entry.suggestion);
 }
 
 /** How many suggestions to return: the caller's request inside `1..SEARCH_SUGGESTION_LIMIT`, or the
- *  cap itself when none was asked for or the request is not a number. */
+ *  cap when none was asked for or the request is not a number. */
 function resolveSuggestionLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return SEARCH_SUGGESTION_LIMIT;
   return clampNumber(Math.trunc(limit), 1, SEARCH_SUGGESTION_LIMIT);
 }
 
+/** The best `count` candidates, best first: a window holding at most `count` entries that compares each
+ *  further candidate against the window's worst and orders only the window — the whole list's own
+ *  prefix, because (tier, text) is unique once candidates are deduplicated. */
+function bestRanked(candidates: readonly RankedSuggestion[], count: number): RankedSuggestion[] {
+  if (count < 1) return [];
+  const best: RankedSuggestion[] = [];
+  for (const candidate of candidates) {
+    const worst = best.at(-1);
+    if (best.length === count && worst !== undefined && RANK_ORDER(candidate, worst) >= 0) continue;
+    best.push(candidate);
+    best.sort(RANK_ORDER);
+    if (best.length > count) best.pop();
+  }
+  return best;
+}
+
 /**
  * Builds the type-ahead list for a term typed so far: the products, brands and categories whose names
- * answer it, ranked by {@link rankSuggestions} and capped.
- *
- * A candidate is admitted when its name begins with the term or holds one of the term's tokens as a
- * whole word; repeated wording is dropped, one row per kind and normalised text, the first kept; and
- * the result is capped at `SEARCH_SUGGESTION_LIMIT` however many candidates answered. A blank term
- * suggests nothing and returns an empty list, and each suggestion's destination is built by the
- * caller's `targets`, so this module writes no path of its own.
+ * answer it, ranked best first and capped. A candidate is admitted when its name begins with the term
+ * — how an unfinished word completes — or holds one of the term's tokens as a whole word, and carries
+ * the keys it is ranked by from that one reading; repeated wording is dropped, one row per kind and
+ * normalised text, the first kept; and the cap keeps the best {@link resolveSuggestionLimit} rows
+ * without ordering the admitted set.
  *
  * @param input - The collections, the term, the route builders and the cap.
  * @returns The suggestions, best first, at most the cap; empty for a term with no token.
@@ -421,31 +450,26 @@ export function buildSuggestions(input: BuildSuggestionsInput): SearchSuggestion
   const normalised = normaliseQuery(query);
   const tokens = tokenise(query);
   if (normalised === "" || tokens.length === 0) return [];
-  const candidates: SearchSuggestion[] = [];
+  const term: QueryMatch = { normalised, tokens };
+  const candidates: RankedSuggestion[] = [];
+  const admit = (text: string, kind: SuggestionKind, target: string): void => {
+    const match = nameMatchOf(text);
+    const answers =
+      match.normalised.startsWith(term.normalised) ||
+      term.tokens.some((token) => holdsWord(match.words, token));
+    if (answers) candidates.push(rankableOf({ text, kind, target }, match, term));
+  };
   for (const product of sources.products) {
-    if (!admitsSuggestion(product.name, normalised, tokens)) continue;
-    candidates.push({
-      text: product.name,
-      kind: "product",
-      target: targets.productTarget(product.slug),
-    });
+    admit(product.name, "product", targets.productTarget(product.slug));
   }
   for (const brand of sources.brands) {
-    if (!admitsSuggestion(brand.name, normalised, tokens)) continue;
-    candidates.push({ text: brand.name, kind: "brand", target: targets.brandTarget(brand.id) });
+    admit(brand.name, "brand", targets.brandTarget(brand.id));
   }
   for (const category of sources.categories) {
-    if (!admitsSuggestion(category.name, normalised, tokens)) continue;
-    candidates.push({
-      text: category.name,
-      kind: "category",
-      target: targets.categoryTarget(category.slug),
-    });
+    admit(category.name, "category", targets.categoryTarget(category.slug));
   }
-  const distinct = uniqueBy(candidates, (suggestion) => {
-    return `${suggestion.kind}:${normaliseForMatch(suggestion.text)}`;
-  });
-  return rankSuggestions(distinct, query).slice(0, resolveSuggestionLimit(input.limit));
+  const distinct = uniqueBy(candidates, (entry) => `${entry.suggestion.kind}:${entry.normalised}`);
+  return bestRanked(distinct, resolveSuggestionLimit(input.limit)).map((entry) => entry.suggestion);
 }
 
 /**
@@ -502,25 +526,27 @@ export function highlightSegments(text: string, tokens: readonly string[]): Sear
  * Builds the query members one listing request carries, so the query state the URL holds and the
  * request it becomes cannot drift: a blank term is left out rather than sent empty, an unset price
  * bound or rating floor is omitted rather than sent as nothing, and the sort, the page and the page
- * size travel explicitly, so the request states which page of which order it wants.
+ * size travel explicitly, so the request states which page of which order it wants. Every member name
+ * comes from `FILTER_PARAMS`, the one list the URL is written with and the request's reader reads, so
+ * a rename there cannot leave the URL writing a filter this request no longer carries.
  *
  * @param filter - The filter, sort and paging state to read.
  * @returns The request's query members, in the endpoint's own member names.
  */
 function listingQuery(filter: FilterState): QueryParams {
   const query: Record<string, string | number | boolean | readonly string[] | undefined> = {
-    sort: filter.sort,
-    page: filter.page,
-    pageSize: filter.pageSize,
+    [FILTER_PARAMS.SORT]: filter.sort,
+    [FILTER_PARAMS.PAGE]: filter.page,
+    [FILTER_PARAMS.PAGE_SIZE]: filter.pageSize,
   };
-  if (!isBlankQuery(filter.q)) query.q = filter.q;
-  if (filter.categoryIds.length > 0) query.categoryIds = filter.categoryIds;
-  if (filter.brandIds.length > 0) query.brandIds = filter.brandIds;
-  if (filter.minPriceMinor !== null) query.minPrice = filter.minPriceMinor;
-  if (filter.maxPriceMinor !== null) query.maxPrice = filter.maxPriceMinor;
-  if (filter.minRating !== null) query.minRating = filter.minRating;
-  if (filter.inStockOnly) query.inStock = true;
-  if (filter.tags.length > 0) query.tags = filter.tags;
+  if (!isBlankQuery(filter.q)) query[FILTER_PARAMS.QUERY] = filter.q;
+  if (filter.categoryIds.length > 0) query[FILTER_PARAMS.CATEGORY_IDS] = filter.categoryIds;
+  if (filter.brandIds.length > 0) query[FILTER_PARAMS.BRAND_IDS] = filter.brandIds;
+  if (filter.minPriceMinor !== null) query[FILTER_PARAMS.MIN_PRICE] = filter.minPriceMinor;
+  if (filter.maxPriceMinor !== null) query[FILTER_PARAMS.MAX_PRICE] = filter.maxPriceMinor;
+  if (filter.minRating !== null) query[FILTER_PARAMS.MIN_RATING] = filter.minRating;
+  if (filter.inStockOnly) query[FILTER_PARAMS.IN_STOCK] = true;
+  if (filter.tags.length > 0) query[FILTER_PARAMS.TAGS] = filter.tags;
   return query;
 }
 
@@ -531,7 +557,7 @@ function listingQuery(filter: FilterState): QueryParams {
  * The state is passed through as given — the URL owns it, and this module never reads or writes a
  * location — and the abort signal travels to the transport, so the search field cancels a superseded
  * keystroke and the caller meets the transport's `request-aborted` value rather than a rejection.
- * Neither the debounce nor any cache lives here: the interval is the field's, through
+ * Neither the debounce nor any request cache lives here: the interval is the field's, through
  * `src/utils/async.ts`, and this function honours whatever signal it is handed.
  *
  * @param query - The filter, sort and paging state to search with.

@@ -171,7 +171,7 @@ export function HeroSection(): ReactElement {
       </div>
       <div className="sp-trust">
         <div className="sp-trust__inner">
-          <ul className="sp-trust__list">
+          <ul className="sp-trust__list" role="list">
             {TRUST_POINTS.map((point) => (
               <li className="sp-trust__item" key={point.id}>
                 <svg

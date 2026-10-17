@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 513
+ * Lines: 536
  */
 
 /* ==== Buttons ====
@@ -10,6 +10,9 @@
  * .sp-btn. The primary fill's text is the on-accent pair tokens.css measures at 6.29:1, where
  * --color-accent-contrast is the pair for the accent tint rather than for the fill.
  */
+/* base.css leaves the underline to the class an anchor carries, and the user agent paints one on every link,
+ * so the family states the absence itself: an anchor wearing a button keeps the button's skin and no rule
+ * runs through its label. The link modifier's hover rule below is the family's only underline. */
 .sp-btn,
 .sp-button {
   display: inline-flex;
@@ -24,6 +27,7 @@
   font-size: var(--text-label-size);
   font-weight: var(--text-label-weight);
   line-height: var(--text-label-line-height);
+  text-decoration-line: none;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -273,8 +277,12 @@
   font-size: var(--text-body-sm-size);
   font-weight: var(--font-weight-medium);
 }
+/* The column is floored at zero so the field's items take its own inline size instead of the widest one's
+ * min-content: an unbreakable token in a label, a hint or an error wraps inside the field rather than
+ * widening the track and with it the whole page. Same floor as .sp-form__grid above. */
 .sp-field {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
 }
 .sp-field__label {
@@ -408,6 +416,20 @@
 .sp-choice__label {
   cursor: inherit;
 }
+/* A row that cannot be used must not advertise itself as clickable, and neither must the label span that
+ * inherits the row's pointer. base.css states the not-allowed pointer for :disabled and [aria-disabled="true"],
+ * but its :where() selector holds zero specificity, so the family's own pointer declaration is the one that
+ * decides and the base rule's intent is honoured only if it is stated again at this weight — the same
+ * restatement the button family already carries above. A :where() wrapper here would collapse back to the
+ * family's weight and lose; the disabled box and radio are covered by their own rule further down. */
+.sp-choice:has(> :disabled),
+.sp-choice:has(> [aria-disabled="true"]),
+.sp-choice:disabled,
+.sp-choice[aria-disabled="true"],
+.sp-switch:disabled,
+.sp-switch[aria-disabled="true"] {
+  cursor: not-allowed;
+}
 .sp-checkbox,
 .sp-radio {
   appearance: none;
@@ -473,6 +495,7 @@
   background-color: var(--color-surface-sunken);
   border-color: var(--color-border);
   opacity: var(--opacity-disabled);
+  cursor: not-allowed;
 }
 /* The track is twice the thumb plus the two inset gaps, so the thumb travels exactly one space token. */
 .sp-switch {

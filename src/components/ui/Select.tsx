@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Select.tsx
  * Purpose: Select, checkbox, radio group and switch with accessible labelling
- * Lines: 580
+ * Lines: 582
  */
 
 import { useCallback, useEffect, useId, useRef } from "react";
@@ -241,16 +241,17 @@ function renderGroups(groups: readonly OptionGroup[] | undefined): readonly Reac
 }
 
 /**
- * The leading choice of a select: a disabled, empty-valued option carrying the wording the closed control
- * reads before a real choice is made. An option rather than a CSS placeholder, because only an option is
- * announced as the control's current value.
+ * The leading choice of a select: an empty-valued option carrying the wording the closed control reads before a
+ * real choice is made. An option rather than a CSS placeholder, because only an option is announced as the
+ * control's current value.
+ *
+ * Deliberately not `disabled`: a disabled option can never hold selectedness, so the platform would hand the
+ * closed control the first enabled choice and the user would read a value they never picked. The empty value is
+ * also what makes a `required` select refuse a submission until a real choice is made, and it is why this is the
+ * option the platform selects by default, without any `selected` attribute needing to be set.
  */
 function renderPlaceholderOption(label: string): ReactElement {
-  return (
-    <option value="" disabled>
-      {label}
-    </option>
-  );
+  return <option value="">{label}</option>;
 }
 
 // The controls ------------------------------------------------------------------------------------
@@ -263,9 +264,10 @@ function renderPlaceholderOption(label: string): ReactElement {
  * renders inside `.sp-select__wrap`, because a pseudo-element does not render on a `<select>` and that wrapper
  * is where the stylesheet's chevron is drawn.
  *
- * The leading choice is a disabled option carrying `placeholder`, or the field's own label when the caller
- * supplied no choices at all, so the closed control never reads blank. Both strings are the caller's, which
- * keeps every user-facing sentence in `src/constants/content.ts`.
+ * The leading choice is an empty-valued option carrying `placeholder`, or the field's own label when the caller
+ * supplied no choices at all, so the closed control never reads blank; it is not disabled, because a disabled
+ * option cannot hold selectedness and the platform would display the first real value in its place. Both strings
+ * are the caller's, which keeps every user-facing sentence in `src/constants/content.ts`.
  *
  * @param props - The field's label and auxiliary text, the form-wide error map, the placeholder, the two ways
  *   of supplying choices and the control's own native attributes. `isDisabled` wins over a native `disabled`.
@@ -518,9 +520,9 @@ export function RadioGroup({
  * technology and what makes the whole row one pointer target.
  *
  * `disabled` and `aria-disabled="true"` are set together: the native attribute takes the control out of the tab
- * order and refuses the click, while the ARIA state is what dims the track. BLITZY [CONTRACT]: a disabled row
- * still shows the pointer cursor, because `.sp-switch` and `.sp-choice` declare `cursor: pointer` and base.css
- * states the not-allowed one with zero specificity — that declaration belongs to the sheet owning the family.
+ * order and refuses the click, while the ARIA state is what dims the track. BLITZY [CONTRACT]: the sheet owning
+ * the family restates the not-allowed pointer for the disabled and `aria-disabled` cases of `.sp-choice` and
+ * `.sp-switch`, so a non-interactive row does not advertise itself as clickable.
  *
  * @param props - The label and its supporting line, the state and its change handler, the disabled flags and
  *   the button's own native attributes. `isDisabled` wins over a native `disabled` when both are given.

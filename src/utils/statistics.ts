@@ -1,12 +1,14 @@
 /**
  * Path: src/utils/statistics.ts
  * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports
- * Lines: 432
+ * Lines: 489
  */
 
 import type { BaselineKind, ChartPoint } from "@/types/analytics";
-import type { MinorUnits } from "@/types/common";
+import type { DateRange, MinorUnits } from "@/types/common";
+import type { Order } from "@/types/commerce";
 import { averageOf, clampNumber, sum } from "@/utils/collections";
+import { isWithinRange } from "@/utils/dates";
 import { roundMinorUnits, type ChangeDirection } from "@/utils/format";
 
 /**
@@ -15,6 +17,11 @@ import { roundMinorUnits, type ChangeDirection } from "@/utils/format";
  * `src/lib/reportService.ts` call these helpers rather than dividing figures themselves, which keeps
  * the number a KPI card shows, the number a report table prints and the number its CSV exports from
  * disagreeing.
+ *
+ * It owns what a period's figures are stated over as well as how they are computed: which orders a
+ * period counts, through `periodOrders`, and how much revenue the goods of one order brought, through
+ * `goodsRevenueMinor`, so the dashboard and the reports settle both questions here rather than each
+ * answering them for itself.
  *
  * Around it: `averageOf` and `sum` from `src/utils/collections.ts` are the plain mean and total;
  * rendering a figure, and the single rounding rule for money, are `src/utils/format.ts`'s; bucketing a
@@ -52,6 +59,56 @@ function finiteValues(values: readonly number[]): number[] {
  *  summary read. The caller's array is never mutated. */
 function sortedFiniteValues(values: readonly number[]): number[] {
   return finiteValues(values).sort((left, right) => left - right);
+}
+
+// A period's orders and its goods revenue -----------------------------------------------------------
+
+/**
+ * The orders a period's figures are stated over: the orders placed inside `range` whose status is not
+ * `cancelled`. This is the one home for that population, and every surface that states a period of
+ * trade reads it — `computeTopProducts` in `src/lib/analyticsService.ts`, and
+ * `buildProductPerformanceRows` and `buildCustomerRows` in `src/lib/reportService.ts` — so a range
+ * counts one set of orders and therefore reports one set of units, one revenue and one share on the
+ * dashboard and in the reports, instead of each surface deciding for itself which orders it reads.
+ *
+ * A cancelled order is the only status left out, because it is the one that sold nothing: its lines
+ * were voided and no surface should state them as trade. A refunded order keeps every line it sold,
+ * because the sale stands and only the money came back afterwards. Both ends of `range` are inclusive,
+ * through `isWithinRange` in `src/utils/dates.ts`, which is the same boundary the period's buckets are
+ * cut on. The orders come back in input order, as a new array: the caller's collection is read and
+ * never mutated.
+ *
+ * @param orders - Every order to select the period's population from; never mutated.
+ * @param range - The period the population is stated over, both ends inclusive.
+ * @returns The orders placed in the period that were not cancelled, in input order.
+ */
+export function periodOrders(orders: readonly Order[], range: DateRange): Order[] {
+  return orders.filter(
+    (order) => order.status !== "cancelled" && isWithinRange(order.placedAt, range),
+  );
+}
+
+/**
+ * What an order's goods brought, net of the discounts that applied to them: their subtotal less the
+ * order's discount total, in integer minor units. Delivery and tax are deliberately outside it — they
+ * are what the buyer paid on top of the goods, not what the goods earned — and this is the one home for
+ * that basis, so a period states one figure under a Revenue or Average-order-value label wherever it is
+ * read: the customer report's Revenue and Average-order-value columns take it from here, the
+ * dashboard's identically labelled KPI cards state the same net goods basis, and the product-performance
+ * report's revenue is the sum of those same lines' net amounts.
+ *
+ * The two amounts are read from the order's snapshotted priced cart, which `src/lib/pricingService.ts`
+ * builds so that `grandTotalMinor` is `subtotalMinor - discountTotalMinor` plus delivery and tax;
+ * subtracting the same two here therefore equals the sum of the order's own lines' net amounts
+ * (`lineTotalMinor`), which is what the product-performance report sums per product. The figure leaves
+ * through the single rounding rule for minor units, so an order carrying an amount that is not finite
+ * states `0` rather than handing a period's revenue a `NaN`.
+ *
+ * @param order - The order whose goods revenue is stated; never mutated.
+ * @returns The goods, net of the discounts that applied to them, in integer minor units.
+ */
+export function goodsRevenueMinor(order: Order): MinorUnits {
+  return roundMinorUnits(order.pricedCart.subtotalMinor - order.pricedCart.discountTotalMinor);
 }
 
 // Change and growth ---------------------------------------------------------------------------------

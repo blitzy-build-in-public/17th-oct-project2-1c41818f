@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Feedback.tsx
  * Purpose: Spinner, skeleton, empty state, alert and progress bar: the four states every data page renders
- * Lines: 569
+ * Lines: 598
  */
 
 import { useId } from "react";
@@ -30,9 +30,9 @@ import { formatPercent } from "@/utils/format";
  * region by tone, the progress bar a `progressbar` with its `aria-value*` trio, and the skeleton
  * `aria-hidden`, because the region it stands in for is what carries `aria-busy` while it loads. The
  * geometry the sheets leave to the component arrives through their own hooks — `--spinner-size`,
- * `--progress-height`, and the inline `inlineSize` components.css names as the progress fill's one value a
- * component sets — and every one of them is a `var()` token from `src/styles/tokens.css`, so no colour,
- * radius, shadow, duration or breakpoint is written in this file.
+ * `--progress-height`, and `--sp-progress-value`, the ratio the progress fill publishes for components.css to
+ * size the fill by — and every value set here is either that ratio or a `var()` reference into
+ * `src/styles/tokens.css`, so no colour, radius, shadow, duration or breakpoint is written in this file.
  *
  * BLITZY [DESIGN_SYSTEM_GAP]: an indeterminate bar is reported by ARIA alone. The sheets declare no
  * indeterminate class — their state vocabulary is the `aria-*` attributes, `disabled`, `inert`, the
@@ -256,38 +256,64 @@ export function Skeleton({
 
 // Empty state ----------------------------------------------------------------------------------
 
-/** Everything {@link EmptyState} accepts. */
-export interface EmptyStateProps {
-  /**
-   * The surface that came up empty, which selects the wording: a filter combination with no matches, an
-   * account with no orders, a reporting range with no sales. Omit it for a state that is none of those and
-   * pass `title` and `description` instead.
-   */
-  readonly surface?: EmptyStateKey;
+/**
+ * The surfaces whose wording names a control: exactly those the content library gives an action label. One
+ * it gives none promises no action, so it needs no wiring and is left out of this union.
+ */
+type ActionableSurfaceKey = {
+  [Key in EmptyStateKey]: "actionLabel" extends keyof (typeof EMPTY_STATES)[Key] ? Key : never;
+}[EmptyStateKey];
+
+/**
+ * What backs the single control an empty state offers, at least one of the two being required: a control
+ * that resolves nothing is worse than the sentence alone. `actionHref` wins when both are given.
+ */
+type EmptyStateActionWiring =
+  | { readonly actionHref: string; readonly onAction?: () => void }
+  | { readonly onAction: () => void; readonly actionHref?: string };
+
+/**
+ * Everything {@link EmptyState} accepts: the wording slots, and the wiring the wording obliges. Wherever it
+ * names a control — a surface whose copy carries an action label, or a caller's own `actionLabel` — the
+ * callback or the destination that backs it is required, so no state can promise an action it does not offer
+ * and no call site can leave one unwired. `relatedProducts`, whose copy names none, and a state that names no
+ * surface and no label, need neither.
+ */
+export type EmptyStateProps = {
   /** The headline, in place of the surface's own. */
   readonly title?: ReactNode;
   /** The plain explanation, in place of the surface's own. */
   readonly description?: ReactNode;
-  /**
-   * The words on the single control that helps. Defaults to the surface's own label, so "clear all filters"
-   * stays the content library's sentence rather than this component's.
-   */
-  readonly actionLabel?: string;
-  /** What the control does, for a state a callback resolves. Ignored when `actionHref` is given. */
-  readonly onAction?: () => void;
-  /** Where the control goes, for a state a navigation resolves. Rendered as a real anchor. */
-  readonly actionHref?: string;
   /** Decoration above the headline, hidden from assistive technology because the words carry the meaning. */
   readonly icon?: ReactNode;
   /**
    * The heading level the headline renders at, so the outline stays in order wherever the state lands: `1`
-   * when it is a page's principal content, `2` for a page section, `3` and `4` inside a card. Defaults to
-   * `2`.
+   * for a page's principal content, `2` for a page section, `3` and `4` inside a card. Defaults to `2`.
    */
   readonly headingLevel?: 1 | 2 | 3 | 4;
   /** Extra classes for the surface the state sits on. */
   readonly className?: string;
-}
+  /** The words on the single control, in place of the surface's own label. */
+  readonly actionLabel?: string;
+} & (
+  | ({
+      /** The surface that came up empty: a filter combination with no matches, an account with no orders, a
+       *  reporting range with no sales. One whose wording names a control, which this state has to back. */
+      readonly surface: ActionableSurfaceKey;
+    } & EmptyStateActionWiring)
+  | {
+      /** A surface whose copy names no control, or no surface for a state passing its own wording. */
+      readonly surface?: Exclude<EmptyStateKey, ActionableSurfaceKey>;
+      readonly actionLabel?: undefined;
+      readonly onAction?: () => void;
+      readonly actionHref?: string;
+    }
+  | ({
+      /** The same two cases, on a state whose label is the caller's rather than the library's. */
+      readonly surface?: Exclude<EmptyStateKey, ActionableSurfaceKey>;
+      readonly actionLabel: string;
+    } & EmptyStateActionWiring)
+);
 
 /**
  * The empty state of a region: what is empty, why, and the one action that helps.
@@ -296,6 +322,10 @@ export interface EmptyStateProps {
  * boundary's neutral pair when no surface is named — so no empty-state sentence is written here and no two
  * surfaces describe the same emptiness differently. Exactly one control is offered, because a state that
  * presents three ways out presents none.
+ *
+ * That one control is not left to a call site to remember: where the wording names it the props type requires
+ * what backs it, so a state cannot render copy promising an action it does not offer, and a state promising
+ * none renders its heading and its sentence alone — every combination renders as it always did.
  *
  * @param props - The surface, the wording overrides, the single action and the heading level.
  * @returns The empty state element.
@@ -312,7 +342,8 @@ export function EmptyState({
   className,
 }: EmptyStateProps): ReactElement {
   const copy = surface === undefined ? undefined : EMPTY_STATES[surface];
-  // Six of the nine surfaces declare an action label and three do not, so the union has to be asked for it.
+  // Eight of the nine surfaces declare an action label and `relatedProducts` does not, so the union of the
+  // nine has to be asked for it.
   const copyActionLabel =
     copy !== undefined && "actionLabel" in copy ? copy.actionLabel : undefined;
   const resolvedTitle = hasSlot(title)
@@ -520,9 +551,10 @@ export interface ProgressBarProps {
  *
  * It is a labelled `progressbar` whose value is stated three ways, because a filled track is unreadable to a
  * visitor who cannot see it: the numeric pair assistive technology announces, the value text when the caller
- * has already rendered one, and a visible caption of the label followed by the value. Both the fill's width
- * and that visible value come from `src/utils/format.ts`, so the bar and the sentence beside it can never
- * disagree, and the caption sits outside the track so the label survives whatever the fill covers.
+ * has already rendered one, and a visible caption of the label followed by the value. The fill's width is the
+ * ratio this bar publishes as `--sp-progress-value`, which `src/styles/components.css` turns into a percentage
+ * — no formatted display string is ever a length — so the fill and the caption from `src/utils/format.ts`
+ * state one figure, and the caption sits outside the track so the label survives whatever the fill covers.
  *
  * @param props - The value and its scale, the label, the optional value text, the indeterminate flag, the
  * thickness and extra classes.
@@ -541,6 +573,7 @@ export function ProgressBar({
   const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), limit) : 0;
   const ratio = filledRatio(clamped, limit);
   const valueText = isIndeterminate ? undefined : (valueLabel ?? formatPercent(ratio));
+  const fillWidthStyle: FeedbackStyle = { "--sp-progress-value": String(ratio) };
 
   return (
     <div className={composeClassName("sp-progress", className)} style={PROGRESS_SIZE_STYLES[size]}>
@@ -554,11 +587,7 @@ export function ProgressBar({
         aria-valuetext={isIndeterminate ? undefined : valueLabel}
       >
         {isIndeterminate ? null : (
-          <span
-            className="sp-progress__fill"
-            style={{ inlineSize: formatPercent(ratio) }}
-            aria-hidden="true"
-          />
+          <span className="sp-progress__fill" style={fillWidthStyle} aria-hidden="true" />
         )}
       </div>
       <p className="sp-progress__label">

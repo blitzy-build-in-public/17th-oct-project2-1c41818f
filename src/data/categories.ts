@@ -1,7 +1,7 @@
 /**
  * Path: src/data/categories.ts
  * Purpose: The seeded category tree with counts, and the deterministic tile builder for category imagery
- * Lines: 401
+ * Lines: 402
  */
 
 import { BRAND_DEFINITIONS, CATEGORY_DEFINITIONS } from "@/constants/taxonomy";
@@ -310,18 +310,19 @@ const TILE_HEIGHT = 320;
  */
 const TILE_DIGEST_RANGE = 720;
 
-/** One two-stop gradient a category tile paints: the fill its background rectangle takes. */
-interface TileGradient {
+/** One two-stop gradient the shared imagery palette holds: the fill a category tile's panel or a product
+ *  picture's background takes, as this module's tile builder and `src/data/products.ts` both draw it. */
+interface ImageryGradient {
   readonly from: string;
   readonly to: string;
 }
 
 /**
- * The tile palette: eight hand-chosen gradients, each dark enough for white initials to read on and
- * distinct enough that two categories sharing one still look apart. A category's place in the palette
- * comes from its slug, so it keeps the same tile across builds and across reloads.
+ * The imagery palette and the only home it has: eight hand-chosen gradients, each dark enough for white
+ * initials to read on. A category's place in it comes from its slug and a product's from its name length
+ * and price, so `src/data/products.ts` imports this palette rather than declaring a second one.
  */
-const TILE_PALETTE = [
+export const IMAGERY_PALETTE = [
   { from: "#1f4e79", to: "#2f7fb8" },
   { from: "#2b5d4a", to: "#3f8f6d" },
   { from: "#5b3a7e", to: "#8a63b8" },
@@ -330,7 +331,7 @@ const TILE_PALETTE = [
   { from: "#6b2f4a", to: "#a24d73" },
   { from: "#3c4a7a", to: "#5f73ad" },
   { from: "#4a4a2f", to: "#7c7c4c" },
-] as const satisfies readonly TileGradient[];
+] as const satisfies readonly ImageryGradient[];
 
 /**
  * Reduces a category's slug to the number the tile's palette entry and accent are drawn from: a
@@ -369,7 +370,7 @@ function slugDigest(slug: string): number {
  */
 export function buildCategoryImage(category: Category): string {
   const digest = slugDigest(category.slug);
-  const gradient = TILE_PALETTE[digest % TILE_PALETTE.length];
+  const gradient = IMAGERY_PALETTE[digest % IMAGERY_PALETTE.length];
   const accentRadius = 96 + (digest % 5) * 16;
   const accentX = TILE_WIDTH - 24 - (digest % 96);
   const accentY = 8 + (digest % 112);

@@ -1,11 +1,11 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 407
+ * Lines: 457
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
-import { ACCOUNT_COPY, ADMIN_COPY, FEEDBACK_COPY, NOT_FOUND_COPY } from "@/constants/content";
+import { ADMIN_COPY, FEEDBACK_COPY, NOT_FOUND_COPY } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Common from "@/types/common";
 import { parseIso } from "@/utils/dates";
@@ -228,14 +228,38 @@ type SessionLookup =
 /** A lookup that found no usable session: the three ways a request can arrive without one. */
 type SessionRefusal = Exclude<SessionLookup, { readonly kind: "active" }>;
 
+/**
+ * Whether a stored record authenticates somebody: it carries a token with content and claims a role
+ * other than `guest`. This is the rule `authService.isAuthenticated` owns and words the same way — a
+ * guest claim authenticates nobody, and reading it as a session would let a stale or hand-made record
+ * reach an account screen.
+ *
+ * It is restated here rather than imported because `src/lib/authService.ts` asks this seam through
+ * `src/lib/apiClient.ts`, which imports this file, so the import would close a module cycle; and the
+ * domain services sit a layer above the transport, which imports downward only. Applying the rule
+ * where a token is resolved is what keeps the route gate and a handler's session from disagreeing
+ * about one record.
+ *
+ * @param session - The record the store holds for a request's token.
+ * @returns Whether that record is a session worth acting on.
+ */
+function authenticatesAnyone(session: Account.Session): boolean {
+  return session.token.trim().length > 0 && session.role !== "guest";
+}
+
 /** Resolves the session a request carries: the token, the session the store still holds for it, and
  * whether that session has expired. A token the store knows nothing about is `unknown` rather than
- * `none`, so a stale token and a missing one answer different codes. */
+ * `none`, so a stale token and a missing one answer different codes; and a record the store still
+ * holds but that authenticates nobody, which its role claim or its blank token member decides
+ * ({@link authenticatesAnyone}), is `none` as well, so every caller refuses it as absent rather than
+ * reading it as a session. An expired session is reported as expired whether or not it authenticates
+ * anybody, because `expired` is what a client signs out on. */
 function lookUpSession(source: SalesProDataSource, token: string | undefined): SessionLookup {
   if (token === undefined || token.trim() === "") return { kind: "none" };
   const session = source.getSession(token);
   if (session === undefined) return { kind: "unknown" };
-  return isExpired(session) ? { kind: "expired", session } : { kind: "active", session };
+  if (isExpired(session)) return { kind: "expired", session };
+  return authenticatesAnyone(session) ? { kind: "active", session } : { kind: "none" };
 }
 
 /** Whether a session has passed its expiry: a session whose `expiresAt` cannot be parsed is treated as
@@ -255,13 +279,16 @@ function sessionRefusal(lookup: SessionRefusal): Common.ApiError {
         ? API_ERROR_CODES.SESSION_UNKNOWN
         : API_ERROR_CODES.SESSION_EXPIRED;
   const message =
-    lookup.kind === "expired" ? FEEDBACK_COPY.TOAST_SESSION_EXPIRED : ACCOUNT_COPY.SIGN_IN_HEADING;
+    lookup.kind === "expired"
+      ? FEEDBACK_COPY.TOAST_SESSION_EXPIRED
+      : FEEDBACK_COPY.SIGN_IN_REQUIRED;
   return shapeError(API_ERROR_STATUS[code], code, message);
 }
 
-/** Whether a request may proceed at a route's level: `anonymous` always may, `customer` needs an
- * active session, and `administrator` needs one whose role claim is `admin`. The check lives here and
- * not only in the router, because hiding a control is not access control. */
+/** Whether a request may proceed at a route's level: `anonymous` always may, `customer` needs a lookup
+ * that resolved to an active session — one {@link authenticatesAnyone} has already judged to
+ * authenticate somebody — and `administrator` needs that session's role claim to be `admin`. The
+ * check lives here and not only in the router, because hiding a control is not access control. */
 function authorizeRoute(
   level: AuthorizationLevel,
   lookup: SessionLookup,
@@ -291,14 +318,38 @@ function patternSegments(pattern: string): readonly string[] {
   return pattern.split("/").filter((segment) => segment !== "");
 }
 
-/** The parameters a pattern captures from a path, or `null` when the two do not match: a `:name`
- * segment captures one non-empty segment and every other segment has to be identical. */
+/** One row of {@link routeTable} beside the parts of its pattern that never change: the row's segments
+ * and how many of them are literals rather than `:name` captures, which is the figure the precedence
+ * rule compares. */
+interface IndexedRoute {
+  readonly route: RouteDefinition<RouteId>;
+  readonly segments: readonly string[];
+  readonly staticCount: number;
+}
+
+/**
+ * The route table, segmented once at module load. Every pattern in it is a constant of this module, so
+ * its split and its static count are too: deriving them here is what keeps a request from re-splitting
+ * all of the table's patterns — and the pathname against each of them — before a handler runs. Only the
+ * patterns are precomputed; no request's own result is remembered, so the seam still holds no cache.
+ */
+const indexedRoutes: readonly IndexedRoute[] = routeTable.map((row) => {
+  const segments = patternSegments(row.pattern);
+  return {
+    route: row,
+    segments,
+    staticCount: segments.filter((segment) => !segment.startsWith(":")).length,
+  };
+});
+
+/** The parameters a pattern's segments capture from a path's, or `null` when the two do not match: a
+ * `:name` segment captures one non-empty segment and every other segment has to be identical. Both
+ * arrays arrive already split, because a pattern's segments are derived once and a request's are
+ * derived once for the request. */
 function captureSegments(
-  pattern: string,
-  pathname: string,
+  expected: readonly string[],
+  actual: readonly string[],
 ): Readonly<Record<string, string>> | null {
-  const expected = patternSegments(pattern);
-  const actual = patternSegments(pathname);
   if (expected.length !== actual.length) return null;
   const params: Record<string, string> = {};
   for (let index = 0; index < expected.length; index += 1) {
@@ -315,7 +366,8 @@ function captureSegments(
  * The route a request is answered by, with the parameters it captured, or `null` for a path no route
  * matches. The most static matching pattern wins, so `/api/reports/definitions` is preferred over
  * `/api/reports/:kind` whatever order the table lists them in, and a captured segment never swallows
- * a literal one.
+ * a literal one. The request's pathname is split once and compared against the table's precomputed
+ * segments, so the request pays one split of its own path and no split of any pattern.
  */
 function findRoute(
   method: Common.HttpMethod,
@@ -324,21 +376,19 @@ function findRoute(
   readonly route: RouteDefinition<RouteId>;
   readonly params: Readonly<Record<string, string>>;
 } | null {
-  let best: RouteDefinition<RouteId> | null = null;
+  const actual = patternSegments(pathname);
+  let best: IndexedRoute | null = null;
   let bestParams: Readonly<Record<string, string>> = {};
-  let bestStaticCount = -1;
-  for (const candidate of routeTable) {
-    if (candidate.method !== method) continue;
-    const params = captureSegments(candidate.pattern, pathname);
+  for (const candidate of indexedRoutes) {
+    if (candidate.route.method !== method) continue;
+    const params = captureSegments(candidate.segments, actual);
     if (params === null) continue;
-    const statics = patternSegments(candidate.pattern).filter((one) => !one.startsWith(":"));
-    if (statics.length > bestStaticCount) {
+    if (best === null || candidate.staticCount > best.staticCount) {
       best = candidate;
       bestParams = params;
-      bestStaticCount = statics.length;
     }
   }
-  return best === null ? null : { route: best, params: bestParams };
+  return best === null ? null : { route: best.route, params: bestParams };
 }
 
 /** The route a method and a path name, without answering it: how a test asserts matching without going

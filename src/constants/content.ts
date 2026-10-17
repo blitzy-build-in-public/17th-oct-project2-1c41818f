@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 596
+ * Lines: 599
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -393,6 +393,8 @@ export const ADMIN_COPY = {
   NOT_AUTHORIZED_BODY: "The signed-in account does not hold the administrator role.",
   NOT_AUTHORIZED_ACTION_LABEL: "Go to the storefront",
 } as const;
+/** The name each sales channel shows in the revenue breakdown's series labels. */
+export const CHANNEL_LABELS = { web: "Web", mobile: "Mobile app", store: "Store" } as const;
 /** States how one KPI moved against its named baseline, from both values already formatted. */
 export const kpiChangeLabel = (formattedChange: string, baselineLabel: string): string =>
   `${formattedChange} versus the ${baselineLabel.toLowerCase()}`;
@@ -460,6 +462,7 @@ export const FEEDBACK_COPY = {
   TOAST_EXPORT_READY: "The export is ready and the download has started.",
   TOAST_EXPORT_FAILED: "The export could not be prepared. Try downloading it again.",
   TOAST_SESSION_EXPIRED: "Your session has expired. Sign in again to reach your account.",
+  SIGN_IN_REQUIRED: "Sign in to your account to continue.",
 } as const;
 /** Outcome messages that name what they acted on. Consumers: the feature that reports them. */
 export const addedToCartMessage = (productName: string): string =>

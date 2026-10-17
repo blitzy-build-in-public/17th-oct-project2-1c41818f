@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/catalogService.ts
  * Purpose: Filtering, cross-filtered facet counts, sorting and paging over the catalogue
- * Lines: 597
+ * Lines: 599
  */
 
 import { RELATED_PRODUCTS_LIMIT, type PageSize } from "@/constants/config";
@@ -62,9 +62,10 @@ const PRODUCTS_PATH = "/api/products";
 /** The facet endpoint, which reads the filter half of a state and answers the five facets directly. */
 const FACETS_PATH = "/api/facets";
 
-/** The path of one product's detail resource. */
+/** The path of one product's detail resource: the identifier is percent-encoded, as every sibling
+ * builder encodes its own parameter, so a request-derived value stays one path segment. */
 function productPath(id: ProductId): string {
-  return `${PRODUCTS_PATH}/${id}`;
+  return `${PRODUCTS_PATH}/${encodeURIComponent(id)}`;
 }
 
 /** The path of one product's related-items resource, which takes the count to answer as `limit`. */
@@ -459,22 +460,13 @@ function facetValueSources(
   return definition.options ?? catalogueTermOptions(definition.id, products, vocabulary);
 }
 
-/** How many products a test accepts, counted in one pass without building a list of matches. */
-function countMatching(products: readonly Product[], test: (product: Product) => boolean): number {
-  let count = 0;
-  for (const product of products) {
-    if (test(product)) count += 1;
-  }
-  return count;
-}
-
 /**
  * One facet's values, each with the number of results choosing it would leave and whether the current query
  * already holds it. Counts are computed over the catalogue with this facet's own selection removed and every
- * other facet's applied, which keeps the remaining values meaningful while a facet is in use; the `selected`
- * flag is read from the query as it stands, through the same accessors the URL is written with, so the panel and
- * the query string cannot disagree about what is applied. A value the filters have emptied out keeps its place
- * with a count of zero rather than disappearing.
+ * other facet's applied, which keeps the remaining values meaningful while a facet is in use, and every option's
+ * test is evaluated against each product in a single pass, so a facet's values cost one traversal. The `selected`
+ * flag is read from the query as it stands, through the same accessors the URL is written with, so panel and query
+ * cannot disagree; a value the filters empty out keeps its place with a count of zero rather than disappearing.
  *
  * @param products - The catalogue to count over — the text-matched collection when a query term is present,
  * since free-text matching is `src/lib/searchService.ts`'s to apply.
@@ -491,15 +483,22 @@ export function countFacetValues(
 ): FacetValue[] {
   const matching = filterProducts(products, withoutFacetSelection(query, definition.id));
   const state = asFilterState(query);
-  return facetValueSources(definition, products, options.vocabulary).map((option) => {
-    const test = valueTestFor(definition, option);
-    return {
-      value: option.value,
-      label: option.label,
-      count: test === null ? 0 : countMatching(matching, test),
-      selected: facetValueMatches(state, definition.id, option.value),
-    };
-  });
+  const entries = facetValueSources(definition, products, options.vocabulary).map((option) => ({
+    option,
+    test: valueTestFor(definition, option),
+    count: 0,
+  }));
+  for (const product of matching) {
+    for (const entry of entries) {
+      if (entry.test !== null && entry.test(product)) entry.count += 1;
+    }
+  }
+  return entries.map((entry) => ({
+    value: entry.option.value,
+    label: entry.option.label,
+    count: entry.count,
+    selected: facetValueMatches(state, definition.id, entry.option.value),
+  }));
 }
 
 /**
@@ -530,7 +529,8 @@ export function buildFacetResponse(
  * The products related to one product: the same category, that product excluded, nearest in price first, with
  * ties broken by name and then by identifier so the strip is identical in every run. Same-category neighbours
  * are the whole rule — a product carries no recommendation signal of its own — so a strip is drawn from the
- * collection a caller passes and the product being viewed is never its own relation.
+ * collection a caller passes, never contains the product being viewed, and keeps the nearest `limit` in a
+ * bounded window in one pass: an equal candidate goes behind those already ahead of it, as a stable sort would.
  *
  * @param products - The catalogue to draw from; never mutated.
  * @param id - The product the strip is for; an identifier the collection does not hold yields none.
@@ -546,20 +546,22 @@ export function selectRelated(
   if (subject === undefined) return [];
   const count = Number.isFinite(limit) ? Math.floor(limit) : 0;
   if (count < 1) return [];
-  const candidates = products.filter(
-    (product) =>
-      product.id !== subject.id &&
-      product.categoryId === subject.categoryId &&
-      isSellable(product),
-  );
-  return sortBy(
-    candidates,
-    createComparator<Product>([
-      { select: (product) => Math.abs(product.priceMinor - subject.priceMinor) },
-      { select: (product) => product.name },
-      { select: (product) => product.id },
-    ]),
-  ).slice(0, count);
+  const comparator = createComparator<Product>([
+    { select: (product) => Math.abs(product.priceMinor - subject.priceMinor) },
+    { select: (product) => product.name },
+    { select: (product) => product.id },
+  ]);
+  const window: Product[] = [];
+  for (const product of products) {
+    if (product.id === subject.id || product.categoryId !== subject.categoryId) continue;
+    if (!isSellable(product)) continue;
+    if (window.length === count && comparator(product, window[count - 1]) >= 0) continue;
+    if (window.length === count) window.pop();
+    let position = window.length;
+    while (position > 0 && comparator(window[position - 1], product) > 0) position -= 1;
+    window.splice(position, 0, product);
+  }
+  return window;
 }
 
 // Paging ----------------------------------------------------------------------------------------

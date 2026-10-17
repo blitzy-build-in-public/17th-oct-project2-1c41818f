@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 371
+ * Lines: 382
  */
 
 import type { CurrencyCode } from "@/types/common";
@@ -67,6 +67,17 @@ export const DEFAULT_CURRENCY: CurrencyCode = "USD";
  * than recomputing one of their own.
  */
 export const TAX_RATE = 0.0825;
+
+/**
+ * The highest price the seeded catalogue carries, in minor units: the ceiling every price-range bound
+ * is confined to.
+ *
+ * Consumers: `src/utils/queryParams.ts`, whose price normalisation clamps both bounds to it, so the
+ * filter cannot express a range the catalogue cannot fill and an absurd bound and the catalogue's own
+ * top price write one canonical URL. It is the dearest price the seeded catalogue reaches
+ * (`src/data/products.ts`), so clamping to it excludes no product.
+ */
+export const CATALOGUE_PRICE_CEILING_MINOR = 189_999;
 
 // Shipping -------------------------------------------------------------------------------------
 

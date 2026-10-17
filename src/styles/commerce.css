@@ -1,6 +1,6 @@
 /* Path: src/styles/commerce.css
  * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
- * Lines: 597
+ * Lines: 599
  */
 /* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
  * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
@@ -310,10 +310,11 @@
 }
 
 /* ==== Step indicator ==== */
-/* An ordered list read as a sequence: numbered markers, the current step's label on a phone, every label from
- * --breakpoint-md. Each item's "current"/"completed" wording is `.sp-steps__status` + base.css's hidden utility. */
+/* Read as a sequence at every width: markers numbered, each step's own name beside its marker, and the row wrapping
+ * rather than dropping a name; the state wording is `.sp-steps__status`, hidden by base.css's utility. */
 .sp-steps {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   list-style: none;
@@ -324,9 +325,8 @@
   gap: var(--space-2);
 }
 /* The items that carry a connector take the row's free space, so the connector's own `flex: 1` has somewhere to
- * grow: content-sized, the rule computed to 0px and no run painted between two markers (measured 157px with this
- * rule at a 640px row). The last item carries no connector, so it keeps its content width and the row of steps
- * ends flush with the final label rather than leaving a blank band behind it. */
+ * grow: content-sized it computed to 0px and no run painted between two markers (157px with this rule at a 640px
+ * row). The last item keeps its content width, so the row ends flush with the final label. */
 .sp-steps__item:not(:last-child) {
   flex: 1;
 }
@@ -342,15 +342,15 @@
   border-radius: var(--radius-pill);
   font-size: var(--text-caption-size);
 }
+/* Every step's name paints at every width: an unnamed marker would leave a step unidentifiable on a phone. */
 .sp-steps__label {
-  display: none;
+  display: block;
   color: var(--color-text-muted);
   font-size: var(--text-label-size);
   font-weight: var(--text-label-weight);
 }
 .sp-steps__item--current .sp-steps__label,
 .sp-steps__item[aria-current="true"] .sp-steps__label {
-  display: block;
   color: var(--color-text);
   font-weight: var(--font-weight-semibold);
 }
@@ -376,9 +376,14 @@
   background-color: var(--color-success);
   border-color: var(--color-success);
 }
+/* The tick's weight comes from the connector's token, so the sheet weighs the glyph, not the component. */
 .sp-steps__item--done .sp-steps__marker > svg {
   inline-size: var(--space-3);
   block-size: var(--space-3);
+  stroke-width: var(--border-width-thick);
+}
+.sp-steps__label.sp-btn {
+  padding-block: var(--space-3); /* the variant zeroes padding, so it reaches --touch-target-min */
 }
 
 /* ==== Step shell ==== */
@@ -545,7 +550,7 @@
 }
 
 /* ==== The medium stop ==== */
-/* The step from one column to two, in the order of the sections above: the cart row, the labels, the grids. */
+/* One column to two, in the order of the sections above: the cart row, the wider step gap, the grids. */
 @media (min-width: 768px) {
   /* --breakpoint-md */
   .sp-cart-row {
@@ -565,9 +570,6 @@
   }
   .sp-steps {
     gap: var(--space-3);
-  }
-  .sp-steps__label {
-    display: block;
   }
   .sp-step__actions {
     grid-auto-flow: column;

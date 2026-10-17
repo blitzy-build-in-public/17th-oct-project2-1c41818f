@@ -47,7 +47,7 @@ import {
   type DateRangeErrorCode,
 } from "@/utils/dates";
 import { formatCellValue, formatCellValueForExport, roundMinorUnits } from "@/utils/format";
-import { averageOrderValue, shareOf } from "@/utils/statistics";
+import { averageOrderValue, goodsRevenueMinor, periodOrders, shareOf } from "@/utils/statistics";
 
 /**
  * The reporting layer: the three reports the product offers, composed once and read by the table, the CSV
@@ -203,9 +203,7 @@ export function buildProductPerformanceRows(
   query: ReportQuery,
 ): ReportRow[] {
   const range: DateRange = { from: query.from, to: query.to };
-  const lines = input.orders
-    .filter((order) => isWithinRange(order.placedAt, range))
-    .flatMap((order) => order.lines);
+  const lines = periodOrders(input.orders, range).flatMap((order) => order.lines);
   const tallies: ProductTally[] = [...groupBy(lines, (line) => line.productId)].map(
     ([productId, productLines]) => ({
       productId,
@@ -245,8 +243,12 @@ function countReturningCustomers(orders: readonly Order[], newcomers: readonly C
  *
  * `returningCustomers` counts the customers who ordered in the period without being created in it, so an
  * account created and used in one period is new rather than returning, and `averageOrderValue` divides
- * the period's revenue by its orders through the shared helper. A period that did neither produces no
- * row. */
+ * the period's revenue by its orders through the shared helper. `orders` and `revenue` are stated over
+ * the period's one order population, from `periodOrders` in `src/utils/statistics.ts`, and `revenue` is
+ * what those orders' goods brought net of the discounts that applied to them, through `goodsRevenueMinor`:
+ * delivery and tax are not revenue, so this is the basis the dashboard's Revenue and Average-order-value
+ * figures and the product-performance report's revenue also state — one range, one figure under the label.
+ * A period that did neither produces no row. */
 export function buildCustomerRows(
   input: ReportDataInput,
   query: ReportQuery,
@@ -254,27 +256,25 @@ export function buildCustomerRows(
 ): ReportRow[] {
   const range: DateRange = { from: query.from, to: query.to };
   const dayOf = (value: string): string => bucketKey(startOfDay(value), granularity);
-  const ordered = input.orders.filter((order) => isWithinRange(order.placedAt, range));
+  const ordered = periodOrders(input.orders, range);
   const ordersByPeriod = groupBy(ordered, (order) => dayOf(order.placedAt));
   const newcomers = input.customers.filter((customer) => isWithinRange(customer.createdAt, range));
   const newcomersByPeriod = groupBy(newcomers, (customer) => dayOf(customer.createdAt));
   const rows: ReportRow[] = [];
   for (const bucket of eachBucket(range, granularity)) {
-    const periodOrders = ordersByPeriod.get(bucket.key) ?? [];
+    const bucketOrders = ordersByPeriod.get(bucket.key) ?? [];
     const periodNewcomers = newcomersByPeriod.get(bucket.key) ?? [];
-    if (periodOrders.length === 0 && periodNewcomers.length === 0) continue;
-    const revenueMinor = roundMinorUnits(
-      sumBy(periodOrders, (order) => order.pricedCart.grandTotalMinor),
-    );
+    if (bucketOrders.length === 0 && periodNewcomers.length === 0) continue;
+    const revenueMinor = roundMinorUnits(sumBy(bucketOrders, goodsRevenueMinor));
     rows.push({
       id: bucket.key,
       cells: {
         period: bucketStart(bucket.key, granularity),
         newCustomers: periodNewcomers.length,
-        returningCustomers: countReturningCustomers(periodOrders, periodNewcomers),
-        orders: periodOrders.length,
+        returningCustomers: countReturningCustomers(bucketOrders, periodNewcomers),
+        orders: bucketOrders.length,
         revenue: revenueMinor,
-        averageOrderValue: averageOrderValue(revenueMinor, periodOrders.length),
+        averageOrderValue: averageOrderValue(revenueMinor, bucketOrders.length),
       },
     });
   }

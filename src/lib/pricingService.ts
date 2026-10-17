@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/pricingService.ts
  * Purpose: Line and order totals, promo application, shipping and tax for the cart and checkout
- * Lines: 593
+ * Lines: 599
  */
 
 import {
@@ -222,22 +222,23 @@ export function clampDiscount(subtotalMinor: MinorUnits, discountMinor: MinorUni
  * in the basket, each with the category it sits in. See {@link eligibleLineIds}. */
 export interface ApplyPromoOptions {
   readonly categoryIdsByProductId?: ReadonlyMap<string, CategoryId>;
+  /** The per-line goods subtotals the caller already computed, parallel to `lines`; derived when omitted. */
+  readonly lineSubtotalsMinor?: readonly MinorUnits[];
+  /** The lines the code reaches, as {@link eligibleLineIds} derived them; derived here when omitted. */
+  readonly eligibleLineIds?: ReadonlySet<string>;
 }
 
 /**
- * The discount a code takes off a goods subtotal, as the applied promo a summary panel, a confirmation or
- * an order detail renders: the code, its kind, the wording for that kind and the amount in minor units.
- *
- * `subtotalMinor` is the goods subtotal the code applies to, before any discount. An `order`-scoped code
- * applies to that whole subtotal; a `category`-scoped one applies to the part the code's own categories
- * cover, which is why the lines are required and why
- * {@link ApplyPromoOptions.categoryIdsByProductId} must be supplied for such a code to be narrowed. The
- * amount is clamped to its base, so no code discounts more goods than the basket holds.
- *
- * A `free_shipping` code reports an amount of `0`: it takes nothing off the goods, and its whole effect is
- * the delivery charge {@link priceCartLines} waives. `PricedCart.discountTotalMinor` is the sum of the
- * amounts of the applied promos, so an amount reported here is always part of that total. The label is
- * built once, from the code and the wording for its kind in `src/constants/taxonomy.ts`.
+ * The discount a code takes off a goods subtotal, as the applied promo a summary panel, a confirmation or an
+ * order detail renders: the code, its kind, the wording for that kind and the amount in minor units, clamped
+ * to its base and `0` for a `free_shipping` code, whose whole effect is the delivery charge
+ * {@link priceCartLines} waives. `PricedCart.discountTotalMinor` is the sum of the amounts of the applied
+ * promos, so an amount reported here is always part of that total. The label is built once, from the code and
+ * the wording for its kind in `src/constants/taxonomy.ts`. `subtotalMinor` is the goods subtotal the code
+ * applies to, before any discount: wholly for an `order`-scoped code, and the part its own categories cover
+ * for a `category`-scoped one, which is why {@link ApplyPromoOptions.categoryIdsByProductId} must be supplied
+ * to narrow one. The per-line subtotals and the eligible set supplied through `options` are used as given, so
+ * {@link priceCartLines} pays for neither twice, and a subtotal list not parallel to `lines` is ignored.
  */
 export function applyPromo(
   subtotalMinor: MinorUnits,
@@ -246,10 +247,14 @@ export function applyPromo(
   options: ApplyPromoOptions = {},
 ): AppliedPromo {
   const goodsSubtotalMinor = Math.max(0, roundToMinor(subtotalMinor));
-  const eligible = eligibleLineIds(promo, lines, options.categoryIdsByProductId);
-  const eligibleSubtotalMinor = sumBy(
-    lines.filter((line) => eligible.has(line.id)),
-    lineSubtotalMinor,
+  const eligible =
+    options.eligibleLineIds ?? eligibleLineIds(promo, lines, options.categoryIdsByProductId);
+  const suppliedSubtotals = options.lineSubtotalsMinor;
+  const lineSubtotals =
+    suppliedSubtotals?.length === lines.length ? suppliedSubtotals : lines.map(lineSubtotalMinor);
+  const eligibleSubtotalMinor = lines.reduce(
+    (total, line, index) => (eligible.has(line.id) ? total + lineSubtotals[index] : total),
+    0,
   );
   const base =
     promo.appliesTo === "category"
@@ -386,28 +391,28 @@ function freeShippingRemainingMinor(discountedSubtotalMinor: MinorUnits): MinorU
 
 /**
  * Prices a basket: the one function in the product that produces a `PricedCart`, and so the one place a
- * subtotal, a discount, a delivery charge, a tax amount or a grand total is computed. Every screen that
- * shows a total shows one of these, which is why a cart and the order placed from it cannot disagree about
- * what the order costs.
+ * subtotal, a discount, a delivery charge, a tax amount or a grand total is computed. Every screen that shows
+ * a total reads one of these, so a cart and the order placed from it cannot disagree about the order's cost.
  *
  * The order of operations documented at the head of this module is applied here and nowhere else, and a
- * `free_shipping` code waives the whole delivery charge whatever the method and whatever the subtotal. The
- * lines are read and never written: the result carries priced copies, so the snapshot the caller handed in
- * is untouched and a placed order's amounts stay the amounts it was placed with.
- *
- * `shippingMethodId` echoes a method the caller actually chose from the list and stays `null` while none has
- * been chosen, so a summary never names a method nobody picked.
+ * `free_shipping` code waives the whole delivery charge whatever the method and whatever the subtotal; the
+ * lines are read and never written. The per-line subtotals and the eligible set are derived once here and
+ * handed to {@link applyPromo}, which derives neither again; `shippingMethodId` echoes a method the caller
+ * chose and stays `null` while none has been chosen, so a summary never names a method nobody picked.
  */
 export function priceCartLines(input: PriceCartInput): PricedCart {
   const { lines, promo } = input;
   const lineSubtotals = lines.map((line) => lineSubtotalMinor(line));
   const subtotalMinor = sumBy(lineSubtotals, (amount) => amount);
-
+  const eligible =
+    promo === undefined ? undefined : eligibleLineIds(promo, lines, input.categoryIdsByProductId);
   const appliedPromo =
     promo === undefined
       ? undefined
       : applyPromo(subtotalMinor, promo, lines, {
           categoryIdsByProductId: input.categoryIdsByProductId,
+          lineSubtotalsMinor: lineSubtotals,
+          eligibleLineIds: eligible,
         });
   const discountTotalMinor = appliedPromo?.amountMinor ?? 0;
   const discountedSubtotalMinor = Math.max(0, subtotalMinor - discountTotalMinor);
@@ -421,8 +426,6 @@ export function priceCartLines(input: PriceCartInput): PricedCart {
   const shippingMinor = promo?.kind === "free_shipping" ? 0 : shippingMethod.priceMinor;
   const taxMinor = computeTax(discountedSubtotalMinor);
 
-  const eligible =
-    promo === undefined ? undefined : eligibleLineIds(promo, lines, input.categoryIdsByProductId);
   const weights = lines.map((line, index) =>
     eligible !== undefined && !eligible.has(line.id) ? 0 : lineSubtotals[index],
   );
@@ -459,23 +462,26 @@ export function priceCartLines(input: PriceCartInput): PricedCart {
  *  whether the threshold is already met. */
 export interface FreeShippingProgress {
   readonly remainingMinor: MinorUnits;
-  /** The share of the threshold the basket has covered, from 0 to 1. */
+  /** The share of the threshold the basket has covered, from 0 to 1; 1 when the threshold is 0. */
   readonly ratio: number;
   readonly qualifies: boolean;
 }
 
 /**
- * The free-delivery position of a priced cart, derived from the figure {@link priceCartLines} computed and
- * the configured threshold: what a cart's progress bar draws and what its label says is still owed. The
- * threshold arithmetic lives here rather than in a component, so the bar, the label and the charge the buyer
- * pays all read one number.
+ * The free-delivery position of a priced cart, derived from the figure {@link priceCartLines} computed and the
+ * configured threshold: what a cart's progress bar draws and what its label says is still owed. The threshold
+ * arithmetic lives here rather than in a component, so the bar, the label and the charge the buyer pays agree.
+ *
+ * A threshold of `0` puts every basket at free delivery, so `ratio` is `1` and `qualifies` is `true`: this is
+ * the guard the module's other degenerate inputs get, and a positive threshold needs no clamp at all.
  */
 export function freeShippingProgress(priced: PricedCart): FreeShippingProgress {
   const remainingMinor = Math.max(0, roundToMinor(priced.freeShippingRemainingMinor));
-  const coveredMinor = Math.max(0, FREE_SHIPPING_THRESHOLD_MINOR - remainingMinor);
+  const thresholdMinor = FREE_SHIPPING_THRESHOLD_MINOR;
+  const coveredMinor = Math.max(0, thresholdMinor - remainingMinor);
   return {
     remainingMinor,
-    ratio: coveredMinor / FREE_SHIPPING_THRESHOLD_MINOR,
+    ratio: thresholdMinor > 0 ? coveredMinor / thresholdMinor : 1,
     qualifies: remainingMinor === 0,
   };
 }
