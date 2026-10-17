@@ -1,7 +1,7 @@
 <!--
 Path: generation-manifest.md
 Purpose: The authoritative build manifest: tree, budgets, actual counts, phase schedule, cumulative total and status ledger — the one file excluded from the 50,000, written in Phase 0 before any of the above.
-Lines: 360
+Lines: 363
 -->
 
 # SalesPro — generation manifest
@@ -58,7 +58,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   ├── constants/
 │   │   ├── routes.ts  # 180 · P4 · Pending · —
 │   │   ├── config.ts  # 250 · P4 · Pending · —
-│   │   ├── content.ts  # 400 · P4 · Pending · —
+│   │   ├── content.ts  # 400 · P4 · Done · 596
 │   │   └── taxonomy.ts  # 330 · P4 · Pending · —
 │   ├── utils/
 │   │   ├── format.ts  # 380 · P5 · Pending · —
@@ -106,7 +106,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── CheckoutContext.tsx  # 380 · P13 · Pending · —
 │   │   ├── ToastContext.tsx  # 250 · P13 · Pending · —
 │   │   ├── cartReducer.ts  # 310 · P14 · Pending · —
-│   │   ├── checkoutReducer.ts  # 350 · P14 · Pending · —
+│   │   ├── checkoutReducer.ts  # 350 · P14 · Done · 542
 │   │   ├── catalogReducer.ts  # 270 · P14 · Pending · —
 │   │   └── hooks.ts  # 480 · P14 · Pending · —
 │   ├── components/
@@ -318,8 +318,11 @@ A budget is an allocation, not a commitment to a number. The rules this ledger e
 | `eslint.config.js` | 55     | 58     | +3 (+5.5%)   | the composition the plan names — ignore block, recommended JavaScript rules, type-checked TypeScript rules, the hooks flat preset, the scoped `languageOptions` and the self-scoped JavaScript block — plus the three-field header and the three `react-hooks` advisory rules raised from warn to error, because the plan's style gate requires lint to pass with no warnings and `package.json`'s plain `eslint .` cannot fail on one; three lines over budget, taken from the remainder |
 | `.gitignore`       | 25     | 37     | +12 (+48.0%) | provisional: the setup baseline enumerates every documented ignore group — dependencies, build output, test and coverage output, environment files, tooling caches, logs and editor files; the owning phase completes and re-records it |
 | `src/utils/strings.ts` | 350 | 541 | +191 (+54.6%) | the file's specified surface is 22 exported members — the 7 text helpers, the generic `prefixedId` and `sequenceId`, the 10 per-entity generators and the `createSalt` / `createCredentialDigest` / `verifyCredential` trio — each carrying the purpose, parameter, return and throw documentation §0.12.2 requires, on top of the single FNV-1a digest implementation the identifier generators and the credential helpers share and the JSDoc stating the rules its callers rest on (the generators' determinism, the session token's opacity, the demonstration-only credential boundary the seed layer and the transport both call); no line is padding, no required capability was cut, and 541 lines stays well inside the 600-line ceiling, with the overrun taken from the remainder |
+| `src/constants/content.ts` | 400 | 596 | +196 (+49.0%) | the file's specified surface is 71 exported members — the copy group for every surface the plan names (identity, page titles, navigation, home, catalogue and product detail, search and filters, cart, checkout, account, admin and reports, empty and error states, accessibility labels) plus the parameterised builders that keep every threshold, money amount and date out of the sentences and the shared pluraliser so no message writes its own plural — each member carrying the documentation §0.12.2 requires; no line is padding, no required capability was cut, and 596 lines stays 4 lines inside the 600-line ceiling, with the overrun taken from the remainder; the free-delivery copy names no delivery service, because which method is free belongs to `SHIPPING_METHODS` and `FREE_SHIPPING_METHOD_ID` in `src/constants/config.ts` and the copy takes the formatted threshold from its caller |
+| `src/state/checkoutReducer.ts` | 350 | 542 | +192 (+54.9%) | the specified surface is 19 exported members — the step union with its two ordered constants, the three value groups with their patch types, the state and its factory, the 11-member action union with its creators, the reducer and the five shared step helpers — plus the seven private helpers the guards, the patch merge and the touched-field error clearing need, every export carrying the purpose-and-invariant documentation §0.12.2 requires (no cart lines in this state, the single-submission guard, the idempotency key retained across a failure so a retry replays, the demonstration card blanked on success and on reset, and the two terminal ends of the step graph); the alternative was to keep two request-assembly converters the plan places with the caller, which were dropped rather than spending lines on them, no line is padding and no required capability was cut, so the overrun is taken from the remainder and the file stays 58 lines inside the 600-line ceiling |
 
 Remainder carried forward at Phase 0: **+111 lines** freed for files not yet generated (-19 - 18 - 4 - 39 - 35 - 8 + 12), pending the four provisional counts above, which are replaced with final figures when their phases complete. `README.md` is not listed: the two lines at that path are a setup placeholder rather than the 310-line phase-39 deliverable, so no deviation is recorded against its budget. The repository is otherwise empty of the plan's content, so the remaining 150 counted files have no actual count yet.
+
 
 ## Part 5 — Output contract
 
