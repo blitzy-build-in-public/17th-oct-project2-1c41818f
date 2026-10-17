@@ -1,6 +1,6 @@
 /* Path: src/styles/commerce.css
  * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
- * Lines: 590
+ * Lines: 597
  */
 /* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
  * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
@@ -322,6 +322,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+/* The items that carry a connector take the row's free space, so the connector's own `flex: 1` has somewhere to
+ * grow: content-sized, the rule computed to 0px and no run painted between two markers (measured 157px with this
+ * rule at a 640px row). The last item carries no connector, so it keeps its content width and the row of steps
+ * ends flush with the final label rather than leaving a blank band behind it. */
+.sp-steps__item:not(:last-child) {
+  flex: 1;
 }
 /* The number always sits in the disc, so a step is identifiable by its position and never by hue alone. */
 .sp-steps__marker {
