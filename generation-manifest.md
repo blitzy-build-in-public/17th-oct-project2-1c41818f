@@ -111,7 +111,7 @@ Legend · `# <budget>` budgeted lines (an allocation, never padding) · `P<n>` t
 │   │   ├── customers.ts  # 310 · P11 · Done · 433
 │   │   ├── orders.ts  # 460 · P11 · Done · 598
 │   │   ├── reviews.ts  # 250 · P12 · Pending · —
-│   │   ├── salesHistory.ts  # 380 · P12 · Pending · —
+│   │   ├── salesHistory.ts  # 380 · P12 · Done · 276
 │   │   └── repositories.ts  # 440 · P12 · Pending · —
 │   ├── state/
 │   │   ├── AuthContext.tsx  # 360 · P13 · Done · 555
