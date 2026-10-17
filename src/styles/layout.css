@@ -1,0 +1,598 @@
+/* Path: src/styles/layout.css
+ * Purpose: Page shell, containers, grid, and the header, footer and sidebar skeletons
+ * Lines: 598
+ */
+/* The application frame, the container and page rhythm, three layout primitives, and the skeletons of the
+ * five layout components — AppLayout, Header, Footer, AdminSidebar and PageHeader. Every class below is
+ * defined here and nowhere else, and each component renders these names verbatim. Loaded third: it
+ * consumes tokens.css properties and base.css's two utilities and declares no colour, length, radius,
+ * shadow, z-index or duration itself. No component primitive (components.css) and no area style: the
+ * product grid, the facet column, the dashboard grid and the checkout steps belong to catalog.css,
+ * commerce.css and admin-reports.css; mobile-first throughout. Four parts of that contract carry no rule
+ * of their own — `.sp-sidebar__nav`, `.sp-sidebar__item`, `.sp-footer__column` and
+ * `.sp-page-header__breadcrumbs` — each being a plain wrapper the rules above already cover, and are named
+ * here so a component rendering them reads the contract complete.
+ */
+
+/* ==== Application shell ==== */
+/* #root is the element index.html declares and src/main.tsx mounts into. */
+#root {
+  min-height: 100%;
+}
+/* A column of header region, routed content and footer; vh is the fallback for an engine without dvh. */
+.sp-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--color-bg);
+}
+/* The skip link is base.css's `.sp-skip-link`; `.sp-app__skip-link` is this sheet's hook and takes no
+ * rule of its own, because a second copy of that technique would be the duplication we forbid. */
+/* Sticky, not fixed, so the document scrolls normally and the header cannot swallow focus. Opaque on
+ * purpose — a translucent header would let page content show through the moment it sticks. */
+.sp-app__header,
+.sp-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-header);
+  min-block-size: var(--layout-header-height);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+  background-color: var(--color-surface);
+}
+/* The region and the component root may be one element or two; when two, the inner one drops the border. */
+.sp-app__header > .sp-header {
+  border-block-end: 0;
+}
+/* min-inline-size: 0 keeps a wide table inside its own scroll container instead of stretching the page. */
+.sp-app__main {
+  flex: 1;
+  min-inline-size: 0;
+  padding-block: var(--space-6);
+}
+.sp-app__footer,
+.sp-footer {
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+  background-color: var(--color-surface-raised);
+}
+.sp-app__footer > .sp-footer {
+  border-block-start: 0;
+}
+
+/* ==== Administrator branch ====
+ * Below --breakpoint-md the sidebar is not part of the column: AppLayout renders it in the drawer
+ * Modal.tsx provides, and a drawer's copy hangs off the document, so hiding this child is safe. */
+.sp-app--admin > .sp-sidebar {
+  display: none;
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* The sidebar keeps its own height rather than stretching to the row, so it has something to stick with. */
+  .sp-app--admin {
+    display: grid;
+    grid-template-columns: var(--layout-sidebar-rail) minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
+    align-items: start;
+  }
+  .sp-app--admin > .sp-app__header,
+  .sp-app--admin > .sp-app__footer {
+    grid-column: 1 / -1;
+  }
+  .sp-app--admin > .sp-sidebar {
+    display: block;
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .sp-app--admin > .sp-app__main {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-app--admin {
+    grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+  }
+}
+
+/* ==== Containers and page rhythm ====
+ * One geometry rule for the three elements that carry the page's width: the container, the header's inner
+ * row and the footer's inner block, each band carrying its own `__inner`. --layout-gutter widens at
+ * --breakpoint-md in tokens.css. */
+.sp-container,
+.sp-header__inner,
+.sp-footer__inner {
+  width: 100%;
+  max-inline-size: var(--layout-container-max);
+  margin-inline: auto;
+  padding-inline: var(--layout-gutter);
+}
+/* The account and sign-in screens read better narrow than the catalogue. */
+.sp-container--narrow {
+  max-inline-size: var(--layout-container-narrow);
+}
+/* A full-bleed band, such as the landing hero, asks for no cap. */
+.sp-container--wide {
+  max-inline-size: none;
+}
+/* A route is a column of blocks at one rhythm. The region above already pads the page, so this element
+ * adds the gap between blocks and none of its own — two paddings of one token would double it. */
+.sp-page {
+  display: grid;
+  gap: var(--space-6);
+}
+/* The region holding a page's own blocks, with the same overflow guard as the main region. */
+.sp-page__body {
+  min-inline-size: 0;
+}
+/* For a page whose first band must meet the header — the landing hero — the region's opening padding is
+ * cancelled by the token that set it, so the two move together. */
+.sp-page--flush {
+  margin-block-start: calc(var(--space-6) * -1);
+}
+
+/* ==== Shared layout primitives ====
+ * Three, and only three: the product grid, the facet column, the dashboard grid and the checkout step
+ * indicator belong to catalog.css, commerce.css and admin-reports.css. */
+.sp-grid {
+  /* As many equal card columns as fit, each at least a small card wide. tokens.css declares no card-floor
+   * token, so the floor is named once, in the one grid that is not an area's own. */
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+/* Main content beside its summary — the cart, the checkout and the reports toolbar use it. One column
+ * until --breakpoint-lg, where the summary takes the aside width the token fixes. */
+.sp-split {
+  display: grid;
+  gap: var(--space-6);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  .sp-split {
+    grid-template-columns: minmax(0, 1fr) var(--layout-aside-width);
+  }
+}
+/* Vertical rhythm for a group of blocks that is not a page: a form's fields, a card's contents. */
+.sp-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* ==== Header skeleton ====
+ * Header.tsx renders `.sp-header` and, inside it, `.sp-header__inner` — the row carrying the container's
+ * max width and gutter. The chrome sits on the region rule in the shell section. */
+/* The row fills the band and centres its controls, so a badge overhanging its button stays inside. */
+.sp-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-block-size: var(--layout-header-height);
+  min-inline-size: 0;
+}
+/* The wordmark yields before the controls do, so a tight header row can never widen the page: the
+ * wrapper shrinks and the link clips its own text rather than spilling. */
+.sp-header__brand {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+/* A link home, of a control's height, taking the heading-3 role: size and weight come from the token. */
+.sp-header__logo {
+  display: inline-flex;
+  gap: var(--space-2);
+  min-block-size: var(--control-height-md);
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--color-text);
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--text-heading-3-weight);
+  text-decoration-line: none;
+}
+/* A desktop affordance: below --breakpoint-md it is replaced by `.sp-nav-menu`, so it leaves the layout. */
+.sp-header__nav {
+  display: none;
+}
+/* The actions close the row, whatever the brand, the navigation and the search slot take. */
+.sp-header__actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+}
+/* Below --breakpoint-md the slot holds the icon-sized trigger Header renders in it, and is never narrower
+ * than one touch target: a field beside the brand and the actions beside it would not fit. From
+ * --breakpoint-md it holds the field itself, `.sp-input` from components.css. */
+.sp-header__search {
+  flex: none;
+  min-inline-size: var(--touch-target-min);
+}
+/* Below --breakpoint-md only; display: none is also what removes it from the tab order and the a11y tree. */
+.sp-header__menu-button {
+  display: grid;
+  place-items: center;
+  min-inline-size: var(--touch-target-min);
+  min-block-size: var(--touch-target-min);
+}
+.sp-nav {
+  min-inline-size: 0;
+}
+.sp-nav__list {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  list-style: none;
+}
+/* The shared link: the header row lays these out inline, the mobile panel stacks them. */
+.sp-nav__link {
+  display: inline-flex;
+  min-block-size: var(--touch-target-min);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+  text-decoration-line: none;
+}
+/* The current destination is marked from the router's attribute plus an underline, not by hue alone. */
+.sp-nav__link[aria-current="page"] {
+  color: var(--color-accent);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--border-width-thick);
+  text-underline-offset: var(--space-2);
+}
+@media (hover: hover) {
+  .sp-nav__link:hover {
+    background-color: var(--color-surface-sunken);
+  }
+}
+/* The two header triggers: the cart, whose count is a badge, and the account menu. */
+.sp-cart-button,
+.sp-account-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+.sp-cart-button {
+  position: relative;
+}
+/* The number is text and is never hidden from assistive technology; only the pill is decoration, and its
+ * minimum width keeps a two-digit count from squeezing it. */
+.sp-cart-badge {
+  position: absolute;
+  inset-block-start: calc(var(--space-1) * -1);
+  inset-inline-end: calc(var(--space-1) * -1);
+  display: grid;
+  place-items: center;
+  min-inline-size: var(--space-5);
+  min-block-size: var(--space-5);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+  font-size: var(--font-size-xs);
+}
+/* A dropdown rather than a modal: the trigger keeps the focus, so no focus trap is needed and nothing
+ * covers the page behind it. */
+.sp-account-menu {
+  position: relative;
+}
+/* Opens under its trigger; its closed state is `hidden`, which base.css makes win everywhere. */
+.sp-account-menu__panel {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-end: 0;
+  z-index: var(--z-dropdown);
+  display: grid;
+  gap: var(--space-1);
+  max-inline-size: calc(100vw - var(--space-8));
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+  box-shadow: var(--shadow-2);
+}
+
+/* ==== Mobile navigation ====
+ * `.sp-nav-menu` replaces the header navigation below --breakpoint-md, toggled by the `hidden` attribute
+ * that base.css makes win here, and the whole block is removed at and above the stop. */
+.sp-nav-menu {
+  background-color: var(--color-surface);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+/* A long navigation scrolls inside the panel: what the viewport leaves below the header bounds it. */
+.sp-nav-menu__panel {
+  max-block-size: calc(100vh - var(--layout-header-height));
+  max-block-size: calc(100dvh - var(--layout-header-height));
+  overflow-y: auto;
+  padding-block: var(--space-2);
+}
+/* Inside the panel the shared navigation stacks, and every row becomes a full-width tap target: the
+ * list fills the panel through align-items, and the block-level link fills the row it sits in. */
+.sp-nav-menu .sp-nav__list {
+  flex-direction: column;
+  align-items: stretch;
+}
+.sp-nav-menu .sp-nav__link {
+  display: flex;
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* Two mutually exclusive ways to reach the primary navigation, swapped at one stop. */
+  .sp-nav-menu,
+  .sp-header__menu-button {
+    display: none;
+  }
+  .sp-header__nav {
+    display: flex;
+    align-items: center;
+    min-inline-size: 0;
+  }
+  /* The actions take the room the brand and the navigation leave, so the slot inside them can grow. */
+  .sp-header__actions {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+  }
+  .sp-header__search {
+    flex: 1 1 auto;
+    inline-size: auto;
+    min-inline-size: 0;
+  }
+}
+
+/* ==== Footer skeleton ====
+ * Footer.tsx renders `.sp-footer`, its `.sp-footer__inner` through the container rule above, the link
+ * columns, the storefront description and the legal row; the chrome sits in the shell section. */
+.sp-footer__columns {
+  /* One column on a phone, two at --breakpoint-sm, four at --breakpoint-md. */
+  display: grid;
+  gap: var(--space-6);
+  padding-block-end: var(--space-6);
+}
+/* A column heading labels a list, so it takes the label role instead of the h2 role base.css gives. */
+.sp-footer__heading {
+  margin-block-end: var(--space-3);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+}
+.sp-footer__links {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-footer__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-height-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  text-decoration-line: none;
+}
+@media (hover: hover) {
+  .sp-footer__link:hover {
+    color: var(--color-accent-hover);
+    text-decoration-line: underline;
+  }
+}
+/* The storefront description, capped at the prose measure so its lines stay readable. */
+.sp-footer__contact {
+  display: grid;
+  gap: var(--space-2);
+  max-inline-size: var(--layout-measure);
+  padding-block: var(--space-6);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-footer__text {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+}
+/* A heading inside the contact block, below its own <h2>: the caption role separates it from the columns. */
+.sp-footer__subheading {
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-subtle);
+}
+/* The closing row: the currency note and the legal line wrap rather than overflow at 375px. */
+.sp-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-footer__legal-text {
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption-size);
+}
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-footer__columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-footer__columns {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ==== Administrator sidebar ====
+ * The column the administrator grid reserves; the shell section hides it below --breakpoint-md, and from
+ * there it is a sticky rail that widens into a labelled sidebar at --breakpoint-lg. */
+.sp-sidebar {
+  position: sticky;
+  inset-block-start: var(--layout-header-height);
+  max-block-size: calc(100vh - var(--layout-header-height));
+  max-block-size: calc(100dvh - var(--layout-header-height));
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-2);
+  border-inline-end: var(--border-width) solid var(--color-border-subtle);
+  background-color: var(--color-surface-raised);
+}
+.sp-sidebar__title {
+  margin-block-end: var(--space-3);
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+.sp-sidebar__list {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+}
+.sp-sidebar__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--touch-target-min);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+  text-decoration-line: none;
+}
+@media (hover: hover) {
+  .sp-sidebar__link:hover {
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text);
+  }
+}
+/* The current section is marked from the attribute NavLink applies, and by two things rather than one: the
+ * accent row and a leading bar, so the state survives a greyscale rendering and a colour-blind one. */
+.sp-sidebar__link[aria-current="page"] {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-sidebar__link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: 0;
+  inline-size: var(--border-width-thick);
+  background-color: var(--color-accent);
+}
+/* The glyph takes the link's own colour through currentColor, and the fixed square keeps the rail even. */
+.sp-sidebar__icon {
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+/* The way back to the storefront, separated from the section's destinations by a rule rather than colour. */
+.sp-sidebar__return {
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* In the rail the label and the section title are hidden visually and kept for assistive technology: the
+   * <nav> is named by the title and each link by its label, so display: none would leave both nameless. */
+  .sp-sidebar__title,
+  .sp-sidebar__label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .sp-sidebar__link {
+    justify-content: center;
+    padding-inline: 0;
+  }
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  /* The rail becomes the labelled sidebar again: the same elements, revealed in place. */
+  .sp-sidebar__title,
+  .sp-sidebar__label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+  .sp-sidebar__link {
+    justify-content: start;
+    padding-inline: var(--space-2);
+  }
+}
+
+/* ==== Page header ====
+ * PageHeader.tsx renders the trail inside `.sp-page-header__breadcrumbs` (a <nav> needing no rule), the page's
+ * one <h1>, an optional description and the page's primary control. The current crumb is a text span carrying
+ * aria-current="page"; the crumbs before it are links. */
+.sp-page-header {
+  display: grid;
+  gap: var(--space-2);
+  /* Tighter on a phone than from --breakpoint-md, where a page has more room above its first block. */
+  padding-block: var(--space-4) var(--space-5);
+  border-block-end: var(--border-width) solid var(--color-border-subtle);
+}
+.sp-page-header__breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-page-header__breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The separator is drawn between items, so a trail of one crumb cannot end on a stray mark. */
+.sp-page-header__breadcrumb-item + .sp-page-header__breadcrumb-item::before {
+  content: "/";
+  color: var(--color-text-subtle);
+}
+.sp-page-header__crumb {
+  color: var(--color-text-muted);
+  text-decoration-line: none;
+}
+.sp-page-header__crumb--current,
+.sp-page-header__crumb[aria-current="page"] {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+.sp-page-header__description {
+  max-inline-size: var(--layout-measure);
+  color: var(--color-text-muted);
+}
+/* The page's primary control: stacked on a phone, closed to the end of the row from --breakpoint-md. */
+.sp-page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-page-header {
+    gap: var(--space-3);
+    padding-block: var(--space-5) var(--space-6);
+  }
+  .sp-page-header__actions {
+    justify-content: end;
+  }
+}
+
+/* ==== Responsive summary ====
+ * Below --breakpoint-sm: one column, the compressed header with its menu button, a one-column footer. At
+ * --breakpoint-sm: two footer columns. At --breakpoint-md: the desktop navigation replaces the menu, the search
+ * slot becomes a field, the admin grid appears with a sidebar rail, the footer opens to four columns, and the
+ * page-header actions move to the end. At --breakpoint-lg: the labelled sidebar and a two-column `.sp-split`.
+ */
