@@ -28,7 +28,7 @@ export default defineConfig({
     // tests/setup.ts arrives in phase 34; Vitest loads a setup file only when it runs test
     // files, so its absence does not fail an otherwise empty run.
     setupFiles: ["tests/setup.ts"],
-    // Pure logic needs no DOM; the dom project below overrides this.
+    // Pure logic needs no DOM; the jsdom project below overrides this.
     environment: "node",
     coverage: {
       provider: "v8",
@@ -50,17 +50,17 @@ export default defineConfig({
         // through `extends`; without it each of them is silently lost.
         extends: true,
         test: {
-          name: "unit",
+          name: "node",
           environment: "node",
-          include: ["tests/unit/**/*.test.ts"],
+          include: ["tests/unit/**/*.test.{ts,tsx}"],
         },
       },
       {
         extends: true,
         test: {
-          name: "dom",
+          name: "jsdom",
           environment: "jsdom",
-          include: ["tests/components/**/*.test.tsx", "tests/integration/**/*.test.tsx"],
+          include: ["tests/components/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
         },
       },
     ],
