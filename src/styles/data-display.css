@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 529
+ * Lines: 534
  */
 
 @import "./tabs-accordion.css";
@@ -266,6 +266,11 @@
 }
 .sp-pagination__pages {
   display: flex;
+  /* Wraps as well as the control around it. Measured in Chrome at a 375px viewport: eight
+   * `--touch-target-min` targets with the gap above total 405px, so a nowrap row overran the
+   * viewport by 30px and put the next control entirely off screen. The floor and the gap are the
+   * sheet's own, so the run wraps onto a second line instead of clipping a control. */
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
 }
