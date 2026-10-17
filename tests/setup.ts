@@ -1,19 +1,24 @@
 /**
  * Path: tests/setup.ts
  * Purpose: Loads the jest-dom matchers and clears state between tests
- * Lines: 130
+ * Lines: 135
  */
 
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
+
+import { BREAKPOINTS } from "@/constants/config";
 
 // Stubbed at module scope rather than in a hook: a setup file is evaluated before any test
 // module, so this is the only point that lands before the mock server reads the value it turns
 // into a response delay. Stubbing per test would leave that first read at the 120 ms default.
 vi.stubEnv("VITE_API_LATENCY_MS", "0");
 
-/** The upper bound of the mobile-first baseline: the default viewport sits one pixel below it. */
-const SMALL_BREAKPOINT_PX = 480;
+/**
+ * The upper bound of the mobile-first baseline: the default viewport sits one pixel below it.
+ * Read from `src/constants/config.ts`, so the baseline cannot drift from the configured stop.
+ */
+const SMALL_BREAKPOINT_PX = BREAKPOINTS.SMALL;
 
 /**
  * The mobile-first viewport media queries are answered against, so no desktop rule applies by

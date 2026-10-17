@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartScales.ts
  * Purpose: Linear and band scales, nice domains, tick generation and path helpers shared by the charts
- * Lines: 389
+ * Lines: 401
  */
 
 import {
@@ -356,16 +356,28 @@ const tickOf = (scale: BandScale, formatter: LabelFormatter, key: string): BandT
 export type {
   ArcDatum,
   ArcOptions,
+  AxisLabelTransform,
+  BandScale,
+  BandTick,
   BarMode,
   BarRect,
   ChartDataRow,
   ChartDataTable,
+  GridLine,
+  LabelFormatter,
+  LinearScale,
+  Orientation,
+  Padding,
+  PlotArea,
   Point2D,
   TableHeadings,
+  TickMark,
+  ValueFormatter,
   ValueFormatterKind,
 } from "@/components/charts/chartGeometry";
 
 export {
+  AXIS_NUMBER_FORMAT,
   DEFAULT_INNER_RADIUS_RATIO,
   MIN_SLICE_LABEL_SHARE,
   SERIES_COUNT,

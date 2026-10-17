@@ -1,12 +1,12 @@
 /**
  * Path: src/state/hooks.ts
  * Purpose: Shared hooks: storage-backed state, debounced value, pagination, media query, async data, document title, outside click
- * Lines: 592
+ * Lines: 600
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
-import { BREAKPOINTS } from "@/constants/config";
+import { BREAKPOINTS, type Breakpoint } from "@/constants/config";
 import type { ApiError, AsyncStatus, PageResult, Result } from "@/types/common";
 import { debounce, isAbortError } from "@/utils/async";
 import { clampPage, normalisePageSize, pageCountFor, pageWindow } from "@/utils/collections";
@@ -308,8 +308,15 @@ export function useMediaQuery(query: string): boolean {
   return snapshot.query === query ? snapshot.matches : readMediaQuery(query);
 }
 
+/** The name each configured stop is reported under; total over `Breakpoint`, so a new stop must be named here. */
+const BREAKPOINT_NAMES = {
+  SMALL: "sm",
+  MEDIUM: "md",
+  LARGE: "lg",
+  XLARGE: "xl",
+} as const satisfies Record<Breakpoint, string>;
 /** The name of a responsive stop, lowest first; the widths behind them are `BREAKPOINTS`. */
-export type BreakpointName = "sm" | "md" | "lg" | "xl";
+export type BreakpointName = (typeof BREAKPOINT_NAMES)[Breakpoint];
 
 /**
  * The stop a viewport is at, and the three coarse flags the layout switches on: mobile is everything
@@ -339,13 +346,14 @@ export function useBreakpoint(): BreakpointInfo {
   const aboveLarge = useMediaQuery(`(min-width: ${BREAKPOINTS.LARGE}px)`);
   const aboveXLarge = useMediaQuery(`(min-width: ${BREAKPOINTS.XLARGE}px)`);
 
-  const current: BreakpointName = aboveXLarge
-    ? "xl"
+  const reached: Breakpoint = aboveXLarge
+    ? "XLARGE"
     : aboveLarge
-      ? "lg"
+      ? "LARGE"
       : aboveMedium
-        ? "md"
-        : "sm";
+        ? "MEDIUM"
+        : "SMALL";
+  const current: BreakpointName = BREAKPOINT_NAMES[reached];
 
   return useMemo(
     () => ({

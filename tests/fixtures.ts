@@ -17,18 +17,18 @@ import type * as Common from "@/types/common";
 import * as config from "@/constants/config";
 import * as taxonomy from "@/constants/taxonomy";
 import * as strings from "@/utils/strings";
-// Determinism: no clock. Every timestamp defaults to FIXED_NOW and every identifier is derived from
-// the fields a builder was handed, so two runs of the suite produce byte-identical fixtures.
+// Determinism: no builder reads a clock — every timestamp defaults to FIXED_NOW and every identifier is
+// derived from the fields a builder was handed, so two calls and two suite runs agree, bar the one below.
 /** The instant every fixture timestamp defaults to: midday UTC on 15 October 2025. */
 export const FIXED_NOW = "2025-10-15T12:00:00.000Z";
 export const FIXED_DATE = FIXED_NOW.slice(0, 10);
 export const FIXED_EARLIER_DATE = "2025-01-01";
 export const FIXED_LATER_DATE = "2025-12-31";
-/** The trailing thirty-day range ending on FIXED_DATE, and the expiry of a session issued then. */
+/** The trailing thirty-day range ending on FIXED_DATE, and the expiry every built session carries: one
+ * TTL counted from the instant this module loads, not from FIXED_NOW, because the seam revalidates a
+ * session against the real clock. Override `expiresAt` with a past instant to build an expired one. */
 export const FIXED_DATE_RANGE = { from: "2025-09-16", to: FIXED_DATE };
-export const FIXED_SESSION_EXPIRY = new Date(
-  Date.parse(FIXED_NOW) + config.SESSION_TTL_MS,
-).toISOString();
+export const FIXED_SESSION_EXPIRY = new Date(Date.now() + config.SESSION_TTL_MS).toISOString();
 /** Three products, priced apart so a sort, a subtotal or a ranking has something to order. */
 const PRODUCT_SEEDS = [
   { name: "Aurora Desk Lamp", sku: "AUR-DL-001", priceMinor: 4_999 },
@@ -378,7 +378,7 @@ export function makeCustomer(overrides?: Partial<Account.Customer>): Account.Cus
   };
   return withDefaults(defaults, overrides);
 }
-/** Builds a session issued at FIXED_NOW for the customer role; override `role` or `expiresAt`. */
+/** Builds an active session issued at FIXED_NOW for the customer role; override `role` or `expiresAt`. */
 export function makeSession(overrides?: Partial<Account.Session>): Account.Session {
   const accountId =
     overrides?.customerId ?? strings.customerId(config.DEMO_ACCOUNTS.CUSTOMER_EMAIL);
@@ -533,7 +533,7 @@ export function makeReportResult(overrides?: Partial<ReportResult>): ReportResul
   };
   return withDefaults(defaults, overrides);
 }
-/** Wraps items in a page derived from its total, page and size; override `page` or `total`. */
+/** Wraps items in a page derived from its total, page and size; an empty collection is one empty page. */
 export function makePageResult<TItem>(
   items: readonly TItem[],
   overrides?: Partial<Common.PageResult<TItem>>,
@@ -541,7 +541,7 @@ export function makePageResult<TItem>(
   const page = overrides?.page ?? 1;
   const pageSize = overrides?.pageSize ?? config.DEFAULT_PAGE_SIZE;
   const total = overrides?.total ?? items.length;
-  const pageCount = total === 0 ? 0 : Math.ceil(total / pageSize);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const defaults: Common.PageResult<TItem> = {
     items: [...items],
     total,
