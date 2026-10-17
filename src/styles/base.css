@@ -1,0 +1,362 @@
+/* Path: src/styles/base.css
+ * Purpose: Reset, document typography and the visible focus treatment every element inherits.
+ * Lines: 362
+ */
+
+/* The reset and the document baseline: this sheet loads second, after tokens.css and before the six
+ * that follow, so it consumes a token and never declares a value of its own. Every rule that resets
+ * an element is wrapped in :where(), which holds its specificity at 0, so a component or an area
+ * sheet overrides it by declaring the property once, with no selector fight. The two global
+ * utilities this file owns, .sp-visually-hidden and .sp-skip-link, are the deliberate exception:
+ * they use real selectors, because they must win wherever they are applied.
+ */
+
+/* ==== Reset: box model ==== */
+:where(*, *::before, *::after) {
+  box-sizing: border-box;
+}
+
+/* ==== Reset: block elements ====
+ * The headings, paragraphs and definition content of the product and account surfaces, then the
+ * list, monospace, form-group and separator boxes. */
+:where(body, h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
+  margin: 0;
+}
+:where(ol, ul, pre, fieldset, legend, hr) {
+  margin: 0;
+}
+:where(ol, ul) {
+  padding: 0;
+  list-style-position: inside;
+}
+
+/* Markers stay: the checkout step list is read as an ordered sequence and a product feature list as
+ * bullets. They are painted inside the content box, so a list that sits flush with its container's
+ * edge, or inside a card that clips its overflow, still shows them — the padding above leaves no
+ * room outside the box. A deliberately marker-less list — a navigation, a footer column, a
+ * breadcrumb trail — is stripped by the sheet that styles it and then carries role="list" in its
+ * markup, which is also what keeps the list semantics in Safari once list-style is removed. */
+:where([role="list"]) {
+  list-style: none;
+}
+
+/* ==== Document ====
+ * No engine has an unprefixed spelling of this property; it stops iOS Safari inflating body text
+ * when the page is rotated to landscape. */
+:where(html) {
+  -webkit-text-size-adjust: 100%;
+}
+:where(html) {
+  height: 100%;
+}
+
+:where(body) {
+  /* Body carries a minimum height, never a fixed one, so its box keeps growing with the document:
+   * a sticky header or sidebar inside it holds its containing block for the whole page instead of
+   * being released once the first viewport has scrolled past. The viewport units come as a pair: vh
+   * is the fallback for an engine without dvh, and dvh is the height that tracks a mobile browser's
+   * collapsing toolbars. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-normal);
+  /* A long unbroken value — a SKU, an email address, an order number — wraps inside its container. */
+  overflow-wrap: break-word;
+  text-rendering: optimizeLegibility;
+  /* Neither smoothing hint has an unprefixed equivalent, and both affect antialiasing only. */
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==== Typography ====
+ * A heading consumes a type role rather than a raw size, so its size, weight and tracking are
+ * decided in the token sheet alone, and balance breaks a title into even lines instead of stranding
+ * its last word. */
+:where(h1) {
+  font-size: var(--text-heading-1-size);
+  font-weight: var(--text-heading-1-weight);
+  line-height: var(--text-heading-1-line-height);
+  letter-spacing: var(--text-heading-1-tracking);
+  text-wrap: balance;
+}
+:where(h2) {
+  font-size: var(--text-heading-2-size);
+  font-weight: var(--text-heading-2-weight);
+  line-height: var(--text-heading-2-line-height);
+  letter-spacing: var(--text-heading-2-tracking);
+  text-wrap: balance;
+}
+:where(h3) {
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--text-heading-3-weight);
+  line-height: var(--text-heading-3-line-height);
+  letter-spacing: var(--text-heading-3-tracking);
+  text-wrap: balance;
+}
+
+/* h4 to h6 head a card, a sidebar group or a footer column, so they sit at the label role. */
+:where(h4, h5, h6) {
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  line-height: var(--text-label-line-height);
+  letter-spacing: var(--text-label-tracking);
+  text-wrap: balance;
+}
+
+/* Running text at the body role; `pretty` keeps a paragraph from ending on a stranded word. */
+:where(p) {
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--text-body-line-height);
+  letter-spacing: var(--text-body-tracking);
+  text-wrap: pretty;
+}
+
+:where(small) {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  letter-spacing: var(--text-caption-tracking);
+}
+
+/* Emphasis in running text is semibold, which stays legible at the body size and subordinate to a
+ * heading. */
+:where(strong, b) {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Machine-readable text — a SKU, an order reference — keeps its columns in the monospace family. */
+:where(code, kbd, samp, pre) {
+  font-family: var(--font-family-mono);
+  font-size: var(--text-body-sm-size);
+  line-height: var(--text-body-sm-line-height);
+}
+:where(pre) {
+  overflow: auto;
+}
+
+:where(hr) {
+  border: 0;
+  border-block-start: var(--border-width) solid var(--color-border);
+  margin-block: var(--space-8);
+}
+
+/* An abbreviation's expansion is available on hover and to assistive technology; the dotted rule
+ * announces it without competing with a link's solid one. */
+:where(abbr[title]) {
+  text-decoration: underline dotted;
+  text-underline-offset: var(--space-1);
+  cursor: help;
+}
+
+::selection {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
+}
+
+/* Firefox paints a placeholder fainter than the colour it is given; full opacity leaves the colour
+ * token to decide how faint a hint is. */
+::placeholder {
+  color: var(--color-text-subtle);
+  opacity: 1;
+}
+
+/* A marker takes the muted text colour, so a list reads as secondary to its content. */
+::marker {
+  color: var(--color-text-muted);
+}
+
+/* ==== Links ====
+ * An anchor is coloured, and underlined too when it is running text, so a link is identifiable
+ * without relying on hue alone; the offset keeps the rule clear of descenders. An anchor carrying a
+ * class — a button, a card title, a navigation item, a breadcrumb — takes its underline from that
+ * class, which is why only the bare anchor keeps one. */
+:where(a) {
+  color: var(--color-accent);
+  text-decoration-thickness: var(--border-width);
+  text-underline-offset: var(--space-1);
+}
+a:not([class]) {
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+}
+
+/* Hover is confined to a device that can hover, so a tap cannot leave a link painted in a state the
+ * finger never left. */
+@media (hover: hover) {
+  :where(a):hover {
+    color: var(--color-accent-hover);
+  }
+
+  a:not([class]):hover {
+    text-decoration-thickness: var(--border-width-thick);
+  }
+}
+
+/* ==== Replaced content ====
+ * No global `fill: currentColor` here, deliberately: every icon names its own paint — a stroked one
+ * on its svg, a filled glyph on its path — and the charts paint each series from its own token, so
+ * a global fill would override the marks that carry the data. */
+:where(img, svg, video, canvas) {
+  display: block;
+  max-width: 100%;
+}
+:where(img, video) {
+  height: auto;
+}
+
+/* ==== Forms ====
+ * Every control starts from the document's own font and colour, so a field, a select and a button
+ * cannot fall back to the user agent's typeface; surface, border, padding and the visual states of
+ * a field belong to components.css. */
+:where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+/* The user agent's button chrome is stripped so `.sp-button` in components.css is the only thing
+ * that gives a button its shape; a button with no class of its own supplies only its content. */
+:where(button) {
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+:where(textarea) {
+  resize: vertical;
+}
+:where(fieldset) {
+  border: 0;
+}
+
+/* ==== Tables ====
+ * Column widths, row borders, cell padding and the sticky header belong to the table component;
+ * what a table needs before any class is applied is that its borders collapse, its caption is not
+ * centred and its header cells keep the alignment they are given. */
+:where(table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+:where(caption) {
+  text-align: start;
+}
+:where(th) {
+  text-align: inherit;
+}
+
+/* ==== Hidden ====
+ * !important is deliberate here, and this is the one place in the folder that needs it: the
+ * attribute states that the element is not part of the page, so a sheet loading later must not be
+ * able to bring it back with a display rule. */
+:where([hidden]) {
+  display: none !important;
+}
+
+/* ==== Focus ====
+ * Visible focus is required on every interactive element, so these two rules use real selectors
+ * rather than :where(): they must beat a component's own outline declaration. The ring is an
+ * outline rather than a box-shadow so that it survives forced-colours mode and costs no layout, and
+ * it follows the element's own corner radius instead of replacing it, so a control keeps its shape
+ * while it is focused. */
+*:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* A pointer-driven focus paints nothing, because the ring shows a keyboard user where they are; the
+ * element keeps its focus for assistive technology either way. */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ==== Disabled ====
+ * The pointer says why nothing happens; whether the state also dims a control is a decision of the
+ * control classes in components.css. */
+:where(:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
+/* ==== Global utilities ====
+ * Both hide content visually without removing it from the accessibility tree, which is what every
+ * purely visual hide in the product needs:
+ *   - the checkout step indicator's "current" and "completed" text;
+ *   - the admin sidebar's labels once the sidebar becomes an icon rail;
+ *   - the live regions that announce a result count, a page change or a toast;
+ *   - the chart components' data-table headers, which name each series.
+ * The 1px box with a 50% clip-path is the modern spelling of the technique: the element keeps its
+ * place in the accessibility tree and stays focusable, while nothing of it is painted. */
+.sp-visually-hidden,
+.sp-skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The skip link is the first focusable element of the shell, rendered by AppLayout ahead of the
+ * header; focus lifts it over the sticky header, so a keyboard user reaches the main region without
+ * tabbing through the navigation. The ring is restated because the rule that suppresses a pointer
+ * focus ring is equally specific. */
+.sp-skip-link:focus,
+.sp-skip-link:focus-visible {
+  position: fixed;
+  inset-block-start: var(--space-4);
+  inset-inline-start: var(--space-4);
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  font-size: var(--text-body-sm-size);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+  /* The first rung above the sticky header: sharing the header's own rung would let the header
+   * paint over the focused link, because an equal z-index is settled by document order and the
+   * header follows the skip link in the shell. */
+  z-index: var(--z-dropdown);
+}
+
+/* ==== In-page targets ====
+ * Every element the application gives an id to — the skip link's #main, an anchor on a checkout step
+ * — is scrolled to with the sticky header cleared, so the heading a visitor jumped to is not hidden
+ * underneath it. */
+:where([id]) {
+  scroll-margin-top: calc(var(--layout-header-height) + var(--space-4));
+}
+
+/* ==== Motion ====
+ * Smooth scrolling is offered only to a visitor whose system has not asked for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  :where(html) {
+    scroll-behavior: smooth;
+  }
+}
+
+/* The other half of the same rule, and the one place !important is required by a stylesheet rather
+ * than by an attribute: it must beat every transition the six sheets loading after this one declare,
+ * so each duration is forced to a value the browser renders as no animation at all. Nothing is
+ * hidden by it — only motion is removed. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

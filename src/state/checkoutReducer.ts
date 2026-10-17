@@ -1,9 +1,10 @@
 /**
  * Path: src/state/checkoutReducer.ts
  * Purpose: Checkout step transitions, validation errors, submission and success
- * Lines: 542
+ * Lines: 538
  */
 
+import { hasErrors } from "@/utils/validation";
 import type { AddressInput } from "@/types/account";
 import type { Order, PricedCart } from "@/types/commerce";
 import type {
@@ -435,11 +436,6 @@ export function canAdvanceFrom(step: CheckoutStep, errors: FieldErrors): boolean
 /** Proof at compile time that every action was handled: a new member fails to type-check here. */
 function assertNever(value: never): never {
   throw new Error(`Unhandled checkout action: ${JSON.stringify(value)}`);
-}
-
-/** Whether an error map holds at least one complaint. */
-function hasErrors(errors: FieldErrors): boolean {
-  return Object.keys(errors).length > 0;
 }
 
 /** Shallow comparison, so an identical map arriving again keeps its identity. */
