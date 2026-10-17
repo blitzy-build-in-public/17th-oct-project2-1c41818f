@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 495
+ * Lines: 504
  */
 
 /* ==== Buttons ====
@@ -239,6 +239,15 @@
 .sp-field__control,
 .sp-radio-group {
   display: grid;
+  gap: var(--space-2);
+}
+/* BLITZY [CONTRACT]: the horizontal arrangement `RadioGroup` asks for with its `orientation="horizontal"` prop.
+ * The group declared above stacks its rows, so the modifier is what puts them in one line: the grid flows
+ * along the row, packed to the start and centred row against row, keeping the base gap between them. */
+.sp-radio-group--horizontal {
+  grid-auto-flow: column;
+  justify-content: start;
+  align-items: center;
   gap: var(--space-2);
 }
 .sp-form__grid {

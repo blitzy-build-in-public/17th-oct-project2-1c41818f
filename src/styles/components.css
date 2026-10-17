@@ -1,6 +1,6 @@
 /* Path: src/styles/components.css
  * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded from controls.css and data-display.css
- * Lines: 347
+ * Lines: 448
  */
 
 /* The twelve primitive families every page composes are defined across the three sheets this one loads:
@@ -197,6 +197,97 @@ button.sp-rating__star {
   visibility: visible;
 }
 
+/* ==== Tooltip and popover placement ====
+ * Where the revealed surface sits, which the rules above do not say. The wrapper both components render
+ * carries the anchor class below, and that is what makes it the containing block an absolutely positioned
+ * surface is measured against; the surface carries the placement it was asked for as a modifier class.
+ *
+ * BLITZY [CONTRACT]: `src/components/ui/Tooltip.tsx` declares `placement` on both members of the family and
+ * the class names it writes have to have rules here, or the prop is a dead name rather than a shared
+ * contract — the same completion `.sp-btn--round`, `.sp-btn-group--*` and `.sp-badge--sm` needed. Each rule
+ * is wrapped in :where(), which holds its specificity at 0, so a consumer that positions its own panel —
+ * `.sp-account-menu__panel` in layout.css is the one in the product — overrides any of these by declaring
+ * the property once, with no selector fight, and what is here is only a default. Every offset reads a
+ * tokens.css property; no length, colour or duration is written, and nothing measures the viewport, because
+ * collision detection belongs to a positioning engine and the stack admits none.
+ */
+:where(.sp-tooltip-anchor, .sp-popover-anchor) {
+  position: relative;
+}
+/* The bubble takes its content's width. Without this an absolutely positioned box shrinks to the space left
+ * beside the offset it was given — 53px on the anchor's right, and nothing at all for a side placement —
+ * which wrapped a one-line label over five lines instead of one. `max-inline-size` on the surface still
+ * caps it, so a long string wraps at the declared maximum rather than growing without bound. */
+:where(.sp-tooltip--top, .sp-tooltip--bottom, .sp-tooltip--start, .sp-tooltip--end) {
+  inline-size: max-content;
+}
+/* The four sides, one edge each, and the cross axis centred where nothing else owns it. */
+:where(.sp-tooltip--top) {
+  inset-block-end: calc(100% + var(--space-2));
+}
+:where(.sp-tooltip--bottom) {
+  inset-block-start: calc(100% + var(--space-2));
+}
+:where(.sp-tooltip--start) {
+  inset-inline-end: calc(100% + var(--space-2));
+}
+:where(.sp-tooltip--end) {
+  inset-inline-start: calc(100% + var(--space-2));
+}
+:where(.sp-tooltip--top, .sp-tooltip--bottom) {
+  inset-inline-start: 50%;
+  translate: -50% 0;
+}
+:where(.sp-tooltip--start, .sp-tooltip--end) {
+  inset-block-start: 50%;
+  translate: 0 -50%;
+}
+/* The pointer follows the surface onto the edge facing the trigger. The base rule above puts it on the
+ * bottom edge, which is the default top placement's own edge, so only the other three are re-pointed, and
+ * they are written at that rule's specificity because a rule that overrides a property has to match it. The
+ * side placements put it on the edge the trigger is actually behind: a bubble at its trigger's inline-end
+ * has that trigger on its own inline-start side. */
+.sp-tooltip--bottom::after {
+  inset-block-start: calc(-1 * var(--space-1));
+  inset-block-end: auto;
+}
+.sp-tooltip--start::after,
+.sp-tooltip--end::after {
+  inset-block-start: 50%;
+  inset-block-end: auto;
+  inset-inline-start: auto;
+  transform: rotate(45deg);
+  translate: 0 -50%;
+}
+.sp-tooltip--end::after {
+  inset-inline-start: calc(-1 * var(--space-1));
+}
+.sp-tooltip--start::after {
+  inset-inline-end: calc(-1 * var(--space-1));
+}
+/* The popover takes one edge at a time and never two axes: a panel an account menu or a navigation menu
+ * positions along the inline axis through the class its caller passes, and one axis set from two sources is
+ * how an absolutely positioned box silently stretches to the anchor instead. */
+:where(.sp-popover--top) {
+  inset-block-end: calc(100% + var(--space-2));
+}
+:where(.sp-popover--bottom) {
+  inset-block-start: calc(100% + var(--space-2));
+}
+:where(.sp-popover--start) {
+  inset-inline-end: calc(100% + var(--space-2));
+}
+:where(.sp-popover--end) {
+  inset-inline-start: calc(100% + var(--space-2));
+}
+/* A panel never asks for more room than the viewport has. The surface's own floor is a minimum, and a
+ * minimum wider than the screen wins over every maximum width a caller sets and pushes the panel past the
+ * edge with no scrollbar to reach it — which is what a 400px panel did at a 375px viewport. Written at the
+ * base rule's specificity because it overrides that rule's property, and a caller's own sheet still wins. */
+.sp-popover {
+  min-inline-size: min(var(--modal-width-sm), calc(100vw - var(--space-8)));
+}
+
 /* ==== Data-page feedback states ==== */
 .sp-spinner {
   --spinner-size: var(--space-5);
@@ -301,6 +392,16 @@ button.sp-rating__star {
 }
 .sp-alert__icon {
   grid-row: 1 / -1;
+}
+/* The icon's `grid-row: 1 / -1` collapses onto the first row, because the grid declares no explicit row
+ * track list for `-1` to count back from. Every region that is not the icon is therefore placed in the
+ * second column by name — as `.sp-alert__action` below does — because without this the body auto-places
+ * into the icon's own column, the auto-sized first column grows to the body's width and the title is
+ * crushed into what is left. A surface that carries no icon spans both columns itself and wins by the
+ * specificity of its own selector. */
+.sp-alert__title,
+.sp-alert__body {
+  grid-column: 2;
 }
 .sp-alert__title {
   font-size: var(--text-body-sm-size);
