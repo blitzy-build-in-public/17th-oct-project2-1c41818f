@@ -1,0 +1,347 @@
+/* Path: src/styles/components.css
+ * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded from controls.css and data-display.css
+ * Lines: 347
+ */
+
+/* The twelve primitive families every page composes are defined across the three sheets this one loads:
+ * this file keeps rating, price and quantity, the tooltip and popover, and the data-page feedback states,
+ * and imports src/styles/controls.css (buttons, form fields and selection controls) and
+ * src/styles/data-display.css (cards and badges, the data table, pagination, overlays, toasts and tabs and
+ * accordion) above every rule it declares. A CSS @import is inlined at the position it occupies, so the
+ * built sheet still reads in one order — tokens, base, layout, controls, data-display, components, then the
+ * four area sheets — and every rule holds the cascade position it held when one file carried all twelve
+ * families. Loading the two sheets from this mapped path, and not from the entry point, is what keeps the
+ * eight-sheet load contract: the application imports the same eight mapped paths it always did, and no
+ * other file imports either of the two. This file defines no shell class (layout.css owns .sp-container,
+ * .sp-app*, .sp-page*, .sp-header*, .sp-footer*, .sp-sidebar*, .sp-page-header*) and no area class (the
+ * .sp-product*, .sp-facet*, .sp-search*, .sp-cart*, .sp-summary*, .sp-checkout*, .sp-steps*, .sp-account*,
+ * .sp-chart*, .sp-kpi* and .sp-report* families belong to the four sheets that follow).
+ * The contract, shared by the three sheets: state is carried by attributes, never by a second class —
+ * [aria-current], [aria-selected], [aria-checked], [aria-invalid], [aria-sort], [aria-expanded],
+ * [aria-busy], [disabled], [hidden], [inert], :checked, :indeterminate, :focus-visible, :hover and
+ * :active — and the only state classes are .is-loading (a submit in flight), .is-open (a drawer, a popover
+ * or a tooltip revealed) and .sp-card--interactive. Select renders .sp-select__wrap around the native
+ * select, because the chevron is that wrapper's ::after and a pseudo-element does not render on a <select>;
+ * Drawer, Popover and Tooltip carry .is-open while revealed; the Switch is a <button role="switch"> whose
+ * state is aria-checked. Every value comes from tokens.css, in whichever of the three sheets it is written:
+ * no sheet invents a colour, a size, a radius, a shadow, a duration or a breakpoint of its own.
+ *
+ * BLITZY [BUDGET]: the twelve families are 1,291 lines, past the 500-line budget and the 600-line ceiling
+ * the plan sets. The ceiling is never raised and no line was cut to reach a number, so the plan's remedy for
+ * a concern that cannot fit — split the concern and record the split — was applied instead: the families are
+ * split by primitive family into the two sheets imported above, every rule, declaration and comment moved
+ * verbatim and in its original order, and the split is recorded in generation-manifest.md, in its Part 1
+ * rows and its Part 4 ledger. Both new sheets are inside the ceiling, this file is inside it again, and the
+ * three together hold exactly what the one file held, so the plan's 50,000-line allocation is unchanged.
+ * The two objections this note first raised against a second stylesheet are answered by that direction: the
+ * plan maps no ninth path and the application loads exactly the eight sheets it lists, and an @import from
+ * this mapped path loads the additions without adding an entry to anyone's import list.
+ */
+
+@import "./controls.css";
+@import "./data-display.css";
+
+/* ==== Rating, price and quantity ==== */
+.sp-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sp-rating__stars {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* The display variant renders its stars as spans, so nothing here is focusable; the input variant renders
+ * buttons, which is why the button half carries a target and the states below are reachable. */
+.sp-rating__star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-warning);
+}
+/* The display variant renders spans, whose unfilled stars are muted; the input variant renders buttons, muted
+ * until chosen, so a selected star is the only one carrying the rating colour. */
+.sp-rating__star--empty,
+button.sp-rating__star {
+  color: var(--color-text-subtle);
+}
+button.sp-rating__star {
+  min-inline-size: var(--touch-target-min);
+  min-block-size: var(--touch-target-min);
+  cursor: pointer;
+}
+.sp-rating__star[aria-checked="true"] {
+  color: var(--color-warning);
+}
+.sp-rating__value {
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+.sp-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.sp-price__current {
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.sp-price__list {
+  color: var(--color-text-subtle);
+  text-decoration-line: line-through;
+}
+.sp-price__discount {
+  padding: var(--space-1) var(--space-2);
+  background-color: var(--color-success-surface);
+  color: var(--color-success-text);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-medium);
+}
+.sp-quantity {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+.sp-quantity__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--touch-target-min);
+  min-block-size: var(--touch-target-min);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.sp-quantity__button[disabled] {
+  opacity: var(--opacity-disabled);
+}
+.sp-quantity__input {
+  inline-size: var(--space-12);
+  padding-block: var(--space-2);
+  border: 0;
+  border-inline: var(--border-width) solid var(--color-border-strong);
+  background-color: transparent;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+/* No engine has an unprefixed spelling of these two, and they are what removes the native stepper the user
+ * agent would otherwise draw inside the quantity field. */
+.sp-quantity__input::-webkit-outer-spin-button,
+.sp-quantity__input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* ==== Tooltip and popover ====
+ * Keyboard and pointer triggering and the aria-describedby wiring belong to Tooltip.tsx; a tooltip or a
+ * popover becomes visible by carrying .is-open.
+ */
+.sp-tooltip {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  max-inline-size: var(--tooltip-max-width);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface-inverse);
+  color: var(--color-text-inverse);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    visibility var(--duration-fast) var(--ease-standard);
+}
+.sp-tooltip::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-end: calc(-1 * var(--space-1));
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  background-color: inherit;
+  border-radius: var(--radius-xs);
+  transform: translateX(-50%) rotate(45deg);
+}
+.sp-tooltip.is-open,
+.sp-tooltip[open] {
+  opacity: 1;
+  visibility: visible;
+}
+.sp-popover {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  min-inline-size: var(--modal-width-sm);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    visibility var(--duration-fast) var(--ease-standard);
+}
+.sp-popover.is-open,
+.sp-popover[open] {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ==== Data-page feedback states ==== */
+.sp-spinner {
+  --spinner-size: var(--space-5);
+  display: inline-block;
+  flex: none;
+  inline-size: var(--spinner-size);
+  block-size: var(--spinner-size);
+  border: var(--border-width-thick) solid var(--color-border);
+  border-block-start-color: var(--color-accent);
+  border-radius: var(--radius-pill);
+  animation: sp-spin var(--duration-slow) linear infinite;
+}
+@keyframes sp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sp-skeleton,
+.sp-skeleton__line {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-surface-sunken);
+  border-radius: var(--radius-sm);
+}
+.sp-skeleton::after,
+.sp-skeleton__line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(90deg, transparent, var(--color-surface), transparent);
+  transform: translateX(-100%);
+  animation: sp-shimmer calc(var(--duration-slow) * 4) var(--ease-standard) infinite;
+}
+@keyframes sp-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+.sp-skeleton--text {
+  block-size: var(--space-4);
+}
+.sp-skeleton--card {
+  block-size: var(--space-20);
+  border-radius: var(--radius-md);
+}
+.sp-skeleton--row {
+  block-size: var(--table-row-height);
+}
+.sp-skeleton--chart {
+  block-size: calc(var(--space-20) * 2);
+  border-radius: var(--radius-md);
+}
+.sp-skeleton__line {
+  inline-size: var(--w, 100%);
+  block-size: var(--space-4);
+}
+/* A container of lines spaces them itself and keeps its own shimmer off, so only the lines shine. */
+.sp-skeleton:has(> .sp-skeleton__line) {
+  display: grid;
+  gap: var(--space-2);
+  block-size: auto;
+  background-color: transparent;
+}
+.sp-skeleton:has(> .sp-skeleton__line)::after {
+  content: none;
+}
+.sp-skeleton__line:last-child {
+  inline-size: var(--w-end, 60%);
+}
+.sp-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+}
+.sp-empty__icon {
+  color: var(--color-text-subtle);
+}
+.sp-empty__title {
+  font-size: var(--text-heading-3-size);
+  font-weight: var(--text-heading-3-weight);
+}
+.sp-empty__body {
+  max-inline-size: var(--layout-measure);
+  color: var(--color-text-muted);
+}
+.sp-empty__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+/* The danger pair is declared with the form summary above, so the two surfaces cannot drift apart. */
+.sp-alert {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  border-inline-start: var(--border-width-thick) solid currentColor;
+  border-radius: var(--radius-md);
+}
+.sp-alert__icon {
+  grid-row: 1 / -1;
+}
+.sp-alert__title {
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-alert__body {
+  font-size: var(--text-body-sm-size);
+}
+.sp-alert__action {
+  grid-column: 2;
+  justify-self: start;
+}
+.sp-alert--info {
+  background-color: var(--color-info-surface);
+  color: var(--color-info-text);
+}
+.sp-alert--success {
+  background-color: var(--color-success-surface);
+  color: var(--color-success-text);
+}
+.sp-alert--warning {
+  background-color: var(--color-warning-surface);
+  color: var(--color-warning-text);
+}
+/* The progress fill's width is set inline by the component: a transition on it would animate a layout
+ * property, which this sheet confines to opacity, transform, colour and shadow. */
+.sp-progress {
+  display: grid;
+  gap: var(--space-2);
+}
+.sp-progress__track {
+  block-size: var(--progress-height);
+  background-color: var(--color-surface-sunken);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+/* The fill carries its own display, because a caller renders it as a bare span whose inline-size alone
+ * would generate no box at all. */
+.sp-progress__fill {
+  display: block;
+  block-size: 100%;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-pill);
+}

@@ -1,0 +1,432 @@
+/* Path: src/styles/controls.css
+ * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
+ * Lines: 432
+ */
+
+/* ==== Buttons ====
+ * BLITZY [CONTRACT]: .sp-button, .sp-button--primary and .sp-button--secondary are accepted as aliases of the
+ * .sp-btn family, because the committed src/features/home/HeroSection.tsx uses those names for its two calls
+ * to action; each alias shares its declaration with the .sp-btn class and a page written from here on uses
+ * .sp-btn. The primary fill's text is the on-accent pair tokens.css measures at 6.29:1, where
+ * --color-accent-contrast is the pair for the accent tint rather than for the fill.
+ */
+.sp-btn,
+.sp-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height-md);
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-text);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  line-height: var(--text-label-line-height);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.sp-btn--primary,
+.sp-button--primary {
+  color: var(--color-text-on-accent);
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.sp-btn--secondary,
+.sp-button--secondary {
+  background-color: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+.sp-btn--ghost {
+  color: var(--color-text-muted);
+}
+.sp-btn--link {
+  min-block-size: auto;
+  padding: 0;
+  color: var(--color-accent);
+}
+.sp-btn--danger {
+  color: var(--color-text-on-accent);
+  background-color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+/* Hover is offered only to a device that can hover, so a tap never leaves a button in a state the finger has
+ * already left; active sits outside the query, because press feedback matters most where there is no pointer. */
+@media (hover: hover) {
+  .sp-btn--primary:hover:not(:disabled):not([aria-disabled="true"]),
+  .sp-button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+    background-color: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+  }
+  .sp-btn--danger:hover:not(:disabled):not([aria-disabled="true"]) {
+    background-color: var(--color-danger-hover);
+    border-color: var(--color-danger-hover);
+  }
+  .sp-btn--secondary:hover:not(:disabled):not([aria-disabled="true"]),
+  .sp-button--secondary:hover:not(:disabled):not([aria-disabled="true"]),
+  .sp-btn--ghost:hover:not(:disabled):not([aria-disabled="true"]) {
+    background-color: var(--color-surface-sunken);
+  }
+  .sp-btn--link:hover:not(:disabled):not([aria-disabled="true"]) {
+    text-decoration-line: underline;
+  }
+}
+.sp-btn--primary:active:not(:disabled):not([aria-disabled="true"]),
+.sp-button--primary:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--color-accent-active);
+  border-color: var(--color-accent-active);
+}
+.sp-btn--danger:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.sp-btn--secondary:active:not(:disabled):not([aria-disabled="true"]),
+.sp-button--secondary:active:not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--color-accent);
+}
+.sp-btn--ghost:active:not(:disabled):not([aria-disabled="true"]),
+.sp-btn--link:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--color-surface-sunken);
+}
+.sp-btn--sm {
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-3);
+  font-size: var(--text-body-sm-size);
+}
+.sp-btn--lg {
+  min-block-size: var(--control-height-lg);
+  padding-inline: var(--space-5);
+  font-size: var(--text-body-size);
+}
+.sp-btn--icon {
+  min-inline-size: var(--touch-target-min);
+  min-block-size: var(--touch-target-min);
+  padding-inline: var(--space-2);
+}
+.sp-btn--block {
+  inline-size: 100%;
+}
+.sp-btn__icon {
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+.sp-btn__label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-btn__spinner {
+  display: none;
+  --spinner-size: var(--space-4);
+}
+/* In flight the pointer is off and the control dims, while the label stays in the box: its text is what a
+ * screen reader announces for the button. */
+.sp-btn.is-loading,
+.sp-btn[aria-busy="true"] {
+  pointer-events: none;
+  opacity: var(--opacity-disabled);
+}
+.sp-btn.is-loading .sp-btn__spinner,
+.sp-btn[aria-busy="true"] .sp-btn__spinner {
+  display: block;
+}
+/* Opacity only: base.css supplies the not-allowed cursor and the hover rules above exclude a disabled control,
+ * so nothing changes under the pointer. */
+.sp-btn:disabled,
+.sp-btn[aria-disabled="true"],
+.sp-button:disabled,
+.sp-button[aria-disabled="true"] {
+  opacity: var(--opacity-disabled);
+}
+.sp-btn-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+.sp-btn-group > .sp-btn {
+  border-radius: var(--radius-none);
+}
+.sp-btn-group > .sp-btn:not(:first-child) {
+  margin-inline-start: calc(-1 * var(--border-width));
+}
+.sp-btn-group > .sp-btn:first-child {
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+}
+.sp-btn-group > .sp-btn:last-child {
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+}
+
+/* ==== Forms and fields ====
+ * Form, FormField, Input, TextArea and Select. A hint and an error are text tied to their control by
+ * aria-describedby in markup; the colour below only reinforces what that text already says.
+ */
+.sp-form {
+  display: grid;
+  gap: var(--space-5);
+}
+.sp-form__row,
+.sp-field__control,
+.sp-radio-group {
+  display: grid;
+  gap: var(--space-2);
+}
+.sp-form__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.sp-form__actions {
+  display: grid;
+  gap: var(--space-2);
+}
+/* The top-of-form error summary and the alert's danger register are declared once here and paired with
+ * .sp-alert--danger below, so the two surfaces cannot drift apart. */
+.sp-form__summary,
+.sp-alert--danger {
+  color: var(--color-danger-text);
+  background-color: var(--color-danger-surface);
+}
+.sp-form__summary {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--color-danger);
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+.sp-field {
+  display: grid;
+  gap: var(--space-1);
+}
+.sp-field__label {
+  display: block;
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+  line-height: var(--text-label-line-height);
+  color: var(--color-text);
+}
+/* A visible marker only: whether the field is required is carried by markup, not by this asterisk. */
+.sp-field__required {
+  color: var(--color-danger-text);
+}
+.sp-field__hint,
+.sp-rating__count,
+.sp-pagination__count,
+.sp-progress__label {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+  color: var(--color-text-muted);
+}
+.sp-field__error {
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-danger-text);
+}
+.sp-input,
+.sp-textarea,
+.sp-select {
+  inline-size: 100%;
+  min-block-size: var(--control-height-md);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-size);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+@media (hover: hover) {
+  .sp-input:hover:not(:disabled),
+  .sp-textarea:hover:not(:disabled),
+  .sp-select:hover:not(:disabled) {
+    border-color: var(--color-text-muted);
+  }
+}
+/* The ring comes from base.css; the border joins it, because a field's boundary is the control itself. */
+.sp-input:focus-visible,
+.sp-textarea:focus-visible,
+.sp-select:focus-visible {
+  border-color: var(--color-accent);
+}
+/* The message beside the field is the text of the failure; this border never carries it alone. */
+.sp-input[aria-invalid="true"],
+.sp-textarea[aria-invalid="true"],
+.sp-select[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+.sp-input:disabled,
+.sp-textarea:disabled,
+.sp-select:disabled {
+  color: var(--color-text-subtle);
+  background-color: var(--color-surface-sunken);
+  border-color: var(--color-border);
+}
+.sp-input:disabled::placeholder,
+.sp-textarea:disabled::placeholder {
+  color: var(--color-text-subtle);
+}
+.sp-textarea {
+  min-block-size: var(--space-20);
+  resize: vertical;
+}
+/* The wrapper carries no padding, so every pixel of it is the select and a click anywhere in it opens the
+ * list; the chevron is drawn from two borders, since a pseudo-element does not render on <select>. */
+.sp-select {
+  appearance: none;
+  padding-inline-end: var(--space-8);
+}
+.sp-select__wrap {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+}
+.sp-select__wrap::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: var(--space-3);
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  border-block-end: var(--border-width-thick) solid var(--color-text-muted);
+  border-inline-end: var(--border-width-thick) solid var(--color-text-muted);
+  transform: translateY(-50%) rotate(45deg);
+  pointer-events: none;
+}
+/* --breakpoint-md, 768px, from tokens.css: a query cannot read a custom property. */
+@media (min-width: 768px) {
+  .sp-form__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sp-form__actions {
+    grid-auto-flow: column;
+    justify-content: end;
+    gap: var(--space-3);
+  }
+}
+
+/* ==== Selection controls ====
+ * Checkbox, Radio, RadioGroup and Switch. Each native input keeps its own semantics and keyboard behaviour and
+ * only loses its user agent painting, so :checked and :indeterminate stay the state; the tick and the dot are
+ * pseudo-elements of the box, and the row, not the box, is the touch target.
+ */
+.sp-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--touch-target-min);
+  cursor: pointer;
+}
+.sp-choice__label {
+  cursor: inherit;
+}
+.sp-checkbox,
+.sp-radio {
+  appearance: none;
+  position: relative;
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  margin: 0;
+  color: var(--color-text-on-accent);
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+.sp-radio {
+  border-radius: var(--radius-pill);
+}
+.sp-checkbox::after,
+.sp-radio::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+}
+/* The two borders of a rotated corner are the tick; the bar below is the indeterminate state. */
+.sp-checkbox::after {
+  inline-size: var(--space-1);
+  block-size: var(--space-2);
+  border-block-end: var(--border-width-thick) solid currentColor;
+  border-inline-end: var(--border-width-thick) solid currentColor;
+  transform: translateY(calc(var(--space-1) / -2)) rotate(45deg);
+}
+.sp-checkbox:indeterminate::after {
+  inline-size: var(--space-3);
+  block-size: var(--border-width-thick);
+  border: 0;
+  background-color: currentColor;
+  transform: none;
+}
+.sp-radio::after {
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  border-radius: var(--radius-pill);
+  background-color: currentColor;
+}
+.sp-checkbox:checked,
+.sp-checkbox:indeterminate,
+.sp-radio:checked {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.sp-checkbox:checked::after,
+.sp-checkbox:indeterminate::after,
+.sp-radio:checked::after {
+  opacity: 1;
+}
+.sp-checkbox:disabled,
+.sp-radio:disabled {
+  background-color: var(--color-surface-sunken);
+  border-color: var(--color-border);
+  opacity: var(--opacity-disabled);
+}
+/* The track is twice the thumb plus the two inset gaps, so the thumb travels exactly one space token. */
+.sp-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--touch-target-min);
+  cursor: pointer;
+}
+.sp-switch__track {
+  display: block;
+  inline-size: calc(2 * var(--space-5));
+  block-size: var(--space-5);
+  background-color: var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  transition: background-color var(--duration-base) var(--ease-standard);
+}
+.sp-switch__thumb {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--space-1);
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-1);
+  transform: translateY(-50%);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+.sp-switch[aria-checked="true"] .sp-switch__track {
+  background-color: var(--color-accent);
+}
+.sp-switch[aria-checked="true"] .sp-switch__thumb {
+  transform: translateY(-50%) translateX(var(--space-4));
+}
+.sp-switch[aria-disabled="true"] .sp-switch__track {
+  opacity: var(--opacity-disabled);
+}
+
