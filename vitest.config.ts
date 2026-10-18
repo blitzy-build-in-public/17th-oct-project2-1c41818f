@@ -21,12 +21,12 @@ export default defineConfig({
   test: {
     // Ambient describe/it/expect in every test file; tsconfig.json supplies their types.
     globals: true,
-    // The build's phase gate is `npm test` exiting zero from phase 1, thirty-three phases
-    // before the first test file exists: removing this option invalidates it for all of them.
+    // `npm test` is the build's phase gate and has to exit zero on a tree with no test files
+    // yet, so this option stays: without it the gate is invalid for an empty run.
     passWithNoTests: true,
     // The jest-dom matchers plus the between-test state clearing, wanted by both projects.
-    // tests/setup.ts arrives in phase 34; Vitest loads a setup file only when it runs test
-    // files, so its absence does not fail an otherwise empty run.
+    // Vitest loads a setup file only when it runs test files, so an empty run cannot fail on
+    // its absence.
     setupFiles: ["tests/setup.ts"],
     // Pure logic needs no DOM; the jsdom project below overrides this.
     environment: "node",

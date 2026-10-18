@@ -75,7 +75,7 @@ What that centralises, so no later file reimplements it: money and number format
 
 ## 3. File size, budgets and splits
 
-- **The ceiling is 600 lines and it is never raised.** The largest budget the plan allocates is 500. Two delivered paths stand above it — `src/components/ui/Toast.tsx` at 614 lines and `src/styles/data-display.css` at 608 — each at its real count with the split into a second file as the remedy the manifest records against it.
+- **The ceiling is 600 lines and it is never raised.** The largest budget the plan allocates is 500. Three delivered paths stand above it — `src/components/ui/Toast.tsx` at 614 lines, `src/styles/data-display.css` at 608 and `tests/integration/catalogBrowseFlow.test.tsx` at 645 — each at its real count with the split into a second file as the remedy the manifest records against it.
 - Every file carries a line budget in the tree and the manifest. A budget is an allocation, not padding: nothing is added to a finished file to reach a number, and no working code is cut to stay inside one.
 - The remainder rule, in the four cases it occurs: **under budget** — the difference returns to the remainder and is reallocated to files not yet generated; **over budget and inside the ceiling** — the overrun is taken from the remainder, with a note naming what grew; **over budget and unable to fit** — the concern is split into a second file, the split is recorded in the manifest, and the second file is generated in the current or the next phase; **beyond 10% of budget either way** — recorded in the manifest's reconciliation ledger with a reason.
 - A split produces what the manifest calls a split path: a part of a counted file, carrying no budget of its own, drawing on the budget of the file it came from, and re-exported from that file's path wherever a consumer imported it there.
@@ -90,13 +90,13 @@ Before any import or content, in the file's own comment syntax:
 /**
  * Path: src/utils/format.ts
  * Purpose: The one-sentence purpose the plan states for that file.
- * Lines: 573
+ * Lines: 577
  */
 ```
 
-- `.css` uses `/* Path: … * Purpose: … * Lines: … */`, with `Path` opening the first line and `Purpose` and `Lines` continuing on their own. `.md` uses an HTML comment with the three fields on their own lines, as this file's header above does. `.gitignore` and `.env.example` use `# Path:`, then `# Purpose:`, then `# Lines:`.
+- `.css` uses `/* Path: …` opening the comment on the first line, with ` * Purpose: …` and ` * Lines: …` each on its own line and ` */` closing it. `.md` uses an HTML comment with the three fields on their own lines, as this file's header above does. `.gitignore` and `.env.example` use `# Path:`, then `# Purpose:`, then `# Lines:`.
 - `Path` is repository-root-relative and identical to the path the tree lists. `Purpose` is the file's one-sentence purpose from the plan. `Lines` is the file's real total length, the header included: set it once the content is final, and record the same number in the manifest.
-- The example above shows `src/utils/format.ts` at its real 573 lines, while 380 is the plan's budget for that path: the header carries the file's real total length, and the manifest records that length beside the budget, so neither figure can be read for the other.
+- The example above shows `src/utils/format.ts` at its real 577 lines, while 380 is the plan's budget for that path: the header carries the file's real total length, and the manifest records that length beside the budget, so neither figure can be read for the other.
 - Exempt, because the format permits no comment: `package.json`, `tsconfig.json` and `.prettierrc.json`. Their counts are still recorded in the manifest.
 
 ## 5. The per-phase output contract

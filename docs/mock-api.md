@@ -1,7 +1,7 @@
 <!--
-  Path: docs/mock-api.md
-  Purpose: The endpoint contract with the demonstration credentials and the latency and failure switches
-  Lines: 212
+Path: docs/mock-api.md
+Purpose: The endpoint contract with the demonstration credentials and the latency and failure switches
+Lines: 212
 -->
 
 # The SalesPro mock API
