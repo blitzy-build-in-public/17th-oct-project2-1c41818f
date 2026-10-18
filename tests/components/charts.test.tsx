@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/charts.test.tsx
  * Purpose: Scale mathematics, rendered geometry and the data-table alternative
- * Lines: 486
+ * Lines: 548
  */
 
 import { describe, expect, it } from "vitest";
@@ -87,6 +87,14 @@ function drawingOf(container: HTMLElement): SVGSVGElement {
   return svg;
 }
 
+/** The value-axis ticks a drawing wrote: a value label is anchored at its end, a band label at its middle, so
+ *  the two axes of one chart are told apart by the anchor rather than by their order in the markup. */
+function axisLabelsOf(container: HTMLElement): string[] {
+  return [...container.querySelectorAll('text[text-anchor="end"]')].map(
+    (node) => node.textContent ?? "",
+  );
+}
+
 /** The bars a bar chart drew: their pointer regions carry `data-band`, the bars themselves do not. */
 function barsOf(container: HTMLElement): SVGRectElement[] {
   return [...container.querySelectorAll("rect")].filter((rect) => !rect.hasAttribute("data-band"));
@@ -160,7 +168,7 @@ describe("the chart scales", () => {
   it("generates ascending, evenly spaced ticks and writes each through its formatter", () => {
     const ticks = scales.linearTicks(0, 100, 5);
     const scale = scales.createLinearScale({ domain: [0, 20_000], range: [200, 0], nice: true });
-    const marks = scales.buildValueTicks(scale, formatMoneyCompact);
+    const marks = scales.buildValueTicks(scale, (value: number) => formatMoneyCompact(value));
     const bands = scales.buildBandTicks(
       scales.createBandScale({ domain: BAND_KEYS, range: [0, 100] }),
     );
@@ -266,6 +274,27 @@ describe("the chart scales", () => {
     ]);
   });
 
+  it("tells a count of people from a metric that carries a fraction", () => {
+    const counts = [
+      oneBandSeries("new", "New customers", 0, 3),
+      oneBandSeries("back", "Returning", 1, 0),
+    ];
+    const ratio = oneBandSeries("conversion", "Conversion", 2, 0.35);
+    expect(scales.hasWholeValues(counts)).toBe(true);
+    expect(scales.hasWholeValues([...counts, ratio])).toBe(false);
+    // A series carrying no finite point states nothing, and neither does a set of them.
+    expect([
+      scales.hasWholeValues([]),
+      scales.hasWholeValues([makeChartSeries({ points: [] })]),
+    ]).toEqual([false, false]);
+    expect(
+      scales.hasWholeValues([
+        oneBandSeries("units", "Units", 3, 2),
+        oneBandSeries("broken", "Broken", 4, Number.NaN),
+      ]),
+    ).toBe(true);
+  });
+
   it("maps each series token reference to one stable, distinct class name", () => {
     const names = CHART_SERIES_TOKEN_REFERENCES.map((reference, index) =>
       scales.seriesClassName(reference, index),
@@ -315,6 +344,39 @@ describe("the chart renderers", () => {
     expect(screen.getByRole("status")).toHaveTextContent(DAY_TWO_LABEL);
     await user.hover(svg.querySelectorAll("rect")[0]);
     expect(screen.getByRole("status").textContent).toBe(bandOne);
+  });
+
+  it("writes a large money axis in one notation and keeps the exact figure in the table", async () => {
+    const year = makeChartSeries({
+      id: "net-year",
+      label: "Net revenue",
+      points: [point(BAND_ONE, 1_278_048), point(BAND_TWO, 1_450_000)],
+    });
+    const { container } = renderWithProviders(<LineChart series={[year]} title={CHART_TITLE} />);
+    await screen.findByRole("img", { name: CHART_TITLE });
+
+    // Every tick of the axis states a magnitude the same way, which is what stops `$0.00` sitting beside `$5K`.
+    expect(axisLabelsOf(container)).toEqual(["$0", "$5K", "$10K", "$15K"]);
+    expect(axisLabelsOf(container)).not.toContain(formatMoney(0));
+    const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
+    expect(within(table).getByRole("cell", { name: formatMoney(1_278_048) })).toBeInTheDocument();
+  });
+
+  it("draws one baseline tick for a series of zeros instead of a degenerate axis", async () => {
+    const zeros = [oneBandSeries("net-zero", "Net revenue", 0, 0)];
+    const { container } = renderWithProviders(<LineChart series={zeros} title={CHART_TITLE} />);
+    await screen.findByRole("img", { name: CHART_TITLE });
+    const plotArea = scales.computePlotArea({
+      width: scales.CHART_VIEWBOX_WIDTH,
+      height: scales.DEFAULT_CHART_HEIGHT,
+    });
+
+    expect(
+      [...container.querySelectorAll(".sp-chart__tick")].map((node) => node.textContent),
+    ).toEqual([formatMoney(0), DAY_ONE_LABEL]);
+    // And the one value there is lies on the baseline the axis starts at, not halfway up a span no figure reaches.
+    const marker = drawingOf(container).querySelector("circle");
+    expect(Number(marker?.getAttribute("cy"))).toBe(plotArea.y + plotArea.height);
   });
 
   it("draws grouped bars, their value labels, a legend and the paired data table", async () => {

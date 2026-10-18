@@ -1,10 +1,10 @@
 /**
  * Path: src/features/admin/SalesChart.tsx
  * Purpose: The dashboard's revenue chart with a bucket control and a series toggle for category or channel
- * Lines: 352
+ * Lines: 361
  */
 
-import { useCallback, useId } from "react";
+import { useCallback, useId, useMemo } from "react";
 import type { ChangeEvent, ElementType, ReactElement } from "react";
 
 import { LineChart } from "@/components/charts/LineChart";
@@ -16,6 +16,7 @@ import { ADMIN_COPY } from "@/constants/content";
 import { GRANULARITY_OPTIONS } from "@/constants/taxonomy";
 import { bucketLabel } from "@/lib/analyticsService";
 import type { BucketGranularity, ChartSeries, RevenueGroupBy } from "@/types/analytics";
+import type { DateRange } from "@/types/common";
 import { formatDateRange } from "@/utils/dates";
 
 /*
@@ -304,11 +305,19 @@ export function SalesChart({
   const hasTitle = hasCopy(title);
   const description = describePeriod(from, to, baselineLabel);
 
+  // The period the series cover, when the page states one: it is what the bucket wording qualifies a clipped
+  // band by, and it is built from the two props so the formatter below stays stable while they hold still.
+  const range = useMemo<DateRange | undefined>(
+    () => (from === undefined || to === undefined ? undefined : { from, to }),
+    [from, to],
+  );
+
   // The axis, the readout and the paired table read a band key through one formatter, so the bucket's human
-  // wording has one home in `src/lib/analyticsService.ts`; an already-worded key is printed as it stands.
+  // wording has one home in `src/lib/analyticsService.ts`, told which period it is wording over; an
+  // already-worded key is printed as it stands.
   const formatLabel = useCallback<LabelFormatter>(
-    (key: string): string => bucketLabel(key, bucket) || key,
-    [bucket],
+    (key: string): string => bucketLabel(key, bucket, range) || key,
+    [bucket, range],
   );
 
   const controls = (

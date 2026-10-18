@@ -24,9 +24,9 @@ import { useCheckout } from "@/state/CheckoutContext";
  * --breakpoint-md; `sp-step__actions` for the row the step's two controls take, which the sheet swaps
  * at --breakpoint-md so the first control in the DOM sits on the right and the second on the left,
  * while a phone stacks them in that same DOM order; and `sp-summary__note`, the muted caption register
- * the submitting line reads in. Earlier sheets supply the rest, reached through the components rather
- * than written here: `sp-field` with its `__label`, `__control`, `__hint` and `__error` parts, and
- * `sp-input`, all from `src/styles/controls.css`.
+ * the submitting line reads in, which `src/styles/summary-panel.css` owns. Earlier sheets supply the
+ * rest, reached through the components rather than written here: `sp-field` with its `__label`,
+ * `__control`, `__hint` and `__error` parts, and `sp-input`, all from `src/styles/controls.css`.
  *
  * Two boundaries hold this file to collecting and judging, and neither is stated here: the card's own
  * rules are `src/utils/validation.ts`', run by the checkout context when the step is left, and the

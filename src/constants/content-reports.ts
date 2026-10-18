@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content-reports.ts
  * Purpose: The back-office register of the user-facing copy: the refusal a signed-in visitor whose role cannot reach an admin path is told, the shared range control's labels, presets and messages, the dashboard's labels and the reports' headings and export note, split out of src/constants/content.ts, which re-exports them
- * Lines: 103
+ * Lines: 112
  */
 
 /*
@@ -74,6 +74,15 @@ export const ADMIN_COPY = {
 } as const;
 /** The name each sales channel shows in the revenue breakdown's series labels. */
 export const CHANNEL_LABELS = { web: "Web", mobile: "Mobile app", store: "Store" } as const;
+/** The word each KPI change's direction is stated in, beside the figure the formatter writes.
+ *  Consumer: `src/features/admin/KpiCard.tsx`, whose arrow is hidden from assistive technology, so the
+ *  direction has to be written as well — a rise and a fall of equal size must not read as one text. */
+export const KPI_CHANGE_WORDS = {
+  up: "up",
+  down: "down",
+  flat: "no change",
+  unknown: "no comparable data",
+} as const;
 /** States how one KPI moved against its named baseline, from both values already formatted. */
 export const kpiChangeLabel = (formattedChange: string, baselineLabel: string): string =>
   `${formattedChange} versus the ${baselineLabel.toLowerCase()}`;

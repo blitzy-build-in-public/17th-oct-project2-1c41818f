@@ -1,10 +1,10 @@
 /**
  * Path: src/utils/isoInstants.ts
  * Purpose: Parses ISO 8601 text into local instants, moves an instant by whole days or hours, and resolves a range into the bounds a scan compares.
- * Lines: 110
+ * Lines: 132
  */
 
-import type { DateRange, IsoDateString } from "@/types/common";
+import type { DateRange, IsoDateString, SortDirection } from "@/types/common";
 
 /**
  * The instant level of the date foundation: what an ISO text names, and whether an instant falls inside a
@@ -107,4 +107,26 @@ export function isWithinPreparedRange(iso: IsoDateString, prepared: PreparedRang
   if (!date) return false;
   const time = date.getTime();
   return time >= prepared.startTime && time < prepared.endTime;
+}
+
+/**
+ * Sorts `items` by the ISO value `select` reads from each, ascending unless `direction` says `desc`, without
+ * touching the input. Each record is parsed once rather than once per comparison, an unparsable value sorts
+ * last whichever way the order runs, and the order is stable, so equal instants keep the order they arrived
+ * in. It belongs to the instant level because the comparison is of parsed instants, and `src/utils/dates.ts`
+ * re-exports it so every consumer's path still resolves it.
+ */
+export function sortByIso<TItem>(
+  items: readonly TItem[],
+  select: (item: TItem) => IsoDateString,
+  direction: SortDirection = "asc",
+): TItem[] {
+  const order = direction === "desc" ? -1 : 1;
+  const entries = items.map((item) => ({ item, time: parseIso(select(item))?.getTime() ?? null }));
+  entries.sort((left, right) => {
+    if (left.time === null) return right.time === null ? 0 : 1;
+    if (right.time === null) return -1;
+    return order * (left.time - right.time);
+  });
+  return entries.map((entry) => entry.item);
 }

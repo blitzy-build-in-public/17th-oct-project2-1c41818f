@@ -1,12 +1,12 @@
 <!--
 Path: docs/architecture.md
 Purpose: The layers, the import rules and the data flow any new file must fit
-Lines: 277
+Lines: 285
 -->
 
 # Architecture
 
-SalesPro is one client-rendered React 19 + TypeScript application: a storefront and a sales back office in the same bundle, with no server, database or external service anywhere in it. Every request is answered in the browser by `src/lib/mockServer.ts` behind `src/lib/apiClient.ts`, and the only durable state in the product is the cart and the session, kept in `localStorage` through `src/utils/storage.ts`.
+SalesPro is one client-rendered React 19 + TypeScript application: a storefront and a sales back office in the same bundle, with no server, database or external service anywhere in it. Every request is answered in the browser by `src/lib/mockServer.ts` behind `src/lib/apiClient.ts`, and the durable state in the product — the cart, the session, the last-used report range, the read credential of each order this browser placed, the orders this browser created and the placement credential the seam recorded for each of those orders — is kept in `localStorage` through `src/utils/storage.ts`.
 
 This document fixes where a new file belongs, which imports are legal, how data moves through the product, and where a change of a given kind lands. The endpoint contract lives in `docs/mock-api.md`; the naming, file-size, duplication and formatting conventions live in `docs/contributing.md`.
 
@@ -29,14 +29,15 @@ This document fixes where a new file belongs, which imports are legal, how data 
 The 600-line ceiling is never raised. When one concern cannot be held in one file it is split along its own seam into a second path in the same layer, the two together holding what the one file held, and the split path is imported by the concrete path that owns the concern — the product has no barrel `index.ts` anywhere, so an importer always names the file that owns what it needs.
 
 - `src/lib/mockServer.ts` → `src/lib/apiContract.ts`, `src/lib/apiRoutes.ts`, `src/lib/apiRequests.ts`, `src/lib/apiOrders.ts`
-- `src/lib/reportService.ts` → `src/lib/reportSeries.ts`; `src/data/repositories.ts` → `src/data/collectionStore.ts`
+- `src/lib/reportService.ts` → `src/lib/reportSeries.ts`; `src/data/repositories.ts` → `src/data/collectionStore.ts`, and the durable record of the orders this browser created → `src/data/placedOrders.ts`
 - the chart files → `src/components/charts/chartGeometry.ts`, `barGeometry.ts`, `lineChartModel.ts`
-- `src/utils/dates.ts` → `src/utils/isoInstants.ts`, whose names `dates.ts` re-exports so no consumer changes
-- the service rule engines → `src/utils/pricingRules.ts`, `orderRules.ts`, `catalogRules.ts`, `searchRules.ts`, `analyticsRules.ts`, `reportRules.ts` and `accountRules.ts`, whose names their services re-export so no consumer's import changes
+- `src/utils/dates.ts` → `src/utils/isoInstants.ts` and `src/utils/dateDisplay.ts`, whose names `dates.ts` re-exports so no consumer changes
+- `src/utils/format.ts` → `src/utils/formatPrimitives.ts`, which `format.ts` imports one way and re-exports the members consumers read from it
+- the service rule engines → `src/utils/pricingRules.ts`, `orderRules.ts`, `catalogRules.ts`, `searchRules.ts`, `analyticsRules.ts`, `reportRules.ts`
 - `src/styles/catalog.css` → `src/styles/catalog-landing.css`, `src/styles/catalog-detail.css`
-- `src/styles/commerce.css` → `src/styles/commerce-cart.css`, which the mapped sheet loads with `@import`
-- `src/constants/content.ts` → `src/constants/content-reports.ts`, whose names `content.ts` re-exports so no consumer changes
-- `tests/components/controls.test.tsx` → `tests/components/overlays.test.tsx`, the overlay family's cases
+- `src/styles/commerce.css` → the cart and mini-cart register in `src/styles/commerce-cart.css`, the checkout's step indicator in `src/styles/commerce-steps.css` and the order summary panel register in `src/styles/summary-panel.css`, each loaded by the mapped sheet with `@import` at the position the moved rules held
+- `src/constants/content.ts` → the account surfaces' copy in `src/constants/content-account.ts` and the back-office and report copy in `src/constants/content-reports.ts`, both re-exported by `content.ts`, so no consumer changes
+- `tests/components/controls.test.tsx` → `tests/components/overlays.test.tsx`, the overlay family's own suite
 
 The service rule engines are placed in Foundations for a second reason on top of the ceiling: the pure rules a service applies are the same rules `src/data/repositories.ts` and its store half compose to answer a route, and the data module may import only its own layer or one below it. So each engine lives in `src/utils/*Rules.ts` — pricing, order, catalog, search, analytics, report and account — its service re-exports every name it published before, and each rule still has exactly one body. A file below a service never imports the service.
 
@@ -48,7 +49,7 @@ The service rule engines are placed in Foundations for a second reason on top of
 Three corollaries the tree implements:
 
 - No feature slice imports `src/data`. `src/data/repositories.ts` and its store half `src/data/collectionStore.ts` are the only readers of the seeded collections, and a page reaches them through a service.
-- No module under `src/components` or `src/features` imports `src/styles`. `src/main.tsx` is the product's only importer of the eight stylesheets, and the further sheets (`controls.css`, `data-display.css`, `page-header.css`, `tabs-accordion.css`, `catalog-landing.css`, `catalog-detail.css`, `commerce-cart.css`) reach the page through `@import`. Classes are consumed by name.
+- No module under `src/components` or `src/features` imports `src/styles`. `src/main.tsx` is the product's only importer of the eight stylesheets, and the further sheets (`controls.css`, `data-display.css`, `page-header.css`, `tabs-accordion.css`, `catalog-landing.css`, `catalog-detail.css`, `commerce-cart.css`, `commerce-steps.css`, `summary-panel.css`) reach the page through `@import`. Classes are consumed by name.
 - A shared need is imported from the file that owns it, never through a re-export that hides the owner.
 
 ## 3. Component interaction
@@ -151,6 +152,10 @@ route → feature component → a context selector or feature hook → a domain 
 
 A write runs the same path and then dispatches into the reducer that owns the state it changed — cart actions to `src/state/cartReducer.ts`, checkout actions to `src/state/checkoutReducer.ts`, catalogue load transitions to `src/state/catalogReducer.ts`. No component writes another concern's state.
 
+**Which layer owns which durable key.** A key belongs to the layer that owns the fact it holds, and no layer writes another's key. The cart and the session token belong to the state layer (`salespro.cart`, `salespro.session`); the demonstration account store's session table belongs to the data layer, because a session's window is a fact about its issue instant (`src/data/collectionStore.ts`, `salespro.sessions`); the last-used report range belongs to the reports surfaces (`salespro.report-range`); the read credential this browser holds for a guest's order belongs to the domain-services layer (`src/lib/orderPlacements.ts`, `salespro.order-tokens`); and the two records a guest's own order is answered from after a reload are split the same way — the **order** to the data layer (`src/data/placedOrders.ts`, `salespro.placed-orders`, written where `createOrderIn` creates it) and the **placement credential** to the seam (`src/lib/apiOrders.ts`, `salespro.order-credentials`, recorded where the account-less order is created).
+
+**Why the data layer reads its own created orders back.** A created order exists nowhere but the store the request was answered from, and that store is rebuilt from the seed generators on every document load, so without a durable record the history would lose it and the confirmation route would refuse a buyer their own order. `createSalesProDataSource` therefore builds the store and immediately reads the record back into it — the collection newest-first, the identifier index, the per-customer grouping and the numbering counters included — and the read that follows answers the order the URL names. Neither the client's copy nor the seam's satisfies that on its own: the client holds a credential, not an order, and the seam holds the credential the read is verified against, not the history the route prints.
+
 ### 4.3 Query state
 
 Search text, facets, sort and page are the one thing that does not live in React state. They live in the URL's search params and are the single source of truth: `src/state/CatalogContext.tsx` reads them through `useSearchParams` and writes them through the readers and writers in `src/utils/queryParams.ts`, and every setter navigates rather than setting a mirrored copy. The consequence is a reload and a shared link behaving alike: the same URL produces the same result set.
@@ -239,9 +244,9 @@ A render failure is caught by the error boundary in `src/App.tsx`, which replace
 - **Money is an integer number of minor units end to end**, never a float, and is formatted only through `src/utils/format.ts`.
 - **Dates are ISO 8601 strings**, parsed, formatted and bucketed only through `src/utils/dates.ts`, which re-exports the instant primitives of `src/utils/isoInstants.ts`.
 - **Identifiers are prefixed strings** (`prod_`, `cat_`, `brd_`, `cus_`, `adr_`, `ord_`, `line_`, `rev_`, `prom_`, `ses_`) produced by the generators in `src/utils/strings.ts`.
-- **Persistence has one door.** Nothing writes to `localStorage` outside `src/utils/storage.ts`, and the keys it uses — `salespro.cart`, `salespro.session`, `salespro.sessions`, `salespro.report-range` — live in `src/constants/config.ts` with the version stamp that discards a payload written by an older shape rather than migrating it.
+- **Persistence has one door.** Nothing writes to `localStorage` outside `src/utils/storage.ts`, and the keys it uses — `salespro.cart`, `salespro.session`, `salespro.sessions`, `salespro.report-range`, `salespro.order-tokens` (the read credential of each order this browser placed without an account), `salespro.placed-orders` (the orders this browser created, owned by `src/data/placedOrders.ts`) and `salespro.order-credentials` (the placement credential the seam recorded for each of those orders, owned by `src/lib/apiOrders.ts`) — live in `src/constants/config.ts` with the version stamp that discards a payload written by an older shape rather than migrating it.
 - **Paths are written once**, in `src/constants/routes.ts`, together with the builders (`productPath`, `categoryPath`, `loginPath`, `registerPath`, `accountOrderPath`, `orderConfirmationPath`) that keep the route table, the navigation and the links from drifting apart.
-- **Text has one home per kind**: all user-facing copy in `src/constants/content.ts`, the controlled vocabulary of categories, brands, sort keys, statuses, and the facet and report definitions in `src/constants/taxonomy.ts`.
+- **Text has one home per kind**: every surface's copy in `src/constants/content.ts` and the two modules it re-exports, `src/constants/content-account.ts` (the account surfaces) and `src/constants/content-reports.ts` (the back office and its reports); and the controlled vocabulary of categories, brands, sort keys, statuses, and the facet and report definitions in `src/constants/taxonomy.ts`.
 - **No package outside the three pinned runtime dependencies** of `package.json` — `react`, `react-dom` and `react-router-dom`, the only non-React runtime import in the tree. Everything a library would have supplied — validation, formatting, the charts, the table, CSV — is built here.
 
 ## 10. Where a change lands

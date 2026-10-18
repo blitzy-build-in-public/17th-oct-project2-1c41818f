@@ -1,13 +1,27 @@
 /**
  * Path: src/utils/format.ts
  * Purpose: Formats money, numbers, percentages and compact values for display across every module
- * Lines: 599
+ * Lines: 573
  */
 
 import { DEFAULT_CURRENCY } from "@/constants/config";
 import type { ReportCellFormat, ReportCellValue } from "@/types/analytics";
 import type { CurrencyCode, MinorUnits } from "@/types/common";
 import { formatDate } from "@/utils/dates";
+import {
+  EMPTY_CELL_TEXT,
+  EMPTY_VALUE_PLACEHOLDER,
+  LOCALE,
+  amountOf,
+  fixedText,
+  formatter,
+  fractionDigitsOf,
+  plainText,
+  signedText,
+  textOf,
+  wholeCountOf,
+} from "@/utils/formatPrimitives";
+import type { DisplayNumber } from "@/utils/formatPrimitives";
 
 /**
  * The boundary this module owns: every figure a surface shows is rendered here, and money only here — a
@@ -18,28 +32,28 @@ import { formatDate } from "@/utils/dates";
  * {@link EMPTY_CELL_TEXT} marks an absent value and renders empty, so absence never reads as a zero;
  * {@link EMPTY_VALUE_PLACEHOLDER} marks a figure that is not finite and renders a dash, never "NaN",
  * "Infinity" or a signed zero. Every function below is pure, total and free of hidden state.
+ *
+ * The machinery all of them are written with — the locale, the `Intl.NumberFormat` cache, the figure coercions
+ * and the machine-readable writers — lives in `src/utils/formatPrimitives.ts`, which this module imports and
+ * does not depend on it back. The three primitive members a consumer also reaches by name through here are
+ * re-exported below, so every existing import path still resolves them.
  */
 
-/** The one locale numbers render in; the product ships one language and one currency. */
-const LOCALE = "en-US";
-/** The most fraction digits `Intl.NumberFormat` accepts, which bounds every digits argument below. */
-const MAX_FRACTION_DIGITS = 20;
+export { EMPTY_CELL_TEXT, EMPTY_VALUE_PLACEHOLDER };
+export type { DisplayNumber };
+
 /** The default fraction digits of a plain number: enough for a rate, a share and an average. */
 const DEFAULT_FRACTION_DIGITS = 3;
 /** The fraction digits money carries: the minor unit of the currency, always two. */
 const MONEY_FRACTION_DIGITS = 2;
 /** Below this major amount compact money keeps its cents instead of shortening `$12.34` to `$12.3`. */
 const COMPACT_MONEY_MINIMUM_MAJOR = 1_000;
+/** The fraction digit a compact money figure keeps by default: `$50.0K`, one place of magnitude. */
+const COMPACT_CELL_FRACTION_DIGITS = 1;
+/** The fraction digit an axis tick keeps: none, because an axis states magnitudes — `$0`, `$50K`. */
+const AXIS_FRACTION_DIGITS = 0;
 /** How many minor units make one major unit: the single place the factor is written. */
 const MINOR_UNITS_PER_MAJOR = 100;
-
-/** What a cell with nothing to show renders: empty, so an absent value never reads as a zero. */
-export const EMPTY_CELL_TEXT = "";
-/** What a figure that is not a finite number renders: a dash, never "NaN", "Infinity" or "-0". */
-export const EMPTY_VALUE_PLACEHOLDER = "—";
-
-/** A figure a display formatter accepts, or `null`/`undefined` from a record not fully loaded. */
-export type DisplayNumber = number | null | undefined;
 
 /** How `formatNumber` shapes a figure: `digits` bounds the fraction digits (default 3), `grouping` adds
  *  thousands separators (default true) and `fixed` pads to exactly `digits` rather than trimming to it. */
@@ -89,19 +103,6 @@ export interface AvailabilityDisplay {
   readonly lowStockThreshold: number;
 }
 
-/** The `Intl.NumberFormat` instances, one per option set: a table of a hundred cells must reuse them
- *  rather than build one per cell, which is measurable. */
-const FORMATTERS = new Map<string, Intl.NumberFormat>();
-
-/** The `en-US` formatter for one option set, built on first use and reused thereafter. */
-function formatter(key: string, options: Intl.NumberFormatOptions): Intl.NumberFormat {
-  const cached = FORMATTERS.get(key);
-  if (cached) return cached;
-  const created = new Intl.NumberFormat(LOCALE, options);
-  FORMATTERS.set(key, created);
-  return created;
-}
-
 /** Plural selection for counts, and the ordinal selection {@link formatOrdinal} reads. */
 const COUNT_PLURALS = new Intl.PluralRules(LOCALE);
 const ORDINAL_PLURALS = new Intl.PluralRules(LOCALE, { type: "ordinal" });
@@ -114,65 +115,6 @@ const ORDINAL_SUFFIXES: Readonly<Record<Intl.LDMLPluralRule, string>> = {
   many: "th",
   other: "th",
 };
-
-/** The finite amount behind `value`, or `null` when there is no figure to render; a zero keeps one sign,
- *  so no formatter below can print `-0`. */
-function amountOf(value: DisplayNumber): number | null {
-  if (value === null || value === undefined || !Number.isFinite(value)) return null;
-  return value === 0 ? 0 : value;
-}
-
-/** The whole non-negative count behind `value`: a quantity, a stock level, a rank and a review count are
- *  integer counts, and an absent or broken figure reads as zero. */
-function wholeCountOf(value: DisplayNumber): number {
-  const amount = amountOf(value);
-  return amount === null ? 0 : Math.max(0, Math.trunc(amount));
-}
-
-/** The digits argument of a formatter, confined to the range `Intl.NumberFormat` accepts. */
-function fractionDigitsOf(digits: number, fallback: number): number {
-  return Number.isFinite(digits)
-    ? Math.min(MAX_FRACTION_DIGITS, Math.max(0, Math.trunc(digits)))
-    : fallback;
-}
-
-/** A cell's text as it stands: text is itself, a number its plain digits, an absent cell empty. */
-function textOf(value: ReportCellValue | undefined): string {
-  if (value === null || value === undefined) return EMPTY_CELL_TEXT;
-  return typeof value === "string" ? value : String(value);
-}
-
-/** A machine-readable figure with exactly `digits` fraction digits, no grouping and no symbol: the form
- *  a money field and a CSV money cell need, and empty when there is no figure. */
-function fixedText(value: DisplayNumber, digits: number): string {
-  const amount = amountOf(value);
-  if (amount === null) return EMPTY_CELL_TEXT;
-  return formatter(`fixed:${digits}`, {
-    useGrouping: false,
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(amount);
-}
-
-/** A machine-readable figure trimmed to at most `digits` fraction digits, ungrouped and unsigned: the
- *  form a CSV integer, percent or count cell needs. */
-function plainText(value: DisplayNumber, digits: number): string {
-  const amount = amountOf(value);
-  if (amount === null) return EMPTY_CELL_TEXT;
-  return formatter(`plain:${digits}`, {
-    useGrouping: false,
-    maximumFractionDigits: digits,
-  }).format(amount);
-}
-
-/** A signed figure for a change or a point difference: `+5.0`, `-2.5` and `0.0` for no change. */
-function signedText(value: number, digits: number): string {
-  return formatter(`signed:${digits}`, {
-    signDisplay: "exceptZero",
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(value);
-}
 
 /** The direction a difference reports: growth, decline, or no change. */
 function directionOf(difference: number): ChangeDirection {
@@ -265,11 +207,43 @@ export function formatMoneyCompact(
   if (amount === null) return EMPTY_VALUE_PLACEHOLDER;
   const major = amount / MINOR_UNITS_PER_MAJOR;
   if (Math.abs(major) < COMPACT_MONEY_MINIMUM_MAJOR) return formatMoney(amount, currency);
-  return formatter(`money-compact:${currency}`, {
+  return compactMoneyText(major, currency, COMPACT_CELL_FRACTION_DIGITS);
+}
+
+/**
+ * Formats one tick of a money axis in the one notation the whole axis is written in. The axis's own extent
+ * decides it, not the tick in hand: an axis whose largest magnitude reaches {@link COMPACT_MONEY_MINIMUM_MAJOR}
+ * major units writes every tick shortened — `$0`, `$50K` — and one below it writes every tick in full money —
+ * `$0.00`, `$12.34`. An axis that shortened only its large ticks wrote the rest of itself in a different
+ * notation, so a reader compared `$0.00` with `$2K` on one scale. An axis with no finite bound reads as a small
+ * one, because full money is the answer that cannot mislead, and a figure that is not finite renders
+ * {@link EMPTY_VALUE_PLACEHOLDER}.
+ */
+export function formatMoneyAxis(
+  minor: DisplayNumber,
+  domain: readonly [number, number],
+  currency: CurrencyCode = DEFAULT_CURRENCY,
+): string {
+  const amount = amountOf(minor);
+  if (amount === null) return EMPTY_VALUE_PLACEHOLDER;
+  const reach = Math.max(Math.abs(domain[0]), Math.abs(domain[1]));
+  return Number.isFinite(reach) && reach >= COMPACT_MONEY_MINIMUM_MAJOR * MINOR_UNITS_PER_MAJOR
+    ? compactMoneyText(amount / MINOR_UNITS_PER_MAJOR, currency, AXIS_FRACTION_DIGITS)
+    : formatMoney(amount, currency);
+}
+
+/**
+ * The shortened money notation, in the one place its options are written, so a compact cell and an axis tick
+ * cannot drift apart. `digits` is the least it keeps beside its one fraction digit: the axis keeps none, so its
+ * ticks read `$0` and `$50K`, while a cell keeps one, `$50.0K`, where a lone integer figure would look exact.
+ */
+function compactMoneyText(major: number, currency: CurrencyCode, digits: number): string {
+  return formatter(`money-compact:${currency}:${digits}`, {
     style: "currency",
     currency,
     notation: "compact",
     compactDisplay: "short",
+    minimumFractionDigits: digits,
     maximumFractionDigits: 1,
   }).format(major);
 }

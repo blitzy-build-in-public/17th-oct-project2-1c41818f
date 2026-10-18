@@ -1,7 +1,7 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 506
+ * Lines: 516
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
@@ -42,6 +42,9 @@ import {
   type DataStore,
 } from "@/data/collectionStore";
 import { PROMO_CODES } from "@/data/orders";
+// The orders this browser created are durable state of their own: this file writes one where it is created
+// and reads them back into the store it builds, which is the reload-safe half of the confirmation route.
+import { rememberPlacedOrder, restorePlacedOrders } from "@/data/placedOrders";
 // The deferred analytics and report graph — its loader, the shape it resolves to and the refusal a failed
 // fetch answers with — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`.
 import {
@@ -318,8 +321,9 @@ function canFulfil(
 
 /** Builds and stores an order from the settled request: its lines are the snapshot's, so a later catalogue edit
  * cannot rewrite what it bought or what it cost, and its status opens with the entry a freshly placed order
- * carries. A repeat of one submission never reaches here twice: the transport's idempotency store answers the
- * second one from the first order. */
+ * carries. The order is written to this browser's durable record as it is created, so it is not lost with the
+ * document that placed it. A repeat of one submission never reaches here twice: the transport's idempotency
+ * store answers the second one from the first order. */
 function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<Order> {
   const lines = toOrderLines(request.snapshot);
   if (!lines.every((line) => canFulfil(store, line))) {
@@ -357,6 +361,9 @@ function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<
     else rows.unshift(order);
     for (const line of order.lines) store.verifiedPurchases.add(purchaseKey(owner, line.productId));
   }
+  // The order exists from here on in this browser, not only in this document: the record written now is what
+  // the store a reload builds reads back, so the confirmation route it reopens answers this order again.
+  rememberPlacedOrder(order);
   return accept(order);
 }
 
@@ -422,7 +429,9 @@ function runReportOver(
 /**
  * Builds a fresh data source over the seeded collections: one independent store per call, so two sources answer
  * alike — the determinism `tests/unit/lib/mockServer.test.ts` measures by comparing two passes — and a write
- * through either is invisible to the other.
+ * through either is invisible to the other. The orders this browser created are read into the store as it is
+ * built, so a document that loads after a submission answers that order again instead of losing it with the
+ * document that placed it.
  *
  * Every member's contract is the one `SalesProDataSource` declares: what it returns, what it refuses with and
  * which read it serves. Nothing here reaches `src/lib/apiClient.ts` or a service's async method, which would
@@ -432,6 +441,7 @@ function runReportOver(
  */
 export function createSalesProDataSource(): SalesProDataSource {
   const store = createStore();
+  restorePlacedOrders(store);
   return {
     // The catalogue: filtered, faceted, sorted, searched and paged by the catalogue and search services.
     listProducts: (filter) => cataloguePage(store, filter),

@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog.css
  * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
- * Lines: 585
+ * Lines: 590
  */
 
 /* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
@@ -285,8 +285,13 @@
 .sp-facets {
   display: none;
 }
-/* A two-column grid, so the panel's heading and its clear action share the first row while every facet group below
- * spans both tracks. */
+/* A two-column grid, so the panel's heading and its clear action share the first row while everything below spans
+ * both tracks. The second track is `auto` and exists for the clear action alone, so every other child is placed
+ * across both tracks by the rule below rather than left to auto-placement: an `auto` track takes its item's
+ * max-content contribution, so a child that landed in it would hold the width it asked for and squeeze the first
+ * track — the panel's whole content width — to nothing. That is the failure measured on the settled-empty panel,
+ * whose only other child is the notice: `grid-template-columns` read `0px 210px` instead of `210px 0px`, and
+ * `.sp-facets__legend` measured 0px wide across seven line boxes, rendering one character per line. */
 .sp-facets__panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

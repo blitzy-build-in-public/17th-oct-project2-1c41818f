@@ -1,7 +1,7 @@
 /**
  * Path: src/data/customers.ts
  * Purpose: The seeded customer base of 40 accounts including 2 administrators, with profiles, digests and addresses
- * Lines: 433
+ * Lines: 492
  */
 
 import { DEMO_ACCOUNTS } from "@/constants/config";
@@ -33,10 +33,43 @@ const SECOND_ADMIN_INDEX = 2;
 const ADDRESS_COUNT_MIN = 1;
 const ADDRESS_COUNT_SPREAD = 2;
 
-/** How far back an account is dated — four hundred days or more, so it predates the trailing year the
- *  order history covers — and how recently it last signed in, never in the future. */
+/** How far back an ordinary account is dated: four hundred days or more, so it predates the trailing year
+ *  the order history covers and can own the orders `src/data/orders.ts` attributes to it. The cohort of
+ *  accounts declared below is the one exception, and it is dated inside that year. */
 const ACCOUNT_AGE_MIN_DAYS = 400;
 const ACCOUNT_AGE_MAX_DAYS = 900;
+
+/** The cohort of accounts dated inside the trailing year rather than before it, and how far back each of
+ *  them is dated.
+ *
+ *  Both readers of the "new customers" dimension — the KPI payload `src/lib/analyticsService.ts` fills, and
+ *  the column and summary `src/lib/reportService.ts` builds for the customer report — count the accounts
+ *  whose `createdAt` falls inside the range they cover, and a range the reports accept ends today and spans
+ *  at most 366 days. Dated four hundred days back or more, every account falls outside all of them, so the
+ *  count, the column and its chart state zero wherever they are read; this cohort is what they are stated
+ *  from.
+ *
+ *  It is the last {@link NEW_CUSTOMER_COHORT_SIZE} generated shoppers, and they own no order: the history
+ *  attributes its sixty customer orders through `ATTRIBUTION_PLAN` in `src/data/orders.ts`, whose positions
+ *  stop at index 24 and never reach these accounts. Dating them inside the year therefore breaks no order
+ *  the seed places — an account still predates every order attributed to it.
+ *
+ *  Ages are read off a position in the cohort rather than drawn: the first is dated
+ *  {@link NEW_CUSTOMER_FIRST_AGE_DAYS} days back and each account after it
+ *  {@link NEW_CUSTOMER_AGE_STEP_DAYS} days further, so the eight spread across the year's months with the
+ *  newest inside the thirty days a report opens on, instead of all eight landing in one bucket. */
+const NEW_CUSTOMER_COHORT_SIZE = 8;
+const NEW_CUSTOMER_COHORT_FIRST_INDEX = CUSTOMER_TOTAL - NEW_CUSTOMER_COHORT_SIZE;
+const NEW_CUSTOMER_FIRST_AGE_DAYS = 10;
+const NEW_CUSTOMER_LAST_AGE_DAYS = 325;
+const NEW_CUSTOMER_AGE_STEP_DAYS = Math.floor(
+  (NEW_CUSTOMER_LAST_AGE_DAYS - NEW_CUSTOMER_FIRST_AGE_DAYS) / (NEW_CUSTOMER_COHORT_SIZE - 1),
+);
+
+/** How recently an ordinary account last signed in, in days before the anchor day: at least a day ago and
+ *  never in the future. A recently dated account takes its own age as the ceiling, so no seeded sign-in is
+ *  dated before the account it belongs to existed; the youngest account the seed dates is ten days old, so
+ *  that ceiling never falls below the floor. */
 const LAST_LOGIN_MIN_DAYS = 1;
 const LAST_LOGIN_SPAN_DAYS = 150;
 
@@ -304,6 +337,37 @@ function timestampOn(day: IsoDateString, rand: SeededRandom): IsoDateTimeString 
   return toIsoDateTime(at);
 }
 
+/** How many days back the account at `index` was created.
+ *
+ *  An account of the cohort is dated by its position in it, so its age is the same on every build and needs
+ *  no draw; every other account draws one between {@link ACCOUNT_AGE_MIN_DAYS} and
+ *  {@link ACCOUNT_AGE_MAX_DAYS}, which dates it before the trailing year the order history covers.
+ *
+ *  @param index - The account's position in the base, counted from zero.
+ *  @param rand - The build's stream, drawn from for every account outside the cohort.
+ *  @returns The number of days before the anchor day the account was created.
+ */
+function accountAgeDays(index: number, rand: SeededRandom): number {
+  const cohortPosition = index - NEW_CUSTOMER_COHORT_FIRST_INDEX;
+  if (cohortPosition >= 0 && cohortPosition < NEW_CUSTOMER_COHORT_SIZE) {
+    return NEW_CUSTOMER_FIRST_AGE_DAYS + cohortPosition * NEW_CUSTOMER_AGE_STEP_DAYS;
+  }
+  return rand.int(ACCOUNT_AGE_MIN_DAYS, ACCOUNT_AGE_MAX_DAYS);
+}
+
+/** How many days before the anchor day an account created `ageDays` days ago last signed in: inside
+ *  {@link LAST_LOGIN_SPAN_DAYS}, and never on the day it was created or before it — a recently dated account
+ *  caps the sign-in at the day after its creation rather than at the span.
+ *
+ *  @param ageDays - The account's own age in days, the ceiling when it is the smaller of the two.
+ *  @param rand - The build's stream, drawn from once.
+ *  @returns The number of days before the anchor day the account last signed in.
+ */
+function lastLoginDaysBack(ageDays: number, rand: SeededRandom): number {
+  const ceiling = Math.min(LAST_LOGIN_SPAN_DAYS, ageDays - LAST_LOGIN_MIN_DAYS);
+  return rand.int(LAST_LOGIN_MIN_DAYS, ceiling);
+}
+
 /** The salted digest a seeded account stores for the shared demonstration password.
  *
  *  Demonstration only, stated plainly: this is an in-browser account store, not a security boundary.
@@ -381,6 +445,7 @@ export function buildCustomerSeed(): CustomerSeed {
     const plan = planCustomer(index, taken, rand);
     taken.add(plan.email);
     const book = buildAddressBook(plan, rand);
+    const ageDays = accountAgeDays(index, rand);
     addresses.push(...book);
     customers.push({
       id: customerId(plan.email),
@@ -389,14 +454,8 @@ export function buildCustomerSeed(): CustomerSeed {
       lastName: plan.lastName,
       phone: book[0].phone,
       role: plan.role,
-      createdAt: timestampOn(
-        addDays(anchorDay, -rand.int(ACCOUNT_AGE_MIN_DAYS, ACCOUNT_AGE_MAX_DAYS)),
-        rand,
-      ),
-      lastLoginAt: timestampOn(
-        addDays(anchorDay, -rand.int(LAST_LOGIN_MIN_DAYS, LAST_LOGIN_SPAN_DAYS)),
-        rand,
-      ),
+      createdAt: timestampOn(addDays(anchorDay, -ageDays), rand),
+      lastLoginAt: timestampOn(addDays(anchorDay, -lastLoginDaysBack(ageDays, rand)), rand),
       loyaltyTier: LOYALTY_TIERS[index % LOYALTY_TIERS.length],
       marketingOptIn: rand.chance(MARKETING_OPT_IN_CHANCE),
       addressIds: book.map((entry) => entry.id),

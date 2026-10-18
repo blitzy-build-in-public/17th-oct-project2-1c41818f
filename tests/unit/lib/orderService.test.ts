@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/orderService.test.ts
  * Purpose: Order construction from a snapshot, numbering, status transitions and snapshot immutability
- * Lines: 580
+ * Lines: 599
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -433,17 +433,25 @@ describe("the transport surface", () => {
     return outcome.value;
   }
 
+  /** One placement beside the key it was submitted under: the credential its own read presents. */
+  async function placeOrderWithKey(
+    snapshot: PricedCart,
+    contact: OrderContact,
+    sessionToken?: string,
+  ): Promise<{ readonly order: Order; readonly key: string }> {
+    const key = createIdempotencyKey();
+    const outcome = await createOrder(buildOrderInput(snapshot, contact, key), { sessionToken });
+    if (!outcome.ok) throw new Error(`The order was refused: ${outcome.error.code}`);
+    return { order: outcome.value, key };
+  }
+
   /** Places one order through the service and returns it, failing the case when the seam refused it. */
   async function placeOrder(
     snapshot: PricedCart,
     contact: OrderContact,
     sessionToken?: string,
   ): Promise<Order> {
-    const outcome = await createOrder(buildOrderInput(snapshot, contact, createIdempotencyKey()), {
-      sessionToken,
-    });
-    if (!outcome.ok) throw new Error(`The order was refused: ${outcome.error.code}`);
-    return outcome.value;
+    return (await placeOrderWithKey(snapshot, contact, sessionToken)).order;
   }
 
   /** Places one invoice order for a session: the shape every case here but the card one uses. */
@@ -507,7 +515,7 @@ describe("the transport surface", () => {
     expect(theirHistory.items.map((row) => row.id)).toEqual([theirOrder.id]);
   });
 
-  it("keeps another account out of an order, and answers a guest's order by its identifier", async () => {
+  it("keeps another account out of an order, and reads a guest's order by its placement credential alone", async () => {
     const mine = registerBuyer("owner");
     const theirs = registerBuyer("stranger");
     const ownOrder = await placeInvoiceOrder(seededSnapshot(), mine.session.token);
@@ -530,17 +538,28 @@ describe("the transport surface", () => {
     if (noHistory.ok) throw new Error("A history is not readable without a session.");
     expect(noHistory.error.status).toBe(401);
 
-    // A guest's order names no account, so it answers to whoever holds the identifier its confirmation
-    // route carries and is reload-safe with no session at all.
-    const guest = await placeOrder(seededSnapshot(), contactFor(INVOICE_PAYMENT));
+    // A guest's order names no account, so the identifier its confirmation route carries reaches nothing:
+    // it answers the credential the placement was submitted under, and every other caller is refused as a
+    // foreign account-owned order is — the anonymous one before ownership, the stranger with `404`.
+    const placed = await placeOrderWithKey(seededSnapshot(), contactFor(INVOICE_PAYMENT));
+    const guest = placed.order;
     expect(guest.customerId).toBeNull();
-    const read = await getOrder(guest.id);
+    const uncredentialed = await getOrder(guest.id);
+    if (uncredentialed.ok) throw new Error("An account-less order is not readable without one.");
+    expect(uncredentialed.error).toMatchObject({ status: 401, code: "unauthenticated" });
+    const stranger = await getOrder(guest.id, token);
+    if (stranger.ok) throw new Error("Another account reads an account-less order.");
+    expect(stranger.error).toMatchObject({ status: 404, code: "order-not-found" });
+
+    // The credential the submission carried, and only that, answers the read in full.
+    const read = await getOrder(guest.id, { orderToken: placed.key });
     if (!read.ok) throw new Error(`The order could not be read: ${read.error.code}`);
     expect(read.value).toMatchObject({
       id: guest.id,
       orderNumber: guest.orderNumber,
       customerId: null,
     });
+    expect(read.value.shippingAddress).toEqual(guest.shippingAddress);
   });
 
   it("discards a card at the seam: an order keeps its brand and last four digits only", async () => {

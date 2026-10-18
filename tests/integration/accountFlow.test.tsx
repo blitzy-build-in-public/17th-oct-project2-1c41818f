@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/accountFlow.test.tsx
  * Purpose: Sign-in, profile edit, order history and the address book, plus the unauthenticated redirect.
- * Lines: 657
+ * Lines: 674
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,7 +23,7 @@ import {
   VALIDATION_MESSAGES,
   documentTitle,
 } from "@/constants/content";
-import { ROUTES, loginPath } from "@/constants/routes";
+import { ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
 import { ORDER_STATUS_OPTIONS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { CUSTOMERS } from "@/data/customers";
 import { ORDERS } from "@/data/orders";
@@ -555,6 +555,23 @@ describe("the customer accounts flow", () => {
     await waitFor(() => {
       expect(listedOrderNumbers()).toHaveLength(SHOPPER_ORDERS.length);
     });
+  });
+
+  it("answers another account's order with the way back rather than a retry that cannot", async () => {
+    // A record this session holds no readable copy of: the seam answers it `404`, exactly as it answers an
+    // identifier no order carries, so asking for it again cannot produce the order.
+    const foreign = ORDERS.find(
+      (order) => order.customerId !== null && order.customerId !== SHOPPER.id,
+    );
+    if (foreign === undefined) throw new Error("The seed holds no other account's order.");
+    const { user } = renderApp({ route: accountOrderPath(foreign.id) });
+    await signInAs(user, DEMO_ACCOUNTS.CUSTOMER_EMAIL);
+
+    const failure = await screen.findByRole("alert");
+    expect(failure).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_TITLE);
+    expect(within(failure).queryByRole("button", { name: COMMON_ACTIONS.RETRY })).toBeNull();
+    const back = screen.getByRole("link", { name: ACCOUNT_COPY.ORDER_DETAIL_BACK_LABEL });
+    expect(back.getAttribute("href")).toBe(ROUTES.ACCOUNT_ORDERS);
   });
 
   it("manages the address book: a refusal, an add, an edit, defaults and a confirmed removal", async () => {

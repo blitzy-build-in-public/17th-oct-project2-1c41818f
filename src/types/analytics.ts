@@ -1,7 +1,7 @@
 /**
  * Path: src/types/analytics.ts
  * Purpose: Analytics shapes: sales facts, KPI summaries, chart series, report definitions, columns and results
- * Lines: 406
+ * Lines: 412
  */
 
 import type { Order } from "@/types/commerce";
@@ -82,17 +82,23 @@ export type BaselineKind = "previous-period" | "previous-year";
  *
  * The baseline is named and dated rather than implied: `kind` says which comparison was asked for
  * and `from`/`to` say which days were read, so a KPI card can label what it compares against instead
- * of gesturing at a previous period. A change is a signed percentage — positive growth, negative
- * decline — and `0` means flat, never missing, so no consumer has to treat zero as absent.
+ * of gesturing at a previous period.
+ *
+ * A change is a signed percentage — positive growth, negative decline — where `0` means flat and
+ * `null` means the comparison states no percentage at all: a baseline window that holds no activity,
+ * or a baseline figure of zero against a current figure that differs. The rule is `percentChange`'s
+ * in `src/utils/statistics.ts`, which computes every field here, and `null` is deliberately not
+ * flattened to `0`: a period that grew from nothing is not a period that did not move, and
+ * `formatScaledPercent` in `src/utils/format.ts` renders the null as the placeholder a card shows.
  */
 export interface KpiBaseline {
   readonly kind: BaselineKind;
   readonly from: IsoDateString;
   readonly to: IsoDateString;
-  readonly revenueChangePercent: number;
-  readonly ordersChangePercent: number;
-  readonly unitsChangePercent: number;
-  readonly averageOrderValueChangePercent: number;
+  readonly revenueChangePercent: number | null;
+  readonly ordersChangePercent: number | null;
+  readonly unitsChangePercent: number | null;
+  readonly averageOrderValueChangePercent: number | null;
 }
 
 /**

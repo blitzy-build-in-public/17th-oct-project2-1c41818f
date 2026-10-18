@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/HomePage.tsx
  * Purpose: Landing route composing the hero, featured-products and category-showcase sections
- * Lines: 309
+ * Lines: 310
  */
 
 import type { ReactElement } from "react";
@@ -9,7 +9,8 @@ import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
 import { RELATED_PRODUCTS_LIMIT } from "@/constants/config";
-import { A11Y_COPY, HOME_COPY, PAGE_TITLES, documentTitle } from "@/constants/content";
+import { A11Y_COPY, PAGE_TITLES, documentTitle } from "@/constants/content";
+import { HOME_COPY } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { SORT_OPTIONS } from "@/constants/taxonomy";
 import { CategoryShowcase, type CategoryTile } from "@/features/home/CategoryShowcase";

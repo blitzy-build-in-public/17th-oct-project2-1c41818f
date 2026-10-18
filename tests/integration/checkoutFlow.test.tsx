@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
- * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart.
- * Lines: 600
+ * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart
+ * Lines: 611
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +20,7 @@ import {
   CHECKOUT_STEP_TITLES,
   COMMON_ACTIONS,
   EMPTY_STATES,
+  FEEDBACK_COPY,
   PROMO_REJECTION_MESSAGES,
   VALIDATION_MESSAGES,
   cartButtonLabel,
@@ -30,6 +31,7 @@ import {
   lowStockLabel,
   quantityLabel,
   removeLineLabel,
+  removePromoLabel,
   stepProgressLabel,
 } from "@/constants/content";
 import { ROUTES, accountOrderPath, orderConfirmationPath, productPath } from "@/constants/routes";
@@ -44,8 +46,7 @@ import { formatMoney, parseMoneyToMinor } from "@/utils/format";
 import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
 import type { UserEvent } from "../testUtils";
 
-/* The real application throughout, with nothing stubbed but the transport's one failure switch and no money
-   typed: each figure is read back off the screen as integer minor units. */
+/* The real application throughout: every figure is read back off the screen in integer minor units. */
 
 /** The contact address a guest's checkout is filled with, and the name its delivery address is under. */
 const CONTACT_EMAIL = DEMO_ACCOUNTS.CUSTOMER_EMAIL;
@@ -57,8 +58,7 @@ const CARD_CVC = "123";
 const CURRENT_MONTH = String(new Date().getMonth() + 1);
 const NEXT_YEAR = String(new Date().getFullYear() + 1);
 
-/** The approved demonstration number with its check digit moved on by one, which breaks its Luhn checksum:
- *  the fault is derived from the configured number rather than typed out. */
+/** The approved number with its check digit moved on by one, which breaks its Luhn checksum. */
 const LUHN_FAILING_NUMBER = `${DEMO_CARD_NUMBERS.APPROVED.slice(0, -1)}${String(
   (Number(DEMO_CARD_NUMBERS.APPROVED.slice(-1)) + 1) % 10,
 )}`;
@@ -94,9 +94,8 @@ type SummaryFigures = Readonly<
   Record<"subtotal" | "discount" | "shipping" | "tax" | "total", MinorUnits>
 >;
 
-/** The summary panel the surface under test renders, named by the heading that surface states: the cart's
- *  panel and the checkout's totals panel are two regions under two names, so a caller names the one it
- *  means, and the checkout's name stands as the default because most call sites read that panel. */
+/** The summary panel the surface under test renders, named by the heading that surface states; the cart's and
+ *  the checkout's are two regions under two names, so a caller names the one it means. */
 function summaryPanel(name: string = CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING): HTMLElement {
   return screen.getByRole("region", { name });
 }
@@ -109,8 +108,7 @@ function rowAmount(scope: HTMLElement, label: string): MinorUnits {
   return parseMoneyToMinor(text.slice(text.indexOf(label) + label.length));
 }
 
-/** The figures a summary states once priced. `discountLabel` names the row a single applied code is
- *  stated in, because the cart labels that saving with the code's own name. */
+/** The figures a summary states once priced; `discountLabel` names the row a single applied code is stated in. */
 async function summaryFigures(scope: HTMLElement, discountLabel?: string): Promise<SummaryFigures> {
   await waitFor(() =>
     expect(rowAmount(scope, CART_COPY.SUMMARY_SUBTOTAL_LABEL)).toBeGreaterThan(0),
@@ -148,10 +146,8 @@ function productLinks(): HTMLElement[] {
     .filter((link) => (link.getAttribute("href") ?? "").startsWith(PRODUCT_PATH_PREFIX));
 }
 
-/** The first product link the listing offers, once the listing it leads has rendered. This one wait asks for
- *  more than the suite's own ceiling in `tests/setup.ts`, because it is the file's first paint: the catalogue's
- *  lazy route and the seeded collections behind it are evaluated in a cold module registry, measured at about
- *  two seconds on an idle host and longer while the other files run. */
+/** The first product link the listing offers, once the listing it leads has rendered. This wait asks for more than
+ *  the suite's ceiling in `tests/setup.ts`: a cold module registry measures about two seconds on an idle host. */
 async function firstProductLink(): Promise<HTMLElement> {
   await waitFor(() => expect(productLinks().length).toBeGreaterThan(0), { timeout: 10_000 });
   const link = productLinks()[0];
@@ -162,8 +158,8 @@ async function firstProductLink(): Promise<HTMLElement> {
 /** What a walk into the catalogue asks for. */
 type CartWalk = { readonly quantity?: number; readonly cheapest?: boolean };
 
-/** Walks into the product the catalogue offers first, adds the units asked for from the detail page, asserts
- *  the count the mini-cart the add opens states, and dismisses it — returning the cart row's name. */
+/** Walks into the catalogue's first product, adds the units asked for, asserts the mini-cart's count and returns
+ *  the cart row's name. */
 async function addItemToCart(user: UserEvent, walk: CartWalk = {}): Promise<string> {
   if (walk.cheapest === true) {
     const before = (await firstProductLink()).textContent;
@@ -188,8 +184,7 @@ async function addItemToCart(user: UserEvent, walk: CartWalk = {}): Promise<stri
   return name;
 }
 
-/** A cart holding the units asked for of one product, optionally with the checkout open on its first step:
- *  the cart route is reached from the header's cart control, through the mini-cart's own link. */
+/** A cart holding the units asked for of one product, optionally with the checkout open on its first step. */
 async function cartWithItems(walk: CartWalk = {}, atCheckout = false) {
   const harness = renderApp({ route: ROUTES.CATALOG });
   const name = await addItemToCart(harness.user, walk);
@@ -213,8 +208,7 @@ async function cartWithItems(walk: CartWalk = {}, atCheckout = false) {
   return { ...harness, name };
 }
 
-/** The control a field's own label names: a required field's label ends with its marker, so a field's
- *  name is matched as a pattern rather than as the exact text. */
+/** The control a field's own label names; a required field's label ends with its marker, so it is a pattern. */
 function field(label: string): HTMLElement {
   return screen.getByLabelText(new RegExp(label));
 }
@@ -257,8 +251,7 @@ async function advanceTo(user: UserEvent, label: string, heading: string): Promi
   await screen.findByRole("heading", { name: heading });
 }
 
-/** Waits for the signed-in shopper's contact and saved address to reach the shipping step: the session's
- *  revalidation, the address book's read and the seed that writes it settle in turn. */
+/** Waits for the shopper's contact and saved address to reach the shipping step as its own reads settle. */
 async function awaitSavedShipping(): Promise<void> {
   await waitFor(() => expect(field(ACCOUNT_COPY.EMAIL_LABEL)).toHaveValue(CONTACT_EMAIL));
   const picker = (): HTMLElement =>
@@ -278,9 +271,8 @@ const CARD: CardFill = {
   cvc: CARD_CVC,
 };
 
-/** Writes every judged member of the card, in the order the payment step declares its five controls: the
- *  holder, the number, the expiry's two halves — labelled with notation this file may not restate — and
- *  the security code. */
+/** Writes every judged member of the card, in the order the payment step declares its five controls: holder,
+ *  number, the expiry's two halves and the security code. */
 async function fillCard(user: UserEvent, fill: CardFill): Promise<void> {
   const values = [CARD_HOLDER, fill.number, fill.expiryMonth, fill.expiryYear, fill.cvc];
   const controls = screen.getAllByRole("textbox");
@@ -359,6 +351,7 @@ describe("promo codes", () => {
   it("refuses the codes the basket cannot use, then discounts it with one it can", async () => {
     const { user } = await cartWithItems({ cheapest: true });
     const before = await summaryFigures(summaryPanel(CART_COPY.SUMMARY_HEADING));
+    const promoField = screen.getByLabelText<HTMLInputElement>(CART_COPY.PROMO_FIELD_LABEL);
     const refusals = [
       { code: UNKNOWN_PROMO_CODE, message: PROMO_REJECTION_MESSAGES.unknown },
       {
@@ -368,10 +361,14 @@ describe("promo codes", () => {
     ];
 
     for (const refusal of refusals) {
-      await user.clear(screen.getByLabelText(CART_COPY.PROMO_FIELD_LABEL));
-      await user.type(screen.getByLabelText(CART_COPY.PROMO_FIELD_LABEL), refusal.code);
+      await user.clear(promoField);
+      expect(promoField).toHaveAttribute("aria-invalid", "false");
+      await user.type(promoField, refusal.code);
       await user.click(screen.getByRole("button", { name: CART_COPY.PROMO_APPLY_LABEL }));
       expect(await screen.findByText(refusal.message)).toBeInTheDocument();
+      expect(promoField).toHaveAttribute("aria-invalid", "true");
+      const describedBy = promoField.getAttribute("aria-describedby") ?? "";
+      expect(document.getElementById(describedBy)?.textContent).toBe(refusal.message);
     }
 
     // Neither attempt took anything off, so the basket still states the identity with no discount.
@@ -380,8 +377,8 @@ describe("promo codes", () => {
     expect(unchanged.total).toBe(before.total);
 
     const promo = seededPromo(before.subtotal, "applies");
-    await user.clear(screen.getByLabelText(CART_COPY.PROMO_FIELD_LABEL));
-    await user.type(screen.getByLabelText(CART_COPY.PROMO_FIELD_LABEL), promo.code);
+    await user.clear(promoField);
+    await user.type(promoField, promo.code);
     await user.click(screen.getByRole("button", { name: CART_COPY.PROMO_APPLY_LABEL }));
     const label = `${promo.code} · ${PROMO_KIND_LABELS[promo.kind]}`;
     await waitFor(() =>
@@ -391,6 +388,10 @@ describe("promo codes", () => {
     expect(after.discount).toBeGreaterThan(0);
     expect(after.total).toBeLessThan(before.total);
     expect(after.total).toBe(after.subtotal - after.discount + after.shipping + after.tax);
+
+    await user.click(await screen.findByRole("button", { name: removePromoLabel(promo.code) }));
+    const restored = await summaryFigures(summaryPanel(CART_COPY.SUMMARY_HEADING));
+    expect(restored.total).toBe(before.total);
   });
 });
 
@@ -538,8 +539,7 @@ describe("placing the order", () => {
     );
     const reviewed = await summaryFigures(summaryPanel());
 
-    // The single submission: the control is disabled and busy as the attempt stands, so a second
-    // activation while it does lands on a control that refuses the press.
+    // The single submission: the control is disabled and busy as the attempt stands, so a second press lands nowhere.
     const placeOrder = screen.getByRole("button", { name: CHECKOUT_COPY.PLACE_ORDER_LABEL });
     await user.click(placeOrder);
     expect(placeOrder).toBeDisabled();
@@ -596,5 +596,16 @@ describe("a refused price request", () => {
       CHECKOUT_COPY.CONTINUE_TO_PAYMENT_LABEL,
       CHECKOUT_COPY.PAYMENT_STEP_HEADING,
     );
+  });
+});
+
+describe("an order read refused for want of a session", () => {
+  it("offers the sign-in that resolves it instead of a retry that cannot", async () => {
+    const route = orderConfirmationPath("ord_999999");
+    renderApp({ route });
+    expect(await screen.findByRole("alert")).toHaveTextContent(FEEDBACK_COPY.SIGN_IN_REQUIRED);
+    expect(screen.queryByRole("button", { name: COMMON_ACTIONS.RETRY })).toBeNull();
+    const signIn = screen.getByRole("link", { name: COMMON_ACTIONS.SIGN_IN });
+    expect(signIn).toHaveAttribute("href", `${ROUTES.LOGIN}?returnTo=${encodeURIComponent(route)}`);
   });
 });

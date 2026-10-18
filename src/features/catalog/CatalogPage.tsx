@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 586
+ * Lines: 584
  */
 
 import { useId, useState } from "react";
@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Drawer } from "@/components/ui/Modal";
+import { NotFoundView } from "@/components/ui/NotFoundView";
 import { Pagination } from "@/components/ui/Pagination";
 import { Checkbox, RadioGroup, Select, Switch } from "@/components/ui/Select";
 import { CloseIcon } from "@/components/ui/icons";
@@ -22,7 +23,6 @@ import {
   COMMON_ACTIONS,
   EMPTY_STATES,
   FACET_ANY_LABELS,
-  NOT_FOUND_COPY,
   PAGE_TITLES,
   SEARCH_COPY,
   categoryPageHeading,
@@ -322,12 +322,18 @@ function CatalogFilterRegion({
  * names.
  *
  * The URL is the single store of the query, so the route keeps no filter value and issues no request: it reads
- * `useCatalogFilters()` and `useCatalog()`, and writes only through the setters it is handed, each of which
- * navigates; the one state it holds is whether the small-screen drawer is open. A category URL entered without a
- * category selection has the route's own scope written into the query — `Navigate` does that declaratively, and a
- * selection already in the address bar is the visitor's own — which is what makes the header, the chips, the facet
- * counts and the listing describe one query and a reloaded URL return the identical result set; a write that would
- * empty that scope hands off to the catalogue route rather than being undone by the guard.
+ * `useCatalogFilters()` and `useCatalog()`, and it writes only through the provider's setters, each of which
+ * navigates. The one state it holds is whether the small-screen drawer is open. A category URL entered without a
+ * category selection has the route's own scope written into the query — `Navigate` does that declaratively, so it
+ * is not a render-side effect, and a selection already in the address bar is the visitor's own and is left alone —
+ * which is what makes the header, the chips, the facet counts and the listing describe one query, and a reloaded
+ * URL return the identical result set; a write that would empty that scope hands off to the catalogue route rather
+ * than being undone by the guard. A parent scopes by its subcategories, every seeded product sitting in a leaf.
+ * The results render in the order a load passes through them: the placeholder grid, the shaped failure with its
+ * retry, the empty state offering the one action that helps, then the results with their paging. An address naming
+ * no category the catalogue holds is not this page's heading over a listing with nothing in it — the listing has
+ * no scope to serve — so it renders the shared not-found view in place of the whole page, and the route's single
+ * `h1` names the state the visitor is actually in.
  *
  * @returns The route: its heading block, the filter region in one of its two placements, and the results.
  * @throws When rendered above every `CatalogProvider`, which must itself be inside a router.
@@ -372,6 +378,13 @@ export function CatalogPage(): ReactElement {
     return <Navigate replace to={filtersToPath(pathname, scoped)} />;
   }
 
+  // An address naming a category the catalogue does not hold is the not-found state and not this page showing
+  // nothing: the listing has no scope to serve, so the page's header would name a page the visitor never asked
+  // for. It renders the one shared view, in place of the header and the whole listing region, which is what
+  // keeps the route's single `h1` describing what is on screen. The title above is set before this return and
+  // is left as it is, because the state a visitor is looking at is the one the tab must name.
+  if (isUnknownCategory) return <NotFoundView />;
+
   // A write that would leave this category route unscoped hands off to the catalogue route: the guard above puts
   // the scope back into any category-less URL, so a control that cleared the scope would appear to do nothing.
   // The next state is the query writer's own, so the term, the sort and the page size cross the hand-off with it.
@@ -412,7 +425,7 @@ export function CatalogPage(): ReactElement {
       : category.parentId === null
         ? category.children
         : (categoryTree.find((node) => node.id === category.parentId)?.children ?? []);
-  const panel = isUnknownCategory ? null : (
+  const panel = (
     <CatalogFilterRegion
       facets={view.facets}
       filters={filters}
@@ -437,7 +450,7 @@ export function CatalogPage(): ReactElement {
           title={title}
           description={category === null ? undefined : category.description}
           actions={
-            panel === null || isColumn ? null : (
+            isColumn ? null : (
               <Button
                 className="sp-facets__toggle"
                 variant="secondary"
@@ -471,105 +484,90 @@ export function CatalogPage(): ReactElement {
         <div className="sp-catalog-layout">
           {isColumn ? panel : null}
           <div className="sp-page__body">
-            {isUnknownCategory ? (
-              <EmptyState
-                title={NOT_FOUND_COPY.TITLE}
-                description={NOT_FOUND_COPY.BODY}
-                actionLabel={NOT_FOUND_COPY.ACTION_LABEL}
-                actionHref={ROUTES.CATALOG}
+            <div className="sp-result-meta">
+              {/* Present from the first render and only ever given new text, because a region inserted at
+                  the moment of the update is not announced reliably. This is the page's only count region;
+                  `Pagination` is told so, so it states that figure and announces the page alone. */}
+              <p className="sp-result-count" role="status">
+                {total === null ? "" : productCountAnnouncement(total)}
+              </p>
+              <Select
+                containerClassName="sp-sort"
+                label={CATALOG_COPY.SORT_GROUP_LABEL}
+                options={SORT_OPTIONS}
+                value={filters.sort}
+                // The value is looked up among the vocabulary's own keys rather than cast, so a value the
+                // control did not offer is ignored and the URL keeps the sort it holds.
+                onChange={(event: ChangeEvent<HTMLSelectElement>): void => {
+                  const chosen = SORT_OPTIONS.find((option) => option.value === event.target.value);
+                  if (chosen !== undefined) catalog.setSort(chosen.value);
+                }}
               />
-            ) : (
-              <>
-                <div className="sp-result-meta">
-                  {/* Present from the first render and only ever given new text, because a region inserted at
-                      the moment of the update is not announced reliably. This is the page's only count region;
-                      `Pagination` is told so, so it states that figure and announces the page alone. */}
-                  <p className="sp-result-count" role="status">
-                    {total === null ? "" : productCountAnnouncement(total)}
-                  </p>
-                  <Select
-                    containerClassName="sp-sort"
-                    label={CATALOG_COPY.SORT_GROUP_LABEL}
-                    options={SORT_OPTIONS}
-                    value={filters.sort}
-                    // The value is looked up among the vocabulary's own keys rather than cast, so a value the
-                    // control did not offer is ignored and the URL keeps the sort it holds.
-                    onChange={(event: ChangeEvent<HTMLSelectElement>): void => {
-                      const chosen = SORT_OPTIONS.find(
-                        (option) => option.value === event.target.value,
-                      );
-                      if (chosen !== undefined) catalog.setSort(chosen.value);
-                    }}
-                  />
-                </div>
-                {entries.length === 0 ? null : (
-                  <ul className="sp-active-filters" aria-label={SEARCH_COPY.ACTIVE_FILTERS_HEADING}>
-                    {entries.map((entry) => {
-                      const text = chipText(entry, view.facets, filters);
-                      const key =
-                        entry.kind === "tag"
-                          ? `tag:${entry.value}`
-                          : `${entry.facetId}:${entry.value}`;
-                      return (
-                        <li className="sp-active-filters__chip" key={key}>
-                          <span>{text}</span>
-                          <IconButton
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            label={removeFilterLabel(text)}
-                            icon={<CloseIcon />}
-                            onClick={() => {
-                              // Each chip removes the single value its label names, through the writer's own
-                              // accessor for that facet: clearing a whole facet is the facet group's own clear
-                              // action, and clearing everything is "Clear all".
-                              if (entry.kind === "tag") catalog.toggleTag(entry.value);
-                              else catalog.toggleFacet(entry.facetId, entry.value);
-                            }}
-                          />
-                        </li>
-                      );
-                    })}
-                    <li className="sp-active-filters__clear-all">{clearAllAction}</li>
-                  </ul>
-                )}
-                <section aria-labelledby={resultsHeadingId} aria-busy={isReading}>
-                  <h2 className="sp-visually-hidden" id={resultsHeadingId}>
-                    {CATALOG_COPY.RESULTS_REGION_LABEL}
-                  </h2>
-                  <ProductList
-                    items={answer === null ? [] : answer.items}
-                    status={status}
-                    error={failure}
-                    onRetry={() => {
-                      if (categories.error === null) view.reload();
-                      else categories.reload();
-                    }}
-                    emptyAction={clearAllAction ?? undefined}
-                  />
-                  {/* The paging belongs to the answer, so it is held back until that answer lands. */}
-                  {isReading || answer === null || answer.total === 0 ? null : (
-                    <Pagination
-                      page={answer.page}
-                      pageSize={answer.pageSize}
-                      total={answer.total}
-                      pageCount={answer.pageCount}
-                      hasNext={answer.hasNext}
-                      hasPrevious={answer.hasPrevious}
-                      pageSizeOptions={PAGE_SIZE_OPTIONS}
-                      onPageChange={(page) => catalog.setPage(page)}
-                      onPageSizeChange={(pageSize) => catalog.setPageSize(pageSize)}
-                      // The count region above is this page's, so the pager announces the page alone.
-                      isCountAnnouncedByCaller
-                    />
-                  )}
-                </section>
-              </>
+            </div>
+            {entries.length === 0 ? null : (
+              <ul className="sp-active-filters" aria-label={SEARCH_COPY.ACTIVE_FILTERS_HEADING}>
+                {entries.map((entry) => {
+                  const text = chipText(entry, view.facets, filters);
+                  const key =
+                    entry.kind === "tag" ? `tag:${entry.value}` : `${entry.facetId}:${entry.value}`;
+                  return (
+                    <li className="sp-active-filters__chip" key={key}>
+                      <span>{text}</span>
+                      <IconButton
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        label={removeFilterLabel(text)}
+                        icon={<CloseIcon />}
+                        onClick={() => {
+                          // Each chip removes the single value its label names, through the writer's own
+                          // accessor for that facet: clearing a whole facet is the facet group's own clear
+                          // action, and clearing everything is "Clear all".
+                          if (entry.kind === "tag") catalog.toggleTag(entry.value);
+                          else catalog.toggleFacet(entry.facetId, entry.value);
+                        }}
+                      />
+                    </li>
+                  );
+                })}
+                <li className="sp-active-filters__clear-all">{clearAllAction}</li>
+              </ul>
             )}
+            <section aria-labelledby={resultsHeadingId} aria-busy={isReading}>
+              <h2 className="sp-visually-hidden" id={resultsHeadingId}>
+                {CATALOG_COPY.RESULTS_REGION_LABEL}
+              </h2>
+              <ProductList
+                items={answer === null ? [] : answer.items}
+                status={status}
+                error={failure}
+                onRetry={() => {
+                  if (categories.error === null) view.reload();
+                  else categories.reload();
+                }}
+                emptyAction={clearAllAction ?? undefined}
+              />
+              {/* The paging belongs to the answer, so it is held back until that answer lands. */}
+              {isReading || answer === null || answer.total === 0 ? null : (
+                <Pagination
+                  page={answer.page}
+                  pageSize={answer.pageSize}
+                  total={answer.total}
+                  pageCount={answer.pageCount}
+                  hasNext={answer.hasNext}
+                  hasPrevious={answer.hasPrevious}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  onPageChange={(page) => catalog.setPage(page)}
+                  onPageSizeChange={(pageSize) => catalog.setPageSize(pageSize)}
+                  // The count region above is this page's, so the pager announces the page alone.
+                  isCountAnnouncedByCaller
+                />
+              )}
+            </section>
           </div>
         </div>
       </div>
-      {panel === null || isColumn ? null : (
+      {isColumn ? null : (
         <Drawer
           isOpen={isDrawerOpen}
           onClose={() => setDrawerOpen(false)}

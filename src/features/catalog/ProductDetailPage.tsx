@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 537
+ * Lines: 536
  */
 
 import { useId, useState } from "react";
@@ -15,6 +15,7 @@ import { ProductCard } from "@/components/product/ProductCard";
 import { ProductGallery } from "@/components/product/ProductGallery";
 import { Button } from "@/components/ui/Button";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { NotFoundView } from "@/components/ui/NotFoundView";
 import { PriceTag, QuantityStepper, Rating } from "@/components/ui/Rating";
 import { Tabs } from "@/components/ui/Tabs";
 import type { TabItem } from "@/components/ui/Tabs";
@@ -24,7 +25,6 @@ import {
   CATALOG_COPY,
   COMMON_ACTIONS,
   EMPTY_STATES,
-  NOT_FOUND_COPY,
   PAGE_TITLES,
   addedToCartMessage,
   documentTitle,
@@ -467,12 +467,14 @@ function ProductDetailBody({ product }: { readonly product: Product }): ReactEle
  * read that turns it into the product, so no request here asks the detail endpoint for an identifier the segment is
  * not; the product's own identifier then serves the two reads that need one — the related strip and the reviews.
  * The category read feeds the breadcrumb trail alone and runs beside the product rather than before it, so the page
- * renders as soon as it knows what it is showing. All four states are derived during render — the placeholders while
- * the read is in flight, the not-found state that read's own refusal produces, the alert carrying any other
- * failure's message with its retry, and the loaded product — so nothing is mirrored into state and no placeholder
- * is ever shown beside a stale product.
+ * renders as soon as it knows what it is showing. The states are derived during render — the placeholders while
+ * the read is in flight, the alert carrying a failure's message with its retry, and the loaded product — so
+ * nothing is mirrored into state and no placeholder is ever shown beside a stale product. The fourth, an address
+ * naming no product, is not a state of this page at all: it returns the shared not-found view in place of the
+ * header and the body, which is what keeps the route's single `h1` naming the state the visitor is in.
  *
- * @returns The route: its heading block, and whichever of the four states the read is in.
+ * @returns The route: its heading block and whichever state the read is in, or the not-found view when the
+ *   address names no product.
  */
 export function ProductDetailPage(): ReactElement {
   const params = useParams();
@@ -491,18 +493,15 @@ export function ProductDetailPage(): ReactElement {
 
   useDocumentTitle(documentTitle(pageTitleFor(loaded, isMissing)));
 
+  // An address naming no product is not this route's header over a page with nothing in it: what is on screen is
+  // the not-found state, so it renders the one shared view in place of the header and the body below, which keeps
+  // the route's single `h1` — and the title set just above, which already names this state — describing what the
+  // visitor is actually looking at rather than a product that does not exist.
+  if (isMissing) return <NotFoundView />;
+
   let body: ReactElement;
   if (isReading) {
     body = <DetailPlaceholders />;
-  } else if (isMissing) {
-    body = (
-      <EmptyState
-        title={NOT_FOUND_COPY.TITLE}
-        description={NOT_FOUND_COPY.BODY}
-        actionLabel={NOT_FOUND_COPY.ACTION_LABEL}
-        actionHref={ROUTES.CATALOG}
-      />
-    );
   } else if (product.error !== null) {
     body = (
       <Alert

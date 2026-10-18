@@ -43,13 +43,13 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in,
  * `sp-page` the column of blocks at one rhythm, `sp-page__body` the region the page's own content lands in,
  * and `sp-split` the frame whose aside track is `--layout-aside-width` from the large stop. `src/styles/
- * commerce.css` owns the cart's register: `sp-cart` widens that frame's row gap, so a summary stacking below
- * the rows on a phone is separated from them; `sp-cart__lines` is the grid frame the rows sit in, each row
- * being a `sp-cart-row` item of it, a family `CartItemRow.tsx` owns and this file does not restate;
- * `sp-cart__aside` is the summary column, sticky below the header from the large stop; `sp-cart__empty`
- * tightens the shared empty state to this panel; and `sp-summary__actions` is the stacked action block the
- * summary's own file does not render — the panel belongs to `CartSummary.tsx`, so the page's two navigation
- * controls compose that block here, each carrying `sp-btn--block` as its contract asks. `src/styles/
+ * commerce.css` owns the cart's register: `sp-cart` widens that frame's row gap, so a summary stacked below
+ * the rows is separated from them; `sp-cart__lines` is the grid frame the rows sit in, each a `sp-cart-row`
+ * item of it, a family `CartItemRow.tsx` owns and this file does not restate; `sp-cart__aside` is the
+ * summary column, sticky below the header from the large stop; `sp-cart__empty` tightens the shared empty
+ * state to this panel; and `sp-summary__actions`, the stacked action block the summary's own file does not
+ * render, is `src/styles/summary-panel.css`'s — the panel belongs to `CartSummary.tsx`, so the page's two
+ * navigation controls compose that block here, each carrying `sp-btn--block`. `src/styles/
  * controls.css` owns the button family, whose classes reach both controls this page draws that are not
  * `Button`'s: a control that navigates is an anchor carrying `sp-btn` with its variant and the block
  * modifier, never a `<button>`, and the clear control is `Button` in its link variant.

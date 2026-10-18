@@ -1,14 +1,14 @@
 /**
  * Path: src/features/search/FilterPanel.tsx
  * Purpose: The facet panel for category, brand, price, rating and availability, with counts and clear actions
- * Lines: 450
+ * Lines: 458
  */
 
 import { useCallback, useId, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Drawer } from "@/components/ui/Modal";
 import { Checkbox, RadioGroup, Switch } from "@/components/ui/Select";
 import { BREAKPOINTS } from "@/constants/config";
@@ -253,16 +253,20 @@ export interface FilterPanelProps {
  * rendered. The panel asks for nothing itself: the page's request carries the facets beside its results, and a
  * failure is answered with the retry the provider owns rather than with a request issued here.
  *
- * Four states are rendered in order: the group-shaped placeholders a definition with no response stands in with,
- * which is also the first load before any facet has arrived; the shaped failure with its retry action; the empty
- * state with the one action that helps, when the response holds no facet value at all; and otherwise the loaded
- * panel. Counts are only ever the ones the response carries, so this surface holds no rule of the catalogue's
- * own: no predicate, no comparator and no second count.
+ * Three states are rendered in order: the group-shaped placeholders a definition with no response stands in with,
+ * which is also the first load before any facet has arrived; the empty state with the one action that helps, when
+ * the response holds no facet value at all; and otherwise the loaded panel. A failure is the page's own state and
+ * is rendered there alone, so while the read stands failed the panel offers no facet content at all and announces
+ * nothing: this surface's counts are the response's, and a count from a query that was never answered is not a
+ * current count, while a second alert beside the page's would announce one failure twice. Counts are only ever
+ * the ones the response carries, so the surface holds no rule of the catalogue's own: no predicate, no comparator
+ * and no second count.
  *
  * @param props - The facets and filter state to render, the change observer, the panel's id and extra classes.
- * @returns The column from the extra-large stop up, or the trigger with its drawer below it.
+ * @returns The column from the extra-large stop up, or the trigger with its drawer below it — or nothing at all
+ *   while the read that fills the panel stands failed, because neither placement then has anything to offer.
  *
- * BLITZY [BUDGET]: 450 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was
+ * BLITZY [BUDGET]: 458 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was
  * added to reach a number and none was cut to leave one. The five data-driven groups, the three controls they
  * dispatch to, the class contract and the four data states are what the surface needs, and the plan's own
  * remedy — a second file — would break the path this slice's page imports.
@@ -273,7 +277,7 @@ export function FilterPanel({
   onChange,
   panelId,
   className,
-}: FilterPanelProps): ReactElement {
+}: FilterPanelProps): ReactElement | null {
   const view = useCatalog();
   const catalog = useCatalogFilters();
   const filters = filtersProp ?? catalog.filters;
@@ -389,16 +393,16 @@ export function FilterPanel({
   };
 
   const groups = FACET_DEFINITIONS.map(renderFacet);
+  // The read that fills this panel has failed with nothing in flight: the page owns that state and renders the
+  // failure, so the panel offers nothing rather than a second copy of it.
+  const hasFailed = view.error !== null && !view.isLoading;
   let content: ReactNode = groups;
-  if (view.error !== null && !view.isLoading) {
-    content = (
-      <Alert
-        tone="danger"
-        error={view.error}
-        actionLabel={COMMON_ACTIONS.RETRY}
-        onAction={() => view.reload()}
-      />
-    );
+  if (hasFailed) {
+    // The failed read is `SearchPage`'s state and it renders the surface's one alert and one retry for it; a
+    // second copy of that alert here would announce a single failure twice and offer a second recovery control
+    // for it. The facets are withheld with it rather than left standing: a count is a fact about an answer, and
+    // this query was never answered, so the last one this panel holds is not a current one.
+    content = null;
   } else if (!view.isLoading && !facets.some((facet) => facet.values.length > 0)) {
     content = <EmptyState surface="catalogue" onAction={clearAll} />;
   }
@@ -420,6 +424,10 @@ export function FilterPanel({
     </div>
   );
   if (isColumn) return panel;
+  // Below the medium stop this panel is reached through its own trigger, and a trigger standing over a panel
+  // holding nothing is a control that resolves nothing: while the read stands failed the whole surface is left
+  // out, and the results column beside it carries the failure and its retry alone.
+  if (hasFailed) return null;
 
   return (
     <>

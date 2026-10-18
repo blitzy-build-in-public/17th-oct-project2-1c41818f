@@ -1,13 +1,29 @@
 /**
  * Path: src/components/charts/chartGeometry.ts
- * Purpose: Mark, path and data-table geometry for the charts, with the formatting hooks its scales share
- * Lines: 599
+ * Purpose: Mark, path and data-table geometry for the charts, with the formatting hooks and label widths its scales share
+ * Lines: 515
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
 import type { ChartPoint, ChartSeries } from "@/types/analytics";
 import { bucketStart, formatBucketLabel } from "@/utils/dates";
 import { formatCompactNumber, formatPercent } from "@/utils/format";
+
+// The label-width rule this module used to hold lives in `labelMetrics.ts`; it is published here so the
+// scales and renderers that read it keep the import path they have always used.
+export { LABEL_FONT_SIZE, estimateLabelWidth } from "@/components/charts/labelMetrics";
+import { FULL_TURN_DEGREES, arcPath, polarToCartesian } from "@/components/charts/svgPaths";
+
+// The path builders this module used to hold live in `svgPaths.ts`; they are published here so the scales
+// and renderers keep the import path they have always used.
+export {
+  arcPath,
+  buildAreaPath,
+  buildLinePath,
+  polarToCartesian,
+  roundCoordinate,
+} from "@/components/charts/svgPaths";
+export type { ArcOptions, Point2D } from "@/components/charts/svgPaths";
 
 /**
  * Why this file exists beside `chartScales.ts`: the charts' coordinate maths is one concern but more than
@@ -30,6 +46,14 @@ import { formatCompactNumber, formatPercent } from "@/utils/format";
 
 /** Formats one numeric value: an axis tick, a value label, a slice label or a data-table cell. */
 export type ValueFormatter = (value: number) => string;
+
+/**
+ * Formats one value-axis tick, and is told the domain the axis spans with it: a formatter that must write every tick
+ * of one axis in one notation needs the whole extent rather than the tick it is handed, and a money axis that
+ * shortened only its large ticks wrote one of them in a different notation from the rest. A plain
+ * {@link ValueFormatter} is assignable to this type, so every axis formatter written before it keeps working.
+ */
+export type AxisValueFormatter = (value: number, domain: readonly [number, number]) => string;
 
 /** Formats one band or bucket key as axis or row wording. */
 export type LabelFormatter = (key: string) => string;
@@ -57,12 +81,6 @@ export interface PlotArea {
   readonly y: number;
   readonly width: number;
   readonly height: number;
-}
-
-/** A point in the frame's coordinate system, where `y` grows downward. */
-export interface Point2D {
-  readonly x: number;
-  readonly y: number;
 }
 
 /** One grid line, as the endpoints an SVG `<line>` takes. */
@@ -168,16 +186,6 @@ export interface TableHeadings {
   readonly shareHeader?: string;
 }
 
-/** What {@link arcPath} takes: the ring, and the angular span one drawing covers. */
-export interface ArcOptions {
-  readonly cx: number;
-  readonly cy: number;
-  readonly outerRadius: number;
-  readonly innerRadius: number;
-  readonly startAngle: number;
-  readonly endAngle: number;
-}
-
 // Constants ---------------------------------------------------------------------------------------
 
 /** Below this share a slice's percentage is drawn outside the ring instead of inside its wedge, so labels cannot pile up on a thin wedge. */
@@ -187,12 +195,10 @@ export const MIN_SLICE_LABEL_SHARE = 0.05;
 export const DEFAULT_INNER_RADIUS_RATIO = 0.62;
 
 // Literals no reader should have to decode.
-const COORDINATE_DECIMALS = 2;
 const BAR_INNER_GAP = 0.15;
 const SLICE_LABEL_RADIUS_RATIO = 0.5;
 const SERIES_CLASS_PREFIX = "sp-chart__series-";
 const SHARE_EPSILON = 1e-9;
-const FULL_TURN_DEGREES = 360;
 
 // Formatting hooks --------------------------------------------------------------------------------
 
@@ -226,88 +232,6 @@ export const defaultLabelFormatter: LabelFormatter = (key) => {
   return formatBucketLabel(key, "day") || key;
 };
 
-// Paths -------------------------------------------------------------------------------------------
-
-/**
- * A coordinate at the precision every drawing in this folder carries.
- *
- * This is the one rounding the charts' coordinates go through, so a path and the mark model that places a
- * label beside it cannot state the same point at two precisions. A coordinate is
- * {@link COORDINATE_DECIMALS} decimals, and either signed zero is written `0`.
- *
- * @param value - The coordinate, in the frame's own coordinate system.
- * @returns The coordinate, rounded.
- */
-export const roundCoordinate = (value: number): number =>
-  normalizeZero(Number(value.toFixed(COORDINATE_DECIMALS)));
-
-/**
- * The `d` of a polyline: one `M` and then `L`s, so a single point draws a zero-length move and no points
- * draw nothing at all. A point with a non-finite coordinate is dropped rather than written into the path as
- * `NaN`, which would invalidate the whole `d`.
- */
-export const buildLinePath = (points: readonly Point2D[]): string =>
-  points
-    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
-    .map(
-      (point, index) => `${index === 0 ? "M" : "L"}${coordinate(point.x)},${coordinate(point.y)}`,
-    )
-    .join("");
-
-/** The `d` of the band an area encloses: the polyline, out to `baselineY` and back, closed; no finite point or a non-finite baseline gives `""`. */
-export const buildAreaPath = (points: readonly Point2D[], baselineY: number): string => {
-  const finite = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-  if (finite.length === 0 || !Number.isFinite(baselineY)) return "";
-  const first = finite[0];
-  const last = finite[finite.length - 1];
-  const edge = coordinate(baselineY);
-  return `${buildLinePath(finite)}L${coordinate(last.x)},${edge}L${coordinate(first.x)},${edge}Z`;
-};
-
-/** The point `radius` away from `(cx, cy)` at `angleDeg`, measured clockwise from the top of the circle. */
-export const polarToCartesian = (
-  cx: number,
-  cy: number,
-  radius: number,
-  angleDeg: number,
-): Point2D => {
-  const radians = ((angleDeg - 90) * Math.PI) / 180;
-  return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
-};
-
-/**
- * The `d` of one ring segment. A sweep of a full turn or more draws a closed ring rather than a malformed
- * one, and an `innerRadius` of `0` draws a wedge out to the centre. A zero or non-finite outer radius, a
- * negative or non-finite inner radius, an inner radius at or beyond the outer one, a non-finite centre,
- * angle or radius, or a zero sweep, gives `""`, because there is no ring to draw.
- */
-export function arcPath(options: ArcOptions): string {
-  const { cx, cy, outerRadius, innerRadius, startAngle, endAngle } = options;
-  const measurable =
-    Number.isFinite(cx) &&
-    Number.isFinite(cy) &&
-    Number.isFinite(outerRadius) &&
-    Number.isFinite(innerRadius) &&
-    Number.isFinite(startAngle) &&
-    Number.isFinite(endAngle);
-  if (!measurable || outerRadius <= 0 || innerRadius < 0) return "";
-  if (innerRadius > 0 && innerRadius >= outerRadius) return "";
-  const sweep = endAngle - startAngle;
-  if (sweep === 0) return "";
-  if (Math.abs(sweep) >= FULL_TURN_DEGREES) return fullRingPath(cx, cy, outerRadius, innerRadius);
-  const largeArc = Math.abs(sweep) > 180 ? 1 : 0;
-  const flag = sweep > 0 ? 1 : 0;
-  const start = pointOf(polarToCartesian(cx, cy, outerRadius, startAngle));
-  const outerArc = `A${coordinate(outerRadius)},${coordinate(outerRadius)} 0 ${largeArc},${flag} `;
-  const outerEnd = pointOf(polarToCartesian(cx, cy, outerRadius, endAngle));
-  if (innerRadius === 0)
-    return `M${start}${outerArc}${outerEnd}L${coordinate(cx)},${coordinate(cy)}Z`;
-  const innerArc = `A${coordinate(innerRadius)},${coordinate(innerRadius)} 0 ${largeArc},${flag === 1 ? 0 : 1} `;
-  const innerEnd = pointOf(polarToCartesian(cx, cy, innerRadius, endAngle));
-  const innerStart = pointOf(polarToCartesian(cx, cy, innerRadius, startAngle));
-  return `M${start}${outerArc}${outerEnd}L${innerEnd}${innerArc}${innerStart}Z`;
-}
-
 // Bands and series --------------------------------------------------------------------------------
 
 /** The band a point belongs to: its own `label` when it carries one, otherwise its `x` as text. */
@@ -325,6 +249,19 @@ export const collectBandKeys = (series: readonly ChartSeries[]): string[] => [
  */
 export const hasChartData = (series: readonly ChartSeries[]): boolean =>
   series.some((one) => one.points.some((point) => Number.isFinite(point.y)));
+
+/**
+ * Whether the figures the series carry are whole numbers, which is what makes a metric a count: a number of
+ * people, orders or units is only ever an integer, so an axis spanning one must tick in whole numbers rather than
+ * in halves no bucket could hold. A series with no finite point contributes nothing to the answer, a set carrying
+ * no finite point at all is `false`, and a point that is not a number decides nothing either.
+ */
+export function hasWholeValues(series: readonly ChartSeries[]): boolean {
+  const values = series
+    .flatMap((one) => one.points.map((point) => point.y))
+    .filter(Number.isFinite);
+  return values.length > 0 && values.every((value) => Number.isInteger(value));
+}
 
 /** The sum of every finite point across the series, which is what a donut's centre total reads. */
 export const chartSeriesTotal = (series: readonly ChartSeries[]): number =>
@@ -533,15 +470,6 @@ export function buildSliceDataTable(
 
 // Internal helpers --------------------------------------------------------------------------------
 
-/** `0` for either signed zero, so a coordinate never carries a sign it does not mean. */
-const normalizeZero = (value: number): number => (value === 0 ? 0 : value);
-
-/** A coordinate as the short text an SVG path carries. */
-const coordinate = (value: number): string => String(roundCoordinate(value));
-
-/** A point as the `x,y` pair an SVG command takes. */
-const pointOf = (point: Point2D): string => `${coordinate(point.x)},${coordinate(point.y)}`;
-
 /** The value a series carries at a band: `0` when it has no point there or the point is not finite. */
 const valueAt = (series: ChartSeries, key: string): number => {
   const point = series.points.find((candidate) => chartPointKey(candidate) === key);
@@ -584,16 +512,4 @@ const trimToPlotArea = (rect: BarRect, plotArea: PlotArea): BarRect => {
     width: Math.max(0, right - left),
     height: Math.max(0, bottom - top),
   };
-};
-
-/** A closed ring as two half arcs out and two back, because one arc cannot close on the point it starts from. */
-const fullRingPath = (cx: number, cy: number, outerRadius: number, innerRadius: number): string => {
-  const outerTop = pointOf(polarToCartesian(cx, cy, outerRadius, 0));
-  const outerBottom = pointOf(polarToCartesian(cx, cy, outerRadius, 180));
-  const outerArc = `A${coordinate(outerRadius)},${coordinate(outerRadius)} 0 1,1 `;
-  if (innerRadius <= 0) return `M${outerTop}${outerArc}${outerBottom}${outerArc}${outerTop}Z`;
-  const innerTop = pointOf(polarToCartesian(cx, cy, innerRadius, 0));
-  const innerBottom = pointOf(polarToCartesian(cx, cy, innerRadius, 180));
-  const innerArc = `A${coordinate(innerRadius)},${coordinate(innerRadius)} 0 1,0 `;
-  return `M${outerTop}${outerArc}${outerBottom}${outerArc}${outerTop}L${innerTop}${innerArc}${innerBottom}${innerArc}${innerTop}Z`;
 };

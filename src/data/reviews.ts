@@ -1,7 +1,7 @@
 /**
  * Path: src/data/reviews.ts
  * Purpose: The seeded reviews, and the product rating aggregates derived from them
- * Lines: 571
+ * Lines: 594
  */
 
 import { BRAND_DEFINITIONS, CATEGORY_DEFINITIONS } from "@/constants/taxonomy";
@@ -54,11 +54,15 @@ const RATING_SEARCH_STEPS = RATING_SCALE.length;
 /** The trailing window a review is dated inside, in days: a product's window is the shorter of this and
  *  the days since it was added. */
 const REVIEW_SPAN_DAYS = 364;
-/** The hours a review is written at, and the hour one takes on its product's own day — above every hour
- *  `src/data/products.ts` dates a product at, so a review never precedes what it reviews. */
+/** The hours a review is written at, and the hour one takes on the day it shares with the product it reviews
+ *  or the account that wrote it — above every hour `src/data/products.ts` dates a product at and
+ *  `src/data/customers.ts` dates an account at, so a review never precedes either one. */
 const REVIEW_FIRST_HOUR = 8;
 const REVIEW_LAST_HOUR = 21;
 const SAME_DAY_HOUR = 22;
+/** The hour a review takes on the anchor day itself: the day's first hour, because every later hour of today
+ *  may not have arrived yet, and the newest-first order must hold against a review just submitted. */
+const ANCHOR_DAY_HOUR = 0;
 /** The durations a review states, so the corpus says how long a product has been in use. */
 const REVIEW_SPANS: readonly string[] = [
   "a few weeks",
@@ -439,10 +443,17 @@ function productAgeDays(product: Product, anchorDay: IsoDateString): number {
   return Math.max(0, differenceInDays(startOfDay(product.createdAt), anchorDay));
 }
 
+/** How many days ago the account that wrote a review was created, measured from today and never negative:
+ *  the oldest a row it wrote can be dated, because an account cannot review a product before it exists. */
+function accountAgeDays(author: Customer, anchorDay: IsoDateString): number {
+  return Math.max(0, differenceInDays(startOfDay(author.createdAt), anchorDay));
+}
+
 /**
  * The days before today a product's rows are dated at, newest first: drawn from the window the product can
  * be reviewed in — the trailing `REVIEW_SPAN_DAYS`, or the days since it was added when that is shorter —
- * so no review precedes the product it reviews and none falls outside the trailing year.
+ * so no review precedes the product it reviews and none falls outside the trailing year. The window is the
+ * product's alone; `reviewsFor` narrows each offset to the age of the account that wrote the row.
  */
 function reviewOffsets(age: number, count: number, rand: SeededRandom): readonly number[] {
   const span = Math.min(REVIEW_SPAN_DAYS, age);
@@ -451,8 +462,12 @@ function reviewOffsets(age: number, count: number, rand: SeededRandom): readonly
 }
 
 /** The instant one review is written at: a day of its window, an hour inside the day and a minute inside
- *  the hour, built through `src/utils/dates.ts` as every other seeded timestamp is. A review dated on its
- *  product's own day takes `SAME_DAY_HOUR`, which is later than any hour a product is dated at. */
+ *  the hour, built through `src/utils/dates.ts` as every other seeded timestamp is. A review dated on the
+ *  day of its product or of its author's account takes `SAME_DAY_HOUR`, later than any hour either of those
+ *  is dated at, so a row that lands on that day still follows it. A row that lands on the anchor day itself
+ *  takes `ANCHOR_DAY_HOUR` instead, because the hours of today that have not arrived yet would date it after
+ *  the moment it is read. The hour is still drawn exactly as it was, so the seed stream and every value it
+ *  goes on to produce are unchanged. */
 function reviewInstant(
   anchorDay: IsoDateString,
   offset: number,
@@ -461,7 +476,8 @@ function reviewInstant(
 ): IsoDateTimeString {
   const at = parseIso(addDays(anchorDay, -offset));
   if (at === null) throw new TypeError(`A review needs an ISO 8601 day; received "${anchorDay}".`);
-  const hour = sameDay ? SAME_DAY_HOUR : rand.int(REVIEW_FIRST_HOUR, REVIEW_LAST_HOUR);
+  const drawn = sameDay ? SAME_DAY_HOUR : rand.int(REVIEW_FIRST_HOUR, REVIEW_LAST_HOUR);
+  const hour = offset === 0 ? ANCHOR_DAY_HOUR : drawn;
   at.setHours(hour, rand.int(0, 59), 0, 0);
   return toIsoDateTime(at);
 }
@@ -469,7 +485,10 @@ function reviewInstant(
 /**
  * The reviews of one product: as many rows as its seeded rating count, each carrying an integer rating from
  * the mix, an account of its own, a title and a two-sentence body in its band's register and its category's
- * voice, a timestamp inside the review window, and the helpful votes its band attracts — newest first.
+ * voice, a timestamp inside the review window and no earlier than the account that wrote the row — an
+ * account cannot review a product before it exists — and the helpful votes its band attracts, newest first.
+ * Every offset `reviewOffsets` draws is clamped to the author's own age, which only ever moves a row later,
+ * so the product-age bound and the window hold as they did.
  *
  * @param product - The product being reviewed.
  * @param anchorDay - Today, the end of the window the rows are dated in.
@@ -492,6 +511,10 @@ function reviewsFor(
   const rows = ratings.map((rating, position) => {
     const band = bandOf(rating);
     const author = authors[position];
+    // The clamp only pulls an offset later, so the product-age bound and the window still hold.
+    const authorAge = accountAgeDays(author, anchorDay);
+    const offset = Math.min(offsets[position], authorAge);
+    const sameDay = offsets[position] === age || offset === authorAge;
     const sentences = REVIEW_SENTENCES[band];
     const step = 1 + (position % SECOND_SENTENCE_STEPS);
     const first = (salt + position) % SENTENCES_PER_BAND;
@@ -506,7 +529,7 @@ function reviewsFor(
       rating,
       title: fill(rand.pick(REVIEW_TITLES[band]), context),
       body,
-      createdAt: reviewInstant(anchorDay, offsets[position], offsets[position] === age, rand),
+      createdAt: reviewInstant(anchorDay, offset, sameDay, rand),
       helpfulCount: helpfulCountFor(band, rand),
       verifiedPurchase: verifiedPurchaseFor(product.id, author.id),
     };

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchBar.tsx
  * Purpose: The search input with debounced suggestions, keyboard selection and recent history
- * Lines: 491
+ * Lines: 492
  */
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -172,8 +172,9 @@ export interface SearchBarProps {
  * `src/lib/searchService.ts`'s; filtering and faceting are `src/lib/catalogService.ts`'s.
  *
  * The recent terms live in React state for as long as the application is mounted and are deliberately
- * never written to `localStorage`: `STORAGE_KEYS` declares an entry for the cart, the session token, the
- * account store's session table and the last-used report range only, and `src/utils/storage.ts` is the
+ * never written to `localStorage`: `STORAGE_KEYS` declares an entry for the cart, the session
+ * token, the demonstration account store's session table, the last-used report range and the
+ * placement credentials of this browser's own orders only, and `src/utils/storage.ts` is the
  * product's only durable store, so a reload starts with an empty history.
  *
  * @param props - The opening term, the autofocus flag, the submission callback and extra classes.

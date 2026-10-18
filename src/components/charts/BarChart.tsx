@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/BarChart.tsx
  * Purpose: Vertical, horizontal, grouped and stacked bars with value labels
- * Lines: 400
+ * Lines: 401
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -23,6 +23,7 @@ import {
   seriesClassName,
 } from "@/components/charts/chartScales";
 import type {
+  AxisValueFormatter,
   BarMode,
   LabelFormatter,
   Orientation,
@@ -31,7 +32,7 @@ import type {
 import { EmptyState } from "@/components/ui/Feedback";
 import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
-import { formatMoney, formatMoneyCompact } from "@/utils/format";
+import { formatMoney, formatMoneyAxis } from "@/utils/format";
 
 /*
  * Class contract. `src/styles/admin-reports.css` owns the whole `.sp-chart*` family this renderer draws with:
@@ -107,8 +108,9 @@ export interface BarChartProps {
   readonly includeZero?: boolean;
   /** Reads the value labels, the legend totals and the readout. Defaults to {@link formatMoney}. */
   readonly formatValue?: ValueFormatter;
-  /** Reads the value-axis ticks. Defaults to {@link formatMoneyCompact}. */
-  readonly formatAxisValue?: ValueFormatter;
+  /** Reads the value-axis ticks, and is told the domain the axis spans with each one, so one axis is written in
+   *  one notation. Defaults to {@link formatMoneyAxis}. */
+  readonly formatAxisValue?: AxisValueFormatter;
   /** Writes a band key as axis wording. Defaults to {@link defaultLabelFormatter}. */
   readonly formatLabel?: LabelFormatter;
   /** The graphic's accessible name, in place of the visible title. */
@@ -153,7 +155,7 @@ export function BarChart({
   legendTotals = DEFAULT_LEGEND_TOTALS,
   includeZero = true,
   formatValue = formatMoney,
-  formatAxisValue = formatMoneyCompact,
+  formatAxisValue = formatMoneyAxis,
   formatLabel = defaultLabelFormatter,
   ariaLabel,
   emptyMessage,
@@ -191,7 +193,6 @@ export function BarChart({
       formatLabel,
     ],
   );
-  // One table model serves both the accessible alternative and the readout, so the two can never disagree
   // One table model serves both the accessible alternative and the readout, so the two can never disagree
   // about a band's label or a figure's wording. The leading heading is the caller's word for the dimension
   // the bands are drawn along, or the shared one for a group.

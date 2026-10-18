@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 535
+ * Lines: 549
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
@@ -35,13 +35,21 @@ import { clearRememberedOrders, routeTable, type RouteId } from "@/lib/apiRoutes
 // Part 4).
 
 /**
- * The seam's error vocabulary and the shaper that turns one of its codes into a `Result`: the names
- * every machine-readable failure is spelled with, the status each answers with, and the two builders
- * a caller uses instead of writing a status and a code of its own. `src/lib/apiContract.ts` owns them
- * and this file republishes them, so a domain service asks the transport for its refusal — the same
- * vocabulary, the same statuses and the same shape the seam itself answers with.
+ * The seam's error vocabulary and the reading of it: the names every machine-readable failure is spelled
+ * with, the status each answers with, the two builders a caller uses instead of writing a status and a code
+ * of its own, and the two predicates that say whether a refused request is one a repeat could answer
+ * differently. `src/lib/apiContract.ts` owns them and this file republishes them, so a domain service or a
+ * screen asks the transport for its refusal — the same vocabulary, the same statuses and the same shape the
+ * seam itself answers with — instead of matching on a status or a sentence of its own.
  */
-export { API_ERROR_CODES, API_ERROR_STATUS, failure, shapeError } from "@/lib/apiContract";
+export {
+  API_ERROR_CODES,
+  API_ERROR_STATUS,
+  failure,
+  isNotFoundFailure,
+  isSessionFailure,
+  shapeError,
+} from "@/lib/apiContract";
 
 /**
  * Every endpoint path, and the builder that fills one of them from the values its captured segments
@@ -86,6 +94,11 @@ export type {
 /** The header a session token travels in, so the client, the seam and a future server name it once.
  * The in-process seam reads the same value off `ApiRequestOptions.sessionToken`. */
 export const SESSION_TOKEN_HEADER = "x-session-token" as const;
+
+/** The header an order token travels in, so the client, the seam and a future server name it once.
+ * It carries the credential of an order placed without an account, and the in-process seam reads the
+ * same value off `ApiRequestOptions.orderToken`. */
+export const ORDER_TOKEN_HEADER = "x-order-token" as const;
 
 // The bound data source --------------------------------------------------------------------------
 
@@ -527,6 +540,7 @@ async function dispatch(
     query,
     body: options.body,
     token: options.sessionToken,
+    orderToken: options.orderToken,
     session: authorized.value,
     sessionProblem: lookup.kind === "active" ? null : sessionRefusal(lookup),
     source,

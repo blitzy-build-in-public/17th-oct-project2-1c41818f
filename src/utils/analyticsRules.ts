@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/analyticsRules.ts
  * Purpose: The aggregation rules the dashboard and the reports read and the seeded repositories compose: period bucketing, KPI aggregation, comparison baselines and top-product performance
- * Lines: 484
+ * Lines: 493
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -118,9 +118,15 @@ export function bucketKey(at: IsoDateString, granularity: BucketGranularity): st
 
 /** The label a bucket's key shows on an axis or in a table: its own day, `Week of Jan 27` for a week named
  * by its Monday, `Jan 2025` for a month. The key is resolved to the day it opens first, because a key is a
- * grouping string rather than a date, and the wording is `src/utils/dates.ts`'s. */
-export function bucketLabel(key: string, granularity: BucketGranularity): string {
-  return formatBucketLabel(bucketStart(key, granularity), granularity);
+ * grouping string rather than a date, and the wording is `src/utils/dates.ts`'s — which words a bucket the
+ * selected `range` clips by the days of it the range covers, so a first band of a partial week states its
+ * two days rather than the week's own opening day. */
+export function bucketLabel(
+  key: string,
+  granularity: BucketGranularity,
+  range?: DateRange,
+): string {
+  return formatBucketLabel(bucketStart(key, granularity), granularity, range);
 }
 
 /** The word a comparison is named by — "Previous period" or "Previous year" — read from the vocabulary
@@ -224,11 +230,6 @@ function conversionRate(converted: number, visitorBase: number): number {
   return clampNumber(converted / visitorBase, 0, 1);
 }
 
-/** The signed change of one figure against the same figure a period earlier. */
-function changeAgainst(current: number, baseline: number): number {
-  return percentChange(current, baseline) ?? 0;
-}
-
 /**
  * The headline figures of one period, with the comparison they are measured against.
  *
@@ -264,10 +265,14 @@ export function computeKpis(input: KpiInput): KpiSummary {
       kind: baseline,
       from: baselineRange.from,
       to: baselineRange.to,
-      revenueChangePercent: changeAgainst(current.revenueMinor, previous.revenueMinor),
-      ordersChangePercent: changeAgainst(current.orders, previous.orders),
-      unitsChangePercent: changeAgainst(current.units, previous.units),
-      averageOrderValueChangePercent: changeAgainst(
+      // Each change is the comparison's own reading, kept exactly as `percentChange` answers it: `null`
+      // when the earlier period holds nothing to compare against, which the card renders as its placeholder
+      // rather than as a flat `0`. A baseline the fact table cannot reach therefore reports no percentage
+      // instead of a false one, and a genuine 0.0% is a figure the comparison actually produced.
+      revenueChangePercent: percentChange(current.revenueMinor, previous.revenueMinor),
+      ordersChangePercent: percentChange(current.orders, previous.orders),
+      unitsChangePercent: percentChange(current.units, previous.units),
+      averageOrderValueChangePercent: percentChange(
         averageOrderValueMinor,
         previousAverageOrderValueMinor,
       ),
@@ -333,18 +338,20 @@ function seriesGroups(
   return sortBy(groups, SERIES_ORDER);
 }
 
-/** One point of a series: the bucket's key, the net revenue it earned — zero for a bucket the group did
- * not sell in — and the band's label, worded from the run's own `keys` so no two bands word alike. */
+/** One point of a series: the bucket's key, the net revenue it earned — zero for a bucket the group did not
+ * sell in — and the band's label, worded by `src/utils/dates.ts` from the run's own `keys` and its `range`, so
+ * no two bands of one run word alike and a bucket the range clipped states the days of it the range holds. */
 function seriesPoint(
   bucket: DateBucket,
   byBucket: ReadonlyMap<string, number> | undefined,
   granularity: BucketGranularity,
   keys: readonly string[],
+  range: DateRange,
 ): ChartPoint {
   return {
     x: bucket.key,
     y: roundMinorUnits(byBucket?.get(bucket.key) ?? 0),
-    label: formatBandLabel(bucket.key, granularity, keys),
+    label: formatBandLabel(bucket.key, granularity, keys, range),
   };
 }
 
@@ -383,7 +390,9 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
     id: group.id,
     label: group.label,
     color: CHART_SERIES_TOKEN_REFERENCES[index % CHART_SERIES_TOKEN_REFERENCES.length],
-    points: buckets.map((bucket) => seriesPoint(bucket, totals.get(group.id), granularity, keys)),
+    points: buckets.map((bucket) =>
+      seriesPoint(bucket, totals.get(group.id), granularity, keys, range),
+    ),
   }));
 }
 

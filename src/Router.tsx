@@ -1,20 +1,21 @@
 /**
  * Path: src/Router.tsx
  * Purpose: The route table with lazy slices, role guards, the suspension boundary and the not-found view
- * Lines: 455
+ * Lines: 435
  */
 
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
-import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
-import { ButtonGroup } from "@/components/ui/Button";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { A11Y_COPY, COMMON_ACTIONS, HEADER_COPY, NOT_FOUND_COPY } from "@/constants/content";
+import { Alert, Skeleton } from "@/components/ui/Feedback";
+import { NotFoundView } from "@/components/ui/NotFoundView";
+import { A11Y_COPY, COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
 import { ROUTES, SECTION_ROLES, loginPath } from "@/constants/routes";
 import { isSessionRefusal } from "@/lib/apiContract";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
+import { useDocumentTitle } from "@/state/hooks";
 import type { Role } from "@/types/account";
 import type { ApiError } from "@/types/common";
 
@@ -24,10 +25,10 @@ import type { ApiError } from "@/types/common";
  * It owns the route table: one `Route` per destination, each element bound lazily to the feature slice that
  * renders that screen; the two guarded sections — `/account/*` admits a customer or an administrator, and
  * `/admin/*` admits an administrator alone, each list read from `SECTION_ROLES` in
- * `src/constants/routes.ts`, which is where the role-to-section policy has its one home; and the catch-all
- * that renders the not-found view composed below. Every path here comes from the same module, so a route
- * string is written once in the product and this table, the navigation and the path builders cannot drift
- * apart.
+ * `src/constants/routes.ts`, which is where the role-to-section policy has its one home; and the catch-all,
+ * which renders the not-found view the shared `src/components/ui/NotFoundView.tsx` owns and names itself in
+ * the tab through `useDocumentTitle`. Every path here comes from the same module, so a route string is
+ * written once in the product and this table, the navigation and the path builders cannot drift apart.
  *
  * No router is rendered here. `src/main.tsx` owns the application's `BrowserRouter` and
  * `tests/testUtils.tsx` supplies a `MemoryRouter` to the tests that render a routed screen, so this module
@@ -50,12 +51,11 @@ import type { ApiError } from "@/types/common";
  * hiding a control is not a permission check.
  *
  * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class rendered below is consumed by name. `src/styles/layout.css` owns the page geometry the
- * not-found view and the route placeholder wear (`sp-container`, `sp-page`); `src/styles/controls.css` owns
- * the button family the recovery links take, as `sp-btn` with its `--primary` and `--secondary` modifiers,
- * and the `sp-btn-group--align-center` rule that widens the group and packs its controls to the middle; and
- * the empty state's own parts (`sp-empty`, `sp-empty__title`, `sp-empty__body`) arrive with `EmptyState`.
- * No colour, length, radius, shadow or breakpoint of this file's own appears below.
+ * so every class rendered below is consumed by name. `src/styles/layout.css` owns the page geometry the route
+ * placeholder wears (`sp-container`, `sp-page`), and `.sp-visually-hidden` is the global utility of
+ * `src/styles/base.css`, which is where the placeholder's announcement lives. The not-found view renders its
+ * own classes inside `src/components/ui/NotFoundView.tsx`, which states that contract; no colour, length,
+ * radius, shadow or breakpoint of this file's own appears below.
  */
 
 // Route-level code splitting ----------------------------------------------------------------------
@@ -352,35 +352,19 @@ function RouteFallback(): ReactElement {
 /**
  * The view the catch-all route renders for an address that matches nothing.
  *
- * It is composed here rather than in a page file of its own: it is not a module the product sells with, and
- * it renders nothing a shared primitive does not already provide. The wording is the content library's three
- * strings, so the explanation is not written twice for two surfaces, and the two ways out are one control
- * group — the catalogue, which is the action the wording names, and the home page — rather than a pair of
- * links left loose in the page's column. Both are router links and neither reloads the document; the group
- * is what gives them the button family's skin and packs them to the middle of the page.
+ * It renders the shared `src/components/ui/NotFoundView.tsx`, so the catch-all, a category route naming no
+ * category and a product route naming no product are one composition rather than three, and the state reads
+ * the same way wherever it is reached. What this page adds is the name of its own address: the title is set
+ * here through the same hook every other page sets its title through, so a cold load of an unmatched address
+ * no longer leaves the bare product name in the tab and an in-app arrival no longer leaves the title of the
+ * page the visitor left.
  *
  * @returns The not-found view.
  */
 function NotFoundPage(): ReactElement {
-  return (
-    <div className="sp-container">
-      <div className="sp-page">
-        <EmptyState
-          headingLevel={1}
-          title={NOT_FOUND_COPY.TITLE}
-          description={NOT_FOUND_COPY.BODY}
-        />
-        <ButtonGroup align="center">
-          <Link className="sp-btn sp-btn--primary" to={ROUTES.CATALOG}>
-            {NOT_FOUND_COPY.ACTION_LABEL}
-          </Link>
-          <Link className="sp-btn sp-btn--secondary" to={ROUTES.HOME}>
-            {HEADER_COPY.NAV_HOME_LABEL}
-          </Link>
-        </ButtonGroup>
-      </div>
-    </div>
-  );
+  useDocumentTitle(documentTitle(PAGE_TITLES.NOT_FOUND));
+
+  return <NotFoundView />;
 }
 
 // The route table ---------------------------------------------------------------------------------

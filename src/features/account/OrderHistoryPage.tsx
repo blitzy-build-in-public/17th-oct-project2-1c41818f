@@ -1,12 +1,12 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 563
+ * Lines: 594
  */
 
 import { useCallback, useId, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { OrderStatusBadge } from "@/components/ui/Card";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
@@ -28,8 +28,11 @@ import {
   documentTitle,
   rangeTooLongMessage,
 } from "@/constants/content";
-import { ROUTE_PARAMS, ROUTES, accountOrderPath } from "@/constants/routes";
+import { ROUTE_PARAMS, ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
 import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
+// The seam's own reading of a failure, so neither mode decides what a status or a sentence means: whether a
+// repeat of the read could answer differently is a fact about the refusal, and `src/lib/apiContract.ts` owns it.
+import { isNotFoundFailure, isSessionFailure } from "@/lib/apiClient";
 import { getOrder, listOrders } from "@/lib/orderService";
 // The session is this page's only source of the token its reads are scoped by, and the only way it can
 // tell a visitor whose session has not survived why it has nothing to show. `src/state/AuthContext.tsx`
@@ -61,10 +64,10 @@ import { formatMoney, formatQuantity } from "@/utils/format";
  * Class contract, consumed by name: no file under `src/features/**` imports a stylesheet, because
  * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/account.css` owns both modes —
  * `sp-order-history` with its `__filters`, `__table` and `__empty`, and `sp-order-detail` with its
- * `__header`, `__number`, `__status`, `__lines`, `__totals`, `__addresses` and `__timeline` — and earlier
- * sheets supply the rest: the table primitive, `sp-alert`, `sp-empty`, `sp-stack`, and from
- * `src/styles/commerce.css` the `sp-summary__row` register with its `--discount`/`--total` modifiers,
- * `sp-summary__note` and the compact itemised row `sp-review__item` the order confirmation reuses.
+ * `__header`, `__number`, `__status`, `__lines`, `__totals`, `__addresses` and `__timeline` — and earlier sheets
+ * supply the rest: the table primitive, `sp-alert`, `sp-empty`, `sp-stack`; from `src/styles/summary-panel.css`
+ * the `sp-summary__row` register with its `--discount`/`--total` modifiers and `sp-summary__note`; and from
+ * `src/styles/commerce.css` the compact itemised row `sp-review__item` the order confirmation reuses.
  *
  * Both account order routes render here, because the slice spends three view files on four routes: the
  * history and one order, branched once on the order segment, sharing this module's helpers and formatting.
@@ -249,6 +252,7 @@ const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
  */
 function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): ReactElement {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const headingId = useId();
   const [statusValue, setStatusValue] = useState("");
   const [fromText, setFromText] = useState("");
@@ -323,7 +327,17 @@ function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): 
 
   const renderResults = (): ReactElement => {
     if (loadStatus === "error" && error !== null) {
-      return (
+      // Every read here carries the session's token, so a refusal for want of one is resolved by the sign-in
+      // that ends in a session rather than by asking again; every other failure keeps the retry that can
+      // answer it.
+      return isSessionFailure(error) ? (
+        <div className="sp-stack">
+          <Alert error={error} tone="danger" />
+          <p className="sp-summary__note">
+            <Link to={loginPath(pathname)}>{COMMON_ACTIONS.SIGN_IN}</Link>
+          </p>
+        </div>
+      ) : (
         <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={reload} tone="danger" />
       );
     }
@@ -408,6 +422,10 @@ function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): 
  * move a total the customer has already been shown. The currency travels with the order, and the timeline
  * states each status in words beside its date, so the sequence reads without the marker's shade.
  *
+ * The failed read is the one state with a decision in it: a refusal for want of a session is resolved by
+ * signing in, and a `404` by the history this order came from, so the retry is offered exactly where a repeat
+ * of the read could answer differently and the link below is the resolving action in both other cases.
+ *
  * @param props - The order the route names, and the session token its read is scoped by.
  * @returns The order detail.
  */
@@ -418,6 +436,7 @@ function OrderDetail({
   readonly orderId: OrderId;
   readonly sessionToken: string;
 }): ReactElement {
+  const { pathname } = useLocation();
   const loadOrder = (signal: AbortSignal): Promise<Result<Order>> =>
     getOrder(orderId, { sessionToken, signal });
   const {
@@ -428,11 +447,23 @@ function OrderDetail({
   } = useAsync<Order>(loadOrder, [orderId, sessionToken]);
 
   if (status === "error" && error !== null) {
+    const isSessionProblem = isSessionFailure(error);
+    const canRetry = !isSessionProblem && !isNotFoundFailure(error);
+
     return (
       <div className="sp-stack">
-        <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={reload} tone="danger" />
+        <Alert
+          actionLabel={canRetry ? COMMON_ACTIONS.RETRY : undefined}
+          error={error}
+          onAction={canRetry ? reload : undefined}
+          tone="danger"
+        />
         <p className="sp-summary__note">
-          <Link to={ROUTES.ACCOUNT_ORDERS}>{ACCOUNT_COPY.ORDER_DETAIL_BACK_LABEL}</Link>
+          {isSessionProblem ? (
+            <Link to={loginPath(pathname)}>{COMMON_ACTIONS.SIGN_IN}</Link>
+          ) : (
+            <Link to={ROUTES.ACCOUNT_ORDERS}>{ACCOUNT_COPY.ORDER_DETAIL_BACK_LABEL}</Link>
+          )}
         </p>
       </div>
     );

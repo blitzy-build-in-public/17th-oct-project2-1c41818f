@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
  * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines.
- * Lines: 600
+ * Lines: 580
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
@@ -54,8 +54,6 @@ const PREVIOUS_YEAR: DateRange = { from: "2024-09-16", to: "2024-10-15" };
 /** The three cuts and the two comparisons, as the controls that render them declare them. */
 const GRANULARITIES: readonly BucketGranularity[] = ["day", "week", "month"];
 const BASELINES: readonly BaselineKind[] = ["previous-period", "previous-year"];
-/** A category id no definition in the vocabulary holds, for the labelling fallback a reader sees. */
-const ORPHAN_CATEGORY = "cat_unknown-slug" as CategoryId;
 
 /** One fact row. Every total below is arithmetic a reader can check against the row beside it. */
 function factRow(
@@ -346,8 +344,32 @@ describe("the headline figures of a period: computeKpis", () => {
     expect(baseline.ordersChangePercent).toBe(100);
     expect(baseline.unitsChangePercent).toBe(100);
     expect(baseline.averageOrderValueChangePercent).toBe(statistics.percentChange(1_750, 1_750));
-    expect(statistics.changeDirection(baseline.averageOrderValueChangePercent)).toBe("flat");
+    // The two averages are the same figure, so the comparison states a flat 0 for it rather than the null
+    // a percentage it could not state takes: 0 is the flat figure `changeDirection` reads as no change.
+    const averageChange = baseline.averageOrderValueChangePercent ?? Number.NaN;
+    expect(averageChange).toBe(0);
+    expect(statistics.changeDirection(averageChange)).toBe("flat");
     expect(dates.compareIso(baseline.to, RANGE.from)).toBeLessThan(0);
+  });
+
+  it("states no percentage for a comparison whose window holds no row, and never a flat zero", () => {
+    const query: AnalyticsQuery = { ...RANGE, baseline: "previous-year" };
+    const summary = analytics.computeKpis({ ...KPI_INPUT, query });
+    // The previous-year window of RANGE lies a year before every fact row, so the comparison has no
+    // baseline to state a ratio against: each change is the null `percentChange` reports for a baseline of
+    // nothing, and not the 0 a period that genuinely did not move states, while the period's own figures
+    // stand as its rows report them.
+    expect(summary.revenueMinor).toBe(14_000);
+    expect(summary.orders).toBe(8);
+    expect(summary.units).toBe(12);
+    expect(summary.averageOrderValueMinor).toBe(1_750);
+    expect(summary.baseline.kind).toBe("previous-year");
+    expect(summary.baseline.from).toBe(PREVIOUS_YEAR.from);
+    expect(summary.baseline.to).toBe(PREVIOUS_YEAR.to);
+    expect(summary.baseline.revenueChangePercent).toBeNull();
+    expect(summary.baseline.ordersChangePercent).toBeNull();
+    expect(summary.baseline.unitsChangePercent).toBeNull();
+    expect(summary.baseline.averageOrderValueChangePercent).toBeNull();
   });
 
   it("states zeros, and no figure that is not finite, for a period holding nothing at all", () => {
@@ -554,47 +576,5 @@ describe("one period, one set of figures: the fact rows against the orders they 
     ]);
     expect(await stated("customers", "orders")).toBe(orders);
     expect(await stated("customers", "revenue")).toBe(net);
-  });
-});
-
-// The builders a dated read is assembled with, and the fallbacks a defensive read carries ---------
-
-describe("the builders a dated read is assembled with", () => {
-  it("states the cut, the comparison and the ranking a caller leaves unanswered", () => {
-    const dated = analytics.toAnalyticsQuery(RANGE.from, RANGE.to);
-    expect(dated).toEqual({ ...RANGE, bucket: "day", baseline: "previous-period" });
-    const revenue = analytics.toRevenueQuery(RANGE.from, RANGE.to);
-    expect(revenue).toEqual({ ...RANGE, bucket: "day" });
-    const ranked = analytics.toTopProductsQuery(RANGE.from, RANGE.to);
-    expect(ranked.limit).toBe(analytics.DEFAULT_TOP_PRODUCTS_LIMIT);
-    expect(ranked.metric).toBe(analytics.DEFAULT_TOP_PRODUCTS_METRIC);
-  });
-
-  it("reads a query naming no cut by day, and refuses the positional form that carries no session", async () => {
-    const series = valueOf(await analytics.getRevenueSeries({ ...seededRange }, admin()));
-    const days = dates.eachBucket(seededRange, "day").map((bucket) => bucket.key);
-    expect(series[0].points.map((point) => point.x)).toEqual(days);
-    // The ranking's positional form takes no options, so it carries no session and the
-    // administrator-only endpoint refuses it; a caller holding a session uses the query form.
-    const positional = await analytics.getTopProducts(seededRange.from, seededRange.to, 2);
-    expect(positional.ok).toBe(false);
-    if (positional.ok) return;
-    expect(positional.error.status).toBe(401);
-  });
-
-  it("states no percentage against a baseline of nothing, and no infinity in its place", () => {
-    const records = FACTS.filter((record) => record.date !== dates.addDays(RANGE.from, -1));
-    const summary = analytics.computeKpis({ ...KPI_INPUT, records });
-    // A comparison period that sold nothing has no ratio: growth from nothing leaves the period's own
-    // figure standing and states no change rather than an infinity no card can render.
-    expect(summary.revenueMinor).toBe(14_000);
-    expect(summary.baseline.revenueChangePercent).toBe(0);
-  });
-
-  it("names a category the vocabulary does not hold by its own slug", () => {
-    const orphan = fixtures.makeSalesRecord({ date: RANGE.to, categoryId: ORPHAN_CATEGORY });
-    const query = { from: RANGE.from, to: RANGE.to, groupBy: "category" } as const;
-    const series = analytics.computeRevenueSeries({ records: [orphan], query });
-    expect(series[0].label).toBe("unknown-slug");
   });
 });

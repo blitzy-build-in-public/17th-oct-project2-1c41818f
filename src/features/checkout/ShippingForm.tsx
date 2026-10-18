@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ShippingForm.tsx
  * Purpose: The shipping step: address entry or reuse of a saved address, with per-field validation
- * Lines: 533
+ * Lines: 534
  */
 
 import { useEffect, useRef } from "react";
@@ -33,11 +33,12 @@ import { formatInteger, formatMoney } from "@/utils/format";
 /*
  * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
  * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step's
- * register: `sp-step__body`, `sp-address-form`, `sp-address-picker` with `__body` for the saved-address
- * radios and the lines beneath them, and `sp-step__actions` for the row the step's two controls share,
- * which it places primary-first in markup and trailing from the medium stop. Its companion
- * `src/styles/commerce-cart.css` owns `sp-address-picker__option` and `sp-summary__shipping` with
- * `sp-summary__method` for the delivery methods; the rest arrives from controls.css and layout.css.
+ * register: `sp-step__body` for the step's grid, `sp-address-form` for the field grid, `sp-address-picker`
+ * with `__body` for the saved-address radios and the lines beneath them, and `sp-step__actions` for the row the
+ * step's two controls share, which it places primary-first in markup and trailing from the medium stop. The
+ * shipping methods and their frame are `src/styles/summary-panel.css`'s: `sp-summary__shipping` with
+ * `sp-summary__method` and the `.sp-address-picker__option` frame they share. The rest comes from the shared
+ * primitives, controls.css and layout.css.
  *
  * `ROUTES` is imported although `src/constants/routes.ts` sits outside this file's dependency set: the
  * step's return control links to the cart, §0.6.1 and §0.6.4 make that module the single home of every

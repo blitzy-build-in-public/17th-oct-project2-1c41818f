@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/FeaturedProducts.tsx
  * Purpose: The featured-products strip drawn from the seeded catalogue, with a link into the catalogue
- * Lines: 258
+ * Lines: 259
  */
 
 import type { ReactElement } from "react";
@@ -10,7 +10,8 @@ import { Link } from "react-router-dom";
 
 import { ProductCard } from "@/components/product/ProductCard";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { COMMON_ACTIONS, FEEDBACK_COPY, HOME_COPY } from "@/constants/content";
+import { COMMON_ACTIONS, FEEDBACK_COPY } from "@/constants/content";
+import { HOME_COPY } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import type { Product } from "@/types/catalog";
 import type { AsyncStatus, ApiError } from "@/types/common";
@@ -35,11 +36,11 @@ import type { AsyncStatus, ApiError } from "@/types/common";
  * would break the strip's flex sizing. `Alert`, `EmptyState` and `Skeleton` carry their own classes, their own
  * state attributes and their own ARIA, so this file passes them props and writes no rule for them.
  *
- * Copy is the content module's throughout and every figure is formatted elsewhere: the band's heading, its
- * supporting line, its view-all label and the empty state's wording all come from
- * `src/constants/content.ts`, the destination from `src/constants/routes.ts`, and each tile formats its own
- * price, discount, rating and availability through `src/utils/format.ts`. Nothing here computes an amount, a
- * count or a sentence of its own.
+ * Copy comes from the copy modules and every figure is formatted elsewhere: the band's heading,
+ * its supporting line and its view-all label from `src/constants/content.ts`, the empty
+ * state's wording from `src/constants/content.ts`, the destination from `src/constants/routes.ts`,
+ * and each tile formats its own price, discount, rating and availability through
+ * `src/utils/format.ts`. Nothing here computes an amount, a count or a sentence of its own.
  */
 
 /**

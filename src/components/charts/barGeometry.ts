@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/barGeometry.ts
  * Purpose: The bar renderer's own geometry: its scales, its marks, its value labels and its readout placement
- * Lines: 472
+ * Lines: 446
  */
 
 import type { CSSProperties } from "react";
@@ -10,7 +10,11 @@ import {
   CHART_VIEWBOX_WIDTH,
   DEFAULT_CHART_HEIGHT,
   DEFAULT_PADDING,
+  LABEL_FONT_SIZE,
+  TICK_GAP,
+  WHOLE_NUMBER_STEP,
   axisLabelTransform,
+  bandAxisPadding,
   buildBandTicks,
   buildBarRects,
   buildValueTicks,
@@ -18,15 +22,17 @@ import {
   computePlotArea,
   createBandScale,
   createLinearScale,
+  estimateLabelWidth,
   extendDomainToIncludeZero,
   gridLineFor,
+  hasWholeValues,
   seriesClassName,
   stackValues,
-  TICK_GAP,
   zeroCoordinate,
 } from "@/components/charts/chartScales";
 import type {
   AxisLabelTransform,
+  AxisValueFormatter,
   BandScale,
   BarMode,
   BarRect,
@@ -105,26 +111,6 @@ const HORIZONTAL_PADDING: Padding = {
   left: MIN_BAND_LABEL_GUTTER,
 };
 
-/**
- * The size a band label is written at, in this frame's user units: `src/styles/admin-reports.css` sets
- * `.sp-chart__tick` to `--font-size-xs`, which is `0.75rem` of the document's 16px root, and a font size inside
- * an SVG is a length in that SVG's own user coordinate system.
- */
-const LABEL_FONT_SIZE = 12;
-
-/**
- * The widest advance each class of character reaches in the system sans-serif stack the sheet draws labels
- * with, as a share of {@link LABEL_FONT_SIZE}: the thin characters by themselves, the lowercase letters and the
- * digits, the capitals, and the glyphs that fill their own cell. Each advance is at or above what its class
- * measures in that stack, so a label summed from them is never wider than the room it is measured against.
- */
-const NARROW_LABEL_CHARS = " !'(),-./:;[]\\fijlrIt";
-const NARROW_LABEL_ADVANCE = 0.44;
-const WIDE_LABEL_CHARS = "MWmw@%";
-const WIDE_LABEL_ADVANCE = 1.02;
-const LOWER_LABEL_ADVANCE = 0.66;
-const UPPER_LABEL_ADVANCE = 0.85;
-
 /** A value this close to nothing is nothing: no extent, and so no label to write. */
 const VALUE_EPSILON = 1e-9;
 
@@ -190,7 +176,7 @@ export interface BarGeometryOptions {
   readonly includeZero: boolean;
   readonly showValues: boolean;
   readonly formatValue: ValueFormatter;
-  readonly formatAxisValue: ValueFormatter;
+  readonly formatAxisValue: AxisValueFormatter;
   readonly formatLabel: LabelFormatter;
 }
 
@@ -228,38 +214,13 @@ function valueLabelTransform(rect: BarRect, orientation: Orientation): AxisLabel
 }
 
 /**
- * What one character of a band label is charged, as a share of {@link LABEL_FONT_SIZE}. A character in none of
- * the classes is charged the widest advance of all rather than an average, because a band label is whatever a
- * caller's formatter writes — a product name, an accented one, a figure — and each has to be measured inside
- * the frame rather than assumed to be a bare word.
- */
-function advanceOf(char: string): number {
-  if (NARROW_LABEL_CHARS.includes(char)) return NARROW_LABEL_ADVANCE;
-  if (WIDE_LABEL_CHARS.includes(char)) return WIDE_LABEL_ADVANCE;
-  if (char >= "A" && char <= "Z") return UPPER_LABEL_ADVANCE;
-  if (char >= "a" && char <= "z") return LOWER_LABEL_ADVANCE;
-  if (char >= "0" && char <= "9") return LOWER_LABEL_ADVANCE;
-  return WIDE_LABEL_ADVANCE;
-}
-
-/**
- * The room one band label takes, in user units: the sum of its characters' advances at the size the sheet draws
- * it. A band label is anchored at its own end and written away from the plot's leading edge, so a gutter
+ * The gutter a horizontal chart reserves for its band labels: the widest label its band axis holds, measured by
+ * {@link estimateLabelWidth} — the one home of that rule — plus the gap that axis keeps to the plot, and never
+ * less than {@link MIN_BAND_LABEL_GUTTER} nor so much that {@link MIN_HORIZONTAL_PLOT_WIDTH} is left for the
+ * bars. A band label is anchored at its own end and written away from the plot's leading edge, so a gutter
  * narrower than this cuts its leading glyphs, and a report's product names run two to three times the width a
- * bucket name needs.
- */
-function estimateLabelWidth(label: string): number {
-  let advance = 0;
-  for (const char of label) advance += advanceOf(char);
-  return advance * LABEL_FONT_SIZE;
-}
-
-/**
- * The gutter a horizontal chart reserves for its band labels: the widest label its band axis holds, plus the gap
- * that axis keeps to the plot, and never less than {@link MIN_BAND_LABEL_GUTTER} nor so much that
- * {@link MIN_HORIZONTAL_PLOT_WIDTH} is left for the bars. Every label the axis writes is one of the keys these
- * were read from — the anti-collision rule only ever drops a label — so no drawn label is wider than the gutter
- * measured from them all.
+ * bucket name needs. Every label the axis writes is one of the keys these were read from — the anti-collision
+ * rule only ever drops a label — so no drawn label is wider than the gutter measured from them all.
  */
 function bandLabelGutter(labels: readonly string[]): number {
   const widest = labels.reduce((widest, label) => Math.max(widest, estimateLabelWidth(label)), 0);
@@ -307,8 +268,9 @@ function plottedValues(
 /**
  * The domain the value axis spans, read from the values actually plotted and widened to carry zero unless the
  * caller asked for a deliberate zoom — where a bar reaching past the frame is trimmed to the plot rather than
- * painted over the axis. Empty input reaches `createLinearScale` as an equal pair, which it resolves to a
- * whole unit rather than a zero-width domain, so an axis is never drawn from `NaN`.
+ * painted over the axis. A pair that is equal — the shape an empty input and an all-zero one both reach — is
+ * resolved to the single value it holds, whose axis draws one tick on the baseline, so an axis is never drawn
+ * from `NaN` and never from a span of invented figures either.
  */
 function valueDomain(values: readonly number[], includeZero: boolean): readonly [number, number] {
   const low = values.length === 0 ? 0 : Math.min(...values);
@@ -321,8 +283,10 @@ function valueDomain(values: readonly number[], includeZero: boolean): readonly 
  * the pointer regions all read one band order and one pair of scales. A horizontal chart builds its scales
  * with their ranges swapped rather than transposing a coordinate afterwards, and nothing here reads a measured
  * pixel: the frame is the viewBox the marks are drawn in. The one reading taken of the content rather than the
- * frame is the room a horizontal chart's band labels take, which sets that frame's leading gutter before the
- * plot is computed — a product name is longer than any fixed gutter, and a clipped one names nothing.
+ * frame is the room the band labels take, which sets the frame's insets before the plot is computed: a
+ * horizontal chart's leading gutter, because a product name is longer than any fixed gutter and a clipped one
+ * names nothing, and a vertical chart's two horizontal ends, because the first and last band label are centred
+ * half a label nearer the frame's edges than the plot reaches.
  *
  * @param options - The series, the frame's height, the orientation, the mode and the three formatters.
  * @returns The scales and every mark placed by them.
@@ -331,13 +295,14 @@ export function buildGeometry(options: BarGeometryOptions): BarGeometry {
   const { series, height, orientation, mode, includeZero } = options;
   const horizontal = orientation === "horizontal";
   const bandKeys = collectBandKeys(series);
-  // The labels a horizontal chart's band axis will write are read before the frame is computed, because they
-  // are what its leading gutter is measured from: the gutter narrows the value direction alone, and the band
-  // axis the labels belong to runs down the frame rather than across it.
-  const bandLabels = horizontal ? bandKeys.map((key) => options.formatLabel(key)) : [];
+  // The labels the band axis will write are read before the frame is computed, because they are what the frame's
+  // room for them is measured from: a horizontal chart's leading gutter, which narrows the value direction alone
+  // because the band axis the labels belong to runs down the frame rather than across it, and a vertical chart's
+  // two horizontal ends, which the first and last centred label overhang.
+  const bandLabels = bandKeys.map((key) => options.formatLabel(key));
   const padding = horizontal
     ? { ...HORIZONTAL_PADDING, left: bandLabelGutter(bandLabels) }
-    : VERTICAL_PADDING;
+    : bandAxisPadding(VERTICAL_PADDING, bandLabels);
   const plotArea = computePlotArea({
     width: CHART_VIEWBOX_WIDTH,
     height,
@@ -354,16 +319,25 @@ export function buildGeometry(options: BarGeometryOptions): BarGeometry {
     ? [downStart, downStart + downSpan]
     : [downStart + downSpan, downStart];
   const bandScale = createBandScale({ domain: bandKeys, range: bandRange });
+  // A series of whole numbers is a count of people, orders or units, so its axis is ticked in whole numbers
+  // rather than at fractions of one; a metric that carries decimals — money in minor units is whole too, and
+  // its steps are far larger than a minor unit — keeps the step the ladder chooses.
   const valueScale = createLinearScale({
     domain: valueDomain(plottedValues(series, bandKeys, mode), includeZero),
     range: valueRange,
     nice: true,
+    minimumStep: hasWholeValues(series) ? WHOLE_NUMBER_STEP : undefined,
   });
   const baseline = zeroCoordinate(valueScale);
   const rects = buildBarRects({ series, bandScale, valueScale, orientation, mode, plotArea });
   const valueTicks = buildValueTicks(valueScale, options.formatAxisValue);
-  // A band key names where a band starts; its label belongs over the region the bars are drawn in.
-  const bandTicks = buildBandTicks(bandScale, options.formatLabel).map((tick) => ({
+  // A band key names where a band starts; its label belongs over the region the bars are drawn in. A label is
+  // thinned by the room it takes along the axis it is written across — the plot's width for a vertical chart —
+  // and by one line of type where it is written down that axis, which is a horizontal chart's band axis.
+  const bandTicks = buildBandTicks(bandScale, options.formatLabel, {
+    axisLength: horizontal ? plotArea.height : plotArea.width,
+    measureLabel: horizontal ? () => LABEL_FONT_SIZE : estimateLabelWidth,
+  }).map((tick) => ({
     key: tick.key,
     label: tick.label,
     position: tick.position + bandScale.bandwidth / 2,

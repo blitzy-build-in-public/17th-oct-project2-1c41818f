@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/SalesReport.tsx
  * Purpose: The sales report: bucketed table, totals row, summary metrics and paired chart
- * Lines: 275
+ * Lines: 276
  */
 
 import { useCallback } from "react";
@@ -193,12 +193,13 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
   const periodSentence = describePeriod(DEFINITION, query);
 
   // The axis, the readout and the paired data table all word a period through this one formatter, so the
-  // bucket's human wording stays `src/utils/dates.ts`'s; a series point's label is already the band's wording,
+  // bucket's human wording stays `src/utils/dates.ts`'s, told the period the run covers — a bucket the range
+  // clips is worded by the days of it the range holds; a series point's label is already the band's wording,
   // so a key that no longer parses as a date is printed as it stands. The x values are the rows' own `period`
   // cells — the day each bucket opens — which is what makes the axis read a period as the table and export do.
   const formatLabel = useCallback(
-    (key: string): string => formatBucketLabel(key, granularity) || key,
-    [granularity],
+    (key: string): string => formatBucketLabel(key, granularity, range) || key,
+    [granularity, range],
   );
 
   const isLoading = status === "idle" || status === "loading";

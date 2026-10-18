@@ -1,6 +1,6 @@
 /* Path: src/styles/components.css
  * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded through controls.css and data-display.css
- * Lines: 506
+ * Lines: 507
  */
 
 /* The twelve primitive families every page composes are defined across the four sheets this chain loads:
@@ -18,8 +18,9 @@
  * always did, and no other file imports either of the two. This file defines no shell class (layout.css owns
  * .sp-container, .sp-app*, .sp-page*, .sp-header*, .sp-footer* and .sp-sidebar*, and .sp-page-header* is
  * src/styles/page-header.css, which layout.css loads) and no area class (the
- * .sp-product*, .sp-facet*, .sp-search*, .sp-cart*, .sp-summary*, .sp-checkout*, .sp-steps*, .sp-account*,
- * .sp-chart*, .sp-kpi* and .sp-report* families belong to the four sheets that follow).
+ * .sp-product*, .sp-facet*, .sp-search*, .sp-cart*, .sp-summary* (in `summary-panel.css`, which the commerce
+ * sheet loads), .sp-checkout*, .sp-steps*, .sp-account*, .sp-chart*, .sp-kpi* and .sp-report* families
+ * belong to the sheets that follow and the sheets they load).
  * The contract, shared by these sheets: state is carried by attributes, never by a second class —
  * [aria-current], [aria-selected], [aria-checked], [aria-invalid], [aria-sort], [aria-expanded],
  * [aria-busy], [disabled], [hidden], [inert], :checked, :indeterminate, :focus-visible, :hover and

@@ -1,11 +1,11 @@
 /**
  * Path: src/features/checkout/OrderConfirmation.tsx
  * Purpose: Confirmation route showing the order number, itemised lines, delivery estimate and address
- * Lines: 496
+ * Lines: 535
  */
 
 import type { ReactElement } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardBody, CardHeader, OrderStatusBadge } from "@/components/ui/Card";
@@ -23,7 +23,10 @@ import {
   documentTitle,
   orderConfirmationHeading,
 } from "@/constants/content";
-import { ROUTE_PARAMS, ROUTES, accountOrderPath } from "@/constants/routes";
+import { ROUTE_PARAMS, ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
+// The seam's own reading of a failure, so this page never decides what a status or a sentence means: whether
+// a retry could answer differently is a fact about the refusal, and `src/lib/apiContract.ts` owns it.
+import { isNotFoundFailure, isSessionFailure } from "@/lib/apiClient";
 import { getOrder } from "@/lib/orderService";
 import type { OrderServiceOptions } from "@/lib/orderService";
 import { useAuth } from "@/state/AuthContext";
@@ -43,14 +46,14 @@ import { capitalise } from "@/utils/strings";
  * family: `sp-confirmation` with its `__header`, `__meta` (the pair grid the address form and the payment
  * row also use), `__number` (monospaced, selectable in one gesture), `__estimate`, `__lines` (the itemised
  * band, ruled off above and below) and `__actions`. That band reuses the review step's form —
- * `sp-review__list` and `sp-review__item`, whose last child the sheet pushes to the trailing edge in
- * tabular figures — and the amounts under it use the summary register: `sp-review__totals`,
- * `sp-summary__title`, `sp-summary__note` and `sp-summary__row` with its `--discount` and `--total`
- * modifiers. Earlier sheets supply the rest: `sp-container` with `--narrow`, `sp-page`, `sp-page__body` and
- * `sp-grid` from `src/styles/layout.css`; `sp-btn` with the `--primary`, `--secondary` and `--link`
- * variants an anchor wears from `src/styles/controls.css`, because every control here navigates and no
- * member of `Button.tsx` renders a link; and `.sp-visually-hidden`, the removal of a `role="list"`
- * element's markers and the neutralising of motion under `prefers-reduced-motion` from `src/styles/base.css`.
+ * `sp-review__list` and `sp-review__item`, whose last child the sheet pushes to the trailing edge in tabular
+ * figures. The amounts under it — `sp-review__totals` here — use the summary register: `sp-summary__title`,
+ * `sp-summary__note` and `sp-summary__row` with its `--discount` and `--total` modifiers, all in
+ * `src/styles/summary-panel.css`. Earlier sheets supply the rest: `sp-container` with `--narrow`, `sp-page`,
+ * `sp-page__body` and `sp-grid` from `src/styles/layout.css`; `sp-btn` with the `--primary`, `--secondary`
+ * and `--link` variants an anchor wears from `src/styles/controls.css`, because every control here navigates
+ * and no member of `Button.tsx` renders a link; and `.sp-visually-hidden`, the removal of a `role="list"`
+ * element's markers and the motion neutralised under `prefers-reduced-motion` from `src/styles/base.css`.
  */
 
 /** The sign between a line's quantity and the price it was bought at: notation rather than wording, so it is
@@ -91,9 +94,10 @@ function isStoredText(value: unknown): value is string {
  *
  * The token is sent because the seam authenticates the read with it: an order that names an account answers
  * only to the session that owns it, or to an administrator, and a request carrying no token at all is refused
- * with `401`; an order placed without an account answers to whoever holds its identifier, which is what keeps
- * a guest's confirmation reload-safe. Nothing about expiry, role or ownership is decided here — those are the
- * seam's answers to this request.
+ * with `401`. An order placed without an account is answered by the placement credential
+ * `src/lib/orderService.ts` remembers for the orders this browser placed, which the read presents on its own
+ * and which is why a guest's confirmation reopens there and nowhere else. Nothing about expiry, role or
+ * ownership is decided here — those are the seam's answers to this request.
  *
  * @param sessionToken - The token the read authenticates with, `""` when the visitor holds none.
  * @param signal - The request's abort signal, from `useAsync`.
@@ -171,31 +175,59 @@ function quantityAtPriceLabel(line: OrderLine, currency: CurrencyCode): string {
   return `${quantity} ${QUANTITY_PRICE_SEPARATOR} ${unitPrice}`;
 }
 
-/** What {@link ConfirmationFailure} needs: the failure the seam shaped, and what retrying does. */
+/** What {@link ConfirmationFailure} needs: the failure the seam shaped, where the visitor stands, and what
+ * retrying does. */
 interface ConfirmationFailureProps {
   /** The `ApiError` the failed read resolved with. */
   readonly error: ApiError;
+  /** The path this read was made from, which the sign-in link carries back as its `returnTo`. */
+  readonly returnPath: string;
   /** Runs the read again, from `useAsync`. */
   readonly onRetry: () => void;
 }
 
 /**
- * The state a failed read shows: the failure in the danger register, with the retry a reader needs and the
+ * The state a failed read shows: the failure in the danger register, with the action that resolves it and the
  * way back its single action cannot also offer.
  *
  * Every failure this route can meet arrives as one value — a `404` for an identifier no order holds, a `401`
  * for an account's order read without a session, a `403` where a role was refused — and the message is the
  * failure's own. No `try`/`catch` surrounds the read, because the seam reports failures as values.
  *
- * @param props - The failure, and the retry that runs the read again.
- * @returns The alert, the hint under it and the link back into the catalogue.
+ * The action offered is the one that resolves the state, not the one a retry verb suggests. A retry is shown
+ * exactly where a repeat of the request could answer differently; a refusal for want of a session is resolved
+ * by the sign-in that ends in one, which carries this path back so the visitor lands on the order they asked
+ * for, and a `404` by the catalogue link below, because repeating either would spend a request on an answer
+ * the seam has already given.
+ *
+ * @param props - The failure, the path to return to, and the retry that runs the read again.
+ * @returns The alert, the hint under it and the links that resolve the state.
  */
-function ConfirmationFailure({ error, onRetry }: ConfirmationFailureProps): ReactElement {
+function ConfirmationFailure({
+  error,
+  onRetry,
+  returnPath,
+}: ConfirmationFailureProps): ReactElement {
+  const isSessionProblem = isSessionFailure(error);
+  const canRetry = !isSessionProblem && !isNotFoundFailure(error);
+
   return (
     <div className="sp-confirmation">
-      <Alert tone="danger" error={error} actionLabel={COMMON_ACTIONS.RETRY} onAction={onRetry} />
-      <p className="sp-summary__note">{FEEDBACK_COPY.ERROR_STATE_HINT}</p>
+      <Alert
+        actionLabel={canRetry ? COMMON_ACTIONS.RETRY : undefined}
+        error={error}
+        onAction={canRetry ? onRetry : undefined}
+        tone="danger"
+      />
+      {/* The hint advises a second attempt, so it is said exactly where one is offered: a visitor asked to sign
+          in or handed the way back is not told to try again. */}
+      {canRetry ? <p className="sp-summary__note">{FEEDBACK_COPY.ERROR_STATE_HINT}</p> : null}
       <div className="sp-confirmation__actions">
+        {isSessionProblem ? (
+          <Link className="sp-btn sp-btn--primary" to={loginPath(returnPath)}>
+            {COMMON_ACTIONS.SIGN_IN}
+          </Link>
+        ) : null}
         <Link className="sp-btn sp-btn--secondary" to={ROUTES.CATALOG}>
           {NOT_FOUND_COPY.ACTION_LABEL}
         </Link>
@@ -395,12 +427,14 @@ function ConfirmationDetails({
  * @param orderId - The identifier the route named, `""` when it named none.
  * @param query - The read's state and its actions, from `useAsync`.
  * @param session - The session in force, or `null` for a visitor who is not signed in.
+ * @param returnPath - The path the visitor is on, which a failed read's sign-in link carries back.
  * @returns The element the page renders below its header.
  */
 function confirmationBody(
   orderId: string,
   query: AsyncQueryState<Order>,
   session: Session | null,
+  returnPath: string,
 ): ReactElement {
   const { data, error, reload } = query;
 
@@ -414,7 +448,9 @@ function confirmationBody(
       />
     );
   }
-  if (error !== null) return <ConfirmationFailure error={error} onRetry={reload} />;
+  if (error !== null) {
+    return <ConfirmationFailure error={error} onRetry={reload} returnPath={returnPath} />;
+  }
   if (data === null) {
     return (
       <div className="sp-confirmation" aria-busy="true">
@@ -433,15 +469,17 @@ function confirmationBody(
 
 /**
  * The order confirmation route: the page a buyer lands on the moment an order is placed, and the page the
- * same address renders again after a reload, from a shared link, or in a browser that never reached the
- * checkout.
+ * same address renders again after a reload in the browser that placed it.
  *
  * That reload-safety is the point of the file. The cart is cleared the moment an order is placed, so this page
  * reads nothing held in memory: it takes the identifier from the route, asks `src/lib/orderService.ts` for the
- * order, and renders what the order holds — which is also why a shared link shows the order rather than an
- * empty page. It reads no cart state and no checkout state, and every rule about who may read an order stays in
- * the seam rather than being restated here. The two session facts it does touch are the credential the read
- * authenticates with and the account that credential stands for; neither is decided here.
+ * order, and renders what the order holds. Which credential answers that read depends on the order: an order
+ * that names an account needs the session token below, and an account-less one the placement credential
+ * `src/lib/orderService.ts` remembers for the orders this browser placed — so a confirmation reopens in the
+ * browser that placed it, and a shared link no longer opens a stranger's order. It reads no cart state and no
+ * checkout state, and every rule about who may read an order stays in the seam rather than being restated here.
+ * The two session facts it does touch are the credential the read authenticates with and the account that
+ * credential stands for; neither is decided here.
  *
  * The credential is read from the entry `src/state/AuthContext.tsx` persists rather than from the session that
  * module publishes, and that choice is load-bearing. A stored token is revalidated on mount, and until it
@@ -456,6 +494,7 @@ function confirmationBody(
  */
 export function OrderConfirmation(): ReactElement {
   const params = useParams();
+  const { pathname } = useLocation();
   const orderId = (params[ROUTE_PARAMS.ORDER_ID] ?? "").trim();
   const { session } = useAuth();
   const [storedToken] = useLocalStorage<string>(STORAGE_KEYS.SESSION, "", {
@@ -489,7 +528,7 @@ export function OrderConfirmation(): ReactElement {
           title={heading}
           description={order.data === null ? undefined : CHECKOUT_COPY.CONFIRMATION_THANK_YOU}
         />
-        <div className="sp-page__body">{confirmationBody(orderId, order, session)}</div>
+        <div className="sp-page__body">{confirmationBody(orderId, order, session, pathname)}</div>
       </div>
     </div>
   );

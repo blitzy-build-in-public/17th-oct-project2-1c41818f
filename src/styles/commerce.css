@@ -1,27 +1,33 @@
 /* Path: src/styles/commerce.css
  * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
- * Lines: 250
+ * Lines: 256
  */
+
+/* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
+ * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
+ * quantity stepper — and restates none of them. It loads sixth; the cart and checkout roots also carry
+ * layout.css's `.sp-split`, whose track gives them their two columns.
 /* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
  * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
  * quantity stepper — and restates none of them. It loads sixth; the cart and checkout roots also carry
  * layout.css's `.sp-split`, whose track gives them their two columns.
  * BLITZY [BUDGET]: the cart, summary and checkout register does not fit its 460-line budget, and the sheet
  * passed the request's 600-line ceiling at 647 once the cart-presentation checkpoint's rules joined it — where
- * the plan's §0.5.5 remedy is the split, the ceiling being never raised. The cart and mini-cart register
- * therefore moved, verbatim and order-preserving, into src/styles/commerce-cart.css, which this sheet loads with
- * @import ahead of its own rules, as catalog.css loads catalog-landing.css and catalog-detail.css. A CSS
- * the checkout's step indicator moved, verbatim and order-preserving, into src/styles/commerce-steps.css by the
- * destination branch's surface-CSS landing, which this sheet loads with its own @import beside the cart register's,
- * so both halves hold the cascade position they held in the one file. A CSS @import is inlined where it sits, so
- * the built cascade still reads the cart register, then the step family, then this sheet's own rules, and the entry
- * point imports the same eight mapped paths in the same order, with no ninth path added. Every value is still a var()
- * from tokens.css and no rule is restated in either sheet.
+ * the plan's §0.5.5 remedy is the split, the ceiling being never raised. Three families have left it whole, each
+ * loaded here with @import ahead of this sheet's own rules, so the built cascade holds the position each held in
+ * the one file and the entry point imports the same eight mapped paths in the same order, with no ninth path
+ * added:
+ *  - the cart and mini-cart register is src/styles/commerce-cart.css, moved verbatim and order-preserving;
+ *  - the checkout's step indicator is src/styles/commerce-steps.css, moved by the destination branch's
+ *    surface-CSS landing, which also carries the family's own medium-stop override;
+ *  - the order summary panel register is src/styles/summary-panel.css, moved by this checkpoint's
+ *    promo-code-lifecycle work, which also carries the promo band's grid and the applied-code row.
+ * Every value is still a var() from tokens.css and no rule is restated in another sheet.
  */
 
 @import "./commerce-cart.css";
 @import "./commerce-steps.css";
-
+@import "./summary-panel.css";
 /* ==== Checkout layout ==== */
 /* The cart's frame from the same `.sp-split`; the aside takes `.sp-cart__aside`'s sticky rule and holds the summary. */
 .sp-checkout {

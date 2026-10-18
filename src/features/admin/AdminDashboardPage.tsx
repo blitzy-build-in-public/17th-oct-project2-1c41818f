@@ -1,10 +1,10 @@
 /**
  * Path: src/features/admin/AdminDashboardPage.tsx
  * Purpose: The administrator dashboard: dated range, KPI cards, revenue chart, breakdown and tables
- * Lines: 361
+ * Lines: 342
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
@@ -32,7 +32,6 @@ import {
 } from "@/lib/analyticsService";
 import { useAuth } from "@/state/AuthContext";
 import { useAsync, useBreakpoint, useDocumentTitle, useLocalStorage } from "@/state/hooks";
-import { useToast } from "@/state/ToastContext";
 import type {
   BaselineKind,
   BucketGranularity,
@@ -42,7 +41,7 @@ import type {
   ProductPerformance,
   RevenueGroupBy,
 } from "@/types/analytics";
-import type { ApiError, DateRange } from "@/types/common";
+import type { DateRange } from "@/types/common";
 import type { Order } from "@/types/commerce";
 import { defaultReportRange, maxReportRange, resolveBaselineRange } from "@/utils/dates";
 import { storedRangeOr } from "@/utils/storage";
@@ -179,17 +178,18 @@ function RevenueBreakdown({
  *
  * The four states every data page renders are explicit. A pending read is each block's own skeleton, driven by
  * the flag passed down; a failure is the single page-level alert this view owns, whose retry re-runs every read
- * that failed; a range that recorded nothing is the dashboard's empty state with the one action that helps; a
- * filled period is the dashboard itself. Authorisation is the session's, not this page's: `src/Router.tsx`
- * guards the route and `src/lib/mockServer.ts` re-checks the administrator role on every analytics endpoint,
- * answering `403` without one, so the session token travels with each read.
+ * that failed — and that alert is the failure's only announcement, because a notice raised beside a region that
+ * already states the message in full would report one failed read twice; a range that recorded nothing is the
+ * dashboard's empty state with the one action that helps; a filled period is the dashboard itself. Authorisation
+ * is the session's, not this page's: `src/Router.tsx` guards the route and `src/lib/mockServer.ts` re-checks the
+ * administrator role on every analytics endpoint, answering `403` without one, so the session token travels with
+ * each read.
  *
  * @returns The dashboard.
  */
 export function AdminDashboardPage(): ReactElement {
   const { session } = useAuth();
   const sessionToken = session?.token;
-  const toast = useToast();
   useDocumentTitle(documentTitle(PAGE_TITLES.DASHBOARD));
 
   // The trailing window, taken once per mount from one reading of the clock, and the last-used range both
@@ -240,7 +240,6 @@ export function AdminDashboardPage(): ReactElement {
 
   const reads = [kpis, revenue, topProducts, recentOrders];
   const anyPending = reads.some((read) => read.status === "idle" || read.status === "loading");
-  const allSettled = reads.every((read) => read.status === "success");
   const firstError = kpis.error ?? revenue.error ?? topProducts.error ?? recentOrders.error;
   const summary = kpis.data;
   const series = revenue.data ?? [];
@@ -252,24 +251,6 @@ export function AdminDashboardPage(): ReactElement {
       if (read.status === "error") read.reload();
     }
   }, [kpis, revenue, topProducts, recentOrders]);
-
-  const announcedErrorRef = useRef<ApiError | null>(null);
-  const hasRenderedRef = useRef(false);
-  useEffect(() => {
-    if (allSettled) hasRenderedRef.current = true;
-  }, [allSettled]);
-  // A failure announces itself twice over: the alert below holds the retry, and a refresh on an already-read
-  // dashboard also raises a toast, because a reader whose figures were replaced by an error may not be looking
-  // at the block region. A first load's failure is the alert alone, and each distinct failure speaks once.
-  useEffect(() => {
-    if (firstError === null) {
-      announcedErrorRef.current = null;
-      return;
-    }
-    if (announcedErrorRef.current === firstError) return;
-    announcedErrorRef.current = firstError;
-    if (hasRenderedRef.current) toast.error(firstError.message);
-  }, [firstError, toast]);
 
   /** Applies a range: the page's own range and the stored last-used one together, so the two can never
    *  disagree about what was last read and the next visit to either administrator surface opens on it. */

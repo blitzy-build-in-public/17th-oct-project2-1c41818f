@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartSummary.tsx
  * Purpose: Totals panel with promo-code entry, discount lines and free-shipping progress
- * Lines: 385
+ * Lines: 426
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -15,7 +15,9 @@ import {
   CART_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
+  appliedPromoLabel,
   freeShippingProgressLabel,
+  removePromoLabel,
 } from "@/constants/content";
 import {
   selectDiscountTotalMinor,
@@ -37,13 +39,16 @@ import {
 
 /*
  * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this panel's
- * register: `sp-summary` with its padding and rhythm, `sp-summary__title`, `sp-summary__promo` (the field,
- * then the apply control, with a rejected code's reason spanning both columns), `sp-summary__row` with its
- * `--discount` and `--total` modifiers, and `sp-summary__progress` for the free-delivery band.
+ * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/summary-panel.css` owns this
+ * panel's register, split out of `src/styles/commerce.css`, which loads it with `@import`: `sp-summary`
+ * with its padding and rhythm, `sp-summary__title`, `sp-summary__promo` (the field, its apply control,
+ * the reason, the applied code's row and the notice, each placed as a row of the band),
+ * `sp-summary__applied` for the applied code with the control that withdraws it, `sp-summary__row` with
+ * its `--discount` and `--total` modifiers, and `sp-summary__progress` for the free-delivery band.
  * `src/styles/layout.css` contributes `sp-stack`, the rhythm the figures sit in on the definition list that
- * holds the amount rows, and `src/styles/base.css` contributes `sp-visually-hidden`, which keeps the
- * announcement out of sight while leaving it in the accessibility tree.
+ * holds the amount rows, so the live region wrapped around them costs the rows none of the panel's spacing,
+ * and `src/styles/base.css` contributes `sp-visually-hidden`, which keeps the announcement out of sight
+ * while leaving it in the accessibility tree.
  */
 
 /** The control a promo rule and a promo failure both key their message to, as the seam names it. */
@@ -220,7 +225,10 @@ function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): React
  * a subtotal, not a discount, not a threshold comparison. What it does own is the promo entry: a code is
  * normalised, its shape judged through `src/utils/validation.ts` and the code then checked against this
  * basket through `src/lib/pricingService.ts`; only a code the seam accepted is stored on the cart, and a
- * refused one always says why in words.
+ * refused one is refused against the field the code was typed into, so the words that say why are the field's
+ * own message, which marks the control invalid and describes it. A code the seam accepted is stated on the panel
+ * together with the control that withdraws it, because a saving can be taken off as readily as it was put on —
+ * and taking it off is what returns the basket to the figures it carried before the code was applied.
  *
  * The panel keeps rendering while its figures do not: the title and the promo entry stand whatever the
  * pricing request is doing, so a shopper can correct a rejected code at any moment. The figures follow the
@@ -245,8 +253,10 @@ export function CartSummary({
   onRetry,
 }: CartSummaryProps): ReactElement {
   // The lines a typed code is checked against come from the cart's own state rather than from a copy: a
-  // code's floor and its eligible goods are properties of the basket as it stands.
-  const { lines } = useCart();
+  // code's floor and its eligible goods are properties of the basket as it stands. The applied code comes
+  // from there too, so the row naming it and the control that withdraws it state what the cart holds rather
+  // than a copy this panel could drift from.
+  const { lines, promoCode } = useCart();
   // Read as the object rather than destructured, because the interface declares its members as methods.
   const cartActions = useCartDispatch();
   const toasts = useToast();
@@ -259,6 +269,9 @@ export function CartSummary({
   /** How many checks have started, so an answer a newer check or an unmount superseded is dropped. */
   const attemptRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
+  /** The promo control itself, so withdrawing a code through the row beside it can put focus back on the
+   *  field that row was reached from. */
+  const promoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(
     () => () => {
@@ -283,8 +296,10 @@ export function CartSummary({
 
   const changeCode = (event: ChangeEvent<HTMLInputElement>): void => {
     setCode(event.target.value);
-    // The message goes as the shopper corrects the code rather than standing until the next submission.
+    // The messages go as the shopper corrects the code rather than standing until the next submission: the
+    // field's own reason and a refusal that named no field are both about the code being edited.
     setFieldErrors((errors) => clearFieldError(errors, PROMO_CODE_FIELD));
+    setNotice(null);
   };
 
   const checkPromoCode = async (): Promise<void> => {
@@ -318,9 +333,13 @@ export function CartSummary({
       return;
     }
 
+    // A code the seam refused was refused for the code the shopper typed into this field, so the reason is
+    // filed against the field rather than stated in the band: the field's own message is what marks the
+    // control invalid and describes it, which is how the reason reaches the input and the sheet's invalid
+    // treatment instead of standing over it unattached.
     const reason = promoRejectionMessage(result.error);
     if (reason !== undefined) {
-      setNotice(reason);
+      setFieldErrors({ [PROMO_CODE_FIELD]: reason });
       return;
     }
     // A failure that is not one of the reasons a code is refused names the control it belongs to, so it is
@@ -331,6 +350,15 @@ export function CartSummary({
       return;
     }
     setNotice(result.error.message);
+  };
+
+  const withdrawPromoCode = (): void => {
+    cartActions.applyPromoCode(null);
+    setFieldErrors({});
+    setNotice(null);
+    // The control that was just used leaves the document with the code it withdrew, so focus is put on
+    // the field the shopper would use next rather than dropped onto the body.
+    promoInputRef.current?.focus();
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
@@ -356,6 +384,7 @@ export function CartSummary({
       </h2>
       <form className="sp-summary__promo" noValidate onSubmit={handleSubmit}>
         <Input
+          ref={promoInputRef}
           autoComplete="off"
           errors={fieldErrors}
           label={CART_COPY.PROMO_FIELD_LABEL}
@@ -368,6 +397,18 @@ export function CartSummary({
         <Button isLoading={isChecking} type="submit" variant="secondary">
           {CART_COPY.PROMO_APPLY_LABEL}
         </Button>
+        {promoCode === null ? null : (
+          <div className="sp-summary__applied">
+            <span>{appliedPromoLabel(promoCode)}</span>
+            <Button
+              aria-label={removePromoLabel(promoCode)}
+              onClick={withdrawPromoCode}
+              variant="link"
+            >
+              {COMMON_ACTIONS.REMOVE}
+            </Button>
+          </div>
+        )}
         {notice === null ? null : <Alert tone="warning">{notice}</Alert>}
       </form>
       <div aria-busy={isLoading}>{renderFigures()}</div>

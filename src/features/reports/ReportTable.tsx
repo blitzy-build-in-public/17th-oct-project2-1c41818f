@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 376
+ * Lines: 399
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -34,7 +34,7 @@ import type { DateRange } from "@/types/common";
 import { normalisePageSize, paginate, sortByKey } from "@/utils/collections";
 import { buildCsvResult, downloadCsv } from "@/utils/csv";
 import type { CsvBuildResult } from "@/utils/csv";
-import { formatDateRange } from "@/utils/dates";
+import { formatBucketCell, formatDateRange } from "@/utils/dates";
 import { formatCellValue } from "@/utils/format";
 
 /*
@@ -55,9 +55,11 @@ import { formatCellValue } from "@/utils/format";
  * header semantics, the sticky header, the tabular-numeric treatment, the single empty row and the composed
  * paginator, so no comparator, page window or cell formatter is written here: the order comes from `sortByKey`
  * over each column's raw cell, a cell is rendered by `formatCellValue` from the `ReportCellFormat` its column
- * declares, and the export is built by `reportService.toCsvMatrix` from the same rows, the same definition and
- * the same summary the table renders over — which is what stops the download from disagreeing with the screen,
- * down to the totals row, which is `totalsRowCells`' output in both.
+ * declares — except the period column, whose wording is `formatBucketCell`'s so that a bucket the selected
+ * range clips states the days of it the range covers — and the export is built by `reportService.toCsvMatrix`
+ * from the same rows, the same definition and the same summary the table renders over — which is what stops
+ * the download from disagreeing with the screen, down to the totals row, which is `totalsRowCells`' output in
+ * both.
  *
  * The order and the page are this file's, and both are applied to the whole run before the primitive is handed
  * anything. `DataTable` sorts only what it is given, and what it is given is one page, so an order left to the
@@ -103,6 +105,20 @@ function exportFileNameOf(
   granularity: BucketGranularity,
 ): string {
   return `${kind}-${granularity}-${range.from}-${range.to}`;
+}
+
+/** The key a period column carries in every definition that has one, so the cell wording below is attached to
+ *  the column of dates rather than to a column's position in the table. */
+const PERIOD_COLUMN_KEY = "period";
+
+/** The wording one row's period cell shows: the day the bucket opens when the range covers it whole, and the
+ *  days of it the range holds when the range clips it — both `src/utils/dates.ts`'s. The row keeps the
+ *  bucket's ISO day as its cell value, so the sort of the column, the row's identity and the CSV export are
+ *  unchanged and only this text is qualified; a cell holding no date is printed as it stands, as the shared
+ *  cell dispatcher does. */
+function periodCellOf(row: ReportRow, granularity: BucketGranularity, range: DateRange): ReactNode {
+  const period = row.cells[PERIOD_COLUMN_KEY];
+  return typeof period === "string" ? formatBucketCell(period, granularity, range) || period : null;
 }
 
 /** The key `DataTable` tracks a row by: the report's own stable id — a bucket key or a product id — and never
@@ -268,20 +284,27 @@ export function ReportTable({
   };
 
   // One column per column of the definition, in its order. `value` reads the raw cell — minor units for money,
-  // a ratio for a percentage — so the primitive orders a column by its figure and renders it through
-  // `formatCellValue`, and a sorted column is never sorted by its printed text.
+  // a ratio for a percentage, the bucket's ISO day for the period — so the primitive orders a column by its
+  // figure and renders it through `formatCellValue`, and a sorted column is never sorted by its printed text.
+  // The period column alone brings a `cell`, which words a bucket the range clipped by the days it covers while
+  // leaving that raw value in place, so nothing the sort or the export reads moves.
   const columns = useMemo<readonly DataTableColumn<ReportRow>[]>(
     () =>
-      definition.columns.map((column) => ({
-        id: column.key,
-        header: column.label,
-        value: (row: ReportRow) => row.cells[column.key] ?? null,
-        format: column.format,
-        sortable: column.sortable,
-        align: column.align,
-        isNumeric: column.align === "end",
-      })),
-    [definition],
+      definition.columns.map((column) => {
+        const base: DataTableColumn<ReportRow> = {
+          id: column.key,
+          header: column.label,
+          value: (row: ReportRow) => row.cells[column.key] ?? null,
+          format: column.format,
+          sortable: column.sortable,
+          align: column.align,
+          isNumeric: column.align === "end",
+        };
+        return column.key === PERIOD_COLUMN_KEY
+          ? { ...base, cell: (row: ReportRow): ReactNode => periodCellOf(row, granularity, range) }
+          : base;
+      }),
+    [definition, granularity, range],
   );
 
   // The totals row that closes the table, from `totalsRowCells` — the same list `toCsvMatrix` writes, so the

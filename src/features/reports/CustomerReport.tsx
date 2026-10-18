@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 306
+ * Lines: 307
  */
 
 import { useCallback } from "react";
@@ -195,11 +195,12 @@ export function CustomerReport({
 
   // A band key read as axis wording. The key is the period's own wording — `src/lib/reportSeries.ts` keys and
   // words every band by its period — so a wording that is already readable is passed through and a raw bucket
-  // key, or a product's name, is read by `src/utils/dates.ts`; the `|| key` fallback is the one
-  // `defaultLabelFormatter` in `src/components/charts/chartScales.ts` applies for the same reason.
+  // key, or a product's name, is read by `src/utils/dates.ts` over the range the run covers, which is what
+  // qualifies a band the range clipped; the `|| key` fallback is the one `defaultLabelFormatter` in
+  // `src/components/charts/chartScales.ts` applies for the same reason.
   const formatBandLabel = useCallback(
-    (key: string): string => formatBucketLabel(key, granularity) || key,
-    [granularity],
+    (key: string): string => formatBucketLabel(key, granularity, range) || key,
+    [granularity, range],
   );
 
   // The catalogue is a compile-time list that carries this kind, so an absent definition is a defect rather than

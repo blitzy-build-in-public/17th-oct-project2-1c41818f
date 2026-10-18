@@ -1,6 +1,5 @@
 /**
  * Path: src/constants/content.ts
- * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
  * Lines: 556
  */
 
@@ -267,6 +266,7 @@ export const CART_COPY = {
 export const removeLineLabel = (productName: string): string => `Remove ${productName}`;
 export const quantityLabel = (productName: string): string => `Quantity for ${productName}`;
 export const appliedPromoLabel = (code: string): string => `Promo code ${code} applied`;
+export const removePromoLabel = (code: string): string => `Remove promo code ${code}`;
 export const freeShippingProgressLabel = (formattedRemaining: string): string =>
   `Add ${formattedRemaining} more to unlock free delivery.`;
 export const cartItemCountLabel = (count: number): string =>
@@ -473,7 +473,7 @@ export const EMPTY_STATES = {
 } as const;
 /** One surface that can hold nothing, derived from {@link EMPTY_STATES}. */
 export type EmptyStateKey = keyof typeof EMPTY_STATES;
-/** The not-found view, composed inside `src/Router.tsx` from the shared primitives. */
+/** The not-found view, composed by `src/components/ui/NotFoundView.tsx` from the shared primitives. */
 export const NOT_FOUND_COPY = {
   TITLE: "Page not found",
   BODY: "That address does not match a page in SalesPro. It may have been mistyped.",

@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/reportRules.ts
  * Purpose: The report rules the report service and the seeded repositories both compose: the catalogue, row building, summaries, chart series and the CSV matrix for export
- * Lines: 569
+ * Lines: 579
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -457,7 +457,10 @@ export function runReportDefinition(
     granularity: resolveGranularity(definition, query),
     rows,
     summary: summarise(kind, rows, query),
-    series: buildReportSeries(kind, rows, definition, resolveGranularity(definition, query)),
+    series: buildReportSeries(kind, rows, definition, resolveGranularity(definition, query), {
+      from: query.from,
+      to: query.to,
+    }),
     generatedAt: toIsoDateTime(now),
   };
 }
@@ -493,7 +496,7 @@ function bandKeyOf(row: ReportRow, axisKey: string): string {
 
 /** The period cells one run is charted over: the keys its bands' wording is read against, so a day of a run
  *  that leaves one calendar year carries its year. A row without a period cell contributes none, and the
- *  reading of a key's calendar year is `src/utils/dates.ts`'s. */
+ *  reading of a key's calendar year and of the days a clipped band covers is `src/utils/dates.ts`'s. */
 function runKeysOf(rows: readonly ReportRow[]): string[] {
   return rows.map((row) => String(row.cells.period ?? ""));
 }
@@ -508,6 +511,7 @@ function seriesOfColumn(
   axisKey: string,
   granularity: BucketGranularity,
   keys: readonly string[],
+  range: DateRange | undefined,
 ): ChartSeries {
   return {
     id: column.key,
@@ -519,7 +523,7 @@ function seriesOfColumn(
       return {
         x: key,
         y: typeof value === "number" ? value : 0,
-        label: formatBandLabel(key, granularity, keys),
+        label: formatBandLabel(key, granularity, keys, range),
       };
     }),
   };
@@ -538,14 +542,18 @@ function seriesOfColumn(
  * @param definition - The definition that ran: the source of the columns, their headings and their formats.
  * @param granularity - The cut the rows were bucketed by, which is what a period band is named in. Defaults
  *   to the definition's own cut, which is the cut a run that asked for none used.
+ * @param range - The range the rows were read over, which is what words a band the range clips; absent, every
+ *   band is worded as whole.
  * @returns One series per charted column, each point's band keyed by its period and worded by that cut — a
- *   day carrying its year when the run's own periods leave one calendar year.
+ *   day carrying its year when the run's own periods leave one calendar year, and a band the range clipped
+ *   stating the days of it the range holds.
  */
 export function buildReportSeries(
   kind: ReportKind,
   rows: readonly ReportRow[],
   definition: ReportDefinition,
   granularity: BucketGranularity = definition.granularity,
+  range?: DateRange,
 ): ChartSeries[] {
   const keys = runKeysOf(rows);
   switch (kind) {
@@ -553,17 +561,19 @@ export function buildReportSeries(
       const headline = headlineColumn(definition);
       return headline === undefined
         ? []
-        : [seriesOfColumn(rows, headline, 0, "period", granularity, keys)];
+        : [seriesOfColumn(rows, headline, 0, "period", granularity, keys, range)];
     }
     case "products": {
       const headline = headlineColumn(definition);
       return headline === undefined
         ? []
-        : [seriesOfColumn(rows, headline, 0, "product", granularity, keys)];
+        : [seriesOfColumn(rows, headline, 0, "product", granularity, keys, range)];
     }
     case "customers":
       return definition.columns
         .filter((column) => column.key === "newCustomers" || column.key === "returningCustomers")
-        .map((column, index) => seriesOfColumn(rows, column, index, "period", granularity, keys));
+        .map((column, index) =>
+          seriesOfColumn(rows, column, index, "period", granularity, keys, range),
+        );
   }
 }

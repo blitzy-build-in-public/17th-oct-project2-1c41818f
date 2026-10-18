@@ -1,18 +1,19 @@
 /**
  * Path: src/utils/dates.ts
  * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use.
- * Lines: 597
+ * Lines: 589
  */
 
 import { DEFAULT_REPORT_RANGE_DAYS, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
 import type { BaselineKind, BucketGranularity } from "@/types/analytics";
-import type {
-  DateRange,
-  FieldErrors,
-  IsoDateString,
-  IsoDateTimeString,
-  SortDirection,
-} from "@/types/common";
+import type { DateRange, FieldErrors, IsoDateString, IsoDateTimeString } from "@/types/common";
+import {
+  MONTH_DAY_OPTIONS,
+  YEAR_OPTIONS,
+  formatDate,
+  formatYearMonth,
+  formatter,
+} from "@/utils/dateDisplay";
 import {
   addDaysToDate,
   isIsoDateText,
@@ -23,11 +24,11 @@ import {
 } from "@/utils/isoInstants";
 
 // The public surface ------------------------------------------------------------------------------
-// The instant level of the date foundation — what an ISO text parses to, and whether an instant falls
-// inside a range that has been resolved once — lives in `src/utils/isoInstants.ts`, because this file's
-// own surface reaches the plan's 600-line ceiling and re-parsing both range ends for every record is
-// exactly what the comparison below stops doing. Every name a consumer imports stays at this path, as
-// `src/lib/mockServer.ts` repeats the names of the modules its own concern is split into.
+// The instant level — what an ISO text parses to, and whether an instant falls inside a range resolved
+// once — lives in `src/utils/isoInstants.ts`, because re-parsing both range ends per record is what the
+// comparison below stops doing. Every name a consumer imports stays at this path.
+
+export { sortByIso } from "@/utils/isoInstants";
 
 export {
   addHoursToDate,
@@ -37,6 +38,17 @@ export {
   type PreparedRange,
 } from "@/utils/isoInstants";
 
+// The display level — the locale and the formatters a date is shown through — lives in
+// `src/utils/dateDisplay.ts`, split out of this file when the bucket wording needed the room.
+
+export {
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+  formatYearMonth,
+  type DateDisplayStyle,
+} from "@/utils/dateDisplay";
+
 /**
  * The conventions every date decision here shares. **Local time:** timestamps are ISO 8601 in the
  * visitor's local time, in which "today", bucketing and the comparisons are computed, so
@@ -44,18 +56,8 @@ export {
  * weeks:** a week bucket is an ISO week, which a Sunday start would split in two. **An injectable
  * clock:** any function needing the current time takes an optional `now: Date` last.
  */
-const LOCALE = "en-US";
 /** Milliseconds in a day, the unit the range arithmetic counts in. */
 const MS_PER_DAY = 86_400_000;
-/** Unit sizes {@link formatRelativeTime} chooses between: a month counts as 30 days, a year as 365. */
-const SECONDS = {
-  MINUTE: 60,
-  HOUR: 3_600,
-  DAY: 86_400,
-  WEEK: 604_800,
-  MONTH: 2_592_000,
-  YEAR: 31_536_000,
-} as const;
 /** The two bucket keys that are not a plain date: an ISO week and a calendar month. */
 const WEEK_KEY_PATTERN = /^(\d{4})-W(\d{2})$/;
 const MONTH_KEY_PATTERN = /^(\d{4})-(\d{2})$/;
@@ -143,44 +145,6 @@ export function fromDateInputValue(value: string): IsoDateString {
 
 // Display ----------------------------------------------------------------------------------------
 
-/** How much of a date {@link formatDate} spells out. */
-export type DateDisplayStyle = "short" | "medium" | "long";
-/** The option sets the formatters are built from: one per style, the date and time a timestamp shows,
- * and the partial forms a range label and a chart axis use. */
-const DATE_OPTIONS: Readonly<Record<DateDisplayStyle, Intl.DateTimeFormatOptions>> = {
-  short: { month: "numeric", day: "numeric", year: "numeric" },
-  medium: { month: "short", day: "numeric", year: "numeric" },
-  long: { month: "long", day: "numeric", year: "numeric" },
-};
-const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
-const MONTH_DAY_OPTIONS: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-const MONTH_YEAR_OPTIONS: Intl.DateTimeFormatOptions = { month: "short", year: "numeric" };
-const YEAR_OPTIONS: Intl.DateTimeFormatOptions = { year: "numeric" };
-/** The `en-US` formatters, built once per option set and reused; the relative pair says "yesterday"
- * for a day and "5 minutes ago" for a count. */
-const FORMATTERS = new Map<string, Intl.DateTimeFormat>();
-const RELATIVE_AUTO = new Intl.RelativeTimeFormat(LOCALE, { numeric: "auto" });
-const RELATIVE_COUNTING = new Intl.RelativeTimeFormat(LOCALE, { numeric: "always" });
-/** An `en-US` formatter for one option set, taken from the cache once it has been built. */
-function formatter(key: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const cached = FORMATTERS.get(key);
-  if (cached) return cached;
-  const created = new Intl.DateTimeFormat(LOCALE, options);
-  FORMATTERS.set(key, created);
-  return created;
-}
-
-/** Formats the ISO `iso` as `1/30/2025` for the `short` style, `Jan 30, 2025` for `medium`, the
- * default, or `January 30, 2025` for `long`; `""` when unparsable, never "Invalid Date". */
-export function formatDate(iso: IsoDateString, style: DateDisplayStyle = "medium"): string {
-  const date = parseIso(iso);
-  return date ? formatter(style, DATE_OPTIONS[style]).format(date) : "";
-}
-/** Formats the ISO `iso` with its local time, e.g. `Jan 30, 2025, 2:45 PM`, where the minute matters. */
-export function formatDateTime(iso: IsoDateTimeString): string {
-  const date = parseIso(iso);
-  return date ? formatter("date-time", DATE_TIME_OPTIONS).format(date) : "";
-}
 /** Formats the closed `from`–`to` range as one label — `"Jan 1 – Jan 30, 2025"`, collapsing the year
  * when the ends share it and writing one date when they are the same day; `""` when either is bad. */
 export function formatDateRange(from: IsoDateString, to: IsoDateString): string {
@@ -193,16 +157,56 @@ export function formatDateRange(from: IsoDateString, to: IsoDateString): string 
   const yearText = formatter("year", YEAR_OPTIONS).format(end);
   return `${dayText.format(start)} – ${dayText.format(end)}, ${yearText}`;
 }
-/** Formats the month and year of the ISO `iso`, e.g. `Jan 2025`, the monthly bucket label; `""` if bad. */
-export function formatYearMonth(iso: IsoDateString): string {
-  const date = parseIso(iso);
-  return date ? formatter("month-year", MONTH_YEAR_OPTIONS).format(date) : "";
+/** The days `range` covers of the bucket `key` names, or `null` when it covers that bucket whole or cannot
+ *  be read: the span a clipped bucket is worded by, both of its ends whole days. */
+function coveredSpan(
+  key: string,
+  granularity: BucketGranularity,
+  range: DateRange,
+): DateBucket | null {
+  const start = bucketStart(key, granularity);
+  const end = bucketEnd(key, granularity);
+  if (start === "" || end === "" || !isValidIso(range.from) || !isValidIso(range.to)) return null;
+  if (compareIso(range.from, range.to) > 0) return null;
+  const from = startOfDay(compareIso(range.from, start) > 0 ? range.from : start);
+  const to = startOfDay(compareIso(range.to, end) < 0 ? range.to : end);
+  const covered = from !== "" && to !== "" && compareIso(from, to) <= 0;
+  return covered && (from !== start || to !== end) ? { key, start: from, end: to } : null;
 }
-/** Formats the axis label of the bucket `iso` falls in at `granularity`: `Jan 30` by day, `Week of
- * Jan 27` by ISO week, named by its Monday, and `Jan 2025` by month; `""` when unparsable. */
-export function formatBucketLabel(iso: IsoDateString, granularity: BucketGranularity): string {
+
+/** The wording of the days a range covers of a bucket: its two days in the axis's own month-day style, with
+ *  the month written once where the span shares one — `Sep 19 – 20` — and both dates whole where the span
+ *  crosses a year (`Dec 31, 2025 – Jan 4, 2026`). `withYear` states the year a report's calendar cell writes
+ *  and an axis leaves off; `""` when either day cannot be parsed. */
+function coveredLabel(span: DateBucket, withYear: boolean): string {
+  const start = parseIso(span.start);
+  const end = parseIso(span.end);
+  if (!start || !end) return "";
+  if (start.getFullYear() !== end.getFullYear()) {
+    return `${formatDate(span.start)} – ${formatDate(span.end)}`;
+  }
+  const day = formatter("month-day", MONTH_DAY_OPTIONS);
+  if (start.getTime() === end.getTime()) return day.format(start);
+  const last = start.getMonth() === end.getMonth() ? String(end.getDate()) : day.format(end);
+  const spanText = `${day.format(start)} – ${last}`;
+  return withYear ? `${spanText}, ${formatter("year", YEAR_OPTIONS).format(end)}` : spanText;
+}
+
+/** Formats the axis label of the bucket `iso` falls in at `granularity`: `Jan 30` by day, `Week of Jan 27`
+ * by ISO week, named by its Monday, and `Jan 2025` by month; `""` when unparsable. Given the `range` a view
+ * charts, a bucket the range clips is worded by the days of it the range covers instead — `Sep 19 – 20`, both
+ * years when such a span crosses one — so a band never implies data outside the selected period; a range that
+ * is absent, inverted or unreadable leaves every label as it was. */
+export function formatBucketLabel(
+  iso: IsoDateString,
+  granularity: BucketGranularity,
+  range?: DateRange,
+): string {
   const date = parseIso(iso);
   if (!date) return "";
+  const key = bucketKey(iso, granularity);
+  const covered = key === "" || range === undefined ? null : coveredSpan(key, granularity, range);
+  if (covered !== null) return coveredLabel(covered, false);
   switch (granularity) {
     case "day":
       return formatter("month-day", MONTH_DAY_OPTIONS).format(date);
@@ -212,41 +216,47 @@ export function formatBucketLabel(iso: IsoDateString, granularity: BucketGranula
       return formatYearMonth(isoOf(date));
   }
 }
+/** The word a report's period cell shows for the bucket `iso` falls in at `granularity`: the day the bucket
+ *  opens, as `formatDate` writes it, or — when `range` clips the bucket — the days of it the range covers in
+ *  that same calendar style (`Sep 19 – 20, 2026`). The cell's own value stays the bucket's ISO day, so the
+ *  column's sort, the row's identity and the CSV export are unchanged; only the words are qualified. */
+export function formatBucketCell(
+  iso: IsoDateString,
+  granularity: BucketGranularity,
+  range: DateRange,
+): string {
+  const key = bucketKey(iso, granularity);
+  if (key === "") return "";
+  const covered = coveredSpan(key, granularity, range);
+  return covered === null ? formatDate(bucketStart(key, granularity)) : coveredLabel(covered, true);
+}
+
 /** Whether a run's `keys` leave one calendar year: the one cut whose wording can repeat inside a run,
- * because a week or a month key cannot. A key not opening with four characters names no year. */
+ *  because a week or a month key cannot. A key not opening with four characters names no year. */
 const leavesOneCalendarYear = (keys: readonly string[]): boolean =>
   new Set(keys.filter((key) => key.length >= 4).map((key) => key.slice(0, 4))).size > 1;
 
-/** Formats the band the key `key` names as one of a run: a day of a run that leaves one calendar year
- * carries its year, as `formatDate` words it, so no two days of one run word alike, and every other key
- * is worded by {@link formatBucketLabel}. The run's own `keys` are the caller's, because only it knows
- * the periods the run holds; the key is resolved to the day its bucket opens, so a week or month key is
- * worded by the day it starts on, and a key neither wording reads is returned as it stands. */
+/** Formats the band the key `key` names as one of a run, over the period that run covered. Two rules decide
+ *  the wording, and both need the run rather than the key alone: a day of a run whose periods leave one
+ *  calendar year carries its year, so no two days of one run word alike, and a bucket the run's `range` clips
+ *  is worded by the days of it the range covers. Every other key is worded by {@link formatBucketLabel},
+ *  resolved to the day its bucket opens; a key neither wording reads is returned as it stands. */
 export function formatBandLabel(
   key: string,
   granularity: BucketGranularity,
   keys: readonly string[],
+  range?: DateRange,
 ): string {
+  // The two callers chart a run by two key forms: the dashboard's series carries bucket keys (`2026-W38`,
+  // `2026-09`) and a report's rows carry the day each bucket opens. `coveredSpan` reads a bucket key, so a
+  // key that re-keys to one is resolved and a key that is one already is used as it stands — reading only
+  // one of the two forms is how a clipped band lost its wording on the dashboard.
+  const bucketAt = bucketKey(key, granularity) || key;
+  const covered = range === undefined ? null : coveredSpan(bucketAt, granularity, range);
+  if (covered !== null) return coveredLabel(covered, false) || key;
   const at = bucketStart(key, granularity) || startOfDay(key);
   const carriesYear = granularity === "day" && leavesOneCalendarYear(keys);
   return (carriesYear ? formatDate(at) : formatBucketLabel(at, granularity)) || key;
-}
-/** Describes how long ago the ISO `iso` was relative to `now` — `2 days ago`, `yesterday` — or how far
- * ahead it is; `""` if unparsable. A month counts as 30 days and a year as 365, so it is approximate. */
-export function formatRelativeTime(iso: IsoDateTimeString, now: Date = new Date()): string {
-  const date = parseIso(iso);
-  if (!date) return "";
-  const elapsed = (date.getTime() - now.getTime()) / 1000;
-  const magnitude = Math.abs(elapsed);
-  const count = (unit: number): number => Math.round(elapsed / unit);
-  if (magnitude < 45) return RELATIVE_AUTO.format(0, "second");
-  if (magnitude < 45 * SECONDS.MINUTE)
-    return RELATIVE_COUNTING.format(count(SECONDS.MINUTE), "minute");
-  if (magnitude < 22 * SECONDS.HOUR) return RELATIVE_COUNTING.format(count(SECONDS.HOUR), "hour");
-  if (magnitude < 7 * SECONDS.DAY) return RELATIVE_AUTO.format(count(SECONDS.DAY), "day");
-  if (magnitude < 5 * SECONDS.WEEK) return RELATIVE_AUTO.format(count(SECONDS.WEEK), "week");
-  if (magnitude < SECONDS.YEAR) return RELATIVE_AUTO.format(count(SECONDS.MONTH), "month");
-  return RELATIVE_AUTO.format(count(SECONDS.YEAR), "year");
 }
 
 // Range arithmetic -------------------------------------------------------------------------------
@@ -340,25 +350,6 @@ export function compareIso(a: IsoDateString, b: IsoDateString): number {
   if (!right) return -1;
   return left.getTime() - right.getTime();
 }
-/** Sorts `items` by the ISO value `select` reads from each, ascending unless `direction` says `desc`,
- * without touching the input; every record is parsed once rather than once per comparison, and an
- * unparsable value still sorts last whichever way the order runs. The order is stable, so equal instants
- * keep the order they arrived in. */
-export function sortByIso<TItem>(
-  items: readonly TItem[],
-  select: (item: TItem) => IsoDateString,
-  direction: SortDirection = "asc",
-): TItem[] {
-  const order = direction === "desc" ? -1 : 1;
-  const entries = items.map((item) => ({ item, time: parseIso(select(item))?.getTime() ?? null }));
-  entries.sort((left, right) => {
-    if (left.time === null) return right.time === null ? 0 : 1;
-    if (right.time === null) return -1;
-    return order * (left.time - right.time);
-  });
-  return entries.map((entry) => entry.item);
-}
-
 // Buckets ----------------------------------------------------------------------------------------
 
 /** One bucket of a range: the `key` consumers group by, and the `start` and `end` days it covers. */
@@ -385,7 +376,7 @@ export function bucketKey(iso: IsoDateString, granularity: BucketGranularity): s
   }
 }
 /** The first day of the bucket `key` names at `granularity`, so a row grouped by a key can state its
- * period; `""` when the key has none of the three forms or names a week past 53 or a month past 12. */
+ * period; `""` when the key has none of the three forms or names no such week or month. */
 export function bucketStart(key: string, granularity: BucketGranularity): IsoDateString {
   switch (granularity) {
     case "day":
@@ -419,9 +410,8 @@ export function bucketEnd(key: string, granularity: BucketGranularity): IsoDateS
       return endOfMonth(start);
   }
 }
-/** Every bucket the `range` touches at `granularity`, each with its key and the days it covers: the
- * axis a chart builds and the rows a report groups by. Bounded by the widest range the product accepts
- * ({@link MAX_REPORT_RANGE_DAYS} days), so it cannot loop without end; `[]` when an end cannot be parsed. */
+/** Every bucket the `range` touches at `granularity`, each with its key and the days it covers. Bounded by
+ * the widest range the product accepts ({@link MAX_REPORT_RANGE_DAYS}), so it cannot loop without end. */
 export function eachBucket(
   range: DateRange,
   granularity: BucketGranularity,
@@ -457,7 +447,7 @@ export function bucketCount(range: DateRange, granularity: BucketGranularity): n
 // Ranges and comparison periods ------------------------------------------------------------------
 
 /** The range the dashboard and the reports open on: the trailing {@link DEFAULT_REPORT_RANGE_DAYS} days
- * ending on `now`'s day, both ends included, so a first visit shows a period unasked. */
+ * ending on `now`'s day, both ends included. */
 export function defaultReportRange(now: Date = new Date()): DateRange {
   const to = toIsoDate(now);
   return { from: addDays(to, -(DEFAULT_REPORT_RANGE_DAYS - 1)), to };
@@ -467,21 +457,21 @@ export function maxReportRange(now: Date = new Date()): DateRange {
   const to = toIsoDate(now);
   return { from: addDays(to, -(MAX_REPORT_RANGE_DAYS - 1)), to };
 }
-/** The comparison period before `range`: the same number of days ending the day before it starts, so
- * the two neither gap nor overlap. An unmeasurable range is returned unchanged, never inverted. */
+/** The comparison period before `range`: the same number of days ending the day before it starts, so the
+ * two neither gap nor overlap; an unmeasurable range is returned unchanged, never inverted. */
 export function previousPeriodRange(range: DateRange): DateRange {
   const days = daysInRange(range);
   if (days === 0) return range;
   const to = addDays(range.from, -1);
   return { from: addDays(to, -(days - 1)), to };
 }
-/** The same `range` one calendar year earlier, for a year-over-year comparison. A leap day clamps to
- * Feb 28 in a common year, so that period can be a day shorter: what a calendar shift does. */
+/** The same `range` one calendar year earlier. A leap day clamps to Feb 28 in a common year, so that
+ * period can be a day shorter: what a calendar shift does. */
 export function previousYearRange(range: DateRange): DateRange {
   return { from: addMonths(range.from, -12), to: addMonths(range.to, -12) };
 }
-/** The comparison range `kind` names for `range`, so a KPI states which comparison it makes:
- * `previous-period` the equal-length one before, `previous-year` the same calendar range a year back. */
+/** The comparison range `kind` names for `range`: `previous-period` the equal-length one before,
+ * `previous-year` the same calendar range a year back. */
 export function resolveBaselineRange(range: DateRange, kind: BaselineKind): DateRange {
   switch (kind) {
     case "previous-period":
@@ -502,7 +492,7 @@ export interface ReportRangePreset {
 const TRAILING_PRESET_DAYS = [7, DEFAULT_REPORT_RANGE_DAYS, 90] as const;
 /** The presets the range control offers, computed against `now`: the trailing 7,
  * {@link DEFAULT_REPORT_RANGE_DAYS} and 90 days, the month to date and the year to date. Only data is
- * returned — a key, its range and its length — because the wording belongs to the copy module. */
+ * returned, because the wording belongs to the copy module. */
 export function reportRangePresets(now: Date = new Date()): readonly ReportRangePreset[] {
   const today = toIsoDate(now);
   const trailing = TRAILING_PRESET_DAYS.map(
@@ -536,17 +526,17 @@ export interface DateRangeProblem {
   readonly field: DateRangeErrorField;
   readonly code: DateRangeErrorCode;
 }
-/** The outcome of validating a range: whether it is usable, what it broke, and the inclusive day count
- * — `0` when the ends cannot be measured, being unparsable or inverted. */
+/** The outcome of validating a range: whether it is usable, what it broke, and the inclusive day count,
+ * `0` when the ends cannot be measured. */
 export interface DateRangeValidation {
   readonly valid: boolean;
   readonly days: number;
   readonly problems: readonly DateRangeProblem[];
 }
-/** Validates `from`–`to` against the rules every dated query holds: both ends are real dates, `from` is
- * not after `to`, neither end is after `now`'s day, and the span is at most {@link MAX_REPORT_RANGE_DAYS}
- * days — a single-day range is valid and exactly the cap is accepted. The rules live here alone, and the
- * wording of a broken rule belongs to the copy module, so this returns codes for `toFieldErrors`. */
+/** Validates `from`–`to` against the rules every dated query holds: both ends are real dates, `from` is not
+ * after `to`, neither end is after `now`'s day, and the span is at most {@link MAX_REPORT_RANGE_DAYS} days —
+ * exactly the cap is accepted. The rules live here alone and a broken rule's wording belongs to the copy
+ * module, so this returns codes for `toFieldErrors`. */
 export function validateDateRange(
   from: IsoDateString,
   to: IsoDateString,
@@ -573,21 +563,20 @@ export function validateDateRange(
   if (days > MAX_REPORT_RANGE_DAYS) problems.push({ field: "range", code: "range-too-long" });
   return { valid: problems.length === 0, days, problems };
 }
-/** Whether `range` reaches past `now`'s day, which no dated query accepts: what a control checks before
- * making a request. `false` when an end cannot be parsed, which {@link validateDateRange} reports. */
+/** Whether `range` reaches past `now`'s day, which no dated query accepts; `false` when an end cannot be
+ * parsed, which {@link validateDateRange} reports. */
 export function hasFutureDate(range: DateRange, now: Date = new Date()): boolean {
   if (!isValidIso(range.from) || !isValidIso(range.to)) return false;
   const today = toIsoDate(now);
   return compareIso(range.from, today) > 0 || compareIso(range.to, today) > 0;
 }
-/** Whether `range` covers more days than the product accepts, so a control can disable a preset it
- * would have to reject. `false` for an unparsable or inverted range, which the validator reports. */
+/** Whether `range` covers more days than the product accepts, so a control can disable a preset it would
+ * have to reject; `false` for an unparsable or inverted range, which the validator reports. */
 export function exceedsMaxRange(range: DateRange): boolean {
   return daysInRange(range) > MAX_REPORT_RANGE_DAYS;
 }
 /** Resolves the `validation` into the field-keyed error map a form renders, taking its wording from the
- * caller — `messages`, keyed by {@link DateRangeErrorCode} — so no user-facing sentence lives here. The
- * first problem on a field wins, since a field shows one message and that is the first to correct. */
+ * caller's `messages`; the first problem on a field wins, since that is the first to correct. */
 export function toFieldErrors(
   validation: DateRangeValidation,
   messages: Readonly<Record<DateRangeErrorCode, string>>,

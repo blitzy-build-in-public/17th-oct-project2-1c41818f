@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/orderService.ts
  * Purpose: Builds orders from a cart snapshot, numbers them and applies the status transitions
- * Lines: 358
+ * Lines: 373
  */
 
 import { DEFAULT_PAGE_SIZE } from "@/constants/config";
@@ -40,6 +40,7 @@ import {
   getJson,
   postJson,
 } from "@/lib/apiClient";
+import { placementTokenFor, rememberPlacement } from "@/lib/orderPlacements";
 
 // The public surface -----------------------------------------------------------------------------
 // The order rules this module is named for — the numbering, the snapshot construction and the status machine
@@ -69,13 +70,19 @@ const DEFAULT_ORDER_HISTORY: OrderHistoryQuery = { page: 1, pageSize: DEFAULT_PA
  *
  * `sessionToken` comes from the signed-in session: it marks a submission as a customer's rather than a
  * guest's, and `GET /api/orders` answers only with one, because the history it hands back belongs to
- * whoever the token authenticates. `GET /api/orders/:id` needs it for an order that names an account,
- * while an order placed without one is read by its identifier alone — the only thing the guest's
- * confirmation route carries. `signal` cancels a request a newer one supersedes, so a page that
- * navigates away mid-request leaves nothing queued behind it.
+ * whoever the token authenticates. `GET /api/orders/:id` needs it for an order that names an account;
+ * an account-less order is read with the credential this client remembers for it, which `orderToken`
+ * overrides. `signal` cancels a request a newer one supersedes, so a page that navigates away
+ * mid-request leaves nothing queued behind it.
  */
 export interface OrderServiceOptions {
   readonly sessionToken?: string;
+  /**
+   * The order credential the caller supplies for an account-less order, overriding the one this client
+   * remembers for it: what the seam compares when it decides whether the read may be answered, absent
+   * for every caller that holds none.
+   */
+  readonly orderToken?: string;
   readonly signal?: AbortSignal;
 }
 
@@ -284,25 +291,32 @@ export async function createOrder(
   if (hasErrors(errors)) {
     return refusedSubmission(errors);
   }
-  return postJson<Order, CreateOrderRequest>(API_PATHS.ORDERS, input, {
+  const placed = await postJson<Order, CreateOrderRequest>(API_PATHS.ORDERS, input, {
     sessionToken: options.sessionToken,
     signal: options.signal,
   });
+  // The credential the placing client holds for an account-less order it just placed, remembered under
+  // the key the submission carried, so a later read of that order can present it.
+  if (placed.ok && placed.value.customerId === null) {
+    rememberPlacement(placed.value, input.idempotencyKey);
+  }
+  return placed;
 }
 
 /**
  * Reads one order by its identifier, for the confirmation route and the account's order detail.
  *
  * Both callers are reload-safe because of this call: the confirmation knows only the identifier in its
- * path, so an order is fetched rather than remembered from the flow that placed it. An order that names
- * no account has no owner to compare a caller with, so the seam answers it to whoever holds its
- * identifier, which is what keeps a guest's confirmation reload-safe. Every other order is read by the
- * session the request carries: one belonging to another customer and an identifier no order holds both
- * answer `404`, deliberately the same answer, so a response cannot be read to learn which orders exist.
+ * path, so an order is fetched rather than remembered from the flow that placed it. Which credential
+ * the read carries depends on the order. An order that names an account is read with `sessionToken`,
+ * and one belonging to another customer and an identifier no order holds both answer `404`,
+ * deliberately the same answer, so a response cannot be read to learn which orders exist. An
+ * account-less order is read with the placement credential this client holds and remembers for it —
+ * the key its submission carried — which is what lets a guest's confirmation reopen after a reload;
+ * an explicit `orderToken` overrides the remembered one.
  *
  * @param id - The order's identifier, prefixed `ord_`.
- * @param options - The session token; an order that names an account answers `401` without one, while an
- * order placed without an account is read by its identifier alone.
+ * @param options - The session token and the order credential, if the caller holds either.
  * @returns The order, or the shaped failure; never a rejection.
  */
 export async function getOrder(
@@ -311,6 +325,7 @@ export async function getOrder(
 ): Promise<Result<Order>> {
   return getJson<Order>(fillApiPath(API_PATHS.ORDER_DETAIL, { id }), {
     sessionToken: options.sessionToken,
+    orderToken: options.orderToken ?? placementTokenFor(id) ?? undefined,
     signal: options.signal,
   });
 }

@@ -30,15 +30,15 @@ import type { PricedCart, PricedCartLine } from "@/types/commerce";
 import { formatFreeShippingRemaining, formatMoney, formatQuantity } from "@/utils/format";
 
 /*
- * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet — `src/main.tsx`
- * is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step: `sp-review` for the grid the
- * sections sit in, `sp-review__section` for one section (a heading, the edit control returning to the step it came
- * from, and the content beneath them) with `sp-review__edit` placing that control, `sp-review__list` and
- * `sp-review__item` for the compact lines, `sp-review__totals` over the summary register (`sp-summary__title`,
- * `sp-summary__row` with its `--discount` and `--total` modifiers, `sp-summary__note`,
- * `sp-summary__progress-label`), and `sp-summary__actions` for the single action band. The sections use the
- * sheet's own frames rather than cards nested inside them: every region of a `Card` carries its own padding and
- * dividing rule, so a card per section would draw each divider and each padding band twice.
+ * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
+ * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step: `sp-review`
+ * for the grid the sections sit in, `sp-review__section` for one section (a heading, the edit control returning
+ * to that step, and the content beneath them) with `sp-review__edit` placing that control, `sp-review__list`
+ * and `sp-review__item` for the compact lines, and `sp-review__totals` over the summary register —
+ * `sp-summary__title`, `sp-summary__row` with its `--discount` and `--total` modifiers, `sp-summary__note`,
+ * `sp-summary__progress-label` and `sp-summary__actions` — which `src/styles/summary-panel.css` owns. The
+ * sections use the sheet's own frames rather than cards nested inside them: every region of a `Card` carries
+ * its own padding and dividing rule, so a card per section would draw each divider and each padding band twice.
  */
 
 /** The sign between a line's quantity and the price it is bought at: notation rather than wording. */

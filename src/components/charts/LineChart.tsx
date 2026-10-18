@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/LineChart.tsx
  * Purpose: Accessible line and area chart with grid, axis ticks, hover readout and a data-table alternative
- * Lines: 461
+ * Lines: 466
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -17,7 +17,11 @@ import {
   hasChartData,
   seriesClassName,
 } from "@/components/charts/chartScales";
-import type { LabelFormatter, ValueFormatter } from "@/components/charts/chartScales";
+import type {
+  AxisValueFormatter,
+  LabelFormatter,
+  ValueFormatter,
+} from "@/components/charts/chartScales";
 import {
   READOUT_LIFT,
   bandCentre,
@@ -30,7 +34,7 @@ import type { Readout } from "@/components/charts/lineChartModel";
 import { EmptyState } from "@/components/ui/Feedback";
 import { APP_COPY, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
-import { formatMoney, formatMoneyCompact } from "@/utils/format";
+import { formatMoney, formatMoneyAxis } from "@/utils/format";
 
 /*
  * Class contract: `src/styles/admin-reports.css` owns this family and `src/styles/data-display.css` owns
@@ -69,7 +73,7 @@ const LABEL_COLUMN_KEY = "label";
  * Everything {@link LineChart} accepts.
  *
  * Only `series` is required, so the component renders without a router, a provider or any other prop and
- * is directly mountable. The three formatters default to `formatMoney`, `formatMoneyCompact` and the
+ * is directly mountable. The three formatters default to `formatMoney`, `formatMoneyAxis` and the
  * bucket formatter of `chartScales.ts`, so a money series in minor units renders correctly with nothing
  * restated here about rounding. `actions`, `footer` and `emptyMessage` are the slots and wording the
  * composing feature owns: this component never fetches, filters or recomputes what it is handed.
@@ -97,8 +101,9 @@ export interface LineChartProps {
   readonly includeZero?: boolean;
   /** Formats a readout and legend figure. Defaults to `formatMoney`, for money in minor units. */
   readonly formatValue?: ValueFormatter;
-  /** Formats a value-axis tick. Defaults to `formatMoneyCompact`, which shortens a large figure. */
-  readonly formatAxisValue?: ValueFormatter;
+  /** Formats a value-axis tick, told the domain the axis spans with it so one axis is written in one notation.
+   *  Defaults to `formatMoneyAxis`. */
+  readonly formatAxisValue?: AxisValueFormatter;
   /** Formats a band key as axis and row wording. Defaults to `defaultLabelFormatter`. */
   readonly formatLabel?: LabelFormatter;
   /** The graphic's accessible name, in place of `title`. */
@@ -178,7 +183,7 @@ export function LineChart({
   showLegend,
   includeZero = true,
   formatValue = formatMoney,
-  formatAxisValue = formatMoneyCompact,
+  formatAxisValue = formatMoneyAxis,
   formatLabel = defaultLabelFormatter,
   ariaLabel,
   emptyMessage,

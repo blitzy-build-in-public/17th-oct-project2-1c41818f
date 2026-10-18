@@ -1,13 +1,15 @@
 /**
  * Path: src/components/charts/chartScales.ts
  * Purpose: Linear and band scales, nice domains, tick generation and path helpers shared by the charts
- * Lines: 405
+ * Lines: 509
  */
 
 import {
   AXIS_NUMBER_FORMAT,
   defaultLabelFormatter,
+  estimateLabelWidth,
   type AxisLabelTransform,
+  type AxisValueFormatter,
   type BandScale,
   type BandTick,
   type GridLine,
@@ -17,7 +19,6 @@ import {
   type Padding,
   type PlotArea,
   type TickMark,
-  type ValueFormatter,
 } from "@/components/charts/chartGeometry";
 import type { MinorUnits } from "@/types/common";
 import { roundMinorUnits } from "@/utils/format";
@@ -52,6 +53,17 @@ export const DEFAULT_TICK_COUNT = 5;
 
 /** The most band labels an axis may carry at once; beyond it {@link buildBandTicks} thins them. */
 export const MAX_AXIS_LABELS = 8;
+
+/**
+ * The step a whole-number metric is ticked with at its smallest, in the metric's own units. A count of people,
+ * orders or units is only ever an integer, so an axis spanning one is widened and ticked in whole numbers rather
+ * than in halves no bucket could hold: a domain of `[0, 1]` ticks at `0` and `1` instead of at fifths.
+ */
+export const WHOLE_NUMBER_STEP = 1;
+
+/** The clear room two band labels keep between them along their axis, in user units, so a thinned axis still
+ *  reads as separate labels rather than as one run of text. */
+export const MIN_BAND_LABEL_GAP = 8;
 
 /** At or below this many points a line chart may still mark each one; above it the marks would merge. */
 export const POINT_MARK_LIMIT = 31;
@@ -90,26 +102,32 @@ export function niceNumber(value: number, round: boolean): number {
 
 /**
  * Widens `[min, max]` to `1`/`2`/`5` × `10ⁿ` bounds carrying about `tickCount` steps, so an axis ends on a
- * readable figure rather than on the largest datum. Degenerate input has stated results, never `NaN`: an
- * equal pair at zero gives `[0, 1]`, an equal non-zero pair is padded by `max(1, |value| × 0.05)` either
- * side, a non-finite bound gives `[0, 1]`, and an inverted pair is read low-to-high.
+ * readable figure rather than on the largest datum. `minimumStep` is the smallest step the metric admits — a
+ * count asks for {@link WHOLE_NUMBER_STEP}, so its axis cannot tick in fractions of a person — and the chosen
+ * step is never below it. Degenerate input has stated results, never `NaN`: an equal pair at zero gives `[0, 0]`,
+ * which is one tick on the baseline rather than an axis of invented pennies; an equal non-zero pair is padded by
+ * `max(1, |value| × 0.05)` either side; a non-finite bound gives `[0, 1]`; and an inverted pair is read low-to-high.
  */
 export function niceDomain(
   min: number,
   max: number,
   tickCount?: number,
+  minimumStep?: number,
 ): readonly [number, number] {
   if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1];
   const low = Math.min(min, max);
   const high = Math.max(min, max);
   if (low === high) {
-    if (low === 0) return [0, 1];
+    if (low === 0) return [0, 0];
     const pad = Math.max(1, Math.abs(low) * 0.05);
     return [low - pad, low + pad];
   }
-  const step = niceNumber(
-    niceNumber(high - low, false) / (resolveCount(tickCount, DEFAULT_TICK_COUNT) - 1),
-    true,
+  const step = Math.max(
+    niceNumber(
+      niceNumber(high - low, false) / (resolveCount(tickCount, DEFAULT_TICK_COUNT) - 1),
+      true,
+    ),
+    stepFloor(minimumStep),
   );
   if (!Number.isFinite(step) || step <= 0) return [low, high];
   return [
@@ -137,18 +155,27 @@ export function extendDomainToIncludeZero(
 }
 
 /**
- * The ascending, deduplicated `1`/`2`/`5` × `10ⁿ` tick values inside `[min, max]`. A `count` below two falls
- * back to {@link DEFAULT_TICK_COUNT}, because one tick cannot straddle a range; a `count` below one or a
- * bound that is not finite gives `[]`; equal bounds give that one value; and a range narrower than one step
- * gives its own two ends rather than none.
+ * The ascending, deduplicated `1`/`2`/`5` × `10ⁿ` tick values inside `[min, max]`, none of them closer together
+ * than `minimumStep` — the step a whole-number metric asks for, so a count axis never ticks at `0.2` of a person.
+ * A `count` below two falls back to {@link DEFAULT_TICK_COUNT}, because one tick cannot straddle a range; a
+ * `count` below one or a bound that is not finite gives `[]`; equal bounds give that one value; and a range
+ * narrower than one step gives its own two ends rather than none.
  */
-export function linearTicks(min: number, max: number, count?: number): number[] {
+export function linearTicks(
+  min: number,
+  max: number,
+  count?: number,
+  minimumStep?: number,
+): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || (count !== undefined && count < 1))
     return [];
   const low = Math.min(min, max);
   const high = Math.max(min, max);
   if (low === high) return [low];
-  const step = niceNumber((high - low) / (resolveCount(count, DEFAULT_TICK_COUNT) - 1), true);
+  const step = Math.max(
+    niceNumber((high - low) / (resolveCount(count, DEFAULT_TICK_COUNT) - 1), true),
+    stepFloor(minimumStep),
+  );
   if (!Number.isFinite(step) || step <= 0) return [low, high];
   const first = Math.ceil(low / step);
   const ticks = Array.from({ length: Math.floor(high / step) - first + 1 }, (_item, offset) =>
@@ -162,11 +189,13 @@ export function linearTicks(min: number, max: number, count?: number): number[] 
 
 /**
  * Builds the continuous scale a value axis is drawn with: a linear map from `domain` onto `range`, its
- * inverse, and the ticks across the resolved domain. A zero-width domain cannot be inverted, so it maps
- * every value to the range's midpoint and inverts every pixel back to its one value. `clamp` holds a value
- * inside the range; without it a value outside the domain maps outside the range, which is what lets a
- * renderer draw an out-of-range mark and trim it. `nice` widens the domain first, and `tickCount` is the
- * count the widening and the ticks aim for.
+ * inverse, and the ticks across the resolved domain. A zero-width domain — one value and no extent, which is
+ * what an all-zero series produces — cannot be inverted, so it maps every value to `range[0]`, the end a value
+ * axis starts at and so the baseline that one value lies on, and reads that value back from any pixel.
+ * `minimumStep` is the smallest step the metric admits, in the metric's own units, and it reaches both the
+ * domain the axis is widened to and the ticks drawn across it; `clamp` holds a value inside the range; without
+ * it a value outside the domain maps outside the range, which is what lets a renderer draw an out-of-range mark
+ * and trim it. `nice` widens the domain first, and `tickCount` is the count the widening and the ticks aim for.
  */
 export function createLinearScale(options: {
   readonly domain: readonly [number, number];
@@ -174,11 +203,12 @@ export function createLinearScale(options: {
   readonly clamp?: boolean;
   readonly nice?: boolean;
   readonly tickCount?: number;
+  readonly minimumStep?: number;
 }): LinearScale {
   const tickCount = resolveCount(options.tickCount, DEFAULT_TICK_COUNT);
   const [low, high] =
     options.nice === true
-      ? niceDomain(options.domain[0], options.domain[1], tickCount)
+      ? niceDomain(options.domain[0], options.domain[1], tickCount, options.minimumStep)
       : orderDomain(options.domain);
   const [start, end] = options.range;
   const domainSpan = high - low;
@@ -187,7 +217,7 @@ export function createLinearScale(options: {
   const lowerPixel = Math.min(start, end);
   const upperPixel = Math.max(start, end);
   const toPixel = (value: number): number =>
-    domainSpan === 0 ? start + rangeSpan / 2 : start + ((value - low) / domainSpan) * rangeSpan;
+    domainSpan === 0 ? start : start + ((value - low) / domainSpan) * rangeSpan;
   return {
     domain: [low, high],
     range: [start, end],
@@ -197,7 +227,7 @@ export function createLinearScale(options: {
     },
     invert: (pixel) =>
       domainSpan === 0 || rangeSpan === 0 ? low : low + ((pixel - start) / rangeSpan) * domainSpan,
-    ticks: (count) => linearTicks(low, high, count ?? tickCount),
+    ticks: (count) => linearTicks(low, high, count ?? tickCount, options.minimumStep),
   };
 }
 
@@ -253,34 +283,79 @@ export function computePlotArea(options: {
 
 // Ticks, labels and axis transforms ---------------------------------------------------------------
 
-/** One tick per value on the scale, positioned by the scale and written by the formatter. */
+/**
+ * One tick per value on the scale, positioned by the scale and written by the formatter, which is handed the
+ * domain the scale spans beside the value: what a formatter needs to write every tick of one axis in one
+ * notation, which is why an axis that shortened only its large figures is fixed here and not in a renderer.
+ */
 export const buildValueTicks = (
   scale: LinearScale,
-  formatter: ValueFormatter = AXIS_NUMBER_FORMAT,
+  formatter: AxisValueFormatter = AXIS_NUMBER_FORMAT,
   count?: number,
 ): TickMark[] =>
-  scale
-    .ticks(count)
-    .map((value) => ({ value, position: scale.scale(value), label: formatter(value) }));
+  scale.ticks(count).map((value) => ({
+    value,
+    position: scale.scale(value),
+    label: formatter(value, scale.domain),
+  }));
+
+/** What {@link buildBandTicks} thins a run of band labels by: how many labels it may emit, how long the axis is,
+ *  and how the room one label needs along that axis is measured. */
+export interface BandTickOptions {
+  /** The most band labels the axis may carry; a limit below two falls back to {@link MAX_AXIS_LABELS}. */
+  readonly maxLabels?: number;
+  /** The axis's own length in user units — a plot's width for a horizontal axis, its height for a vertical one.
+   *  Absent, negative or not a number, the labels are thinned by count alone. */
+  readonly axisLength?: number;
+  /** The room one label takes along the axis, in user units. Defaults to {@link estimateLabelWidth}, which is the
+   *  rule a label running across the axis needs; a label running down it takes `LABEL_FONT_SIZE` instead. */
+  readonly measureLabel?: (label: string) => number;
+}
 
 /**
- * One tick per band key, thinned by a stride so at most `maxLabels` labels are emitted and the first and last
- * band always keep theirs — the anti-collision rule a ninety-day axis needs, kept here so no renderer thins
- * its own labels. A limit below two falls back to {@link MAX_AXIS_LABELS}.
+ * One tick per band key, thinned so the labels an axis writes neither overlap nor collide. The count rule is a
+ * floor: a stride is chosen so at most `maxLabels` labels are emitted, which is what a ninety-day axis has always
+ * been thinned by. Where the options also state the axis's length the width rule joins it — the widest label the
+ * axis writes is measured once and two kept labels must sit that room plus {@link MIN_BAND_LABEL_GAP} apart along
+ * the axis — so a run of wide labels is thinned further than a run of narrow ones, which is the rule a count
+ * alone cannot express and the reason a "Week of Jan 27" axis superimposed its labels.
+ *
+ * The last key keeps its label, but only where it clears the label before it by that same room; otherwise it
+ * replaces that label, so an axis still ends on its last band without two labels sharing the space of one.
+ * The rule lives here so no renderer thins its own labels.
  */
 export function buildBandTicks(
   scale: BandScale,
   formatter: LabelFormatter = defaultLabelFormatter,
-  maxLabels?: number,
+  options: BandTickOptions = {},
 ): BandTick[] {
   const keys = scale.ticks();
-  const limit = resolveCount(maxLabels, MAX_AXIS_LABELS);
-  if (keys.length <= limit) return keys.map((key) => tickOf(scale, formatter, key));
-  const stride = Math.ceil((keys.length - 1) / (limit - 1));
-  const kept = keys.filter((_key, index) => index % stride === 0);
-  const last = keys[keys.length - 1];
-  if (kept[kept.length - 1] !== last) kept.push(last);
-  return kept.map((key) => tickOf(scale, formatter, key));
+  const limit = resolveCount(options.maxLabels, MAX_AXIS_LABELS);
+  const countStride = keys.length <= limit ? 1 : Math.ceil((keys.length - 1) / (limit - 1));
+  const room = labelRoom(scale, formatter, options);
+  const widthStride = room > 0 && scale.step > 0 ? Math.ceil(room / scale.step) : 1;
+  const stride = Math.max(countStride, widthStride);
+  const kept = keys.map((_key, index) => index).filter((index) => index % stride === 0);
+  const last = keys.length - 1;
+  if (kept[kept.length - 1] !== last) {
+    if ((last - (kept[kept.length - 1] ?? 0)) * scale.step < room) kept.pop();
+    kept.push(last);
+  }
+  return kept.map((index) => tickOf(scale, formatter, keys[index]));
+}
+
+/**
+ * {@link Padding} with the room the label at either end of a band axis needs: each horizontal end reserves half
+ * the widest label the axis writes, plus {@link MIN_BAND_LABEL_GAP}. A band label is centred on its band, and the
+ * band at either end sits half a bandwidth inside the plot, so without that room the first and last labels are
+ * painted past the frame and cut by its edge. An end `base` already insets further keeps its own inset, and a run
+ * of labels narrower than that inset reserves nothing more, so a chart whose labels already fit its frame is
+ * drawn exactly as it was.
+ */
+export function bandAxisPadding(base: Padding, labels: readonly string[]): Padding {
+  const widest = labels.reduce((widest, label) => Math.max(widest, estimateLabelWidth(label)), 0);
+  const room = Math.ceil(widest / 2) + MIN_BAND_LABEL_GAP;
+  return { ...base, left: Math.max(base.left, room), right: Math.max(base.right, room) };
 }
 
 /**
@@ -324,6 +399,11 @@ export function gridLineFor(
 const resolveCount = (value: number | undefined, fallback: number): number =>
   value !== undefined && Number.isFinite(value) && value >= 2 ? Math.trunc(value) : fallback;
 
+/** A smallest step a metric admits as a floor a chosen step must reach, or `0` — no floor at all — when none
+ *  was asked for or the value is not a usable step, so an axis is never widened by a bound it cannot hold. */
+const stepFloor = (minimumStep: number | undefined): number =>
+  minimumStep !== undefined && Number.isFinite(minimumStep) && minimumStep > 0 ? minimumStep : 0;
+
 /** A frame or padding value as it may be used: an inset is a non-negative, finite number of pixels. */
 const insetOf = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0);
 
@@ -344,6 +424,26 @@ const orderDomain = (domain: readonly [number, number]): readonly [number, numbe
 /** The keys of a band domain in first-appearance order without repeats, so a repeated key cannot shift a band. */
 const uniqueKeys = (domain: readonly string[]): string[] => [...new Set(domain)];
 
+/**
+ * The room two kept band labels must keep between them along the axis: the widest label the axis writes plus
+ * {@link MIN_BAND_LABEL_GAP}, or `0` when the caller states no usable axis length and the labels are thinned by
+ * count alone. Every label the axis writes is one of the keys measured here — thinning only ever drops a label —
+ * so no drawn label is wider than the room the stride was chosen from.
+ */
+const labelRoom = (
+  scale: BandScale,
+  formatter: LabelFormatter,
+  options: BandTickOptions,
+): number => {
+  const axisLength = options.axisLength;
+  if (axisLength === undefined || !Number.isFinite(axisLength) || axisLength <= 0) return 0;
+  const measure = options.measureLabel ?? estimateLabelWidth;
+  const widest = scale
+    .ticks()
+    .reduce((widest, key) => Math.max(widest, measure(formatter(key))), 0);
+  return widest + MIN_BAND_LABEL_GAP;
+};
+
 /** One band's tick, positioned by the scale and written by the formatter. */
 const tickOf = (scale: BandScale, formatter: LabelFormatter, key: string): BandTick => ({
   key,
@@ -358,6 +458,7 @@ export type {
   ArcDatum,
   ArcOptions,
   AxisLabelTransform,
+  AxisValueFormatter,
   BandScale,
   BandTick,
   BarMode,
@@ -380,6 +481,7 @@ export type {
 export {
   AXIS_NUMBER_FORMAT,
   DEFAULT_INNER_RADIUS_RATIO,
+  LABEL_FONT_SIZE,
   MIN_SLICE_LABEL_SHARE,
   SERIES_COUNT,
   arcPath,
@@ -394,8 +496,10 @@ export {
   collectBandKeys,
   defaultLabelFormatter,
   defaultValueFormatter,
+  estimateLabelWidth,
   hasChartData,
   hasThinSlice,
+  hasWholeValues,
   polarToCartesian,
   ringShares,
   roundCoordinate,

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/CategoryShowcase.tsx
  * Purpose: Category tiles with product counts that link into the filtered catalogue
- * Lines: 231
+ * Lines: 232
  */
 
 import type { ReactElement } from "react";
@@ -9,7 +9,8 @@ import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { COMMON_ACTIONS, FEEDBACK_COPY, HOME_COPY, productCountLabel } from "@/constants/content";
+import { COMMON_ACTIONS, FEEDBACK_COPY, productCountLabel } from "@/constants/content";
+import { HOME_COPY } from "@/constants/content";
 import type { AsyncStatus, ApiError } from "@/types/common";
 
 /*
@@ -28,9 +29,9 @@ import type { AsyncStatus, ApiError } from "@/types/common";
  * click handling and cannot itself navigate, and a tile whose blank space sits outside its target is a smaller
  * target than the one the sheet paints. The feedback primitives own their own classes and state attributes.
  *
- * Copy is the content module's throughout, and the count is its template: a category's product count is an
- * integer the facet already counted, so `productCountLabel` renders it with the singular form it decides, and
- * no figure is grouped, rounded or re-derived here.
+ * Copy comes from the two copy modules: the band's heading and supporting line from
+ * `src/constants/content.ts`, the count's template from `src/constants/content.ts`. That template renders
+ * the facet's own count in the singular form it decides; no figure is grouped, rounded or re-derived here.
  */
 
 /**

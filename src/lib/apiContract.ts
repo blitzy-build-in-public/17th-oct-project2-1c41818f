@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiContract.ts
  * Purpose: The contract the in-process API is built on: its error vocabulary, the failure it shapes and the data-source interface it asks for
- * Lines: 485
+ * Lines: 547
  */
 
 import type * as Account from "@/types/account";
@@ -106,6 +106,64 @@ export type SessionRefusalCode = (typeof SESSION_REFUSAL_CODES)[number];
  */
 export function isSessionRefusal(error: Common.ApiError): boolean {
   return (SESSION_REFUSAL_CODES as readonly string[]).includes(error.code);
+}
+
+/**
+ * The codes that say no usable session reached a request: none was sent, the token named no session, or the
+ * session it named had expired. They are one answer to a caller — the request was refused for want of a
+ * session — which is why {@link isSessionFailure} reads them together rather than each caller comparing them.
+ */
+const SESSION_FAILURE_CODES: readonly ApiErrorCode[] = [
+  API_ERROR_CODES.UNAUTHENTICATED,
+  API_ERROR_CODES.SESSION_EXPIRED,
+  API_ERROR_CODES.SESSION_UNKNOWN,
+];
+
+/**
+ * The codes that say the resource a request named is not there for its caller: a path no endpoint matches,
+ * and a product, order or address the caller holds no readable record for — the seam answers a foreign
+ * record exactly as it answers an absent one, so the two cannot be told apart from here.
+ */
+const NOT_FOUND_FAILURE_CODES: readonly ApiErrorCode[] = [
+  API_ERROR_CODES.ROUTE_NOT_FOUND,
+  API_ERROR_CODES.PRODUCT_NOT_FOUND,
+  API_ERROR_CODES.ORDER_NOT_FOUND,
+  API_ERROR_CODES.ADDRESS_NOT_FOUND,
+];
+
+/** Whether `error` carries one of `codes`, which are values of {@link API_ERROR_CODES}: the single
+ * comparison both predicates below are written in, so each code list is read in one place. */
+function hasFailureCode(error: Common.ApiError, codes: readonly ApiErrorCode[]): boolean {
+  return codes.some((code) => code === error.code);
+}
+
+/**
+ * Whether a failure is one no repeat of the same request can change: it was refused for want of a usable
+ * session, so the repeat carries the same nothing and is refused identically.
+ *
+ * A screen reads this to offer the action that does resolve the state — the sign-in that ends in a session —
+ * in place of a retry that cannot. The decision comes from the seam's own vocabulary and never from the
+ * status or the sentence beside it, so reworded copy cannot move it.
+ *
+ * @param error - The failure the seam shaped.
+ * @returns True when the request was refused for want of a usable session.
+ */
+export function isSessionFailure(error: Common.ApiError): boolean {
+  return hasFailureCode(error, SESSION_FAILURE_CODES);
+}
+
+/**
+ * Whether a failure says the resource a request named is not there for its caller: a path no endpoint
+ * matches, or a record no identifier holds for that caller.
+ *
+ * A screen reads this to offer the way back to what does exist instead of a retry, because the seam has
+ * already answered the only question the request asks and asking it again returns the same `404`.
+ *
+ * @param error - The failure the seam shaped.
+ * @returns True when the request named a resource that is not there for this caller.
+ */
+export function isNotFoundFailure(error: Common.ApiError): boolean {
+  return hasFailureCode(error, NOT_FOUND_FAILURE_CODES);
 }
 
 // Shaping an outcome -----------------------------------------------------------------------------
@@ -311,6 +369,10 @@ export interface RouteContext {
   readonly query: Readonly<Record<string, unknown>>;
   readonly body: unknown;
   readonly token: string | undefined;
+  /** The order credential a request presented, read by the order-detail handler alone: the value the
+   * client that placed an account-less order holds for it, and the only proof of placement a
+   * session-less reader can offer. */
+  readonly orderToken: string | undefined;
   readonly session: Account.Session | null;
   /** The refusal a missing, unknown or expired session is answered with, so the session endpoint can
    * answer with exactly the same failure the dispatcher would have produced. */

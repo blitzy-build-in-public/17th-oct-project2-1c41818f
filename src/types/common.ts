@@ -1,7 +1,7 @@
 /**
  * Path: src/types/common.ts
  * Purpose: Shared primitives: money units, currency, paging, results, API errors, async status and option types
- * Lines: 255
+ * Lines: 263
  */
 
 // Money, currency and time ---------------------------------------------------------------------
@@ -194,7 +194,8 @@ export type QueryParams = Readonly<
  * newer one supersedes — type-ahead suggestions use it on every keystroke — and it is how any
  * request that can outlive its component is stopped. `sessionToken` becomes the session header and
  * is absent for anonymous requests; it stays a plain string here so that no caller has to brand
- * the token it was handed.
+ * the token it was handed. `orderToken` becomes the order header on the one read that asks for an
+ * order placed without an account, and is absent everywhere else.
  */
 export interface ApiRequestOptions<TBody = unknown> {
   readonly method?: HttpMethod;
@@ -202,6 +203,13 @@ export interface ApiRequestOptions<TBody = unknown> {
   readonly body?: TBody;
   readonly signal?: AbortSignal;
   readonly sessionToken?: string;
+  /**
+   * The credential a client holds for an account-less order it placed, sent as the `x-order-token`
+   * header and read by the seam when it decides whether a caller may read that order. Absent for
+   * every request that asks for nothing of the kind, and a plain string, so no caller has to brand
+   * it.
+   */
+  readonly orderToken?: string;
 }
 
 // Identity -------------------------------------------------------------------------------------

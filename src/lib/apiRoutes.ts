@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 475
+ * Lines: 494
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -35,7 +35,7 @@ import {
   type RouteDefinition,
   type RouteHandler,
 } from "@/lib/apiContract";
-import { createOrder, forgetRememberedOrders } from "@/lib/apiOrders";
+import { createOrder, forgetRememberedOrders, holdsGuestOrderCredential } from "@/lib/apiOrders";
 import {
   fieldProblem,
   invalidFields,
@@ -250,11 +250,30 @@ function listOrders(context: RouteContext): Common.Result<unknown> {
   return query.ok ? ok(context.source.listOrders(query.value)) : query;
 }
 
-/** An order that names no account is answered to whoever holds its identifier; a foreign id is `404`,
- * never `403`; the level admits a session-less caller, which is all a guest's confirmation carries. */
+/**
+ * Reads one order.
+ *
+ * An order that names no account answers the caller presenting the credential minted when it was
+ * placed ({@link holdsGuestOrderCredential}), or an administrator; every other caller is refused
+ * exactly as a foreign account-owned order is, so a response cannot be read to learn whether an
+ * identifier exists. That refusal is the dispatcher's own `sessionProblem` — `401` for a caller that
+ * sent no session, and a token naming no live session answers its own code — for a caller whose
+ * session cannot be resolved, and the same `404` an identifier no order holds answers for a caller the
+ * order does not belong to. A foreign id is therefore `404`, never `403`, and the level admits a
+ * session-less caller, which is what a confirmation carrying a placement credential is.
+ */
 function getOrder(context: RouteContext): Common.Result<unknown> {
-  const order = context.source.getOrder(context.params.id as Common.OrderId);
-  if (order !== undefined && order.customerId === null) return ok(order);
+  const orderId = context.params.id as Common.OrderId;
+  const order = context.source.getOrder(orderId);
+  // The placement credential is judged before the session, because it is all a session-less buyer's own
+  // confirmation holds; it proves the order was created here and refuses everyone else just as below.
+  if (
+    order !== undefined &&
+    order.customerId === null &&
+    holdsGuestOrderCredential(orderId, context.orderToken)
+  ) {
+    return ok(order);
+  }
   if (context.sessionProblem !== null) return { ok: false, error: context.sessionProblem };
   if (order === undefined) return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
   const session = sessionOf(context);

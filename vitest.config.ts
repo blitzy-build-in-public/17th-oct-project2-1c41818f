@@ -1,7 +1,7 @@
 /**
  * Path: vitest.config.ts
  * Purpose: Test configuration: the node and jsdom projects, setup file, globals, coverage thresholds and `passWithNoTests`
- * Lines: 72
+ * Lines: 75
  */
 
 import { fileURLToPath, URL } from "node:url";
@@ -21,10 +21,6 @@ export default defineConfig({
   test: {
     // Ambient describe/it/expect in every test file; tsconfig.json supplies their types.
     globals: true,
-    // The integration flows mount the whole application and drive real forms, so a case measures one to
-    // four seconds on an idle host and more while the other files run; the five-second default fails
-    // them for reasons no assertion describes. The ceiling is raised here, once, for both projects.
-    testTimeout: 15_000,
     // The build's phase gate is `npm test` exiting zero from phase 1, thirty-three phases
     // before the first test file exists: removing this option invalidates it for all of them.
     passWithNoTests: true,
@@ -32,6 +28,13 @@ export default defineConfig({
     // tests/setup.ts arrives in phase 34; Vitest loads a setup file only when it runs test
     // files, so its absence does not fail an otherwise empty run.
     setupFiles: ["tests/setup.ts"],
+    // The integration flows mount the whole application and drive real user-event sequences through
+    // jsdom, so a case measures two to four seconds on an idle host and more while the other files
+    // run; the five-second default failed them for reasons no assertion describes. The ceiling is
+    // raised here, once, for both projects, above the 5,149 ms one case measured under deliberate
+    // load, so contention cannot decide a run. Only the per-test allowance moves: no assertion, case
+    // or skip is relaxed, and a test that genuinely hangs still fails, at the wider limit, not in 5 s.
+    testTimeout: 30_000,
     // Pure logic needs no DOM; the jsdom project below overrides this.
     environment: "node",
     coverage: {

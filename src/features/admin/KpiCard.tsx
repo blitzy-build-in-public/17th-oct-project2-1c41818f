@@ -1,14 +1,14 @@
 /**
  * Path: src/features/admin/KpiCard.tsx
  * Purpose: One KPI with its value, named comparison baseline and change indicator
- * Lines: 239
+ * Lines: 250
  */
 
 import { useId } from "react";
 import type { ElementType, ReactElement } from "react";
 
 import { Card } from "@/components/ui/Card";
-import { ADMIN_COPY, FEEDBACK_COPY } from "@/constants/content";
+import { ADMIN_COPY, FEEDBACK_COPY, KPI_CHANGE_WORDS } from "@/constants/content";
 import { describeBaseline } from "@/lib/analyticsService";
 import type { KpiBaseline } from "@/types/analytics";
 import {
@@ -25,6 +25,10 @@ import { changeDirection } from "@/utils/statistics";
  * is the frame and the grid the card's four parts sit in, `sp-kpi-card__label` names the figure,
  * `sp-kpi-card__value` states it, `sp-kpi-card__delta` carries the change with its `--up`/`--down` colour
  * reinforcement, and `sp-kpi-card__baseline` words the comparison the change is measured against.
+ *
+ * `sp-visually-hidden` comes from `src/styles/base.css`, which owns that utility, and it hides the word the
+ * delta states the direction in while leaving it in the accessibility tree: the arrow is aria-hidden, so the
+ * word beside the figure is what tells assistive technology which way the KPI moved.
  *
  * The frame is composed without the card primitive's header and body regions: the KPI sheet lays the four
  * parts out itself, and those two regions would add a second padding and a rule between them.
@@ -105,6 +109,7 @@ const CLASSES = {
   deltaUp: "sp-kpi-card__delta--up",
   deltaDown: "sp-kpi-card__delta--down",
   baseline: "sp-kpi-card__baseline",
+  changeWord: "sp-visually-hidden",
 } as const;
 
 /** The heading element each level the caller may ask for renders as, so the label joins the outline at the
@@ -115,7 +120,8 @@ const HEADING_ELEMENTS: Readonly<Record<2 | 3 | 4, ElementType>> = { 2: "h2", 3:
  * The colour reinforcement each direction adds to the change line, as the sheet's two modifiers.
  *
  * A flat comparison and one that could not be made add none, so neither is coloured: the direction reaches
- * the reader through the arrow and the signed change text, and the colour only repeats what they say.
+ * the reader through the arrow, the signed change text and the word beside it, and the colour only repeats
+ * what they say.
  */
 const DIRECTION_CLASSES: Readonly<Record<ChangeDirection, string>> = {
   up: CLASSES.deltaUp,
@@ -141,10 +147,11 @@ function deltaClassName(direction: ChangeDirection): string {
 /**
  * The arrow drawn beside a KPI's change, one per direction the comparison can report.
  *
- * It is hidden from assistive technology because the change text beside it states the same difference: the
- * percentage carries its magnitude and keeps the minus a decline is written with, so the arrow is the
- * sighted reader's shortcut to that difference rather than a second, exclusive reading of it. Its paint
- * comes from the change line's own colour through `currentColor`, so no colour is written here.
+ * It is hidden from assistive technology because the change line states the same difference in words beside
+ * it: the percentage carries its magnitude and keeps the minus a decline is written with, and the word after
+ * it says which way the figure moved, so the arrow is the sighted reader's shortcut to that difference
+ * rather than a second, exclusive reading of it. Its paint comes from the change line's own colour through
+ * `currentColor`, so no colour is written here.
  *
  * @param props - The direction the comparison moved, or could not be established.
  * @returns The arrow, or `null` when there is no direction to draw.
@@ -188,12 +195,15 @@ export interface KpiCardProps {
  * integer minor units all the way to this component and is never divided here; the change is the figure
  * `KpiSummary.baseline` carries and its direction is classified by `src/utils/statistics.ts`; and the
  * comparison is named by `describeBaseline`, so a reader is told what the change is measured against
- * instead of being left to assume. A comparison whose baseline is zero states the documented flat result
- * and one that reports no percentage shows the placeholder, so no card renders `NaN`.
+ * instead of being left to assume. A comparison that states no percentage — a baseline window holding no
+ * activity, or a baseline figure of zero against a period that differs — shows the formatter's placeholder
+ * with no arrow and no colour, while two figures that do not differ state a flat zero, so no card renders
+ * `NaN` and no unstated percentage is presented as a period that did not move.
  *
  * The label carries the section's name through `aria-labelledby`; the change writes its own magnitude and
- * the minus a decline keeps, the arrow beside it states which way the figure moved, and the two colour
- * modifiers only reinforce what the pair already says, so nothing about the card depends on colour.
+ * the minus a decline keeps, the arrow beside it draws which way the figure moved and the word beside the
+ * figure states the direction where the arrow cannot, and the two colour modifiers only reinforce what the
+ * pair already says, so nothing about the card depends on colour.
  *
  * @param props - The KPI, its label and figure, the comparison, the heading level and the loading flag.
  * @returns The KPI card as a labelled section.
@@ -210,7 +220,7 @@ export function KpiCard({
   const spec = KPI_KINDS[kpi];
   const Heading = HEADING_ELEMENTS[headingLevel];
   const change = baseline[spec.changeField];
-  const direction = changeDirection(change);
+  const direction = change === null ? "unknown" : changeDirection(change);
   const valueText = spec.unit === "money" ? formatMoneyCompact(value) : formatInteger(value);
   const heading = label ?? spec.label;
 
@@ -230,6 +240,7 @@ export function KpiCard({
           <p className={deltaClassName(direction)}>
             <DeltaGlyph direction={direction} />
             {formatScaledPercent(change)}
+            <span className={CLASSES.changeWord}> {KPI_CHANGE_WORDS[direction]}</span>
           </p>
           <p className={CLASSES.baseline}>{describeBaseline(baseline.kind, baseline)}</p>
         </>

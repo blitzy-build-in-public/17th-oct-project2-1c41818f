@@ -1,6 +1,6 @@
 /* Path: src/styles/account.css
  * Purpose: Styles for the account screens: profile form, order history and address cards
- * Lines: 495
+ * Lines: 496
  */
 
 /* The account layer: the sign-in and registration screens, the account shell with its section navigation and
@@ -293,8 +293,9 @@
 /* ==== Order detail ====
  * One order read top to bottom: the number with its date and status, the itemised lines, the totals, the two
  * addresses and the status history. The number is monospaced and explicitly selectable, because a customer reads
- * it out or pastes it into a support conversation. src/styles/commerce-cart.css owns .sp-summary, and this
- * sheet loads no other sheet, so the totals block is declared here rather than composed from that class.
+ * it out or pastes it into a support conversation. The `.sp-summary` register belongs to
+ * `src/styles/summary-panel.css`, which `commerce.css` loads, so the totals block is declared here rather than
+ * composed from a class this sheet's own file does not define.
  */
 .sp-order-detail {
   display: grid;

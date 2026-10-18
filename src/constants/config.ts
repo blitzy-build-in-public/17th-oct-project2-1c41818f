@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 395
+ * Lines: 428
  */
 
 import type { CurrencyCode } from "@/types/common";
@@ -18,10 +18,13 @@ import type { ShippingMethod } from "@/types/commerce";
 export const STORAGE_KEY_PREFIX = "salespro";
 
 /**
- * The keys of the four pieces of durable state the product keeps — the cart, the session token, the
- * demonstration account store's session table and the last-used report range — and of nothing else.
- * Search history stays in memory in `src/features/search/SearchBar.tsx`, and the catalogue is never
- * persisted.
+ * The keys of the seven pieces of durable state the product keeps — the cart, the session token,
+ * the demonstration account store's session table, the last-used report range, the read
+ * credential of each order this browser placed without an account, the orders this browser created
+ * and the placement credential the seam recorded for each of those orders — and of nothing else.
+ * Search history stays in memory in `src/features/search/SearchBar.tsx`, the catalogue is never
+ * persisted, and the seeded history needs no entry at all: `src/data/orders.ts` rebuilds it
+ * identically in every document, so only what this browser created has to survive.
  *
  * Consumer: `src/utils/storage.ts`, the only module in the product that touches `localStorage`. It
  * reads every key from here so no caller invents one, and stamps each payload with
@@ -41,6 +44,36 @@ export const STORAGE_KEYS = {
   SESSIONS: `${STORAGE_KEY_PREFIX}.sessions`,
   /** The last report range an administrator chose, so the dashboard reopens where it was left. */
   REPORT_RANGE: `${STORAGE_KEY_PREFIX}.report-range`,
+  /** The read credential of each order this browser placed without an account, so the buyer's own
+   * confirmation can be reopened after a reload. It holds order identifiers and their placement
+   * credentials only: no personal data, no payment data and no credential of any account. */
+  ORDER_TOKENS: `${STORAGE_KEY_PREFIX}.order-tokens`,
+  /**
+   * The orders this browser created, as the whole records the store serves them from, newest first.
+   * A created order is the one thing in the history no seed can rebuild: `src/data/orders.ts`
+   * regenerates the seeded year on every load, so an order a submission created would otherwise be
+   * lost with the document that placed it and the confirmation route would refuse a buyer their own
+   * order. It holds the orders this browser created, never a seeded one, and only the most recent of
+   * them: `src/data/placedOrders.ts` bounds the record so a browser that places order after order
+   * cannot grow it without bound.
+   *
+   * Consumer: `src/data/placedOrders.ts`, which writes the record where the order is created in
+   * `src/data/repositories.ts` and reads it back into a store a document builds, so `getOrder`, an
+   * account's history and the per-customer grouping answer the created orders again.
+   */
+  PLACED_ORDERS: `${STORAGE_KEY_PREFIX}.placed-orders`,
+  /**
+   * The placement credential the seam recorded for each account-less order it created — the
+   * idempotency key the submission was sent under, kept against the order it placed — so a credential
+   * minted in an earlier document still verifies the read of that order. It holds identifiers and keys
+   * only: no personal data, no payment data and no credential of any account.
+   *
+   * Consumer: `src/lib/apiOrders.ts`, which records one when a submission creates an account-less
+   * order and is the only reader. The credential is compared against this record and never against
+   * the order's own `idempotencyKey` member, so a payload a reader legitimately holds cannot be
+   * presented as the credential of an order that reader was refused.
+   */
+  ORDER_CREDENTIALS: `${STORAGE_KEY_PREFIX}.order-credentials`,
 } as const;
 
 /**

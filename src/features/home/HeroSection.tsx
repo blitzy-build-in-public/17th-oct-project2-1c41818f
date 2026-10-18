@@ -141,10 +141,10 @@ function HeroArtwork(): ReactElement {
  * their look. Their labels are the copy module's, and each reads as an action on its own
  * ("Shop the catalogue", "Search products") so neither depends on the sentence above it.
  *
- * The trust strip sits inside this section's landmark rather than in a second one. The copy module
- * carries no heading for it, and inventing one here would split the page's copy across two homes,
- * so the strip is an unlabelled band in the hero's own labelled region — no landmark is left
- * unnamed and no sentence is written outside `src/constants/content.ts`.
+ * The trust strip sits inside this section's landmark rather than in a second one. The copy
+ * module carries no heading for it, and inventing one here would split the page's copy across
+ * two homes, so the strip is an unlabelled band in the hero's own labelled region — no
+ * landmark is left unnamed and no sentence is written outside `src/constants/contentContent.ts`.
  */
 export function HeroSection(): ReactElement {
   return (

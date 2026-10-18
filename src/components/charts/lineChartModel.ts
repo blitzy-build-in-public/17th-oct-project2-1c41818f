@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/lineChartModel.ts
  * Purpose: The line chart's plot model: its scales, axis ticks, series paths, pointer areas and readout placement
- * Lines: 254
+ * Lines: 271
  */
 
 import type { CSSProperties } from "react";
@@ -10,6 +10,8 @@ import {
   CHART_VIEWBOX_WIDTH,
   DEFAULT_PADDING,
   POINT_MARK_LIMIT,
+  WHOLE_NUMBER_STEP,
+  bandAxisPadding,
   buildAreaPath,
   buildBandTicks,
   buildLinePath,
@@ -19,11 +21,14 @@ import {
   computePlotArea,
   createBandScale,
   createLinearScale,
+  estimateLabelWidth,
   extendDomainToIncludeZero,
+  hasWholeValues,
   seriesClassName,
   zeroCoordinate,
 } from "@/components/charts/chartScales";
 import type {
+  AxisValueFormatter,
   BandScale,
   BandTick,
   ChartDataTable,
@@ -109,7 +114,7 @@ export interface PlotModelOptions {
   readonly area: boolean;
   readonly showPoints: boolean;
   readonly formatValue: ValueFormatter;
-  readonly formatAxisValue: ValueFormatter;
+  readonly formatAxisValue: AxisValueFormatter;
   readonly formatLabel: LabelFormatter;
 }
 
@@ -174,11 +179,16 @@ export function readoutStyle(x: number, y: number, characters: number): ChartSty
 /**
  * Builds everything one render of the plot draws, from the series it is handed.
  *
- * The bands come from `collectBandKeys`, the band scale spreads them across the plot width, and the
- * value scale spans the finite extent of the series, widened to carry zero when the axis is asked to.
+ * The bands come from `collectBandKeys`, the band scale spreads them across the plot width, and the value
+ * scale spans the finite extent of the series, widened to carry zero when the axis is asked to.
  * A band a series does not carry is drawn, and tabulated, as zero: a sparse revenue series means no
  * revenue in that period rather than a missing figure. Markers are drawn only while a series carries at
  * most `POINT_MARK_LIMIT` bands, because past it they would merge into the line they mark.
+ *
+ * The band labels are worded before the frame is computed, because two of its insets are the room the first
+ * and last centred label need and the axis thins its labels by the room they take across the plot. A metric of
+ * whole numbers — a count of people, orders or units — is ticked in whole numbers, and its axis, like every
+ * value axis here, is written by the formatter the caller supplies, handed the domain it spans.
  *
  * @param options - The series, the band keys, the resolved frame and the formatters to write it with.
  * @returns The scales, the axis ticks, the series marks, the pointer areas and the paired data table.
@@ -195,10 +205,11 @@ export function buildPlotModel(options: PlotModelOptions): PlotModel {
     formatAxisValue,
     formatLabel,
   } = options;
+  const bandLabels = bandKeys.map((key) => formatLabel(key));
   const plotArea = computePlotArea({
     width: CHART_VIEWBOX_WIDTH,
     height,
-    padding: DEFAULT_PADDING,
+    padding: bandAxisPadding(DEFAULT_PADDING, bandLabels),
   });
   const bandScale = createBandScale({
     domain: bandKeys,
@@ -209,6 +220,7 @@ export function buildPlotModel(options: PlotModelOptions): PlotModel {
     domain: includeZero ? extendDomainToIncludeZero(extent) : extent,
     range: [plotArea.y + plotArea.height, plotArea.y],
     nice: true,
+    minimumStep: hasWholeValues(series) ? WHOLE_NUMBER_STEP : undefined,
   });
   const baselineY = includeZero ? zeroCoordinate(valueScale) : plotArea.y + plotArea.height;
   const marks = series.map((one, index) => {
@@ -246,7 +258,12 @@ export function buildPlotModel(options: PlotModelOptions): PlotModel {
     valueScale,
     plotArea,
     valueTicks: buildValueTicks(valueScale, formatAxisValue),
-    bandTicks: buildBandTicks(bandScale, formatLabel),
+    // A band label is written across the axis and centred on its band, so the thinning measures the room one
+    // takes along the plot and the frame reserves half of the widest at either end.
+    bandTicks: buildBandTicks(bandScale, formatLabel, {
+      axisLength: plotArea.width,
+      measureLabel: estimateLabelWidth,
+    }),
     marks,
     hits,
     dataTable: buildSeriesDataTable(series, formatValue, { labelHeader: DATE_RANGE_COPY.LABEL }),

@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/shoppingFlow.test.tsx
  * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states.
- * Lines: 709
+ * Lines: 787
  */
 
 import { act } from "@testing-library/react";
@@ -54,7 +54,6 @@ const {
   EMPTY_STATES,
   FEEDBACK_COPY,
   HEADER_COPY,
-  HOME_COPY,
   PAGE_TITLES,
   SEARCH_COPY,
   addedToCartMessage,
@@ -67,6 +66,7 @@ const {
   ratingSummaryLabel,
   removeFilterLabel,
 } = content;
+const { HOME_COPY } = content;
 const TRUST_CLAIMS = [
   HOME_COPY.TRUST_REVIEWS_CLAIM,
   HOME_COPY.TRUST_CART_CLAIM,
@@ -215,6 +215,29 @@ function currentDestinations(): HTMLElement[] {
 /** The button a name reaches. */
 function buttonNamed(name: string): HTMLElement {
   return screen.getByRole("button", { name });
+}
+
+/** A `MediaQueryList` answering `matches`, which is all `useMediaQuery` reads from it: how a case states a
+ *  viewport width, which jsdom lays nothing out to infer. `tests/setup.ts` installs its own shim after every
+ *  case, so an override here cannot reach the case after it. */
+function mediaQueryList(query: string, matches: boolean): MediaQueryList {
+  const noop = (): void => undefined;
+  return {
+    media: query,
+    matches,
+    onchange: null,
+    addEventListener: noop,
+    removeEventListener: noop,
+    addListener: noop,
+    removeListener: noop,
+    dispatchEvent: () => true,
+  } as unknown as MediaQueryList;
+}
+
+/** The desktop presentation: every `min-width` query satisfied, which is the viewport the facet panel is the
+ *  column beside the results at rather than the contents of the drawer the small stops reach it through. */
+function desktopViewport(): void {
+  window.matchMedia = (query: string) => mediaQueryList(query, query.includes("min-width"));
 }
 
 describe("the shopper's browse-and-add journey", () => {
@@ -681,6 +704,34 @@ describe("the shopper's browse-and-add journey", () => {
     expect(screen.getByLabelText(CATALOG_COPY.SORT_GROUP_LABEL)).toHaveValue(PRICE_ASCENDING_SORT);
   });
 });
+it("announces one failed search once, with one recovery action, and recovers on retry", async () => {
+  // The desktop presentation is the one carrying the facet column beside the results, which is where the same
+  // failure was announced a second time; the panel the case does not see is the drawer's contents.
+  desktopViewport();
+  const { user } = renderApp({ route: ROUTES.SEARCH });
+  await screen.findByLabelText(SEARCH_COPY.FIELD_LABEL);
+
+  // A term the seeded catalogue holds, so the retry's own answer is observable: the read that failed is the
+  // one this query asks for, and the recovery it offers has a result to restore.
+  const failure = failNext({ path: API_PATHS.PRODUCTS });
+  await user.type(screen.getByLabelText(SEARCH_COPY.FIELD_LABEL), "jacket");
+  await user.keyboard("{Enter}");
+
+  // One failed read is one announcement carrying the retry that resolves it, and the whole screen offers that
+  // one action: the results region owns the failure, and the facet column beside it repeats neither.
+  expect(await screen.findAllByRole("alert")).toHaveLength(1);
+  const alert = screen.getByRole("alert");
+  expect(alert).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_TITLE);
+  expect(screen.getAllByRole("button", { name: COMMON_ACTIONS.RETRY })).toEqual([
+    within(alert).getByRole("button", { name: COMMON_ACTIONS.RETRY }),
+  ]);
+  expect(tileNames()).toHaveLength(0);
+
+  failure.disarm();
+  await user.click(within(alert).getByRole("button", { name: COMMON_ACTIONS.RETRY }));
+
+  await waitFor(() => expect(tileNames().length).toBeGreaterThan(0));
+});
 
 describe("the catalogue's facet control under a burst", () => {
   /** The category facet value the burst writes, and the label the panel offers it under. */
@@ -705,5 +756,32 @@ describe("the catalogue's facet control under a burst", () => {
 
     expect(control).not.toBeChecked();
     await waitFor(() => expect(readAnnouncedTotal()).toBe(total));
+  });
+});
+
+/*
+ * The state every surface that can resolve nothing shares: the catch-all route, a category segment naming no
+ * category and a product segment naming no product render the one view `src/components/ui/NotFoundView.tsx`
+ * owns, so each names itself in the tab and heads itself with the page's one `<h1>`. The segments are written
+ * out because a case's whole subject is an address that resolves to nothing.
+ */
+describe("an address the product cannot serve", () => {
+  it.each([
+    ["an unmatched address", "/this-route-does-not-exist"],
+    ["a category the catalogue does not hold", "/category/does-not-exist"],
+    ["a product the catalogue does not hold", "/product/does-not-exist"],
+  ])("names %s in the tab and in its only heading", async (_case, route) => {
+    renderApp({ route });
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: content.NOT_FOUND_COPY.TITLE }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    // The tab is written by a passive effect after the view commits, so it is awaited to the same settle the
+    // heading above is, rather than read on the frame the heading appears in.
+    await waitFor(() =>
+      expect(document.title).toBe(content.documentTitle(content.PAGE_TITLES.NOT_FOUND)),
+    );
+    expect(screen.getByText(content.NOT_FOUND_COPY.BODY)).toBeVisible();
   });
 });

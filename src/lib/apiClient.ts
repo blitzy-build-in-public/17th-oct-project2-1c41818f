@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiClient.ts
  * Purpose: The single transport seam: one typed request function with latency, abort, error shaping and a test double
- * Lines: 471
+ * Lines: 484
  */
 
 import type { ApiError, ApiRequestOptions, HttpMethod, QueryParams, Result } from "@/types/common";
@@ -123,13 +123,18 @@ function resolveRequestTarget(path: string, query: QueryParams | undefined): str
 }
 
 /**
- * The options the dispatcher is handed: the resolved method with the query, body, session token and
- * signal passed through.
+ * The options the dispatcher is handed: the resolved method with the query, body, session token,
+ * order token and signal passed through.
  *
  * The query travels twice on purpose. It is in the target, so the request the seam answers is the
  * request a real client would send and the transport keeps one record of it; it is also in the
  * options, so the seam reads each member in the type its caller gave it — a number stays a number for
  * a route that reads an amount — instead of the string the URL can only carry.
+ *
+ * Every member a caller may set is carried over, which is why the list is written out here rather
+ * than spread: a request reaches the seam with exactly the members this function names, so a member
+ * `src/types/common.ts` adds is passed on only once it is added below — dropping `orderToken` here
+ * would leave the order-detail read unable to present the credential of an order it placed.
  */
 function dispatcherOptions(options: ApiRequestOptions): ApiRequestOptions {
   return {
@@ -137,6 +142,7 @@ function dispatcherOptions(options: ApiRequestOptions): ApiRequestOptions {
     query: options.query,
     body: options.body,
     sessionToken: options.sessionToken,
+    orderToken: options.orderToken,
     signal: options.signal,
   };
 }
@@ -412,9 +418,9 @@ export function deleteJson<TValue>(
 // The seam's published vocabulary -----------------------------------------------------------------
 
 /**
- * The error vocabulary and the failure shaper a domain service asks for its own refusal, republished
- * from the seam this file dispatches to, so `src/lib/*Service.ts` reaches both through the one module
- * they already import.
+ * The error vocabulary and the reading of it that a domain service or a screen asks for its own refusal,
+ * republished from the seam this file dispatches to, so `src/lib/*Service.ts` and `src/features/**` reach
+ * both through the one module they already import.
  *
  * The words are the same everywhere by construction: `API_ERROR_CODES` names every machine-readable
  * reason a request can fail, `API_ERROR_STATUS` gives the status each of those codes answers with, and
@@ -422,8 +428,19 @@ export function deleteJson<TValue>(
  * breaks a rule before it is sent. A service therefore refuses a malformed body in exactly the shape
  * the seam refuses the same body with, and no status or code literal is written outside the contract
  * module that owns them.
+ *
+ * {@link isSessionFailure} and {@link isNotFoundFailure} are the other half of that reading: they answer
+ * whether a failure is one a repeat of the request could answer differently, which is what lets a screen
+ * offer the action that resolves the state — a sign-in, or the way back — instead of a retry that cannot.
  */
-export { API_ERROR_CODES, API_ERROR_STATUS, failure, shapeError } from "@/lib/mockServer";
+export {
+  API_ERROR_CODES,
+  API_ERROR_STATUS,
+  failure,
+  isNotFoundFailure,
+  isSessionFailure,
+  shapeError,
+} from "@/lib/mockServer";
 
 /**
  * Every endpoint path, and the builder that fills one from the values its captured segments take,

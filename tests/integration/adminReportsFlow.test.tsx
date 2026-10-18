@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/adminReportsFlow.test.tsx
- * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range.
- * Lines: 600
+ * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range
+ * Lines: 596
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,6 +52,7 @@ import { parseMoneyToMinor } from "@/utils/format";
 import { readStored } from "@/utils/storage";
 
 import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
+import { COUNT_TEXT, KPI_DELTA_TEXT, MONEY_TEXT, PERCENT_TEXT } from "./figureReaders";
 import type { RenderHarness, UserEvent } from "../testUtils";
 
 // The real application over its seeded data, with the seam's failure switch a case's only other lever. Both
@@ -61,11 +62,6 @@ import type { RenderHarness, UserEvent } from "../testUtils";
 /** The sign-in form's controls; a required field's label also carries the hidden requirement text. */
 const EMAIL_FIELD = new RegExp(`^${ACCOUNT_COPY.EMAIL_LABEL}`);
 const PASSWORD_FIELD = new RegExp(`^${ACCOUNT_COPY.PASSWORD_LABEL}`);
-
-/** Money, count and share as the product renders them, for reading a figure back out of a screen. */
-const MONEY_TEXT = /^\$[\d,]+(\.\d+)?[KMB]?$/;
-const COUNT_TEXT = /^[\d,]+$/;
-const PERCENT_TEXT = /^-?\d+(\.\d+)?%$/;
 
 /** The alignment class the shared table's own contract gives a column of figures. */
 const NUMERIC_CELL_CLASS = "sp-table__num";
@@ -322,7 +318,7 @@ describe("the dashboard an administrator sees", () => {
     ]) {
       const card = await screen.findByRole("region", { name: label });
       expect(kpiFigure(label)).not.toBe("");
-      const change = within(card).getByText(PERCENT_TEXT);
+      const change = within(card).getByText((_, el) => KPI_DELTA_TEXT.test(el?.textContent ?? ""));
       expect(change.querySelector("svg[aria-hidden='true']")).not.toBeNull();
       expect(within(card).getByText(comparison)).toBeInTheDocument();
     }
@@ -573,28 +569,28 @@ describe("a period that recorded nothing", () => {
 });
 
 describe("a read that fails", () => {
-  it("states the seam's message with a retry that restores the screen", async () => {
-    // Armed before the mount and aimed at one endpoint, so the failure reached is the one a read meets
-    // rather than the sign-in or the session restore the guard waits on.
-    const dashboardFailure = failNext({ path: "/api/analytics/kpis" });
+  it("announces one failed read once, with a retry that restores the figures", async () => {
+    // The dashboard reads first, so the range re-run below is the refresh path a duplicate notice was reported on.
     const dashboard = await openAsAdmin();
+    await screen.findByRole("region", { name: ADMIN_COPY.KPI_REVENUE_LABEL });
+    const failure = failNext({ path: "/api/analytics/kpis" });
+    await applyRange(dashboard.user, addDays(defaultReportRange().to, -6), defaultReportRange().to);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_BODY);
     await dashboard.user.click(within(alert).getByRole("button", { name: COMMON_ACTIONS.RETRY }));
-    expect(
-      await screen.findByRole("region", { name: ADMIN_COPY.KPI_REVENUE_LABEL }),
-    ).toBeInTheDocument();
-    dashboardFailure.disarm();
-    dashboard.unmount();
-
-    const reportFailure = failNext({ path: "/api/reports/sales" });
-    const reports = renderApp({ route: ROUTES.ADMIN_REPORTS });
-    const reportAlert = await screen.findByRole("alert");
-    expect(reportAlert).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_BODY);
-    await reports.user.click(
-      within(reportAlert).getByRole("button", { name: COMMON_ACTIONS.RETRY }),
-    );
+    await screen.findByRole("region", { name: ADMIN_COPY.KPI_REVENUE_LABEL });
+    // One failure, one announcement: a duplicate notice would outlive this assertion, not precede it.
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    expect(screen.queryByText(FEEDBACK_COPY.ERROR_STATE_BODY)).toBeNull();
+    failure.disarm();
+  });
+  it("states the seam's message with a retry that restores the report screen", async () => {
+    const failure = failNext({ path: "/api/reports/sales" });
+    const reports = await openAsAdmin(ROUTES.ADMIN_REPORTS);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_BODY);
+    await reports.user.click(within(alert).getByRole("button", { name: COMMON_ACTIONS.RETRY }));
     expect((await reportTableOf(definitionOf("sales"))).grid.length).toBeGreaterThan(2);
-    reportFailure.disarm();
+    failure.disarm();
   });
 });
