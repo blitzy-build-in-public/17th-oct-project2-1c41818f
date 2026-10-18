@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 373
+ * Lines: 379
  */
 
 import { useEffect } from "react";
@@ -11,7 +11,6 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/Feedback";
-import { FREE_SHIPPING_METHOD_ID } from "@/constants/config";
 import {
   CART_COPY,
   COMMON_ACTIONS,
@@ -127,10 +126,13 @@ const CLASSES = {
  * The `/cart` route: the lines the shopper holds, what they come to, and the two ways on from here.
  *
  * The page reads the cart from `src/state/CartContext.tsx` and owns exactly one request: the price of the
- * basket as it stands, asked through `src/lib/pricingService.ts` whenever the lines or the code change. It
- * computes no money of its own — not a line total, not a subtotal, not a delivery charge, not how far the
- * basket is from free delivery — because each of those figures has one producer, so a figure derived here
- * would be a second answer to a question the pricing service already answers. What this page owns is the
+ * basket as it stands, asked through `src/lib/pricingService.ts` whenever the lines or the code change. The
+ * request names no delivery method, because this route offers no control that chooses one and a method
+ * belongs to the checkout's shipping step: the basket is priced against the fallback method, the priced cart
+ * echoes no method back, and the summary's delivery row states where a charge is settled instead of quoting
+ * one. It computes no money of its own — not a line total, not a subtotal, not a delivery charge, not how
+ * far the basket is from free delivery — because each of those figures has one producer, so a figure derived
+ * here would be a second answer to a question the pricing service already answers. What this page owns is the
  * composition: the heading, the rows, the summary panel, the two navigation controls and the clear control,
  * each handed the state it renders and none of them keeping a copy of it.
  *
@@ -168,7 +170,11 @@ export function CartPage(): ReactElement {
    * rather than the callback's identity — an inline fetcher is a new function on every render — so a cart
    * change asks once and the answer to a superseded request is discarded; `enabled` is what keeps an empty
    * cart from asking at all. The priced cart is never copied into state here: the hook holds the last
-   * answer, and a second copy could outlive the price it came from.
+   * answer, and a second copy could outlive the price it came from. The third argument is `null` rather than
+   * a method, because this page has no choice to state — the pricing contract reads it as "no method
+   * chosen" — so the basket is priced against the fallback method and the priced cart echoes none; the
+   * panel's delivery row then says where the charge is settled, which is what the checkout's own panel
+   * states for the same basket until its shipping step chooses one.
    *
    * `keepPreviousData` is what stops the shopper's own edit from emptying the page's figures: the price of
    * the basket they just corrected is asked for on every change, and without it the rows and the summary
@@ -183,7 +189,7 @@ export function CartPage(): ReactElement {
     error,
     reload,
   } = useAsync<PricedCart>(
-    (signal) => priceCart(lines, promoCode ?? undefined, FREE_SHIPPING_METHOD_ID, { signal }),
+    (signal) => priceCart(lines, promoCode ?? undefined, null, { signal }),
     [lines, promoCode],
     { enabled: !isEmpty, keepPreviousData: true },
   );

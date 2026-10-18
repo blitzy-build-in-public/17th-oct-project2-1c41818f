@@ -26,10 +26,10 @@ import { indexBy, sumQuantities } from "@/utils/collections";
  * - Amounts leave as integer minor units. Turning one into text is the view's job, through
  *   `src/utils/format.ts`.
  *
- * The slice's views read these directly: the cart page's header line and the mini-cart count units with
- * `selectItemCount` — whose reading is `sumQuantities`, the shared helper the header's badge and the
- * checkout's summary panel call for themselves, because the layer rule keeps those two surfaces above this
- * slice — and a row reads `selectAvailability` and maps its status to the wording in
+ * The slice's views read these directly: the cart page's header line, the mini-cart and the header's badge all
+ * count units with `selectItemCount` — whose reading is `sumQuantities`, the shared helper the checkout's own
+ * summary panel has to call for itself, because the layer rule keeps that other slice from importing this
+ * module — and a row reads `selectAvailability` and maps its status to the wording in
  * `src/constants/content.ts`, the summary panel puts the priced cart's own breakdown of applied promos
  * beside `selectDiscountTotalMinor` and draws its progress block from `selectFreeShippingProgress`, and
  * every amount reaches the screen through `src/utils/format.ts`.

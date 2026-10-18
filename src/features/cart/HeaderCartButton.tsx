@@ -1,14 +1,14 @@
 /**
  * Path: src/features/cart/HeaderCartButton.tsx
  * Purpose: The header's cart trigger: the basket's count and the mini-cart disclosure, composed into the header by the shell
- * Lines: 86
+ * Lines: 89
  */
 
 import type { ReactElement } from "react";
 
 import { HEADER_COPY, cartButtonLabel } from "@/constants/content";
+import { selectItemCount } from "@/features/cart/cartSelectors";
 import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
-import { sumQuantities } from "@/utils/collections";
 
 /*
  * Why this control lives in the cart slice and not in the header.
@@ -35,8 +35,10 @@ import { sumQuantities } from "@/utils/collections";
 /**
  * The header's cart trigger: a real button that reports what the basket holds and opens the mini-cart drawer.
  *
- * The count is summed during render from the cart's lines and stored nowhere, because a count kept beside the
- * lines it counts is a second answer to one question; it reaches the button's accessible name through
+ * The count is read during render through `selectItemCount`, the cart slice's one home for its derived values —
+ * which reads the shared `sumQuantities` in `src/utils/collections.ts` for the sum itself, so the figure is
+ * derived in one place rather than a second time here — and it is stored nowhere, because a count kept beside
+ * the lines it counts is a second answer to one question; it reaches the button's accessible name through
  * `cartButtonLabel`, so a screen reader hears the figure without the badge, and the badge itself is
  * `aria-hidden` so the figure is not announced twice. `aria-expanded` reports the drawer's own state, read from
  * `useMiniCartOpen()` — the flag's own context, which the cart exposes separately from the lines precisely so a
@@ -52,10 +54,11 @@ export function HeaderCartButton(): ReactElement {
   // `unbound-method` rule exists to catch.
   const cartActions = useCartDispatch();
 
-  // The count is one fact about the lines, so it is read through the shared aggregation helper during render
-  // and stored nowhere: the same reading the cart slice uses, so the badge cannot disagree with the cart page,
-  // the mini-cart or the checkout's summary panel about one basket.
-  const itemCount = sumQuantities(lines);
+  // The count is one fact about the lines, so it is read during render and stored nowhere, and it is read
+  // through the cart slice's derived-value home rather than summed here: `selectItemCount` is where this cart
+  // derives it, so the badge cannot disagree with the cart page, the mini-cart or the checkout's summary panel
+  // about one basket.
+  const itemCount = selectItemCount(lines);
 
   return (
     <button
