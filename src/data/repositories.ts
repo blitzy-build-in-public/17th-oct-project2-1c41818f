@@ -1,7 +1,7 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 463
+ * Lines: 470
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
@@ -62,7 +62,7 @@ import type {
   SalesProDataSource,
 } from "@/lib/mockServer";
 import { appendStatusHistory, orderNumber, toOrderLines } from "@/lib/orderService";
-import { decidePromo, priceCartLines } from "@/lib/pricingService";
+import { decidePromo, normalisePromoCode, priceCartLines } from "@/lib/pricingService";
 import { findDefinition, runReportDefinition } from "@/lib/reportService";
 import { applyTextMatch, buildSuggestions } from "@/lib/searchService";
 import type { ReportResult } from "@/types/analytics";
@@ -76,7 +76,7 @@ import type {
   SearchSuggestion,
 } from "@/types/catalog";
 import type { PageResult, ProductId, Result } from "@/types/common";
-import type { CartLine, Order, OrderLine, PricedCart, PromoCode } from "@/types/commerce";
+import type { CartLine, Order, PricedCart, PromoCode } from "@/types/commerce";
 import { averageOf, clampNumber, paginate } from "@/utils/collections";
 import {
   isWithinRange,
@@ -89,6 +89,7 @@ import {
   type DateRangeErrorCode,
 } from "@/utils/dates";
 import { DEFAULT_FILTER_STATE, readFilterState, writeFilterState } from "@/utils/queryParams";
+import { roundToTenths } from "@/utils/statistics";
 import { reviewId as newReviewId, sequenceId as newSequenceId } from "@/utils/strings";
 
 /** The wording for each rule a dated range can break, so a range refused here reads as the same range refused
@@ -162,12 +163,6 @@ function reviewPage(store: DataStore, query: ReviewQuery): PageResult<Review> {
   return paginate(ordered, query.page, query.pageSize);
 }
 
-/** The one-decimal form the catalogue states a rating in, so an average computed here and a seeded one are
- * written the same way wherever the figure is read. */
-function roundToOneDecimal(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
 /** Records a submitted review and folds it into the rating its product is served with. Its identifier, its
  * timestamp, its helpful count and its verified-purchase mark are decided here, the mark from the orders this
  * account has placed for the product — the same reading the seeded rows were given. */
@@ -205,8 +200,7 @@ function foldRating(store: DataStore, productId: ProductId): void {
   const updated: Product = {
     ...product,
     ratingCount: rows.length,
-    ratingAverage:
-      rows.length === 0 ? 0 : roundToOneDecimal(averageOf(rows.map((row) => row.rating))),
+    ratingAverage: rows.length === 0 ? 0 : roundToTenths(averageOf(rows.map((row) => row.rating))),
   };
   store.productById.set(productId, updated);
   const index = store.products.findIndex((candidate) => candidate.id === productId);
@@ -224,27 +218,29 @@ function unpriceableLine(lines: readonly CartLine[]): boolean {
   );
 }
 
-/** The stored code a submitted spelling names, or `undefined`: the spelling is compared case-insensitively, as
- * `PromoCode.code` documents, and whether the code may apply is the pricing service's decision. */
+/** The stored code a submitted spelling names, or `undefined`: the comparison rule — trimmed and upper-cased —
+ * is reached from its one home, `src/lib/pricingService.ts`, so a submitted spelling and a stored one are
+ * matched by one implementation, and whether the code may apply is that service's decision. */
 function findPromoCode(code: string | null): PromoCode | undefined {
-  if (code === null) return undefined;
-  const normalised = code.trim().toUpperCase();
-  if (normalised === "") return undefined;
-  return PROMO_CODES.find((promo) => promo.code.toUpperCase() === normalised);
+  const normalised = normalisePromoCode(code);
+  if (normalised === null) return undefined;
+  return PROMO_CODES.find((promo) => normalisePromoCode(promo.code) === normalised);
 }
 
 /** The refusal a code earns against a basket, or `null` when it applies: the decision order, the reasons and
  * the eligibility rules belong to the pricing service, and the catalogue fact a `category`-scoped code is
- * narrowed by belongs to the store. */
+ * narrowed by belongs to the store. The rule that whitespace alone is no code at all is that service's too,
+ * reached through its own normaliser rather than restated. */
 function promoRefusal(
   store: DataStore,
   code: string | null,
   promo: PromoCode | undefined,
   lines: readonly CartLine[],
 ): Result<never> | null {
-  if (code === null || code.trim() === "") return null;
+  const normalised = normalisePromoCode(code);
+  if (normalised === null) return null;
   const reason = decidePromo({
-    code,
+    code: normalised,
     promo,
     lines,
     today: toIsoDate(new Date()),
@@ -264,6 +260,11 @@ function priceRequest(
   },
 ): Result<PricedCart> {
   if (unpriceableLine(request.lines)) {
+    return refuse("insufficient-stock", VALIDATION_MESSAGES.QUANTITY_RANGE, "lines");
+  }
+  // The pricing read checks the real shelf, not only the ceiling each line declares, so a basket prices only
+  // while the catalogue can still cover it and an order placed from the priced cart cannot be refused for stock.
+  if (!request.lines.every((line) => canFulfil(store, line))) {
     return refuse("insufficient-stock", VALIDATION_MESSAGES.QUANTITY_RANGE, "lines");
   }
   const promo = findPromoCode(request.promoCode);
@@ -292,10 +293,16 @@ function promoValidation(
   return promo === undefined ? rejectPromo("unknown") : accept(promo);
 }
 
-/** Whether a line can still be bought: the product exists and holds at least the quantity the snapshot
- * recorded. The shelf is deliberately not rewritten by an order — catalogue and inventory administration are
+/** Whether a line can still be bought: the product exists and holds at least the quantity the line asks for.
+ * The check reads the catalogue as it stands rather than the ceiling a line declares, so the pricing read and
+ * order creation ask the shelf the same question and cannot disagree. Both submitted line shapes carry the
+ * pair it needs — a cart line names the product and the quantity, an order line copies them — so one rule
+ * serves both. The shelf is deliberately not rewritten by an order — catalogue and inventory administration are
  * outside this product's scope — so an order takes a snapshot and never a decrement. */
-function canFulfil(store: DataStore, line: OrderLine): boolean {
+function canFulfil(
+  store: DataStore,
+  line: { readonly productId: ProductId; readonly quantity: number },
+): boolean {
   const product = store.productById.get(line.productId);
   return product !== undefined && product.stockOnHand >= line.quantity;
 }

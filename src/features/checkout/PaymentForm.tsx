@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/PaymentForm.tsx
  * Purpose: The payment step: demonstration card entry with Luhn, expiry and CVC validation
- * Lines: 260
+ * Lines: 247
  */
 
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/Input";
 import { DEMO_CARD_NUMBERS } from "@/constants/config";
 import { CHECKOUT_COPY, COMMON_ACTIONS, demoPaymentNote } from "@/constants/content";
 import { useCheckout } from "@/state/CheckoutContext";
-import type { ApiError } from "@/types/common";
 
 /*
  * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only
@@ -142,23 +141,13 @@ function cardPatch(member: CardFieldName, value: string): CardPatch {
   }
 }
 
-/**
- * The failure this panel shows: the last submission's, while it concerns the payment as a whole.
- *
- * A failure that named a field is already on that control — the flow files it in the error map the
- * fields read, so a complaint of the card rule appears inline where it belongs and a copy of it above
- * the form would report one fault twice. What is left is the failure that names no control, which is
- * the declined demonstration card: a buyer who has come back here to change the card needs to read why
- * the order was refused, and that answer is the seam's message rather than anything this file decides.
- *
- * @param error - The failure the flow holds for its last submission, or `null` when it holds none.
- * @returns The failure to render, or `null` when there is none to show here.
+/*
+ * The last attempt's failure is not shown here. A submission begins and ends on the review step, which
+ * states the failure the attempt answered with, and the flow withdraws that failure as soon as it moves
+ * or a value changes — so a panel here could only report a request that is already settled, and for a
+ * refusal that named no field it would report one in the shared error-state wording rather than in
+ * anything about the card.
  */
-function panelFailure(error: ApiError | null): ApiError | null {
-  if (error === null) return null;
-  const field = error.field;
-  return field === undefined || field.trim() === "" ? error : null;
-}
 
 /**
  * The payment step: the demonstration notice, the card's five controls, and the way on.
@@ -174,14 +163,13 @@ function panelFailure(error: ApiError | null): ApiError | null {
  * back through `updateValues`, so a step change, a return to this step and the card's blanking after a
  * placed order all read the same single source.
  *
- * @returns The payment step's form, complete with its notice, failure and actions.
+ * @returns The payment step's form, complete with its notice and its actions.
  */
 export function PaymentForm(): ReactElement {
-  const { values, errors, error, isSubmitting, actions } = useCheckout();
+  const { values, errors, isSubmitting, actions } = useCheckout();
 
-  // Derived on every render and never stored: the failure to show, and the sentence that states what
-  // this panel is — no payment is processed, and which two numbers produce which outcome.
-  const failure = panelFailure(error);
+  // The sentence that states what this panel is — no payment is processed, and which two numbers produce
+  // which outcome — read from the two configured numbers and held nowhere.
   const notice = demoPaymentNote(DEMO_CARD_NUMBERS.APPROVED, DEMO_CARD_NUMBERS.DECLINED);
 
   /**
@@ -213,7 +201,6 @@ export function PaymentForm(): ReactElement {
       <Alert className="sp-payment__note" tone="info">
         {notice}
       </Alert>
-      {failure === null ? null : <Alert error={failure} tone="danger" />}
       <div className="sp-payment__card">
         <div className="sp-payment__row">
           {CARD_FIELDS.map((field) => (

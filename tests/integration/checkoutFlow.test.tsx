@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
  * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart.
- * Lines: 587
+ * Lines: 600
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,6 +23,7 @@ import {
   PROMO_REJECTION_MESSAGES,
   VALIDATION_MESSAGES,
   cartButtonLabel,
+  cartItemCountLabel,
   demoPaymentNote,
   editSectionLabel,
   freeShippingProgressLabel,
@@ -93,9 +94,11 @@ type SummaryFigures = Readonly<
   Record<"subtotal" | "discount" | "shipping" | "tax" | "total", MinorUnits>
 >;
 
-/** The order-summary panel a cart or a checkout renders: the one named region both of them register. */
-function summaryPanel(): HTMLElement {
-  return screen.getByRole("region", { name: CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING });
+/** The summary panel the surface under test renders, named by the heading that surface states: the cart's
+ *  panel and the checkout's totals panel are two regions under two names, so a caller names the one it
+ *  means, and the checkout's name stands as the default because most call sites read that panel. */
+function summaryPanel(name: string = CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING): HTMLElement {
+  return screen.getByRole("region", { name });
 }
 
 /** The amount a summary row states for `label`, or `0` when the region prints no such row. */
@@ -145,9 +148,12 @@ function productLinks(): HTMLElement[] {
     .filter((link) => (link.getAttribute("href") ?? "").startsWith(PRODUCT_PATH_PREFIX));
 }
 
-/** The first product link the listing offers, once the listing it leads has rendered. */
+/** The first product link the listing offers, once the listing it leads has rendered. This one wait asks for
+ *  more than the suite's own ceiling in `tests/setup.ts`, because it is the file's first paint: the catalogue's
+ *  lazy route and the seeded collections behind it are evaluated in a cold module registry, measured at about
+ *  two seconds on an idle host and longer while the other files run. */
 async function firstProductLink(): Promise<HTMLElement> {
-  await waitFor(() => expect(productLinks().length).toBeGreaterThan(0));
+  await waitFor(() => expect(productLinks().length).toBeGreaterThan(0), { timeout: 10_000 });
   const link = productLinks()[0];
   if (link === undefined) throw new Error("The catalogue rendered no product link.");
   return link;
@@ -156,8 +162,8 @@ async function firstProductLink(): Promise<HTMLElement> {
 /** What a walk into the catalogue asks for. */
 type CartWalk = { readonly quantity?: number; readonly cheapest?: boolean };
 
-/** Walks into the product the catalogue offers first, adds the units asked for from the detail page and
- *  dismisses the mini-cart the add opens, returning the name the cart's own row will be named by. */
+/** Walks into the product the catalogue offers first, adds the units asked for from the detail page, asserts
+ *  the count the mini-cart the add opens states, and dismisses it — returning the cart row's name. */
 async function addItemToCart(user: UserEvent, walk: CartWalk = {}): Promise<string> {
   if (walk.cheapest === true) {
     const before = (await firstProductLink()).textContent;
@@ -176,6 +182,7 @@ async function addItemToCart(user: UserEvent, walk: CartWalk = {}): Promise<stri
   }
   await user.click(screen.getByRole("button", { name: CATALOG_COPY.ADD_TO_CART_LABEL }));
   const drawer = await screen.findByRole("dialog", { name: CART_COPY.MINI_CART_HEADING });
+  expect(within(drawer).getByText(cartItemCountLabel(walk.quantity ?? 1))).toBeInTheDocument();
   await user.keyboard("{Escape}");
   await waitFor(() => expect(drawer).not.toBeInTheDocument());
   return name;
@@ -193,17 +200,21 @@ async function cartWithItems(walk: CartWalk = {}, atCheckout = false) {
     await screen.findByRole("link", { name: CART_COPY.MINI_CART_VIEW_CART_LABEL }),
   );
   await screen.findByRole("heading", { name: CART_COPY.PAGE_HEADING });
+  expect(await screen.findByText(cartItemCountLabel(walk.quantity ?? 1))).toBeInTheDocument();
   if (atCheckout) {
     await harness.user.click(
       screen.getByRole("link", { name: CART_COPY.PROCEED_TO_CHECKOUT_LABEL }),
     );
     await screen.findByRole("heading", { name: CHECKOUT_COPY.SHIPPING_STEP_HEADING });
+    expect(
+      await within(summaryPanel()).findByText(cartItemCountLabel(walk.quantity ?? 1)),
+    ).toBeInTheDocument();
   }
   return { ...harness, name };
 }
 
-/** The control a field's own label names: a required field states its requirement inside that label, so a
- *  field's name is matched as a pattern rather than as the exact text. */
+/** The control a field's own label names: a required field's label ends with its marker, so a field's
+ *  name is matched as a pattern rather than as the exact text. */
 function field(label: string): HTMLElement {
   return screen.getByLabelText(new RegExp(label));
 }
@@ -302,7 +313,7 @@ afterEach(() => {
 describe("the cart", () => {
   it("prices what it holds, keeps a line at its stock ceiling and empties into the empty state", async () => {
     const { name, unmount } = await cartWithItems({ quantity: 3 });
-    const summary = await summaryFigures(summaryPanel());
+    const summary = await summaryFigures(summaryPanel(CART_COPY.SUMMARY_HEADING));
     const row = screen.getByText(name).closest("li") as HTMLElement;
     const figures = moneyFigures(row);
     // The row's money reads in the order its grid places it: one unit's price, then the line's total.
@@ -347,7 +358,7 @@ describe("the cart", () => {
 describe("promo codes", () => {
   it("refuses the codes the basket cannot use, then discounts it with one it can", async () => {
     const { user } = await cartWithItems({ cheapest: true });
-    const before = await summaryFigures(summaryPanel());
+    const before = await summaryFigures(summaryPanel(CART_COPY.SUMMARY_HEADING));
     const refusals = [
       { code: UNKNOWN_PROMO_CODE, message: PROMO_REJECTION_MESSAGES.unknown },
       {
@@ -364,7 +375,7 @@ describe("promo codes", () => {
     }
 
     // Neither attempt took anything off, so the basket still states the identity with no discount.
-    const unchanged = await summaryFigures(summaryPanel());
+    const unchanged = await summaryFigures(summaryPanel(CART_COPY.SUMMARY_HEADING));
     expect(unchanged.discount).toBe(0);
     expect(unchanged.total).toBe(before.total);
 
@@ -373,8 +384,10 @@ describe("promo codes", () => {
     await user.type(screen.getByLabelText(CART_COPY.PROMO_FIELD_LABEL), promo.code);
     await user.click(screen.getByRole("button", { name: CART_COPY.PROMO_APPLY_LABEL }));
     const label = `${promo.code} · ${PROMO_KIND_LABELS[promo.kind]}`;
-    await waitFor(() => expect(rowAmount(summaryPanel(), label)).toBeGreaterThan(0));
-    const after = await summaryFigures(summaryPanel(), label);
+    await waitFor(() =>
+      expect(rowAmount(summaryPanel(CART_COPY.SUMMARY_HEADING), label)).toBeGreaterThan(0),
+    );
+    const after = await summaryFigures(summaryPanel(CART_COPY.SUMMARY_HEADING), label);
     expect(after.discount).toBeGreaterThan(0);
     expect(after.total).toBeLessThan(before.total);
     expect(after.total).toBe(after.subtotal - after.discount + after.shipping + after.tax);

@@ -1,13 +1,14 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
- * Purpose: Route matching, error mapping, idempotency replay, the unregistered-source failure and seed determinism.
- * Lines: 470
+ * Purpose: Route matching, error mapping, catalogue filter reading, review scoping, idempotency replay, the unregistered-source failure and seed determinism.
+ * Lines: 529
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   DEFAULT_API_LATENCY_MS,
+  DEFAULT_PAGE_SIZE,
   DEMO_ACCOUNTS,
   DEMO_CARD_NUMBERS,
   FREE_SHIPPING_METHOD_ID,
@@ -45,6 +46,7 @@ import type { ApiError, LineId, PageResult, Result } from "@/types/common";
 import type { CartLine, Order, PricedCart } from "@/types/commerce";
 import { createAbortError, isAbortError } from "@/utils/async";
 import { compareIso } from "@/utils/dates";
+import { FILTER_PARAMS } from "@/utils/queryParams";
 
 import { FIXED_DATE_RANGE, FIXED_NOW, makeAddress, makeFilterState } from "../../fixtures";
 
@@ -67,6 +69,15 @@ const STATIC_ROUTES: [string, string][] = [
   ["/api/facets", "facets.list"],
   ["/api/reports/definitions", "reports.list"],
   ["/api/reports/sales", "reports.run"],
+];
+
+/** The numeric filter members a malformed value can arrive on, against the two paths that read a
+ * filter: `GET /api/facets` takes the same parameters as the listing, so both answer their own `422`. */
+const MALFORMED_FILTERS: [string, string][] = [
+  ["/api/products", FILTER_PARAMS.MIN_PRICE],
+  ["/api/products", FILTER_PARAMS.MAX_PRICE],
+  ["/api/products", FILTER_PARAMS.MIN_RATING],
+  ["/api/facets", FILTER_PARAMS.MIN_PRICE],
 ];
 
 /** The registration body the two account cases submit, well formed so only the field under test differs. */
@@ -316,6 +327,54 @@ describe("answered reads", () => {
       getJson<{ items: Product[] }>(`/api/products/${product.id}/related`),
     );
     expect(firstOf(related.items).categoryId).toBe(product.categoryId);
+  });
+});
+
+// The catalogue's filter reading: a filter member that is present but carries no number is refused by
+// name, an inverted price pair is swapped rather than refused, and the paging members stay clamped.
+
+describe("catalogue filter reading", () => {
+  it.each(MALFORMED_FILTERS)("%s refuses a malformed %s", async (path, member) => {
+    const error = await refusalOf(getJson(path, { query: { [member]: "not-a-number" } }));
+    expectRefusal(error, 422, "validation-failed");
+    expect(error.field).toBe(member);
+  });
+
+  it("swaps an inverted price pair rather than refusing it, serving the same rows ascending", async () => {
+    const page = (minPrice: number, maxPrice: number) =>
+      valueOf(
+        getJson<PageResult<Product>>("/api/products", {
+          query: { minPrice, maxPrice, pageSize: PAGE_SIZE },
+        }),
+      );
+    const ascending = await page(10_000, 50_000);
+    const inverted = await page(50_000, 10_000);
+    const unfiltered = await valueOf(
+      getJson<PageResult<Product>>("/api/products", { query: { pageSize: PAGE_SIZE } }),
+    );
+    expect(inverted.total).toBe(ascending.total);
+    expect(inverted.items.map((item) => item.id)).toEqual(ascending.items.map((item) => item.id));
+    // The bounds were swapped rather than dropped: they still leave rows out of the unfiltered page.
+    expect(ascending.total).toBeGreaterThan(0);
+    expect(ascending.total).toBeLessThan(unfiltered.total);
+  });
+
+  it("keeps the paging members clamped rather than reading them as malformed filters", async () => {
+    const paged = await valueOf(
+      getJson<PageResult<Product>>("/api/products", { query: { page: "abc", pageSize: "abc" } }),
+    );
+    expect(paged.page).toBe(1);
+    expect(paged.pageSize).toBe(DEFAULT_PAGE_SIZE);
+  });
+
+  it("reads an empty price member as no bound, the reading an empty vocabulary member gets", async () => {
+    const blank = await valueOf(
+      getJson<PageResult<Product>>("/api/products", { query: { minPrice: "", maxPrice: "" } }),
+    );
+    const unfiltered = await valueOf(
+      getJson<PageResult<Product>>("/api/products", { query: { pageSize: PAGE_SIZE } }),
+    );
+    expect(blank.total).toBe(unfiltered.total);
   });
 });
 

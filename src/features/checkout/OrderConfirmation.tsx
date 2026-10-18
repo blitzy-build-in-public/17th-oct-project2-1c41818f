@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderConfirmation.tsx
  * Purpose: Confirmation route showing the order number, itemised lines, delivery estimate and address
- * Lines: 487
+ * Lines: 496
  */
 
 import type { ReactElement } from "react";
@@ -29,6 +29,7 @@ import type { OrderServiceOptions } from "@/lib/orderService";
 import { useAuth } from "@/state/AuthContext";
 import { useAsync, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import type { AsyncQueryState } from "@/state/hooks";
+import { useScrollToTop } from "@/state/scrollHooks";
 import type { Address, Session } from "@/types/account";
 import type { Order, OrderLine, PaymentSummary } from "@/types/commerce";
 import type { ApiError, CurrencyCode, OrderId } from "@/types/common";
@@ -472,6 +473,14 @@ export function OrderConfirmation(): ReactElement {
       : orderConfirmationHeading(order.data.orderNumber);
 
   useDocumentTitle(documentTitle(PAGE_TITLES.ORDER_CONFIRMATION));
+
+  /*
+   * The confirmation opens at its own top, because it arrives with whatever offset the route in front of it
+   * was left at — the checkout's, when this is where a placed order handed over — which would otherwise put
+   * the placed order's heading underneath the sticky header. The value that names the view is the route's own
+   * order identifier, so a second order's confirmation opens at its top rather than at this one's.
+   */
+  useScrollToTop(orderId);
 
   return (
     <div className="sp-container sp-container--narrow">

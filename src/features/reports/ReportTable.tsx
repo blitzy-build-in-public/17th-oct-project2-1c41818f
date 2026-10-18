@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 313
+ * Lines: 317
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -15,6 +15,7 @@ import {
   DATE_RANGE_COPY,
   EMPTY_STATES,
   FEEDBACK_COPY,
+  PAGING_NOUNS,
   REPORTS_COPY,
   exportNote,
 } from "@/constants/content";
@@ -204,7 +205,9 @@ export function ReportTable({
 
   // The paging contract the primitive renders its control from and reports a change through. The hook's two
   // page actions already clamp the page and normalise the size, so neither rule is applied a second time here,
-  // and the object is rebuilt only when this file renders.
+  // and the object is rebuilt only when this file renders. The caption counts what the table's rows are: the
+  // sales and customer reports page over reporting periods, and the product-performance report is the one
+  // report whose rows are products.
   const tablePaging: DataTablePaging = {
     page: pagination.page,
     pageSize: pagination.pageSize,
@@ -212,6 +215,7 @@ export function ReportTable({
     pageCount: pagination.pageCount,
     hasNext: pagination.hasNext,
     hasPrevious: pagination.hasPrevious,
+    countNoun: kind === "products" ? PAGING_NOUNS.PRODUCTS : PAGING_NOUNS.PERIODS,
     onPageChange: pagination.goTo,
     onPageSizeChange: pagination.setPageSize,
   };

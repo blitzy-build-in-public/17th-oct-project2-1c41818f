@@ -1,13 +1,13 @@
 /**
  * Path: src/features/cart/cartSelectors.ts
  * Purpose: Derived cart values: item count, line discount totals and free-shipping progress
- * Lines: 204
+ * Lines: 194
  */
 
 import { freeShippingProgress, type FreeShippingProgress } from "@/lib/pricingService";
 import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
 import type { LineId, MinorUnits } from "@/types/common";
-import { indexBy, sumBy } from "@/utils/collections";
+import { indexBy, sumQuantities } from "@/utils/collections";
 
 /**
  * The derived values the cart slice displays, read off the lines the shopper built and off the priced
@@ -16,8 +16,9 @@ import { indexBy, sumBy } from "@/utils/collections";
  * Three rules decide what may live in this module, and they are what stop the header's badge, the
  * cart's summary panel and the checkout from disagreeing about the same basket:
  *
- * - Counts are read off the lines themselves, so the item count, the line count and the empty test
- *   belong here.
+ * - Counts are read off the lines themselves, so the item count and the empty test belong here — and the
+ *   count is read through the shared aggregation helper, so every surface that states it, inside this
+ *   slice and above it, states one figure for one basket.
  * - No money is computed. A line's discount and the basket's discount total are read from the priced
  *   cart exactly as the pricing service wrote them, and the free-delivery position is that service's
  *   own `freeShippingProgress`, called rather than restated. Nothing here compares a subtotal against
@@ -25,8 +26,10 @@ import { indexBy, sumBy } from "@/utils/collections";
  * - Amounts leave as integer minor units. Turning one into text is the view's job, through
  *   `src/utils/format.ts`.
  *
- * The slice's views read these directly: the header's badge and the mini-cart count units with
- * `selectItemCount`, a row reads `selectAvailability` and maps its status to the wording in
+ * The slice's views read these directly: the cart page's header line and the mini-cart count units with
+ * `selectItemCount` — whose reading is `sumQuantities`, the shared helper the header's badge and the
+ * checkout's summary panel call for themselves, because the layer rule keeps those two surfaces above this
+ * slice — and a row reads `selectAvailability` and maps its status to the wording in
  * `src/constants/content.ts`, the summary panel puts the priced cart's own breakdown of applied promos
  * beside `selectDiscountTotalMinor` and draws its progress block from `selectFreeShippingProgress`, and
  * every amount reaches the screen through `src/utils/format.ts`.
@@ -99,29 +102,16 @@ export function selectAvailability(line: CartLine): LineAvailability {
  * The number of units in the cart: the sum of every line's quantity, and `0` for an empty cart.
  *
  * This is the figure the header's cart badge shows and its accessible label announces, so it counts
- * units rather than lines — three of one product beside one of another are four items. The sum comes
- * from the shared aggregation helper, so integer quantities add up exactly and no second summation
- * loop is written here.
+ * units rather than lines — three of one product beside one of another are four items. The sum is
+ * `sumQuantities` from `src/utils/collections`, the shared home of that reading, so the badge, the
+ * mini-cart, the cart page, the checkout's summary panel and a placed order's own figures all add the
+ * same quantities up in one place rather than each writing the loop again.
  *
  * @param lines The cart's lines.
  * @returns The total quantity across them.
  */
 export function selectItemCount(lines: readonly CartLine[]): number {
-  return sumBy(lines, (line) => line.quantity);
-}
-
-/**
- * The number of distinct lines in the cart, and `0` for an empty cart.
- *
- * A line count answers a different question from the item count: it is how many rows the cart and the
- * mini-cart render, and how many distinct products the shopper has chosen, which is why the two are
- * two selectors rather than one figure read two ways.
- *
- * @param lines The cart's lines.
- * @returns How many lines the cart holds.
- */
-export function selectLineCount(lines: readonly CartLine[]): number {
-  return lines.length;
+  return sumQuantities(lines);
 }
 
 /**

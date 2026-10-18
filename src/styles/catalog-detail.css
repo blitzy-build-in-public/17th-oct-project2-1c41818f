@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog-detail.css
  * Purpose: Styles for the product detail surfaces: the two-column layout, the gallery, the specification and feature lists, the related strip and the reviews with their form
- * Lines: 300
+ * Lines: 301
  */
 
 /* One product's own page: its gallery and buy column, its specifications and features, the related strip under it
@@ -12,8 +12,8 @@
  * rules; every value is a var() from tokens.css.
  *
  * Two rules of this family live elsewhere on purpose: the availability text state shares one rule set with the
- * product card's in catalog.css, and .sp-product-grid--related and .sp-related__header are the product grid's and
- * the landing sheet's, so the strip keeps one home each. The names below are the contract the feature files adopt.
+ * product card's in catalog.css, .sp-related__header is the landing sheet's, and .sp-product-grid--related is a
+ * rule-less hook because the strip wears the grid's ladder. The names below are the contract the files adopt.
  */
 
 /* ==== Product detail ====
@@ -213,8 +213,9 @@
 }
 
 /* ==== Related products ==== */
-/* The strip's cards, its --related modifier and its heading row are .sp-product-grid's, catalog.css's and the
- * landing sheet's; only the section's own rhythm belongs here. */
+/* The strip's cards, its heading row and the --related hook it wears are .sp-product-grid's, catalog.css's and
+ * the landing sheet's — the hook carries no rule, because the strip wears the grid's own ladder. Only the
+ * section's own rhythm belongs here. */
 .sp-related {
   display: grid;
   gap: var(--space-4);

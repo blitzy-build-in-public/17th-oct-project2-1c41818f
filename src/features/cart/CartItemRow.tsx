@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartItemRow.tsx
  * Purpose: A single cart line with thumbnail, quantity stepper, removal and an availability warning
- * Lines: 317
+ * Lines: 338
  */
 
 import type { ReactElement } from "react";
@@ -48,9 +48,13 @@ import { formatMoney } from "@/utils/format";
  * line with nothing to warn about leaves it empty and still pays its row gap; reported here because the template
  * is that sheet's to change.
  *
- * The unit price is drawn by `PriceTag`, whose `sp-price__current` register is the heading-3 one, and the sheet
- * declares no `sp-cart-row__price .sp-price__current` override, so the figure is painted at that register inside
- * a part the sheet calls muted body-sm. Reported rather than restated: the register is not this file's to change.
+ * The money registers are the sheet's, and it sets both of them for this row. `PriceTag` draws the unit price in
+ * its `sp-price__current` register, the heading-3 one wherever the figure is the message; here the sheet steps
+ * that register down to the price part's own body-sm size at the medium weight, and states the line total at the
+ * body size and the semibold weight in the money column the medium stop's template gives it, so the figure that
+ * carries the weight is the line's own total. The row's name wraps rather than being cut, which is what gives a
+ * line the height both registers need. Which figure reads how is the sheet's to decide; this file only places
+ * the parts and names the classes the sheet declares for them.
  *
  * The name is text and not a link, a boundary of this file rather than an omission: `CartLine` carries no slug and
  * this file's dependency list admits no route constants, so there is nothing to navigate to. `__name`'s own
@@ -76,6 +80,10 @@ const REMOVE_GLYPH = "✕";
 /** The sign a per-line discount is stated with. Notation rather than wording, so it is not the copy library's,
  *  and it is markup rather than a character inside a sentence. */
 const DISCOUNT_SIGN = "−";
+
+/** The class `src/styles/base.css` gives an element that stays in the accessibility tree and is never painted.
+ *  Kept out of `CLASSES`, which holds the layout names the sheets declare for this row. */
+const VISUALLY_HIDDEN = "sp-visually-hidden";
 
 /**
  * Every class this row puts on the page, written once so a rename is one edit.
@@ -190,6 +198,11 @@ function availabilityWarning(availability: LineAvailability): ReactElement | nul
  * `lineTotalMinor`; all three reach the screen through `src/utils/format.ts`, which owns the single rounding rule
  * for minor units. Nothing here adds, multiplies or rounds, so the row cannot disagree with the summary panel
  * beside it about what a line costs.
+ *
+ * Each figure the full row states is named through `sp-visually-hidden` — the price of one unit, and the line's
+ * own total — because the two are otherwise unlabelled amounts of the same shape, and a reader who cannot see the
+ * grid would meet them without knowing which is which. The drawer's compact form states the unit price alone and
+ * carries no label: a label there would name a figure that form does not show.
  *
  * Every word is copy from `src/constants/content.ts` and every class is a name one of the two sheets declares.
  * The thumbnail is decorative — the line's name is rendered beside it as text, so alternative text of its own
@@ -306,9 +319,17 @@ export function CartItemRow({
         {discountText === null ? null : <span className={CLASSES.meta}>{discountText}</span>}
       </div>
       {stepper}
-      <span className={CLASSES.price}>{price}</span>
+      <span className={CLASSES.price}>
+        <span className={VISUALLY_HIDDEN}>{CART_COPY.UNIT_PRICE_LABEL}</span>
+        {price}
+      </span>
       {pricedLine === undefined ? null : (
-        <span className={CLASSES.lineTotal}>{formatMoney(pricedLine.lineTotalMinor)}</span>
+        <span className={CLASSES.lineTotal}>
+          <span className={VISUALLY_HIDDEN}>{CART_COPY.LINE_TOTAL_LABEL}</span>
+          {/* The figure keeps an element of its own beside the label: the two are one named amount rather than a
+           * run of text, and the amount is what the row's money reads from. */}
+          <span>{formatMoney(pricedLine.lineTotalMinor)}</span>
+        </span>
       )}
       {removeControl}
       {warning}

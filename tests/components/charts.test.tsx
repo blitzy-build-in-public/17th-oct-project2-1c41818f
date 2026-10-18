@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/charts.test.tsx
  * Purpose: Scale mathematics, rendered geometry and the data-table alternative
- * Lines: 405
+ * Lines: 437
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ import { LineChart } from "@/components/charts/LineChart";
 // dozen of its exports, and naming them singly cost twenty-two lines of the budget.
 import * as scales from "@/components/charts/chartScales";
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
-import { EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
+import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
 import { formatMoney, formatMoneyCompact, formatShare } from "@/utils/format";
 
 import { makeChartSeries } from "../fixtures";
@@ -102,10 +102,23 @@ function sideOf(rect: SVGRectElement, name: "x" | "y" | "width" | "height"): num
   return Number(rect.getAttribute(name));
 }
 
-/** Renders a chart with nothing to plot and asserts the shared no-data state replaces the figure. */
-async function expectNoData(element: ReactElement): Promise<void> {
+/**
+ * Renders a chart with nothing to plot and asserts the shared no-data state replaces the figure.
+ *
+ * The state's heading level is asserted with it: a chart that renders its own heading above the state nests
+ * it one level under that heading, and one that renders none takes the level its own heading would have
+ * taken, so a page's outline never skips a level.
+ *
+ * @param element - The chart to render, with nothing to plot.
+ * @param level - The level the no-data heading must carry.
+ */
+async function expectNoData(element: ReactElement, level: number = 3): Promise<void> {
   const { container } = renderWithProviders(element);
-  await within(container).findByText(EMPTY_STATES.dashboardRange.title);
+  const heading = await within(container).findByRole("heading", {
+    level,
+    name: EMPTY_STATES.dashboardRange.title,
+  });
+  expect(heading).toBeInTheDocument();
   expect(container.querySelector("svg")).toBeNull();
   expect(within(container).queryByRole("table")).toBeNull();
 }
@@ -326,8 +339,44 @@ describe("the chart renderers", () => {
 
     const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
     expect(within(table).getAllByRole("row")).toHaveLength(BAND_KEYS.length + 1);
+    // The column the band names sit in is headed too, so no figure in the alternative is unlabelled.
+    expect(within(table).getAllByRole("columnheader")[0]).toHaveTextContent(
+      CHART_COLUMN_LABELS.GROUP_LABEL,
+    );
     expect(within(table).getByRole("columnheader", { name: "Gross revenue" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")[0]).toHaveTextContent(formatMoney(NET_ONE + NET_TWO));
+  });
+
+  // A caller that charts per-band counts which must not be added together — a report's returning-customer
+  // column, say — names the series in `legendTotals` and its legend entry then states no figure, while a
+  // series the record does not suppress keeps the total the chart reads from its own points. Suppression
+  // reaches the legend alone: the entry still names its series, and the paired table still carries every
+  // band's figure, so the figure is neither lost nor contradicted.
+  it("states no total for the series `legendTotals` suppresses, and totals the rest", async () => {
+    const { container } = renderWithProviders(
+      <BarChart series={SERIES} title={CHART_TITLE} legendTotals={{ net: true, gross: false }} />,
+    );
+    expect(await screen.findByRole("img", { name: CHART_TITLE })).toBeInTheDocument();
+
+    const legend = screen.getAllByRole("listitem");
+    expect(legend).toHaveLength(SERIES.length);
+    expect(legend[0]).toHaveTextContent(formatMoney(NET_ONE + NET_TWO));
+
+    // The suppressed series is still named and its swatch still drawn, so the bars stay tellable apart; it
+    // is the value alone that is absent, which is what `textContent` holds the entry to.
+    expect(legend[1]).toHaveTextContent("Gross revenue");
+    expect(legend[1]).not.toHaveTextContent(formatMoney(GROSS_ONE + GROSS_TWO));
+    expect(legend[1].textContent).toBe("Gross revenue");
+
+    const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
+    expect(within(table).getAllByRole("row")).toHaveLength(BAND_KEYS.length + 1);
+    expect(table).toHaveTextContent(formatMoney(GROSS_ONE));
+    expect(table).toHaveTextContent(formatMoney(GROSS_TWO));
+    // Nothing the chart draws moved for the suppressed series: its bars and their value labels are its own.
+    expect(barsOf(container)).toHaveLength(BAND_KEYS.length * SERIES.length);
+    expect(labelsOf(drawingOf(container))).toEqual(
+      expect.arrayContaining([formatMoney(GROSS_ONE), formatMoney(GROSS_TWO)]),
+    );
   });
 
   it("draws horizontal bars and a stack's geometry beside the figures it keeps off the marks", async () => {
@@ -378,14 +427,26 @@ describe("the chart renderers", () => {
 
     const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
     const rows = within(table).getAllByRole("row");
-    expect(rows).toHaveLength(slices.length);
-    expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent(SLICE_A.label);
+    expect(rows).toHaveLength(slices.length + 1);
+    // The header row names all three columns, so neither figure a row states is left unlabelled.
     expect(
       within(rows[0])
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual([
+      CHART_COLUMN_LABELS.GROUP_LABEL,
+      CHART_COLUMN_LABELS.VALUE_LABEL,
+      CHART_COLUMN_LABELS.SHARE_LABEL,
+    ]);
+    expect(within(rows[1]).getByRole("rowheader")).toHaveTextContent(SLICE_A.label);
+    expect(
+      within(rows[1])
         .getAllByRole("cell")
         .map((cell) => cell.textContent),
     ).toEqual([formatMoney(100), formatShare(100, SLICE_TOTAL, 1)]);
 
+    // The marker-less flex legend keeps its list semantics, which the base sheet documents the role for.
+    expect(container.querySelector("ul.sp-chart__legend")).toHaveAttribute("role", "list");
     const legend = screen.getAllByRole("listitem");
     expect(legend[2]).toHaveTextContent(formatMoney(1));
     expect(legend[2]).toHaveTextContent(formatShare(1, SLICE_TOTAL, 1));
@@ -396,10 +457,26 @@ describe("the chart renderers", () => {
     );
   });
 
+  it.each<[string, (word: string) => ReactElement]>([
+    ["bar chart", (word) => <BarChart series={SERIES} title={CHART_TITLE} labelHeader={word} />],
+    ["donut", (word) => <DonutChart series={[SLICE_A]} title={CHART_TITLE} labelHeader={word} />],
+  ])(
+    "takes a caller's own word for the %s paired table's leading column",
+    async (_chart, build) => {
+      const leadingHeader = "Product";
+      renderWithProviders(build(leadingHeader));
+
+      const table = await screen.findByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
+      expect(within(table).getAllByRole("columnheader")[0]).toHaveTextContent(leadingHeader);
+    },
+  );
+
   it("shows its no-data state instead of drawing an empty figure", async () => {
     await expectNoData(<LineChart series={[]} />);
     await expectNoData(<BarChart series={[]} />);
     await expectNoData(<DonutChart series={[]} />);
     await expectNoData(<DonutChart series={[oneBandSeries("zero", "Nothing sold", 0, 0)]} />);
+    // A chart that renders its own heading nests the state one level under it instead of skipping to h4.
+    await expectNoData(<DonutChart series={[]} title={CHART_TITLE} />, 4);
   });
 });

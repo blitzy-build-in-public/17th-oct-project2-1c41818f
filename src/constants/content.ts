@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 623
+ * Lines: 696
  */
 
 import type { LoyaltyTier } from "@/types/account";
@@ -61,11 +61,20 @@ export const HEADER_COPY = {
   MOBILE_MENU_OPEN_LABEL: "Open menu",
   MOBILE_MENU_CLOSE_LABEL: "Close menu",
 } as const;
-/** Names the cart button from its item count, singular handled. Consumer: `Header.tsx`. */
+/**
+ * Names the cart button from its item count, singular handled. Consumer: `Header.tsx`, which sets the result
+ * as the button's `aria-label`.
+ *
+ * WCAG 2.5.3 (Label in Name) requires a control's accessible name to contain its visible label text, and a
+ * badge digit is visible text: with one item in the cart the button reads "Cart 1". The name therefore leads
+ * with the same word the button shows (`HEADER_COPY.NAV_CART_LABEL`) and repeats the badge's digit rather
+ * than restating the count as "Cart, 1 item". The badge is `aria-hidden`, so the count is announced from
+ * here alone, and an empty cart renders no badge — which is why the count-free name still contains "Cart".
+ */
 export const cartButtonLabel = (itemCount: number): string =>
   itemCount === 0
-    ? "Cart, nothing added yet"
-    : `Cart, ${itemCount} ${noun(itemCount, "item", "items")}`;
+    ? `${HEADER_COPY.NAV_CART_LABEL}, nothing added yet`
+    : `${HEADER_COPY.NAV_CART_LABEL} ${itemCount} ${noun(itemCount, "item", "items")}`;
 
 /** Footer copy. Consumer: `src/components/layout/Footer.tsx`. */
 export const FOOTER_COPY = {
@@ -141,6 +150,17 @@ export const CATALOG_COPY = {
   WRITE_REVIEW_LABEL: "Write a review",
   SIGN_IN_TO_REVIEW_LABEL: "Sign in to write a review",
 } as const;
+/**
+ * Names one tile's quick add from the product it adds, so that no two controls in the same grid share a
+ * name. Consumer: `src/components/product/ProductCard.tsx`, which sets the result as the button's
+ * `aria-label`.
+ *
+ * The visible label leads and the product name follows it, because WCAG 2.5.3 (Label in Name) requires a
+ * control's accessible name to contain its visible text; the product name is what tells one control from
+ * the next, and it is the same string the tile's heading and the cart's line labels use.
+ */
+export const quickAddLabel = (productName: string): string =>
+  `${CATALOG_COPY.QUICK_ADD_LABEL} ${productName}`;
 /** Builds the heading of a category listing from the category's name. */
 export const categoryPageHeading = (name: string): string => `Products in ${name}`;
 /** Result-set, live-region and stock labels. Consumers: `src/features/catalog/ProductList.tsx`. */
@@ -157,10 +177,13 @@ export const lowStockLabel = (count: number): string => `Only ${count} left in s
 export const SEARCH_COPY = {
   FIELD_LABEL: "Search products",
   PLACEHOLDER: "Try a product name, a brand, or a category",
+  QUERY_NOT_APPLIED_TITLE: "That search was not applied",
+  QUERY_NOT_APPLIED_DESCRIPTION: "A search needs at least two letters or digits to match products.",
   SUGGESTIONS_LIST_LABEL: "Search suggestions",
   SUGGESTIONS_PRODUCTS_HEADING: "Products",
   SUGGESTIONS_BRANDS_HEADING: "Brands",
   SUGGESTIONS_CATEGORIES_HEADING: "Categories",
+  SUGGESTIONS_EMPTY: "No suggestions",
   RECENT_HEADING: "Recent searches",
   RECENT_CLEAR_LABEL: "Clear recent searches",
   ACTIVE_FILTERS_HEADING: "Applied filters",
@@ -173,13 +196,40 @@ export const searchSummaryLabel = (query: string, count: number): string =>
   count === 0
     ? `No results for "${query}"`
     : `${count} ${noun(count, "result", "results")} for "${query}"`;
-/** Filter-chip, live-region and paging labels. Consumers: `src/features/search/*`. */
+/** Filter-chip, live-region and paging labels. Consumers: `src/features/search/*` and `Pagination.tsx`. */
 export const clearFacetLabel = (facetLabel: string): string => `Clear ${facetLabel}`;
 export const removeFilterLabel = (filterLabel: string): string => `Remove filter: ${filterLabel}`;
 export const resultsUpdatedAnnouncement = (count: number): string =>
   productCountAnnouncement(count);
+export const suggestionsUpdatedAnnouncement = (count: number): string =>
+  `Now showing ${count} ${noun(count, "suggestion", "suggestions")}.`;
 export const pageAnnouncement = (page: number, pageCount: number): string =>
   `Page ${page} of ${pageCount}`;
+
+/** The collection a paging control counts, so its caption can name orders, reviews or periods. */
+export interface PagingNoun {
+  /** The noun a count of one takes. */
+  readonly singular: string;
+  /** The noun every other count takes. */
+  readonly plural: string;
+}
+/** The collections the shared pager counts. Consumers: `src/components/ui/Pagination.tsx` and its callers. */
+export const PAGING_NOUNS = {
+  PRODUCTS: { singular: "product", plural: "products" },
+  ORDERS: { singular: "order", plural: "orders" },
+  REVIEWS: { singular: "review", plural: "reviews" },
+  PERIODS: { singular: "period", plural: "periods" },
+} as const satisfies Record<string, PagingNoun>;
+/**
+ * States a collection's own noun and its size, so a paging caption counts what it pages over and never
+ * presents a collection's total as the rows one page renders. Consumer: `Pagination.tsx`.
+ */
+export const pagingCountLabel = (count: number, collection: PagingNoun): string =>
+  count === 0
+    ? `No ${collection.plural} match the current filters.`
+    : `${count} ${noun(count, collection.singular, collection.plural)} in total.`;
+/** Names the page-size selector for what it changes. Consumer: `src/components/ui/Pagination.tsx`. */
+export const PAGE_SIZE_LABEL = "Results per page";
 
 // Cart and mini-cart ----------------------------------------------------------------------------
 /** Cart copy. Consumers: `src/features/cart/*`. */
@@ -188,6 +238,7 @@ export const CART_COPY = {
   PROMO_FIELD_LABEL: "Promo code",
   PROMO_PLACEHOLDER: "Enter a code",
   PROMO_APPLY_LABEL: "Apply code",
+  SUMMARY_HEADING: "Order summary",
   SUMMARY_SUBTOTAL_LABEL: "Subtotal",
   SUMMARY_DISCOUNT_LABEL: "Discount",
   SUMMARY_SHIPPING_LABEL: "Shipping",
@@ -200,6 +251,8 @@ export const CART_COPY = {
   MINI_CART_HEADING: "In your cart",
   MINI_CART_VIEW_CART_LABEL: "View cart",
   MINI_CART_CLOSE_LABEL: "Close cart",
+  UNIT_PRICE_LABEL: "Unit price",
+  LINE_TOTAL_LABEL: "Line total",
   AVAILABILITY_WARNING: "This product is out of stock. Remove the line or check back later.",
   QUANTITY_CLAMPED_NOTICE: "Your quantity was reduced to what is still in stock.",
 } as const;
@@ -367,6 +420,16 @@ export const removeAddressLabel = (addressLabel: string): string => `Remove ${ad
 export const demoSignInHint = (adminEmail: string, userEmail: string, password: string): string =>
   `Seeded accounts: ${adminEmail} for the dashboard and ${userEmail} for a customer account, both with the password ${password}.`;
 
+/**
+ * What a signed-in visitor whose role cannot reach the path they asked for is told. Consumer:
+ * `src/features/account/LoginPage.tsx`, which states the refusal instead of offering to continue to it.
+ */
+export const ACCOUNT_ACCESS_COPY = {
+  HEADING: "You do not have access to that page",
+  BODY: "That page is for administrators, and the account you are signed in with is not one.",
+  CONTINUE_LABEL: "Go to my account",
+} as const;
+
 // Dashboard and reports, over their shared range control ----------------------------------------
 /** The range control's labels, presets and messages, kept once for both consumers. */
 export const DATE_RANGE_COPY = {
@@ -476,6 +539,7 @@ export const FEEDBACK_COPY = {
   ERROR_BOUNDARY_RELOAD_LABEL: "Reload the page",
   ERROR_BOUNDARY_HOME_LABEL: "Go to the home page",
   TOAST_REMOVED_FROM_CART: "That item was removed from your cart.",
+  TOAST_CART_CLEARED: "Your cart is now empty.",
   TOAST_PROMO_APPLIED: "Your promo code was applied and the total recalculated.",
   TOAST_PROFILE_SAVED: "Your profile changes were saved.",
   TOAST_ADDRESS_SAVED: "Your address was saved.",
@@ -490,6 +554,8 @@ export const FEEDBACK_COPY = {
 export const addedToCartMessage = (productName: string): string =>
   `${productName} was added to your cart.`;
 export const signedInMessage = (name: string): string => `Welcome back, ${name}.`;
+/** The greeting a registration raises: the account was created by this visit rather than returned to. */
+export const registeredMessage = (name: string): string => `Welcome to SalesPro, ${name}.`;
 export const orderPlacedMessage = (orderNumber: string): string =>
   `Order ${orderNumber} is placed.`;
 /** One empty state: what is empty, why, and the single action that helps. */
@@ -559,6 +625,7 @@ export const NOT_FOUND_COPY = {
 export const A11Y_COPY = {
   SKIP_TO_CONTENT: "Skip to main content",
   MAIN_NAV_LABEL: "Main",
+  MOBILE_NAV_LABEL: "Main menu",
   FOOTER_NAV_LABEL: "Footer",
   ACCOUNT_NAV_LABEL: "Account sections",
   ACCOUNT_MENU_LABEL: "Account menu",
@@ -572,6 +639,12 @@ export const A11Y_COPY = {
 /** Captions a chart's paired data table, so no figure is reachable through colour alone. */
 export const chartDataTableCaption = (chartTitle: string): string =>
   `The values behind the chart "${chartTitle}"`;
+/** Names a chart's paired data table's columns: the group, its value and that value's share. */
+export const CHART_COLUMN_LABELS = {
+  GROUP_LABEL: "Group",
+  VALUE_LABEL: "Value",
+  SHARE_LABEL: "Share",
+} as const;
 /** Chart and rating text alternatives, so no value is conveyed by colour or stars alone. */
 export const ratingSummaryLabel = (formattedRating: string, count: number): string =>
   `Rated ${formattedRating} from ${count} ${noun(count, "review", "reviews")}`;
@@ -580,7 +653,7 @@ export const ratingSummaryLabel = (formattedRating: string, count: number): stri
 export const VALIDATION_MESSAGES = {
   REQUIRED: "This field is required.",
   EMAIL_FORMAT: "Enter an email address in the form name@example.com.",
-  PHONE_FORMAT: "Enter a phone number with at least seven digits.",
+  PHONE_FORMAT: "Enter 7 to 15 digits, with spaces, brackets, dots, hyphens or a leading +.",
   PASSWORD_POLICY: "Your password is too short, or it is missing a letter or a digit.",
   POSTAL_CODE_FORMAT: "Enter the postal code in the format this country uses.",
   CARD_NUMBER: "Check the digits and enter them as printed on the card.",

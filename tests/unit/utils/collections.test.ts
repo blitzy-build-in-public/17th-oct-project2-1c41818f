@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/collections.test.ts
  * Purpose: Grouping, sorting, chunking, indexing and pagination helpers, including boundary pages
- * Lines: 584
+ * Lines: 592
  */
 
 import { describe, expect, it } from "vitest";
@@ -30,6 +30,7 @@ import {
   sortByKey,
   sum,
   sumBy,
+  sumQuantities,
   uniqueBy,
   type PageWindowEntry,
 } from "@/utils/collections";
@@ -321,12 +322,19 @@ describe("minBy and maxBy", () => {
 
 // Aggregation -----------------------------------------------------------------------------------
 
-describe("sum, sumBy and averageOf", () => {
+describe("sum, sumBy, sumQuantities and averageOf", () => {
   it("totals numbers exactly and returns zero rather than NaN for an empty collection", () => {
     expect(sum([1_200, 800, 2_400])).toBe(4_400);
     expect(sumBy(SALES, (row) => row.revenueMinor)).toBe(6_600);
     expect(sum(NO_NUMBERS)).toBe(0);
     expect(sumBy(NO_SALES, (row) => row.revenueMinor)).toBe(0);
+  });
+
+  it("totals the quantity each item carries, and nothing for an empty collection", () => {
+    expect(sumQuantities([])).toBe(0);
+    expect(sumQuantities([{ quantity: 2 }])).toBe(2);
+    // Two rows holding four units: the total is the quantities added up, never the row count.
+    expect(sumQuantities([{ quantity: 3 }, { quantity: 1 }])).toBe(4);
   });
 
   it("averages a collection and avoids a NaN mean for an empty one", () => {

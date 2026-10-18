@@ -203,7 +203,7 @@ export const DEFAULT_API_LATENCY_MS = 120;
  * literals and names this file as their owner, because CSS cannot evaluate a custom property inside
  * a media query; the two must be changed together.
  *
- * The rules that use them: the facet panel becomes a drawer below `MEDIUM`; the product grid runs
+ * The rules that use them: the facet panel becomes a drawer below `XLARGE`; the product grid runs
  * two columns at `SMALL`, three at `MEDIUM` and four at `LARGE`; the header navigation collapses
  * behind a menu below `SMALL`; and the administrator sidebar becomes a compact rail below `MEDIUM`.
  */

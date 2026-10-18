@@ -1,7 +1,7 @@
 /**
  * Path: src/data/products.ts
  * Purpose: The seeded catalogue: hand-authored anchor products expanded deterministically, with specs and generated imagery
- * Lines: 594
+ * Lines: 595
  */
 
 import { DEFAULT_CURRENCY } from "@/constants/config";
@@ -13,6 +13,7 @@ import type { IsoDateString, IsoDateTimeString, MinorUnits } from "@/types/commo
 import { countBy } from "@/utils/collections";
 import { addDays, parseIso, toIsoDate, toIsoDateTime } from "@/utils/dates";
 import { formatAvailability, fromMinorUnits, roundMinorUnits, toMinorUnits } from "@/utils/format";
+import { roundToTenths } from "@/utils/statistics";
 import { brandId, categoryId, initials, productId, sequenceId, slugify } from "@/utils/strings";
 
 // Deterministic sampling -------------------------------------------------------------------------
@@ -383,7 +384,7 @@ function ratingSummaryFor(index: number, rand: SeededRandom): { average: number;
   if (count === 0) return { average: 0, count: 0 };
   const target = rand.int(RATING_TARGET_MIN_TENTHS, RATING_TARGET_MAX_TENTHS);
   const total = Math.round((target * count) / 10);
-  return { average: Math.round((total / count) * 10) / 10, count };
+  return { average: roundToTenths(total / count), count };
 }
 /** The day and time a product was added, inside the trailing window ending on `anchorDay`: only the day comes
  *  from the clock, and only once per build, so two builds on the same day are identical. */

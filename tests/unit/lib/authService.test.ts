@@ -1,6 +1,6 @@
 /**
  * Path: tests/unit/lib/authService.test.ts
- * Purpose: Registration, duplicate email, sign-in, session expiry and role checks.
+ * Purpose: Registration, duplicate email, sign-in, session expiry and role checks
  * Lines: 529
  */
 

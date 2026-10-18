@@ -32,8 +32,8 @@ import { FEEDBACK_COPY } from "@/constants/content";
  * for assistive technology that the same sheet hides visually with `.sp-visually-hidden`.
  *
  * The committed `src/features/home/HeroSection.tsx` styles its two calls to action as links carrying
- * `sp-button sp-button--primary`, because a call to action that navigates is an anchor and not a button,
- * and the sheet accepts `sp-button` and `sp-button--primary|--secondary` as aliases for that call site.
+ * `sp-btn sp-btn--primary`, because a call to action that navigates is an anchor and not a button,
+ * and that call site wears the same `sp-btn` family this file renders, with no alias declared beside it.
  * Nothing here renders a link: a control that navigates is an `<a>` styled with those classes, and a
  * control that acts is the `<button>` this file renders.
  */

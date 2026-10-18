@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/DonutChart.tsx
  * Purpose: Donut with legend, percentage labels and a centre total
- * Lines: 577
+ * Lines: 599
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -23,7 +23,7 @@ import {
 } from "@/components/charts/chartScales";
 import type { ArcDatum, Padding, ValueFormatter } from "@/components/charts/chartScales";
 import { EmptyState } from "@/components/ui/Feedback";
-import { EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
+import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
 import type { MinorUnits } from "@/types/common";
 import { formatMoney, formatMoneyCompact, formatPercent, formatShare } from "@/utils/format";
@@ -37,8 +37,8 @@ import { formatMoney, formatMoneyCompact, formatPercent, formatShare } from "@/u
  * `sp-chart__label` for the percentage inside a wedge, `sp-chart__readout`, `sp-chart__legend` with its item,
  * swatch, label and value, `sp-chart__center` with `sp-chart__center-value` for the hole's total, and
  * `sp-chart__data` with `sp-chart__empty` for a range that sold nothing. The table composes `sp-table`,
- * `sp-table--compact`, `sp-table__caption`, `sp-table__num` and a `th[scope="row"]` from
- * `src/styles/data-display.css`.
+ * `sp-table--compact`, `sp-table__caption`, `sp-table__num`, a `th[scope="col"]` header row and a
+ * `th[scope="row"]` from `src/styles/data-display.css`.
  *
  * No appearance lives here, and none may be moved here: the sheet paints every mark from the
  * `--chart-series-N` tokens `src/styles/tokens.css` declares and clamps the readout inside the frame. This
@@ -64,8 +64,7 @@ import { formatMoney, formatMoneyCompact, formatPercent, formatShare } from "@/u
  *   - It is anchored on the slice's mid-angle at the ring's outer edge, where it can cover that slice's own
  *     percentage label while it is up. That is deliberate: it states the same label, value and share, and no
  *     other anchor both stays inside the frame and leaves the centre total alone.
- *   - The paired table carries no column-header row: the value and share columns have no wording in
- *     `src/constants/content.ts`, and a row of empty headings states less than the caption already does.
+ *   - The paired table names its three columns, with the wording `src/constants/content.ts` owns.
  */
 
 /** The largest share of the outer radius the hole may take; at the outer radius there is no ring to draw. */
@@ -83,6 +82,9 @@ const SLICE_LABEL_DIGITS = 0;
  * way whether it is computed from the whole or read from the geometry.
  */
 const formatSliceShare: ValueFormatter = (share) => formatPercent(share, SHARE_DIGITS);
+
+/** The keys the paired table's column cells render under, in the order the columns are stated. */
+const SLICE_COLUMN_KEYS = ["group", "value", "share"] as const;
 
 /** A style object that also carries the custom properties `src/styles/admin-reports.css` positions by. */
 type DonutChartStyle = CSSProperties & Record<`--${string}`, string>;
@@ -272,6 +274,8 @@ export interface DonutChartProps {
    * explanation under it stays the library's, so no sentence is written at this call site.
    */
   readonly emptyMessage?: string;
+  /** The paired table's leading column heading: the group each slice is, or the caller's word. */
+  readonly labelHeader?: string;
 }
 
 /**
@@ -311,6 +315,7 @@ export function DonutChart({
   formatTotalValue = formatMoneyCompact,
   ariaLabel,
   emptyMessage,
+  labelHeader = CHART_COLUMN_LABELS.GROUP_LABEL,
 }: DonutChartProps): ReactElement {
   const baseId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -372,8 +377,13 @@ export function DonutChart({
   );
 
   const dataTable = useMemo(
-    () => buildSliceDataTable(arcs, formatValue, formatSliceShare),
-    [arcs, formatValue],
+    () =>
+      buildSliceDataTable(arcs, formatValue, formatSliceShare, {
+        labelHeader,
+        valueHeader: CHART_COLUMN_LABELS.VALUE_LABEL,
+        shareHeader: CHART_COLUMN_LABELS.SHARE_LABEL,
+      }),
+    [arcs, formatValue, labelHeader],
   );
 
   const captionId = `${baseId}-data`;
@@ -463,6 +473,9 @@ export function DonutChart({
       </div>
     ) : null;
 
+  // The no-data state opens at the level the chart's own heading would have taken: with a title the chart's
+  // <h3> stands above it and the state nests one level under it, and without one the state is the block's
+  // first heading, so the page's outline never skips a level.
   if (isEmpty) {
     return (
       <div className="sp-chart">
@@ -472,7 +485,7 @@ export function DonutChart({
             <EmptyState
               title={hasText(emptyMessage) ? emptyMessage : EMPTY_STATES.dashboardRange.title}
               description={EMPTY_STATES.dashboardRange.description}
-              headingLevel={4}
+              headingLevel={hasText(title) ? 4 : 3}
             />
           </div>
         </div>
@@ -543,7 +556,7 @@ export function DonutChart({
         )}
       </div>
       {showLegend ? (
-        <ul className="sp-chart__legend">
+        <ul className="sp-chart__legend" role="list">
           {legendItems.map((item) => (
             <li key={item.id} className="sp-chart__legend-item">
               <span className={`sp-chart__legend-swatch ${item.className}`} aria-hidden="true" />
@@ -557,6 +570,15 @@ export function DonutChart({
       <div className="sp-chart__data">
         <table className="sp-table sp-table--compact" id={captionId}>
           <caption className="sp-table__caption">{caption}</caption>
+          <thead>
+            <tr>
+              {dataTable.columns.map((heading, index) => (
+                <th key={SLICE_COLUMN_KEYS[index]} scope="col">
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
             {dataTable.rows.map((row) => {
               const [formattedValue, formattedShare] = row.cells;

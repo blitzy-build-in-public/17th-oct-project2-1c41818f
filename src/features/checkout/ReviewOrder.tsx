@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ReviewOrder.tsx
  * Purpose: The review step: items, addresses, shipping, totals and payment restated before submission
- * Lines: 462
+ * Lines: 468
  */
 
 import { useId } from "react";
@@ -404,11 +404,17 @@ function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactE
           isBlock
           disabled={!canSubmit}
           isLoading={isSubmitting}
-          loadingLabel={CHECKOUT_COPY.SUBMITTING_LABEL}
           aria-describedby={isSubmitting ? noticeId : undefined}
           onClick={submitOrder}
         >
-          {CHECKOUT_COPY.PLACE_ORDER_LABEL}
+          {/*
+            The in-flight wording is the control's own visible label rather than `Button`'s
+            `loadingLabel`, which that component renders inside a visually hidden span and excludes from
+            the name it pins to the label element: a control that keeps saying "Place order" while the
+            order is being placed tells a shopper nothing, so the same words a reader hears are the ones
+            on screen.
+          */}
+          {isSubmitting ? CHECKOUT_COPY.SUBMITTING_LABEL : CHECKOUT_COPY.PLACE_ORDER_LABEL}
         </Button>
         {isSubmitting ? (
           <p className="sp-summary__note" id={noticeId}>

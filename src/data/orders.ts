@@ -22,6 +22,7 @@ import type {
 } from "@/types/commerce";
 import { indexBy, sum } from "@/utils/collections";
 import { addDays, differenceInDays, parseIso, toIsoDate, toIsoDateTime } from "@/utils/dates";
+import { addHoursToDate } from "@/utils/dates";
 import { categoryId, prefixedId, sequenceId, slugify } from "@/utils/strings";
 
 // The seeded stream and the window -----------------------------------------------------------------
@@ -470,8 +471,7 @@ function recordStatusHistory(order: Order, plan: PlannedOrder, status: OrderStat
   const room = plan.ageDays * HOURS_PER_DAY + (WINDOW_LAST_HOUR - start.getHours());
   const step = Math.max(1, Math.min(MAX_STATUS_STEP_HOURS, Math.floor(room / path.length)));
   return path.reduce((current, entry, index) => {
-    const at = new Date(start.getTime());
-    at.setHours(at.getHours() + index * step);
+    const at = addHoursToDate(start, index * step);
     return appendStatusHistory(current, entry, toIsoDateTime(at));
   }, order);
 }

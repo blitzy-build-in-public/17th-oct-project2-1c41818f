@@ -19,8 +19,8 @@ import { ROUTES } from "@/constants/routes";
  * the file: `sp-hero`, `sp-hero__inner`, `sp-hero__copy`, `sp-hero__eyebrow`, `sp-hero__title`,
  * `sp-hero__body`, `sp-hero__actions`, `sp-hero__action` and `sp-hero__media` (catalog.css) for
  * the hero band, its centred container, its copy and its two-column reflow; the `sp-hero__art*`
- * classes below for the illustration; `sp-button` with `sp-button--primary` and
- * `sp-button--secondary` (components.css) for the calls to action's button skin; and `sp-trust`,
+ * classes below for the illustration; `sp-btn` with `sp-btn--primary` and `sp-btn--secondary`
+ * (components.css) for the calls to action's button skin; and `sp-trust`,
  * `sp-trust__inner`, `sp-trust__list`, `sp-trust__item`, `sp-trust__icon` and `sp-trust__claim`
  * (catalog.css) for the trust strip.
  *
@@ -157,10 +157,10 @@ export function HeroSection(): ReactElement {
           </h1>
           <p className="sp-hero__body">{HOME_COPY.HERO_BODY}</p>
           <div className="sp-hero__actions">
-            <Link className="sp-button sp-button--primary sp-hero__action" to={ROUTES.CATALOG}>
+            <Link className="sp-btn sp-btn--primary sp-hero__action" to={ROUTES.CATALOG}>
               {HOME_COPY.HERO_PRIMARY_ACTION_LABEL}
             </Link>
-            <Link className="sp-button sp-button--secondary sp-hero__action" to={ROUTES.SEARCH}>
+            <Link className="sp-btn sp-btn--secondary sp-hero__action" to={ROUTES.SEARCH}>
               {HOME_COPY.HERO_SECONDARY_ACTION_LABEL}
             </Link>
           </div>

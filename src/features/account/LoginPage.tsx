@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/LoginPage.tsx
  * Purpose: Sign-in form with inline validation and return-path preservation
- * Lines: 322
+ * Lines: 376
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -9,18 +9,19 @@ import type { ChangeEvent, FormEvent, ReactElement } from "react";
 
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonGroup } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Alert, Skeleton } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import {
+  ACCOUNT_ACCESS_COPY,
   ACCOUNT_COPY,
   COMMON_ACTIONS,
   PAGE_TITLES,
   documentTitle,
   signedInMessage,
 } from "@/constants/content";
-import { RETURN_TO_QUERY_KEY, ROUTES, registerPath } from "@/constants/routes";
+import { RETURN_TO_QUERY_KEY, ROUTES, canReachPath, registerPath } from "@/constants/routes";
 import { authErrorMessage, roleHomePath, toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
@@ -40,8 +41,10 @@ import { FORM_ERROR_KEY, clearFieldError, hasErrors, validateSignIn } from "@/ut
  * as the form it stands in for. `sp-container` with `sp-container--narrow` is `src/styles/layout.css`'s one
  * geometry rule for a page's width and inline gutter, which a route carries itself because the shell's main
  * region pads the block flow only. `src/styles/controls.css` supplies the skins the primitives render:
- * `sp-field` with its `__label`, `__required`, `__control`, `__hint` and `__error` parts, `sp-input`, and
- * `sp-btn` with the `--primary`, `--block` and `--link` modifiers the submit and the switch link wear.
+ * `sp-field` with its `__label`, `__required`, `__control`, `__hint` and `__error` parts, `sp-input`,
+ * `sp-btn` with its `--primary`, `--secondary`, `--block` and `--link` modifiers — worn by the submit, the
+ * refusal's pair of controls and the switch link — and `sp-btn-group` for the row those two controls are
+ * arranged in.
  */
 
 // The form's shape and the state it reads ----------------------------------------------------------
@@ -119,11 +122,13 @@ function intendedPath(raw: string | null): string | null {
 /**
  * The sign-in route of the customer accounts slice.
  *
- * It renders one of three states from what the session context holds: a placeholder shaped like the form
- * while the stored session is being revalidated, the panel's own "already signed in" state for a visitor
- * who arrives with a usable session, and the form itself for everyone else. A signed-in visitor therefore
- * never sits in front of a sign-in form, and a returning one never sees the form flash before their
- * session resolves.
+ * It renders one of four states from what the session context holds and what the route asks for: a
+ * placeholder shaped like the form while the stored session is being revalidated; a refusal for a visitor
+ * who is signed in and, through the path the guard preserved, asked for a page their role cannot reach;
+ * the panel's own "already signed in" state for a signed-in visitor whose destination is open to them; and
+ * the form itself for everyone else. A signed-in visitor therefore never sits in front of a sign-in form, a
+ * returning one never sees the form flash before their session resolves, and neither is offered a control
+ * that leads back into the refusal they arrived from.
  *
  * The page owns no authentication rule. `src/lib/authService.ts` decides what a session is, how long it
  * lasts and how a refusal is worded, and `src/utils/validation.ts` decides what the form may be submitted
@@ -134,18 +139,19 @@ function intendedPath(raw: string | null): string | null {
  *
  * The unauthenticated redirect belongs to `src/Router.tsx`, which guards `/account/*`; this page guards
  * nothing and instead reads the path that guard preserved, landing the visitor on it once the session is
- * established — the account's own home when the guard left no such path. Authentication is an in-browser
- * demonstration store: no credential is read back, logged or rendered here, and the session token is
- * persisted by `src/state/AuthContext.tsx` alone.
+ * established — the role's own home when the guard left no such path, and again when the path it left is
+ * one `canReachPath` says the role cannot open, which is the case stated here as a refusal rather than as a
+ * way on. Authentication is an in-browser demonstration store: no credential is read back, logged or
+ * rendered here, and the session token is persisted by `src/state/AuthContext.tsx` alone.
  *
- * @returns The sign-in section, in whichever of its three states the session puts it.
+ * @returns The sign-in section, in whichever of its four states the session puts it.
  */
 export function LoginPage(): ReactElement {
   const headingId = useId();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { displayName, isAuthenticated, role, session, status } = useAuth();
-  const { signIn } = useAuthDispatch();
+  const { signIn, signOut } = useAuthDispatch();
   const { success: announceSuccess } = useToast();
 
   const [credentials, setCredentials] = useState<Credentials>(BLANK_CREDENTIALS);
@@ -156,22 +162,39 @@ export function LoginPage(): ReactElement {
   const [obtainedToken, setObtainedToken] = useState<SessionToken | null>(null);
 
   const returnTo = intendedPath(searchParams.get(RETURN_TO_QUERY_KEY));
-  const destination = returnTo ?? roleHomePath(role);
   // An action reports itself through the same status as the mount revalidation, so the submitting flag is
   // what keeps a submission from replacing the form the visitor is filling in with its own placeholder.
   const isRestoring = status === "loading" && !isSubmitting;
   const isSignedIn = isAuthenticated && !isRestoring;
+  /**
+   * Whether the path the guard preserved is one this visitor's role can open, which `canReachPath` in
+   * `src/constants/routes.ts` decides: no role-to-section rule is restated in this file.
+   */
+  const isReturnToReachable = returnTo !== null && canReachPath(returnTo, role);
+  /** Whether the panel states a refusal rather than a way on: the visitor is signed in and asked, through a
+   * preserved path, for a page their role cannot reach. */
+  const isRefused = isSignedIn && returnTo !== null && !isReturnToReachable;
+  /**
+   * The path a control on this screen may send the visitor to: the preserved one when their role can open
+   * it, and the home their role does hold otherwise — so neither the signed-in state's continuation nor the
+   * navigation this page performs after its own sign-in can land on a page the guard refuses.
+   */
+  const destination = isReturnToReachable ? returnTo : roleHomePath(role);
   // The account's name as the greeting uses it, empty until the identity projection resolves — and empty
   // again when that projection fails while the session itself stands, which is why both consumers below
   // leave the greeting out rather than render it with a name missing from it.
   const greeting = displayName.trim();
-  const lede = isSignedIn
-    ? greeting.length > 0
-      ? signedInMessage(greeting)
-      : undefined
-    : ACCOUNT_COPY.SIGN_IN_SUBHEADING;
+  const lede = isRefused
+    ? ACCOUNT_ACCESS_COPY.BODY
+    : isSignedIn
+      ? greeting.length > 0
+        ? signedInMessage(greeting)
+        : undefined
+      : ACCOUNT_COPY.SIGN_IN_SUBHEADING;
 
-  useDocumentTitle(documentTitle(isSignedIn ? PAGE_TITLES.ACCOUNT : PAGE_TITLES.SIGN_IN));
+  // The title describes the route, which is this sign-in route in every one of the panel's states — the
+  // panel's own heading below is what describes the state it is in, as `RegisterPage` does for its route.
+  useDocumentTitle(documentTitle(PAGE_TITLES.SIGN_IN));
 
   /**
    * What has already been announced here, so the greeting and the continuation happen once per session
@@ -294,9 +317,36 @@ export function LoginPage(): ReactElement {
     </Link>
   );
 
-  /** What the panel holds: the placeholder, the way on for a visitor who is already signed in, or the form. */
+  /**
+   * Ends the session, so the visitor can sign in again as an account that holds the role the refused path
+   * needs. The panel falls back to its form, which still carries the preserved path and honours it for
+   * whichever role can reach it.
+   */
+  const leaveSession = (): void => {
+    void signOut();
+  };
+
+  /**
+   * The panel's refusal: the two ways this visitor can answer it, and neither of them the path they asked
+   * for, because their role cannot reach it. The primary control goes to the home their role does hold and
+   * the sign-out lets them arrive as an account that can open the refused page.
+   */
+  const renderRefused = (): ReactElement => (
+    <ButtonGroup>
+      <Link className="sp-btn sp-btn--primary" to={roleHomePath(role)}>
+        {ACCOUNT_ACCESS_COPY.CONTINUE_LABEL}
+      </Link>
+      <Button variant="secondary" onClick={leaveSession}>
+        {COMMON_ACTIONS.SIGN_OUT}
+      </Button>
+    </ButtonGroup>
+  );
+
+  /** What the panel holds: the placeholder, the refusal, the way on for a visitor who is already signed in,
+   *  or the form. */
   const renderBody = (): ReactElement => {
     if (isRestoring) return renderRestoring();
+    if (isRefused) return renderRefused();
     if (isSignedIn) return renderSignedIn();
     return renderForm();
   };
@@ -310,7 +360,11 @@ export function LoginPage(): ReactElement {
         <Card className="sp-auth__panel">
           <header className="sp-auth__header">
             <h1 className="sp-auth__title" id={headingId}>
-              {isSignedIn ? PAGE_TITLES.ACCOUNT : ACCOUNT_COPY.SIGN_IN_HEADING}
+              {isRefused
+                ? ACCOUNT_ACCESS_COPY.HEADING
+                : isSignedIn
+                  ? PAGE_TITLES.ACCOUNT
+                  : ACCOUNT_COPY.SIGN_IN_HEADING}
             </h1>
             {lede === undefined ? null : <p className="sp-auth__lede">{lede}</p>}
           </header>

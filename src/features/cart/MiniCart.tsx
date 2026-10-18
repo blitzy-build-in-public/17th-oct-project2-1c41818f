@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/MiniCart.tsx
  * Purpose: The cart drawer opened from the header badge, with quick quantity edits and a checkout link
- * Lines: 269
+ * Lines: 272
  */
 
 import type { ReactElement } from "react";
@@ -14,7 +14,7 @@ import { CART_COPY, cartItemCountLabel } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { CartItemRow } from "@/features/cart/CartItemRow";
 import { selectIsCartEmpty, selectItemCount } from "@/features/cart/cartSelectors";
-import { useCart, useCartDispatch } from "@/state/CartContext";
+import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
 
 /*
  * Where this drawer is mounted, and why it is not mounted by the header.
@@ -138,13 +138,13 @@ function miniCartActionLink({
 /**
  * The mini-cart: the cart's lines in a drawer, opened from the header's badge on any route.
  *
- * It holds no state of its own. Whether it is open is the cart context's `isMiniCartOpen`, which the
- * header's cart button flips through `toggleMiniCart` and this file only reads; the lines are that
- * context's too, so an edit made anywhere — with the drawer open or shut — is already in the array this
- * drawer renders on its next pass, and a quantity changed in here updates the badge behind it without
- * either surface telling the other anything. A local open/closed flag would be a second answer to a
- * question the context already answers, and the badge and the panel would disagree the first time one of
- * them changed without the other.
+ * It holds no state of its own. Whether it is open is the flag `src/state/CartContext.tsx` publishes through
+ * `useMiniCartOpen()`, which the header's cart button flips through `toggleMiniCart` and this file only
+ * reads; the lines arrive through `useCart()`, so an edit made anywhere — with the drawer open or shut — is
+ * already in the array this drawer renders on its next pass, and a quantity changed in here updates the badge
+ * behind it without either surface telling the other anything. A local open/closed flag would be a second
+ * answer to a question the context already answers, and the badge and the panel would disagree the first time
+ * one of them changed without the other.
  *
  * Where it is mounted, and what that obliges. The app shell `src/App.tsx` renders this component beside
  * the toast viewport: the drawer has to be reachable from every route, the header's badge is what opens it
@@ -178,13 +178,14 @@ function miniCartActionLink({
  * @returns The drawer, rendered only while the cart context reports it open.
  */
 export function MiniCart(): ReactElement {
-  const cart = useCart();
+  const { lines } = useCart();
+  const isMiniCartOpen = useMiniCartOpen();
   const cartActions = useCartDispatch();
   const navigate = useNavigate();
 
   /** How many units the cart holds, read off the lines rather than kept beside them. */
-  const itemCount = selectItemCount(cart.lines);
-  const isEmpty = selectIsCartEmpty(cart.lines);
+  const itemCount = selectItemCount(lines);
+  const isEmpty = selectIsCartEmpty(lines);
 
   /**
    * The drawer's dismissal, wrapped around the cart's own action.
@@ -215,7 +216,7 @@ export function MiniCart(): ReactElement {
   return (
     <Drawer
       closeLabel={CART_COPY.MINI_CART_CLOSE_LABEL}
-      isOpen={cart.isMiniCartOpen}
+      isOpen={isMiniCartOpen}
       onClose={closeMiniCart}
       side="end"
       title={CART_COPY.MINI_CART_HEADING}
@@ -238,9 +239,11 @@ export function MiniCart(): ReactElement {
             <p className={CLASSES.count}>{cartItemCountLabel(itemCount)}</p>
             {/* The lines as a list, keyed by the line's own id so a removal cannot make React reuse one
              * line's subtree for another: the row holds no state, but the key is what keeps the stepper's
-             * focus where the shopper left it. */}
-            <ul className={CLASSES.list}>
-              {cart.lines.map((line) => (
+             * focus where the shopper left it. `role="list"` is the pairing `src/styles/base.css` documents
+             * as what keeps the list announced once a sheet strips the marker, which `sp-minicart__list`
+             * does — the cart page's own list, the search grids and the review list wear it too. */}
+            <ul className={CLASSES.list} role="list">
+              {lines.map((line) => (
                 <CartItemRow isCompact key={line.id} line={line} />
               ))}
             </ul>

@@ -1,6 +1,6 @@
 /* Path: src/styles/layout.css
  * Purpose: Page shell, containers, grid, and the header, footer and sidebar skeletons
- * Lines: 556
+ * Lines: 566
  */
 /* The application frame, the container and page rhythm, three layout primitives, and the skeletons of the
  * five layout components — AppLayout, Header, Footer, AdminSidebar and PageHeader, the fifth of which is
@@ -195,7 +195,7 @@
   font-weight: var(--text-heading-3-weight);
   text-decoration-line: none;
 }
-/* A desktop affordance: below --breakpoint-md it is replaced by `.sp-nav-menu`, so it leaves the layout. */
+/* A desktop affordance: below --breakpoint-sm it is replaced by `.sp-nav-menu`, so it leaves the layout. */
 .sp-header__nav {
   display: none;
 }
@@ -212,7 +212,7 @@
   flex: none;
   min-inline-size: var(--touch-target-min);
 }
-/* Below --breakpoint-md only; display: none is also what removes it from the tab order and the a11y tree. */
+/* Below --breakpoint-sm only; display: none is also what removes it from the tab order and the a11y tree. */
 .sp-header__menu-button {
   display: grid;
   place-items: center;
@@ -304,7 +304,7 @@
 }
 
 /* ==== Mobile navigation ====
- * `.sp-nav-menu` replaces the header navigation below --breakpoint-md, toggled by the `hidden` attribute
+ * `.sp-nav-menu` replaces the header navigation below --breakpoint-sm, toggled by the `hidden` attribute
  * that base.css makes win here, and the whole block is removed at and above the stop. */
 .sp-nav-menu {
   background-color: var(--color-surface);
@@ -326,11 +326,17 @@
 .sp-nav-menu .sp-nav__link {
   display: flex;
 }
-@media (min-width: 768px) {
-  /* --breakpoint-md */
-  /* Two mutually exclusive ways to reach the primary navigation, swapped at one stop. */
-  .sp-nav-menu,
-  .sp-header__menu-button {
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  /* Two mutually exclusive ways to reach the primary navigation, swapped at this one stop: the row's own
+   * list takes over and both the panel and the menu button that toggles it leave the layout. The button's
+   * rule is scoped to `.sp-header` so it outranks the button family of `src/styles/controls.css` on
+   * specificity: that sheet reaches the page after this one at the same 0-1-0 weight, so order alone would
+   * leave the control painted, focusable and stateful at every width. */
+  .sp-nav-menu {
+    display: none;
+  }
+  .sp-header .sp-header__menu-button {
     display: none;
   }
   .sp-header__nav {
@@ -338,7 +344,11 @@
     align-items: center;
     min-inline-size: 0;
   }
-  /* The actions take the room the brand and the navigation leave, so the slot inside them can grow. */
+}
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* The search slot, not the navigation, changes at this stop: the slot holds the field itself from here,
+   * and the actions take the room the brand and the navigation leave so that field can grow. */
   .sp-header__actions {
     flex: 1 1 auto;
     min-inline-size: 0;
@@ -550,7 +560,7 @@
 
 /* ==== Responsive summary ====
  * Below --breakpoint-sm: one column, the compressed header with its menu button, a one-column footer. At
- * --breakpoint-sm: two footer columns. At --breakpoint-md: the desktop navigation replaces the menu, the search
- * slot becomes a field, the admin grid appears with a sidebar rail, the footer opens to four columns, and the
- * page-header actions move to the end. At --breakpoint-lg: the labelled sidebar and a two-column `.sp-split`.
+ * --breakpoint-sm: the row navigation replaces the menu. At --breakpoint-md: the search slot becomes a field,
+ * the admin grid appears with a sidebar rail, the footer opens to four columns, and the page-header actions
+ * move to the end. At --breakpoint-lg: the labelled sidebar and a two-column `.sp-split`.
  */

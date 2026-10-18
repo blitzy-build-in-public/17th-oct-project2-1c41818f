@@ -369,7 +369,7 @@ export function useBreakpoint(): BreakpointInfo {
 
 /** Options for {@link useAsync}. */
 export interface UseAsyncOptions {
-  /** Run when `deps` change. `false` suppresses every automatic run until `reload()`. Defaults to `true`. */
+  /** Run when `deps` change. `false` suppresses every run and cancels one in flight. Defaults to `true`. */
   readonly enabled?: boolean;
   /**
    * Run on mount. `false` waits for the first `reload()`, which is how a screen that fetches only on
@@ -419,12 +419,11 @@ interface AsyncTrigger {
  * list is rebuilt each render and cannot be spread into one. Pass the inputs the request actually reads
  * — a query, a page, an id — and nothing that is rebuilt each render.
  *
- * Each run owns one `AbortController`: starting a new run aborts the one before it, unmounting aborts
- * whatever is in flight, and a run whose controller has been superseded ignores its own settled promise,
- * so a slow response cannot overwrite the state of a newer request. The `signal` is the one to forward
- * into `src/lib/apiClient.ts`, which is what lets a superseded request stop rather than merely be
- * ignored. A run cancelled on purpose keeps the status it had, because a cancellation is not a failure
- * to show a reader.
+ * Each run owns one `AbortController`: a newer run aborts the one before it, and unmounting or disabling
+ * the hook aborts whatever is in flight. A superseded run ignores its own settled promise, so a slow
+ * response cannot overwrite the state of a newer request; the `signal` is the one to forward into
+ * `src/lib/apiClient.ts`, which is what lets a superseded request stop rather than merely be ignored. A
+ * run cancelled on purpose keeps the status it had, because a cancellation is not a failure to show.
  *
  * @param run - Starts the request, given the signal that cancels it.
  * @param deps - The inputs that decide when to run; compared with `Object.is`, element by element.
@@ -481,10 +480,26 @@ export function useAsync<TValue>(
     );
   }, []);
 
+  const reload = useCallback((): void => {
+    setRunToken((token) => token + 1);
+  }, []);
+  const cancel = useCallback((): void => {
+    const controller = controllerRef.current;
+    controllerRef.current = null;
+    controller?.abort();
+  }, []);
+  const reset = useCallback((): void => {
+    const controller = controllerRef.current;
+    controllerRef.current = null;
+    controller?.abort();
+    setSnapshot(IDLE_ASYNC_SNAPSHOT);
+  }, []);
+
   useEffect(() => {
     const previous = triggerRef.current;
     triggerRef.current = { deps, runToken, enabled };
-    if (!enabled || (!immediate && runToken === 0)) return;
+    if (!enabled) return cancel();
+    if (!immediate && runToken === 0) return;
     const triggered =
       previous === null ||
       previous.runToken !== runToken ||
@@ -504,21 +519,6 @@ export function useAsync<TValue>(
       void settle(controller);
     });
   });
-
-  const reload = useCallback((): void => {
-    setRunToken((token) => token + 1);
-  }, []);
-  const cancel = useCallback((): void => {
-    const controller = controllerRef.current;
-    controllerRef.current = null;
-    controller?.abort();
-  }, []);
-  const reset = useCallback((): void => {
-    const controller = controllerRef.current;
-    controllerRef.current = null;
-    controller?.abort();
-    setSnapshot(IDLE_ASYNC_SNAPSHOT);
-  }, []);
 
   return useMemo(
     () => ({

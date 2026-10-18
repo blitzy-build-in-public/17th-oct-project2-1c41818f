@@ -1,6 +1,6 @@
 /* Path: src/styles/tokens.css
  * Purpose: Declares every colour, spacing, typography, radius, shadow and z-index token the stylesheets consume
- * Lines: 296
+ * Lines: 298
  */
 
 /* The single source of every design value in SalesPro: the other seven stylesheets consume these
@@ -249,8 +249,10 @@
    * stops rather than feed a query: each query in the folder writes the literal width and carries a
    * trailing comment naming the token it came from, as the block at the foot of this file does.
    * The rules they govern: the header navigation collapses below --breakpoint-sm; the facet panel
-   * becomes a drawer below --breakpoint-md, where the admin sidebar also becomes a rail; the product
-   * grid runs two columns at --breakpoint-sm, three at --breakpoint-md and four at --breakpoint-lg. */
+   * becomes a drawer below --breakpoint-xl, because the 260px column it would take there leaves the
+   * product grid narrower than its cards' own content; the admin sidebar is a rail below
+   * --breakpoint-md; the grid runs two columns at --breakpoint-sm, three at --breakpoint-md and
+   * four at --breakpoint-lg. */
   --breakpoint-sm: 480px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;

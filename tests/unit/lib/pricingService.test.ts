@@ -1,10 +1,10 @@
 /**
  * Path: tests/unit/lib/pricingService.test.ts
  * Purpose: Line and order totals, promo kinds and limits, shipping thresholds and tax rounding
- * Lines: 579
+ * Lines: 474
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_CURRENCY,
@@ -14,19 +14,17 @@ import {
 } from "@/constants/config";
 import { PROMO_REJECTION_MESSAGES } from "@/constants/content";
 import { PROMO_KIND_LABELS } from "@/constants/taxonomy";
-import { salesProDataSource } from "@/data/repositories";
-import { API_PATHS, failNext, registerDataSource, resetMockServer } from "@/lib/mockServer";
 // The module under test is imported as a namespace, as formatting.test.ts imports src/utils/format.ts:
-// this file exercises fourteen of its exports, and fourteen specifiers named singly cost sixteen lines.
+// this file exercises eleven of its exports, and eleven specifiers named singly cost thirteen lines.
 import * as pricing from "@/lib/pricingService";
 import { FIXED_DATE, makeApiError, makeCartLine, makePromoCode } from "../../fixtures";
 
-import type { ApiError, CategoryId, MinorUnits, Result } from "@/types/common";
+import type { CategoryId, MinorUnits } from "@/types/common";
 import type { CartLine, PromoCode, PromoRejectionReason, PricedCart } from "@/types/commerce";
 
 // Every figure asserted below is a whole number of minor units and every date comes from the fixture
-// clock, so no case reads the real time. The three async reads go through the real transport over the
-// seeded data source, which the composition root binds in the application and this file binds for itself.
+// clock, so no case reads the real time. The async reads over the seeded data source live in this suite's
+// §0.5.5 split path, tests/unit/lib/pricingSurface.test.ts, which carries the surface the seam serves.
 
 /** The currency every priced figure is in, and the tax the configured rate puts on 10,000 minor units. */
 const CURRENCY = DEFAULT_CURRENCY;
@@ -79,19 +77,6 @@ function expectMoneyInvariants(cart: PricedCart): void {
   expect(cart.lines.map((item) => item.lineTotalMinor)).toEqual(
     cart.lines.map((item) => item.lineSubtotalMinor - item.discountMinor),
   );
-}
-
-/** The payload a request returned, for a case expecting it to have succeeded. */
-function valueOf<TValue>(result: Result<TValue>): TValue {
-  if (!result.ok) throw new Error(`expected a success but the seam answered ${result.error.code}`);
-  return result.value;
-}
-
-/** The failure a request returned: asserting `ok` here keeps every failure case from restating the shape
- *  that says the request failed. */
-function failureOf<TValue>(result: Result<TValue>): ApiError {
-  if (result.ok) throw new Error("expected a failure but the seam answered a payload");
-  return result.error;
 }
 
 /** Three lines at 1,999 and 12,900 twice and 3,499 once: a subtotal of 35,296, checked by hand. */
@@ -485,95 +470,5 @@ describe("the wording a refusal carries", () => {
       expect(pricing.promoRejectionReason(error)).toBeUndefined();
       expect(pricing.promoRejectionMessage(error)).toBeUndefined();
     }
-  });
-});
-
-describe("the pricing surface the cart and the checkout call", () => {
-  // The async reads answer through the real transport over the seeded data source: no case mocks a module,
-  // and the only isolation used is the seam's own failure injection.
-  beforeEach(() => {
-    registerDataSource(salesProDataSource);
-  });
-
-  /** The code the data layer issues with no floor and an open window: 10% off an order. */
-  const SEEDED_CODE = "SAVE10";
-  const basket = [line("Aurora Desk Lamp", 4_999)];
-
-  it("returns the stored code a seeded spelling names, however it was typed", async () => {
-    const promo = valueOf(await pricing.validatePromoCode(" save10 ", basket));
-    expect(promo.code).toBe(SEEDED_CODE);
-    expect(promo.kind).toBe("percent");
-    expect(promo.value).toBe(10);
-    expect(Number.isInteger(promo.minSubtotalMinor)).toBe(true);
-  });
-
-  it("answers an unknown code with the reason as a value, never by throwing", async () => {
-    const error = failureOf(await pricing.validatePromoCode("ZZZZ9", basket));
-    expect(error.status).toBe(409);
-    expect(error.field).toBe("promoCode");
-    expect(pricing.promoRejectionReason(error)).toBe("unknown");
-    expect(error.message).toBe(PROMO_REJECTION_MESSAGES.unknown);
-  });
-
-  it.each(["ab", "   ", "ABCDEFGHIJKLMNOPQ"])(
-    "refuses the spelling %j without asking the store",
-    async (spelling) => {
-      const error = failureOf(await pricing.validatePromoCode(spelling, basket));
-      expect(error.status).toBe(422);
-      expect(error.code).toBe("validation-failed");
-      expect(error.field).toBe("promoCode");
-    },
-  );
-
-  it("offers the five configured delivery methods, with their prices intact", async () => {
-    const methods = valueOf(await pricing.listShippingMethods());
-    expect(methods).toHaveLength(5);
-    expect(methods).toEqual([...SHIPPING_METHODS]);
-  });
-
-  it("prices one basket identically twice, through the one pricing implementation", async () => {
-    const first = valueOf(await pricing.priceCart(basket, SEEDED_CODE, null));
-    const second = valueOf(await pricing.priceCart(basket, SEEDED_CODE, null));
-    const equivalent = makePromoCode({ code: SEEDED_CODE, value: 10, minSubtotalMinor: 0 });
-    expect(second).toEqual(first);
-    expect(first.subtotalMinor).toBe(4_999);
-    expect(first.discountTotalMinor).toBe(500);
-    expect(first.taxMinor).toBe(371);
-    expect(first.grandTotalMinor).toBe(4_870);
-    expect(first).toEqual(priced(basket, equivalent));
-    expectMoneyInvariants(first);
-  });
-
-  it("answers a line that can no longer be bought with 422 naming the basket", async () => {
-    const error = failureOf(
-      await pricing.priceCart([line("Aurora Desk Lamp", 4_999, 11)], undefined, null),
-    );
-    expect(error.status).toBe(422);
-    expect(error.code).toBe("insufficient-stock");
-    expect(error.field).toBe("lines");
-  });
-
-  it("answers a code that no longer applies with 409 carrying its reason", async () => {
-    const error = failureOf(await pricing.priceCart(basket, "SUMMER25", null));
-    expect(error.status).toBe(409);
-    expect(error.field).toBe("promoCode");
-    expect(pricing.promoRejectionReason(error)).toBe("expired");
-  });
-
-  it("hands an injected failure back as a value, so no caller needs a try/catch", async () => {
-    const message = "The pricing service is unavailable.";
-    failNext({ path: API_PATHS.CART_PRICE, status: 500, code: "unexpected-error", message });
-    const error = failureOf(await pricing.priceCart(basket, undefined, null));
-    expect(error.status).toBe(500);
-    expect(error.code).toBe("unexpected-error");
-    expect(error.message).toBe(message);
-    expect(pricing.promoRejectionReason(error)).toBeUndefined();
-  });
-
-  it("answers 503 before any data source has been bound", async () => {
-    resetMockServer();
-    const error = failureOf(await pricing.priceCart(basket, undefined, null));
-    expect(error.status).toBe(503);
-    expect(error.code).toBe("data-source-unavailable");
   });
 });

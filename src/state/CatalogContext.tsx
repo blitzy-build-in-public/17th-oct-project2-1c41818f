@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CatalogContext.tsx
  * Purpose: Loaded catalogue page, facets and status, plus the URL-derived filter state and its setter
- * Lines: 421
+ * Lines: 402
  */
 
 import {
@@ -16,6 +16,7 @@ import {
 import type { ReactElement, ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { toRejectionError } from "@/lib/apiClient";
 import { buildFacets, listProducts } from "@/lib/catalogService";
 import {
   catalogActions,
@@ -41,6 +42,7 @@ import {
   withSort,
   writeFilterState,
 } from "@/utils/queryParams";
+import { isRatingValue } from "@/utils/validation";
 
 // Consumer surface -----------------------------------------------------------------------------
 
@@ -120,31 +122,6 @@ export interface CatalogFilters {
   /** Whether the address bar holds nothing beyond the defaults, asked of the query writer, which omits
    * every default, rather than of a list of fields restated here. */
   readonly isDefault: boolean;
-}
-
-// Helpers --------------------------------------------------------------------------------------
-
-/**
- * A star value the filter state can hold, so `setRating` can be handed the plain number a control
- * produces: the writer normalises anything else away, and this narrows to the state's own domain.
- */
-function toRatingValue(value: number | null): FilterState["minRating"] {
-  if (value === 1 || value === 2 || value === 3 || value === 4 || value === 5) return value;
-  return null;
-}
-
-/**
- * The failure a rejected promise is reported as. `src/lib/catalogService.ts` resolves every failure as
- * a `Result` and never rejects, so nothing reaches this through the transport the product ships with;
- * it exists so a rejection could not leave a surface loading forever, and carries the cause's message
- * because no sentence is written here.
- */
-function rejectionFailure(cause: unknown): ApiError {
-  return {
-    status: 500,
-    code: "unexpected-error",
-    message: cause instanceof Error ? cause.message : "",
-  };
 }
 
 // Contexts -------------------------------------------------------------------------------------
@@ -247,9 +224,11 @@ export function CatalogProvider({ children }: { children: ReactNode }): ReactEle
       commit((current) => setPriceRange(current, minPriceMinor, maxPriceMinor)),
     [commit],
   );
+  // The narrowing comes from the rating domain's own predicate: a whole number from one to five is the
+  // value, and `null`, an off-scale value, a fraction and `NaN` all clear the filter instead.
   const setRatingValue = useCallback(
     (minRating: number | null): void =>
-      commit((current) => setRating(current, toRatingValue(minRating))),
+      commit((current) => setRating(current, isRatingValue(minRating) ? minRating : null)),
     [commit],
   );
   const setInStockOnlyValue = useCallback(
@@ -301,7 +280,9 @@ export function CatalogProvider({ children }: { children: ReactNode }): ReactEle
       },
       (cause: unknown) => {
         if (controller.signal.aborted || isAbortError(cause)) return;
-        dispatch(catalogActions.loadFailed(fingerprint, rejectionFailure(cause)));
+        // Unreachable through the shipped transport, which resolves every failure as a value: kept so a
+        // rejection could not leave the surface loading forever.
+        dispatch(catalogActions.loadFailed(fingerprint, toRejectionError(cause)));
       },
     );
 

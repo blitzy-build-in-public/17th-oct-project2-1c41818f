@@ -1,13 +1,14 @@
 /**
  * Path: tests/integration/accountFlow.test.tsx
  * Purpose: Sign-in, profile edit, order history and the address book, plus the unauthenticated redirect.
- * Lines: 566
+ * Lines: 657
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEMO_ACCOUNTS } from "@/constants/config";
 import {
+  ACCOUNT_ACCESS_COPY,
   ACCOUNT_COPY,
   A11Y_COPY,
   CART_COPY,
@@ -18,9 +19,11 @@ import {
   FEEDBACK_COPY,
   HEADER_COPY,
   PAGE_TITLES,
+  REPORTS_COPY,
   VALIDATION_MESSAGES,
+  documentTitle,
 } from "@/constants/content";
-import { ROUTES } from "@/constants/routes";
+import { ROUTES, loginPath } from "@/constants/routes";
 import { ORDER_STATUS_OPTIONS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { CUSTOMERS } from "@/data/customers";
 import { ORDERS } from "@/data/orders";
@@ -68,8 +71,8 @@ function uniqueEmail(tag: string): string {
 
 // Driving the real forms --------------------------------------------------------------------------
 
-/** The pattern a field's label is found by: a required field's label continues past its copy with a marker
- *  and a visually hidden sentence, so its whole text is never the copy alone. */
+/** The pattern a field's label is found by: a required field's label continues past its copy with its
+ *  marker, so its whole text is never the copy alone. */
 function fieldLabel(label: string): RegExp {
   return new RegExp(`^${label}`);
 }
@@ -254,6 +257,94 @@ describe("the customer accounts flow", () => {
     await user.type(password, DEMO_ACCOUNTS.PASSWORD);
     await user.click(screen.getByRole("button", { name: ACCOUNT_COPY.SIGN_IN_SUBMIT_LABEL }));
     expect(await listedTable()).toBeVisible();
+  });
+
+  it("marks a malformed sign-in address at its own field, and keeps the credential refusal generic", async () => {
+    const { user } = renderApp({ route: ROUTES.LOGIN });
+    const email = await screen.findByLabelText(fieldLabel(ACCOUNT_COPY.EMAIL_LABEL));
+    const password = screen.getByLabelText(fieldLabel(ACCOUNT_COPY.PASSWORD_LABEL));
+
+    // The address's shape is judged where it was typed, in the shared validator's own words, and linked to
+    // the control rather than only reported above the form.
+    await user.type(email, "not-an-email");
+    await user.type(password, DEMO_ACCOUNTS.PASSWORD);
+    await user.click(screen.getByRole("button", { name: ACCOUNT_COPY.SIGN_IN_SUBMIT_LABEL }));
+    const shape = await screen.findByText(VALIDATION_MESSAGES.EMAIL_FORMAT);
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email.getAttribute("aria-describedby")).toContain(shape.id);
+    expect(screen.queryByText(ACCOUNT_COPY.SIGN_IN_FAILED_MESSAGE)).toBeNull();
+
+    // An address that is well formed but names no account is the refusal the generic sentence covers, and it
+    // still marks neither control: a refusal that pointed at one would tell a stranger where accounts are.
+    await user.clear(email);
+    await user.type(email, "stranger@salespro.test");
+    await user.click(screen.getByRole("button", { name: ACCOUNT_COPY.SIGN_IN_SUBMIT_LABEL }));
+    expect(await screen.findByText(ACCOUNT_COPY.SIGN_IN_FAILED_MESSAGE)).toBeVisible();
+    expect(email).not.toHaveAttribute("aria-invalid", "true");
+    expect(password).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("keeps the tab title on the route, and continues a signed-in visitor to a path they can reach", async () => {
+    const signedIn = renderApp({ route: ROUTES.LOGIN });
+    await signInAs(signedIn.user, DEMO_ACCOUNTS.CUSTOMER_EMAIL);
+    expect(await profileScreen()).toBeVisible();
+    signedIn.unmount();
+
+    // The sign-in route again, this time with the session in storage and an account path in hand: that path
+    // is one this customer can open, so it stays the destination, while the tab title names the route rather
+    // than the panel's own state — the address in the bar is still `/login`.
+    const returning = renderApp({ route: loginPath(ROUTES.ACCOUNT_ORDERS) });
+    const continuation = await screen.findByRole("link", { name: COMMON_ACTIONS.CONTINUE });
+    expect(continuation).toHaveAttribute("href", ROUTES.ACCOUNT_ORDERS);
+    await waitFor(() => {
+      expect(document.title).toBe(documentTitle(PAGE_TITLES.SIGN_IN));
+    });
+    await returning.user.click(continuation);
+    expect(await listedTable()).toBeVisible();
+  });
+
+  it("refuses a signed-in customer the privileged route, and offers a way out of it", async () => {
+    const signedIn = renderApp({ route: ROUTES.LOGIN });
+    await signInAs(signedIn.user, DEMO_ACCOUNTS.CUSTOMER_EMAIL);
+    expect(await profileScreen()).toBeVisible();
+    signedIn.unmount();
+
+    // The privileged route with the customer's session in storage: the guard preserves the path it refuses,
+    // and the screen says that the role is what refuses it instead of offering to continue into it again.
+    const refused = renderApp({ route: ROUTES.ADMIN });
+    expect(
+      await screen.findByRole("heading", { name: ACCOUNT_ACCESS_COPY.HEADING, level: 1 }),
+    ).toBeVisible();
+    expect(screen.getByText(ACCOUNT_ACCESS_COPY.BODY)).toBeVisible();
+    expect(screen.queryByRole("heading", { name: PAGE_TITLES.DASHBOARD, level: 1 })).toBeNull();
+    await waitFor(() => {
+      expect(document.title).toBe(documentTitle(PAGE_TITLES.SIGN_IN));
+    });
+
+    // Nothing here leads back into the refusal, so the guard's redirect cannot be walked in a circle: the way
+    // on is the account this role does hold, and a sign-out is how another account gets to the refused page.
+    expect(screen.queryByRole("link", { name: COMMON_ACTIONS.CONTINUE })).toBeNull();
+    expect(screen.getByRole("link", { name: ACCOUNT_ACCESS_COPY.CONTINUE_LABEL })).toHaveAttribute(
+      "href",
+      ROUTES.ACCOUNT,
+    );
+    await refused.user.click(screen.getByRole("button", { name: COMMON_ACTIONS.SIGN_OUT }));
+    expect(await screen.findByText(ACCOUNT_COPY.SIGN_IN_HEADING)).toBeVisible();
+  });
+
+  it("refuses a preserved path that carries a query string as well as its route", async () => {
+    const signedIn = renderApp({ route: ROUTES.LOGIN });
+    await signInAs(signedIn.user, DEMO_ACCOUNTS.CUSTOMER_EMAIL);
+    expect(await profileScreen()).toBeVisible();
+    signedIn.unmount();
+
+    // The guard preserves the search along with the path it refuses, so the value it hands over is judged by
+    // the section its route sits in rather than by the whole string it arrived as.
+    renderApp({ route: `${ROUTES.ADMIN_REPORTS}?bucket=week` });
+    expect(
+      await screen.findByRole("heading", { name: ACCOUNT_ACCESS_COPY.HEADING, level: 1 }),
+    ).toBeVisible();
+    expect(screen.queryByRole("tablist", { name: REPORTS_COPY.SELECTOR_LABEL })).toBeNull();
   });
 
   it("judges the registration form and refuses an address that already has an account", async () => {

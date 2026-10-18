@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/reportService.ts
  * Purpose: The report catalogue, row building, summaries, chart series and the CSV matrix for export
- * Lines: 545
+ * Lines: 552
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -162,10 +162,12 @@ function averageUnitPrice(revenueMinor: MinorUnits, units: number): MinorUnits {
   return units > 0 ? roundMinorUnits(revenueMinor / units) : 0;
 }
 
-/** The sales report's rows: one per period the fact table holds activity in, oldest first. A period
- *  counts only the days of it inside the range, and one with no fact record produces no row at all, which
- *  is what makes an empty range a well-formed report. The `period` cell holds the day the period opens,
- *  so a partly covered month is still labelled by its own first day. */
+/** The sales report's rows: one per period the range enumerates, oldest first, so the period set is a
+ *  function of the range alone and two reports over one range state the same periods. A period counts
+ *  only the days of it inside the range, and states zeros when the fact table records nothing in it; a
+ *  range the fact table holds no record in at all is a report of no rows, which is what makes an empty
+ *  range a well-formed report. The `period` cell holds the day the period opens, so a partly covered
+ *  month is still labelled by its own first day. */
 export function buildSalesRows(
   input: ReportDataInput,
   query: ReportQuery,
@@ -174,11 +176,13 @@ export function buildSalesRows(
   const range: DateRange = { from: query.from, to: query.to };
   const bounds = prepareRange(range);
   const records = input.salesRecords.filter((record) => isWithinPreparedRange(record.date, bounds));
+  // Read once, before the periods are walked: a range nothing traded in is no rows at all rather than
+  // every bucket of it zeroed, which is the report an empty range states.
+  if (records.length === 0) return [];
   const byPeriod = groupBy(records, (record) => bucketKey(record.date, granularity));
   const rows: ReportRow[] = [];
   for (const bucket of eachBucket(range, granularity)) {
-    const periodRecords = byPeriod.get(bucket.key);
-    if (periodRecords === undefined) continue;
+    const periodRecords = byPeriod.get(bucket.key) ?? [];
     const sums = { orders: 0, units: 0, grossRevenue: 0, discounts: 0, refunds: 0, netRevenue: 0 };
     for (const record of periodRecords) {
       sums.orders += record.orders;
@@ -254,8 +258,8 @@ function countReturningCustomers(orders: readonly Order[], newcomers: readonly C
   ).length;
 }
 
-/** The customer report's rows: one per period that either gained an account or took an order, oldest
- *  first.
+/** The customer report's rows: one per period the range enumerates, oldest first, so the period set is a
+ *  function of the range alone and the sales report over the same range states the same periods.
  *
  * `returningCustomers` counts the customers who ordered in the period without being created in it, so an
  * account created and used in one period is new rather than returning, and `averageOrderValue` divides
@@ -264,7 +268,8 @@ function countReturningCustomers(orders: readonly Order[], newcomers: readonly C
  * what those orders' goods brought net of the discounts that applied to them, through `goodsRevenueMinor`:
  * delivery and tax are not revenue, so this is the basis the dashboard's Revenue and Average-order-value
  * figures and the product-performance report's revenue also state — one range, one figure under the label.
- * A period that did neither produces no row. */
+ * A period that neither gained an account nor took an order is a row of zeros, and a range that did
+ * neither anywhere in it is a report of no rows. */
 export function buildCustomerRows(
   input: ReportDataInput,
   query: ReportQuery,
@@ -279,11 +284,13 @@ export function buildCustomerRows(
     isWithinPreparedRange(customer.createdAt, bounds),
   );
   const newcomersByPeriod = groupBy(newcomers, (customer) => dayOf(customer.createdAt));
+  // Read once, before the periods are walked: a range that neither took an order nor gained an account
+  // is no rows at all rather than every bucket of it zeroed, which is the report an empty range states.
+  if (ordered.length === 0 && newcomers.length === 0) return [];
   const rows: ReportRow[] = [];
   for (const bucket of eachBucket(range, granularity)) {
     const bucketOrders = ordersByPeriod.get(bucket.key) ?? [];
     const periodNewcomers = newcomersByPeriod.get(bucket.key) ?? [];
-    if (bucketOrders.length === 0 && periodNewcomers.length === 0) continue;
     const revenueMinor = roundMinorUnits(sumBy(bucketOrders, goodsRevenueMinor));
     rows.push({
       id: bucket.key,

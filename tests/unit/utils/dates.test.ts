@@ -2,7 +2,7 @@
  * Path: tests/unit/utils/dates.test.ts
  * Purpose: The range arithmetic, bucket boundaries and comparison periods of src/utils/dates.ts, in its
  * own suite because the two suites that touch the module sit at the per-file 600-line ceiling
- * Lines: 599
+ * Lines: 600
  */
 
 // A pure-function suite: it reaches no DOM, mocks no module and reads no ambient clock — every rule
@@ -151,29 +151,25 @@ const BASELINE_CASES: { readonly kind: BaselineKind; readonly expected: DateRang
 
 describe("the day a value falls on: startOfDay and endOfDay", () => {
   it.each(DAY_CASES)("floors $value to the date $day", ({ value, day }) => {
-    expect(dates.startOfDay(value)).toBe(day);
-    expect(dates.endOfDay(value)).toBe(day);
+    expect([dates.startOfDay(value), dates.endOfDay(value)]).toEqual([day, day]);
   });
 
   it("leaves a value it cannot parse with no day at all", () => {
     for (const value of UNPARSABLE_VALUES) {
-      expect(dates.startOfDay(value)).toBe("");
-      expect(dates.endOfDay(value)).toBe("");
+      expect([dates.startOfDay(value), dates.endOfDay(value)]).toEqual(["", ""]);
     }
   });
 });
 
 describe("the week and the month a date opens: startOfWeek, endOfWeek, startOfMonth, endOfMonth", () => {
   it.each(WEEK_CASES)("runs $value's week from $from through $to", ({ value, from, to }) => {
-    expect(dates.startOfWeek(value)).toBe(from);
-    expect(dates.endOfWeek(value)).toBe(to);
+    expect([dates.startOfWeek(value), dates.endOfWeek(value)]).toEqual([from, to]);
     // Six days apart, so the two ends are the closed seven-day week and nothing shorter.
     expect(dates.differenceInDays(from, to)).toBe(6);
   });
 
   it.each(MONTH_CASES)("runs the month of $value from $from through $to", ({ value, from, to }) => {
-    expect(dates.startOfMonth(value)).toBe(from);
-    expect(dates.endOfMonth(value)).toBe(to);
+    expect([dates.startOfMonth(value), dates.endOfMonth(value)]).toEqual([from, to]);
   });
 
   it("leaves a value it cannot parse with no week and no month", () => {
@@ -186,7 +182,7 @@ describe("the week and the month a date opens: startOfWeek, endOfWeek, startOfMo
   });
 });
 
-describe("moving a date: addDays and addMonths", () => {
+describe("moving a date: addDays, addMonths and addHours", () => {
   it.each(SHIFT_CASES)("moves $value by $by day(s) to $to", ({ value, by, to }) => {
     expect(dates.addDays(value, by)).toBe(to);
     // The inverse shift returns the day it started from, so neither direction drifts.
@@ -197,10 +193,15 @@ describe("moving a date: addDays and addMonths", () => {
     expect(dates.addMonths(value, by)).toBe(to);
   });
 
+  it("steps whole hours across a day boundary either way, leaving the instant it was given alone", () => {
+    const late = new Date(2025, 9, 31, 23, 30);
+    expect(dates.toIsoDateTime(dates.addHoursToDate(late, 1))).toBe("2025-11-01T00:30:00");
+    expect(dates.toIsoDateTime(dates.addHoursToDate(late, -2))).toBe("2025-10-31T21:30:00");
+  });
+
   it("leaves a value it cannot parse with no moved date", () => {
     for (const value of UNPARSABLE_VALUES) {
-      expect(dates.addDays(value, 1)).toBe("");
-      expect(dates.addMonths(value, 1)).toBe("");
+      expect([dates.addDays(value, 1), dates.addMonths(value, 1)]).toEqual(["", ""]);
     }
   });
 });

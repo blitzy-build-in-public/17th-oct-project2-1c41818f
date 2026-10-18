@@ -1,6 +1,6 @@
 /* Path: src/styles/base.css
  * Purpose: Reset, document typography and the visible focus treatment every element inherits
- * Lines: 362
+ * Lines: 370
  */
 
 /* The reset and the document baseline: this sheet loads second, after tokens.css and before the six
@@ -156,6 +156,14 @@
   color: var(--color-accent-contrast);
 }
 
+/* The mark a search's matched run is wrapped in — the summary line and every suggestion row — takes the
+ * selection's accent tint and its documented text pair (10.22:1), so a highlight never falls back to the
+ * engine's own marking colour and no value on this page reaches the document outside `tokens.css`. */
+:where(mark) {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
+}
+
 /* Firefox paints a placeholder fainter than the colour it is given; full opacity leaves the colour
  * token to decide how faint a hint is. */
 ::placeholder {
@@ -217,7 +225,7 @@ a:not([class]) {
   margin: 0;
 }
 
-/* The user agent's button chrome is stripped so `.sp-button` in components.css is the only thing
+/* The user agent's button chrome is stripped so `.sp-btn` in components.css is the only thing
  * that gives a button its shape; a button with no class of its own supplies only its content. */
 :where(button) {
   background: none;

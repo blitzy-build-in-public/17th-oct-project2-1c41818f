@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ProductPerformanceReport.tsx
  * Purpose: The product-performance report: units, revenue and share by product
- * Lines: 310
+ * Lines: 313
  */
 
 import { useCallback, useMemo } from "react";
@@ -286,12 +286,15 @@ export function ProductPerformanceReport({
 
       {/* The ranking as bars: the run's revenue series, bounded to the leading products, drawn across the
           frame rather than up it because the bands are product names. No control is mounted beside the
-          heading, because the selector, the period and the cut all belong to the page above this view. */}
+          heading, because the selector, the period and the cut all belong to the page above this view. The
+          bands are what the definition's first column holds, so the chart's paired table takes that column's
+          own word for them rather than the chart's word for a group. */}
       <BarChart
         series={series}
         title={REPORTS_COPY.PRODUCT_CHART_HEADING}
         description={describePeriod(data.from, data.to)}
         orientation="horizontal"
+        labelHeader={DEFINITION.columns[0].label}
         footer={chartBoundNote(CHART_PRODUCT_LIMIT)}
       />
 

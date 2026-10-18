@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/collections.ts
  * Purpose: Grouping, sorting, uniqueness, chunking, indexing and pagination helpers for collections
- * Lines: 585
+ * Lines: 597
  */
 
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, type PageSize } from "@/constants/config";
@@ -326,6 +326,18 @@ export function sumBy<TItem>(items: readonly TItem[], valueOf: Selector<TItem, n
   let total = 0;
   for (const item of items) total += valueOf(item);
   return total;
+}
+
+/**
+ * Totals the quantity carried by every item of `items` — a cart's lines and a placed order's lines alike —
+ * so the number of units a basket or an order holds is read in one place rather than summed again at each
+ * surface that states it. That is what makes the header's badge, the mini-cart, the cart page, the checkout's
+ * summary panel and a placed order's own figures one reading of one basket instead of several that may
+ * disagree. Units are counted rather than rows: three of one product beside one of another total four.
+ * Returns `0` for an empty collection.
+ */
+export function sumQuantities(items: readonly { readonly quantity: number }[]): number {
+  return sumBy(items, (item) => item.quantity);
 }
 
 /**

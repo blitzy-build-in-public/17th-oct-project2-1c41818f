@@ -1,13 +1,14 @@
 /**
  * Path: src/components/ui/Table.tsx
  * Purpose: Sortable data table with column definitions, empty state, sticky header and the pagination contract
- * Lines: 468
+ * Lines: 472
  */
 
 import { useCallback, useMemo, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 import { Pagination } from "@/components/ui/Pagination";
+import type { PaginationProps } from "@/components/ui/Pagination";
 import { EMPTY_STATES } from "@/constants/content";
 import type { ReportCellFormat, ReportCellValue } from "@/types/analytics";
 import type { PageResult, SortDirection } from "@/types/common";
@@ -219,7 +220,10 @@ export interface DataTableSort {
  * The six paging fields are `PageResult`'s own — projected out of it rather than restated, so a listing can
  * pass a service result's paging straight through and neither side can drift from the payload it came from —
  * and the two handlers say where a change is reported. The catalogue, the account order history, the
- * recent-orders table and the report tables all page through this one type.
+ * recent-orders table and the report tables all page through this one type, so the pager's collection noun
+ * and the ownership of its count announcement travel with the contract rather than being re-declared by every
+ * surface: a table of orders or report rows hands in its own `countNoun`, and a surface that already announces
+ * the count in a live region of its own sets `isCountAnnouncedByCaller`.
  */
 export type DataTablePaging = Pick<
   PageResult<unknown>,
@@ -229,7 +233,7 @@ export type DataTablePaging = Pick<
   readonly onPageChange: (page: number) => void;
   /** Called with a newly chosen page size; absent, the size selector is not rendered. */
   readonly onPageSizeChange?: (pageSize: number) => void;
-};
+} & Pick<PaginationProps, "countNoun" | "isCountAnnouncedByCaller">;
 
 /**
  * Everything {@link DataTable} accepts.
@@ -264,7 +268,7 @@ export interface DataTableProps<TItem> {
   readonly defaultSort?: DataTableSort;
   /** Called with the order a header activation asks for, so a paged caller can refetch. */
   readonly onSortChange?: (sort: DataTableSort) => void;
-  /** The paging to report and render, as `PageResult`'s own fields plus the handlers. */
+  /** The paging to report and render: `PageResult`'s own fields, the two handlers and the pager's caption. */
   readonly paging?: DataTablePaging;
   /** Marks the table busy and keeps the rows it already holds visible until the next page arrives. */
   readonly isLoading?: boolean;

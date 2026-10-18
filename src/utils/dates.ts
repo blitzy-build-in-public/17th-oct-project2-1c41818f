@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/dates.ts
  * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use.
- * Lines: 578
+ * Lines: 597
  */
 
 import { DEFAULT_REPORT_RANGE_DAYS, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -30,6 +30,7 @@ import {
 // `src/lib/mockServer.ts` repeats the names of the modules its own concern is split into.
 
 export {
+  addHoursToDate,
   isWithinPreparedRange,
   parseIso,
   prepareRange,
@@ -211,6 +212,25 @@ export function formatBucketLabel(iso: IsoDateString, granularity: BucketGranula
       return formatYearMonth(isoOf(date));
   }
 }
+/** Whether a run's `keys` leave one calendar year: the one cut whose wording can repeat inside a run,
+ * because a week or a month key cannot. A key not opening with four characters names no year. */
+const leavesOneCalendarYear = (keys: readonly string[]): boolean =>
+  new Set(keys.filter((key) => key.length >= 4).map((key) => key.slice(0, 4))).size > 1;
+
+/** Formats the band the key `key` names as one of a run: a day of a run that leaves one calendar year
+ * carries its year, as `formatDate` words it, so no two days of one run word alike, and every other key
+ * is worded by {@link formatBucketLabel}. The run's own `keys` are the caller's, because only it knows
+ * the periods the run holds; the key is resolved to the day its bucket opens, so a week or month key is
+ * worded by the day it starts on, and a key neither wording reads is returned as it stands. */
+export function formatBandLabel(
+  key: string,
+  granularity: BucketGranularity,
+  keys: readonly string[],
+): string {
+  const at = bucketStart(key, granularity) || startOfDay(key);
+  const carriesYear = granularity === "day" && leavesOneCalendarYear(keys);
+  return (carriesYear ? formatDate(at) : formatBucketLabel(at, granularity)) || key;
+}
 /** Describes how long ago the ISO `iso` was relative to `now` — `2 days ago`, `yesterday` — or how far
  * ahead it is; `""` if unparsable. A month counts as 30 days and a year as 365, so it is approximate. */
 export function formatRelativeTime(iso: IsoDateTimeString, now: Date = new Date()): string {
@@ -321,20 +341,22 @@ export function compareIso(a: IsoDateString, b: IsoDateString): number {
   return left.getTime() - right.getTime();
 }
 /** Sorts `items` by the ISO value `select` reads from each, ascending unless `direction` says `desc`,
- * without touching the input; stable, with an unparsable value last whichever way the order runs. */
+ * without touching the input; every record is parsed once rather than once per comparison, and an
+ * unparsable value still sorts last whichever way the order runs. The order is stable, so equal instants
+ * keep the order they arrived in. */
 export function sortByIso<TItem>(
   items: readonly TItem[],
   select: (item: TItem) => IsoDateString,
   direction: SortDirection = "asc",
 ): TItem[] {
   const order = direction === "desc" ? -1 : 1;
-  const compare = (a: TItem, b: TItem): number => {
-    const left = parseIso(select(a));
-    const right = parseIso(select(b));
-    if (!left || !right) return left ? -1 : right ? 1 : 0;
-    return order * (left.getTime() - right.getTime());
-  };
-  return [...items].sort(compare);
+  const entries = items.map((item) => ({ item, time: parseIso(select(item))?.getTime() ?? null }));
+  entries.sort((left, right) => {
+    if (left.time === null) return right.time === null ? 0 : 1;
+    if (right.time === null) return -1;
+    return order * (left.time - right.time);
+  });
+  return entries.map((entry) => entry.item);
 }
 
 // Buckets ----------------------------------------------------------------------------------------

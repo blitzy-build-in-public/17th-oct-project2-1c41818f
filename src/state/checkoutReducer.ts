@@ -1,10 +1,10 @@
 /**
  * Path: src/state/checkoutReducer.ts
  * Purpose: Checkout step transitions, validation errors, submission and success
- * Lines: 574
+ * Lines: 599
  */
 
-import { hasErrors } from "@/utils/validation";
+import { FORM_ERROR_KEY, hasErrors } from "@/utils/validation";
 import type { AddressInput } from "@/types/account";
 import type { Order, PricedCart } from "@/types/commerce";
 import type {
@@ -298,19 +298,21 @@ export function checkoutReducer(state: CheckoutState, action: CheckoutAction): C
       // returns the state itself rather than jumping into a step whose validation never ran, or
       // back into the flow from a placed order: forward movement is `next`, which the checkout
       // context has already gated on `canAdvanceFrom` by the time it is dispatched.
-      return isReturnStep(state.step, action.step) ? { ...state, step: action.step } : state;
+      return isReturnStep(state.step, action.step)
+        ? withoutSubmissionFailure({ ...state, step: action.step })
+        : state;
     }
 
     case "checkout/next": {
       // Validation is the context's call: it runs the step's validators and dispatches `set-errors`
       // instead of this action when the step is not ready to be left.
       const step = nextStep(state.step);
-      return step === state.step ? state : { ...state, step };
+      return step === state.step ? state : withoutSubmissionFailure({ ...state, step });
     }
 
     case "checkout/back": {
       const step = previousStep(state.step);
-      return step === state.step ? state : { ...state, step };
+      return step === state.step ? state : withoutSubmissionFailure({ ...state, step });
     }
 
     case "checkout/update-values": {
@@ -503,7 +505,11 @@ function applyValuesPatch(state: CheckoutState, patch: CheckoutValuesPatch): Che
             billing: mergeGroup(state.values.shipping.billing, billing),
           },
   };
-  return { ...state, values, errors: clearErrorsFor(state.errors, touched) };
+  return withoutSubmissionFailure({
+    ...state,
+    values,
+    errors: clearErrorsFor(state.errors, touched),
+  });
 }
 
 /**
@@ -547,6 +553,25 @@ function withFailureErrors(
     merged[failure.field] = failure.message;
   }
   return merged;
+}
+
+/**
+ * The state with the last submission's refusal withdrawn: the failure off the flow, the flow idle again
+ * and the message that refusal filed under the form key taken off the screen with it, since a refusal
+ * answers an attempt that is already over and must not outlive the shopper's next move — a step change,
+ * an advance, a step back or a patch. A named field's complaint stays put.
+ *
+ * @param state - The state a move or a patch has produced.
+ * @returns That state without the refusal, or the state itself — same reference — when it holds none.
+ */
+function withoutSubmissionFailure(state: CheckoutState): CheckoutState {
+  const { error, errors, status } = state;
+  if (status !== "error" && error === null && errors[FORM_ERROR_KEY] === undefined) return state;
+  const kept: FieldErrors = {};
+  for (const [field, message] of Object.entries(errors)) {
+    if (field !== FORM_ERROR_KEY) kept[field] = message;
+  }
+  return { ...state, status: "idle", error: null, errors: kept };
 }
 
 /**

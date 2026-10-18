@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/validation.test.ts
  * Purpose: Each validator's accept and reject cases, and the form-level error maps
- * Lines: 577
+ * Lines: 583
  */
 
 // A pure-function suite: it runs in the node project, reaches no DOM, mocks no module and touches no
@@ -439,8 +439,14 @@ describe("form validators", () => {
     expect(errors.firstName).toBe(VALIDATION_MESSAGES.REQUIRED);
   });
 
-  it("accepts plausible credentials at sign-in without judging their shape", () => {
+  it("accepts a well-formed sign-in without judging the password's policy", () => {
     expect(validateSignIn({ email: "legacy.address@example.com", password: "x" })).toEqual({});
+  });
+
+  it("marks a malformed address at its own field", () => {
+    expect(validateSignIn({ email: "not-an-email", password: "x" })).toEqual({
+      email: VALIDATION_MESSAGES.EMAIL_FORMAT,
+    });
   });
 
   it("keys an empty sign-in by both fields, with one sentence for either", () => {

@@ -1,13 +1,14 @@
 /**
  * Path: src/features/search/ActiveFilters.tsx
  * Purpose: A removable chip per applied filter, with a clear-all action
- * Lines: 248
+ * Lines: 234
  */
 
 import { useState } from "react";
 import type { ReactElement } from "react";
 
 import { Button, IconButton } from "@/components/ui/Button";
+import { CloseIcon } from "@/components/ui/icons";
 import { COMMON_ACTIONS, SEARCH_COPY, removeFilterLabel } from "@/constants/content";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import type { CatalogFilters } from "@/state/CatalogContext";
@@ -113,21 +114,6 @@ function applyRemoval(entry: ActiveFilterEntry, filters: CatalogFilters): void {
   }
 }
 
-/** The remove control's glyph: decorative, because the control carrying it owns the accessible name. */
-function DismissGlyph(): ReactElement {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path
-        d="M6 6 18 18M18 6 6 18"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth={2}
-      />
-    </svg>
-  );
-}
-
 /** Everything {@link ChipRow} accepts. */
 interface ChipRowProps {
   readonly text: string;
@@ -148,7 +134,7 @@ function ChipRow({ text, onRemove }: ChipRowProps): ReactElement {
         variant="ghost"
         size="sm"
         label={removeFilterLabel(text)}
-        icon={<DismissGlyph />}
+        icon={<CloseIcon />}
         onClick={onRemove}
       />
     </li>

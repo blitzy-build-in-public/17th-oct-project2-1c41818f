@@ -1,9 +1,11 @@
 /**
  * Path: src/constants/taxonomy.ts
  * Purpose: The controlled vocabulary: categories, brands, sort keys, order statuses, facet and report definitions
- * Lines: 405
+ * Lines: 507
  */
 
+import { CHECKOUT_COPY } from "@/constants/content";
+import type { AddressInput } from "@/types/account";
 import type {
   BaselineKind,
   BucketGranularity,
@@ -403,3 +405,103 @@ export const SUPPORTED_COUNTRIES = [
   { code: "AU", label: "Australia", postalCodePattern: "^\\d{4}$" },
   { code: "DE", label: "Germany", postalCodePattern: "^\\d{5}$" },
 ] as const satisfies readonly CountryOption[];
+
+// Address fields ----------------------------------------------------------------------------------
+
+/**
+ * One member of the address body a form field writes: `AddressInput`'s members bar `label`, which names
+ * an address-book entry rather than a control.
+ */
+export type AddressFieldMember = Exclude<keyof AddressInput, "label">;
+
+/** The country field's choices, mapped once from the set above, which owns the codes and the labels. */
+const COUNTRY_CHOICES: readonly SelectOption[] = SUPPORTED_COUNTRIES.map((country) => ({
+  value: country.code,
+  label: country.label,
+}));
+
+/**
+ * One field of an address form: the body member its control writes, the words it is labelled with,
+ * whether the address rule requires it, and what the control carries besides its value — a supporting
+ * line, the input type, or the choices of a field that is picked rather than typed.
+ */
+export interface AddressFieldSpec {
+  /** The body member the control writes, which is also the `name` its error is filed under. */
+  readonly member: AddressFieldMember;
+  /** The control's label, read from the copy the checkout step and the address book share. */
+  readonly label: string;
+  /** What the browser's own autofill is told this field is, so an address it already holds can be
+   * filled in: the standard HTML autofill field names, which the browser resolves itself, with no
+   * service and no request behind them. */
+  readonly autoComplete: string;
+  /** Whether the address rule requires the member, which the control passes on as its own requirement. */
+  readonly required: boolean;
+  /** A supporting line under the control, where the copy library words one for it. */
+  readonly hint?: string;
+  /** The input type: `tel` for the one field a numeric keypad suits, text for the rest. */
+  readonly type?: "text" | "tel";
+  /** The choices of a field that is picked rather than typed, which the country field carries. */
+  readonly options?: readonly SelectOption[];
+}
+
+/**
+ * The address body's fields, in the order both forms render them, iterated by
+ * `src/features/checkout/ShippingForm.tsx` for the delivery address and by
+ * `src/features/account/AddressBookPage.tsx` for an address-book entry: the field set, its labels, its
+ * requirements and its autofill tokens are stated once here, so the delivery address and the address
+ * book cannot drift apart on any of them.
+ */
+export const ADDRESS_FIELDS: readonly AddressFieldSpec[] = [
+  {
+    member: "fullName",
+    label: CHECKOUT_COPY.FULL_NAME_LABEL,
+    autoComplete: "name",
+    required: true,
+  },
+  {
+    member: "line1",
+    label: CHECKOUT_COPY.ADDRESS_LINE_1_LABEL,
+    autoComplete: "address-line1",
+    required: true,
+  },
+  {
+    member: "line2",
+    label: CHECKOUT_COPY.ADDRESS_LINE_2_LABEL,
+    hint: CHECKOUT_COPY.ADDRESS_LINE_2_HINT,
+    autoComplete: "address-line2",
+    required: false,
+  },
+  {
+    member: "city",
+    label: CHECKOUT_COPY.CITY_LABEL,
+    autoComplete: "address-level2",
+    required: true,
+  },
+  {
+    member: "region",
+    label: CHECKOUT_COPY.REGION_LABEL,
+    autoComplete: "address-level1",
+    required: true,
+  },
+  {
+    member: "postalCode",
+    label: CHECKOUT_COPY.POSTAL_CODE_LABEL,
+    autoComplete: "postal-code",
+    required: true,
+  },
+  {
+    member: "country",
+    label: CHECKOUT_COPY.COUNTRY_LABEL,
+    autoComplete: "country",
+    required: true,
+    options: COUNTRY_CHOICES,
+  },
+  {
+    member: "phone",
+    label: CHECKOUT_COPY.PHONE_LABEL,
+    hint: CHECKOUT_COPY.PHONE_HINT,
+    autoComplete: "tel",
+    required: false,
+    type: "tel",
+  },
+];

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 594
+ * Lines: 582
  */
 
 import { useId, useState } from "react";
@@ -15,6 +15,7 @@ import { EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Drawer } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { Checkbox, RadioGroup, Select, Switch } from "@/components/ui/Select";
+import { CloseIcon } from "@/components/ui/icons";
 import { BREAKPOINTS, PAGE_SIZE_OPTIONS } from "@/constants/config";
 import {
   CATALOG_COPY,
@@ -73,9 +74,11 @@ const CLASSES = {
   clear: "sp-facets__clear",
 } as const;
 
-/** The stop the filter panel is a sticky column from and a drawer below, built from the configured token: CSS
- *  cannot evaluate a custom property inside a media query, so the width travels from `src/constants/config.ts`. */
-const COLUMN_QUERY = `(min-width: ${BREAKPOINTS.MEDIUM}px)`;
+/** The stop the filter panel is a sticky column from and a drawer below, built from the configured token: the
+ *  results column holds cards of their own 198px content width only while no facet column stands beside it, so the
+ *  panel waits for the width the column and a row of the grid share, and CSS cannot evaluate a custom property
+ *  inside a media query, which is why the width travels from `src/constants/config.ts`. */
+const COLUMN_QUERY = `(min-width: ${BREAKPOINTS.XLARGE}px)`;
 
 /** The value a single-choice facet carries to mean "no value": the choice that clears the rating filter. */
 const ANY_VALUE = "";
@@ -94,21 +97,6 @@ function flattenCategories(nodes: readonly CategoryNode[]): readonly CategoryNod
 function categoryScopeIds(category: CategoryNode): readonly CategoryId[] {
   if (category.children.length === 0) return [category.id];
   return category.children.map((child) => child.id);
-}
-
-/** The chip's remove control glyph: decorative, because the control carrying it owns the accessible name. */
-function DismissGlyph(): ReactElement {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path
-        d="M6 6 18 18M18 6 6 18"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth={2}
-      />
-    </svg>
-  );
 }
 
 /** One applied filter's chip text: the vocabulary's wording, a term's name as the facet response labels it (the
@@ -182,7 +170,7 @@ interface FilterRegionProps {
 
 /**
  * The filter region: the five facet groups of `src/constants/taxonomy.ts` over the catalogue's own facet
- * response, as the sticky first column of `.sp-catalog-layout` from the medium stop up and inside the caller's
+ * response, as the sticky first column of `.sp-catalog-layout` from the extra-large stop up and inside the caller's
  * focus-trapped drawer below it.
  *
  * The region is composed here rather than imported from the search slice's `FilterPanel.tsx`, which one feature
@@ -493,7 +481,7 @@ export function CatalogPage(): ReactElement {
                 <div className="sp-result-meta">
                   {/* Present from the first render and only ever given new text, because a region inserted at
                       the moment of the update is not announced reliably. This is the page's only count region;
-                      `Pagination` announces the same figure beside the page number. */}
+                      `Pagination` is told so, so it states that figure and announces the page alone. */}
                   <p className="sp-result-count" role="status">
                     {total === null ? "" : productCountAnnouncement(total)}
                   </p>
@@ -528,7 +516,7 @@ export function CatalogPage(): ReactElement {
                             variant="ghost"
                             size="sm"
                             label={removeFilterLabel(text)}
-                            icon={<DismissGlyph />}
+                            icon={<CloseIcon />}
                             onClick={() => {
                               // The facet clears as a whole — the action `clearFacet` is — so every chip
                               // removes the facet it names, and the tag it carries when it is a tag.
@@ -569,6 +557,8 @@ export function CatalogPage(): ReactElement {
                       pageSizeOptions={PAGE_SIZE_OPTIONS}
                       onPageChange={(page) => catalog.setPage(page)}
                       onPageSizeChange={(pageSize) => catalog.setPageSize(pageSize)}
+                      // The count region above is this page's, so the pager announces the page alone.
+                      isCountAnnouncedByCaller
                     />
                   )}
                 </section>

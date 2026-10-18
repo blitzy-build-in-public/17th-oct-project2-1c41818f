@@ -1,6 +1,6 @@
 /**
  * Path: tests/integration/adminReportsFlow.test.tsx
- * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range.
+ * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range
  * Lines: 599
  */
 
@@ -57,7 +57,7 @@ import type { RenderHarness, UserEvent } from "../testUtils";
 // acceptance signals are here: the guard with the endpoint's own role check, and the CSV a report exports
 // against the table it was taken from.
 
-/** The sign-in form's controls; a required field's label also carries the hidden requirement text. */
+/** The sign-in form's controls; a required field's label also carries its marker, hence the patterns. */
 const EMAIL_FIELD = new RegExp(`^${ACCOUNT_COPY.EMAIL_LABEL}`);
 const PASSWORD_FIELD = new RegExp(`^${ACCOUNT_COPY.PASSWORD_LABEL}`);
 

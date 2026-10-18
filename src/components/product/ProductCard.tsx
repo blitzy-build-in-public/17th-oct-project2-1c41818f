@@ -1,7 +1,8 @@
 /**
  * Path: src/components/product/ProductCard.tsx
  * Purpose: Catalogue tile with imagery, price, discount, rating and quick add to cart
- * Lines: 374
+ * Lines: 394
+ * Lines: 385
  */
 
 import { useId } from "react";
@@ -13,10 +14,10 @@ import { Button } from "@/components/ui/Button";
 import { Badge, Card } from "@/components/ui/Card";
 import { PriceTag, Rating } from "@/components/ui/Rating";
 import { DEFAULT_CURRENCY } from "@/constants/config";
-import { CATALOG_COPY, EMPTY_STATES, lowStockLabel } from "@/constants/content";
+import { CATALOG_COPY, EMPTY_STATES, lowStockLabel, quickAddLabel } from "@/constants/content";
 import { productPath } from "@/constants/routes";
 import { BRAND_DEFINITIONS } from "@/constants/taxonomy";
-import { useCart, useCartDispatch } from "@/state/CartContext";
+import { useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import type { Product, ProductStatus } from "@/types/catalog";
 import { formatAvailability, formatRating } from "@/utils/format";
@@ -28,9 +29,12 @@ import { brandId } from "@/utils/strings";
  * `src/styles/**` — so every class below is consumed by name: `sp-product-card` for the tile, which
  * composes `sp-card` and `sp-card--interactive`, the frame that sheet's own comment says the tile wears;
  * `sp-product-card__media` for the image box; `sp-product-card__flag` for the mark placed over it;
- * `sp-product-card__body` for the text column; `sp-product-card__name` for the heading, which the sheet
- * clamps to two lines and reserves both of; `sp-product-card__brand`; `sp-product-card__rating`;
- * `sp-product-card__price`, which carries the `sp-price` primitive and needs no rule of its own;
+ * `sp-product-card__body` for the text column, which the sheet lays out as a column so the price block can be
+ * pinned to its foot; `sp-product-card__name` for the heading, which the sheet clamps to two lanes and
+ * reserves both of, rising to three from the four-column stop; `sp-product-card__brand`;
+ * `sp-product-card__rating`, which the sheet holds at the start of the row it sits in;
+ * `sp-product-card__price`, which carries the `sp-price` primitive and is pinned to the foot of the body so
+ * one row's availability sentence sits on one baseline, its discount pill placed out of the row by the sheet;
  * `sp-product-card__stock`, the availability line the shared `PriceTag` renders when it is handed that
  * class and its own `--low` and `--out` modifiers; and `sp-product-card__actions` for the quick-add slot,
  * which the sheet keeps in the tab order at every width rather than hiding it.
@@ -43,8 +47,9 @@ import { brandId } from "@/utils/strings";
  * columns, the media and the body, and a third direct child would be auto-placed into a second row under
  * the media.
  *
- * The tile holds no cart state of its own: its one cart-reading piece is the private quick-add control
- * below, which is why the tile itself renders identically whether or not the shopper has a cart.
+ * The tile holds no cart state of its own: its one cart-touching piece is the private quick-add control
+ * below, which reads the cart only when its button is activated, so the tile renders identically whether
+ * or not the shopper has a cart.
  */
 
 /** The class names of this block, named once so a render body repeats no string. */
@@ -264,7 +269,12 @@ export function ProductCard({
       <div className={CLASSES.body}>
         {brand === null ? null : <p className={CLASSES.brand}>{brand}</p>}
         <h3 className={CLASSES.name}>
-          <Link to={productPath(product.slug)}>{product.name}</Link>
+          {/* The sheet clamps the heading and this link, so a name longer than the lanes they allow can still
+              hide a word below the four-column stop. The title carries the whole name for the pointer; the
+              link's own text is unchanged and remains the accessible name every reader gets. */}
+          <Link to={productPath(product.slug)} title={product.name}>
+            {product.name}
+          </Link>
         </h3>
         {/* A product nobody has reviewed shows the copy module's own words for that state instead of a
             nought rating, because an average of zero from no reviews is not a score. */}
@@ -308,11 +318,16 @@ interface QuickAddControlProps {
  * The tile's quick add: one button that puts a single unit of the product in the cart.
  *
  * It is a separate component for one reason. It is the only piece of the tile that has to know what the
- * cart already holds — a second activation must report the ceiling rather than pass silently — and reading
- * the cart re-renders its reader on every change to it. Keeping that read here leaves the tile itself,
- * with its image, its two prices and its rating, independent of the cart: `src/state/CartContext.tsx`
- * splits its state and its actions into two contexts precisely so a control that only changes the cart is
- * not re-rendered by a change to it, and this control is the one place that needs both.
+ * cart already holds — a second activation must report the ceiling rather than pass silently — and the
+ * tile itself, with its image, its two prices and its rating, has to stay independent of the cart.
+ *
+ * Its render output does not depend on the cart either, so it holds no subscription to it: the line it
+ * compares against its ceiling is read through `useCartDispatch()`'s `readLines()` at the moment the
+ * button is activated, which is the only moment the line is needed. Subscribing instead — reading the
+ * cart during render, as this control first did — re-renders the action row of every tile on screen on
+ * every change to the cart, so one quick add on a catalogue page costs a pass over all of them, twice
+ * when the add also opens the drawer. `src/state/CartContext.tsx` splits its contexts, and offers
+ * `readLines` beside them, precisely so a control that only changes the cart is re-rendered by neither.
  *
  * The add is a single call. `src/state/cartReducer.ts` merges a repeated add into the line the product
  * already holds and clamps the quantity to that line's ceiling, so the control dispatches nothing else and
@@ -324,7 +339,6 @@ interface QuickAddControlProps {
  * @returns The action slot holding the quick-add button.
  */
 function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProps): ReactElement {
-  const { lines } = useCart();
   // The action object is held rather than its members destructured: `CartActions` declares its members in
   // method position, and a member separated from the object it belongs to is the shape the linter's
   // `unbound-method` rule exists to catch.
@@ -334,7 +348,9 @@ function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProp
   /**
    * Adds one unit, or reports the ceiling the cart has already reached.
    *
-   * The line the cart holds for this product is compared against its own ceiling, which is the bound
+   * The line the cart holds for this product is read here rather than held above, because nothing this
+   * control renders depends on it: the ceiling comparison is made at activation, against the lines as they
+   * stand at that moment. It is compared against the line's own ceiling, which is the bound
    * `src/state/cartReducer.ts` clamps to, so the notice is raised for the same condition the reducer would
    * silently absorb. Every other outcome opens the mini-cart, which is where the shopper sees the line
    * that was added and what the basket now holds.
@@ -342,7 +358,7 @@ function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProp
   const addToCart = (): void => {
     if (!canBuy) return;
 
-    const line = lines.find((candidate) => candidate.productId === product.id);
+    const line = cartActions.readLines().find((candidate) => candidate.productId === product.id);
     if (line !== undefined && line.quantity >= line.maxQuantity) {
       error(lowStockLabel(line.maxQuantity));
       return;
@@ -358,11 +374,15 @@ function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProp
           native one takes the control out of the tab order and with it the description below: a keyboard
           user keeps the control and is told, on focus, why it will not act. The stylesheet dims both
           spellings, and the handler refuses the activation either way. */}
+      {/* The name is composed from the product, because every tile in a grid renders this one control and a
+          shared name would leave twelve successive Tab stops identical. It leads with the visible label for
+          WCAG 2.5.3, and is an `aria-label` rather than extra content so the button's box is unchanged. */}
       <Button
         type="button"
         variant="secondary"
         size="sm"
         isBlock
+        aria-label={quickAddLabel(product.name)}
         aria-disabled={canBuy ? undefined : "true"}
         aria-describedby={describedById}
         onClick={addToCart}

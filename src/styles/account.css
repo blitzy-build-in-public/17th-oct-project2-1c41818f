@@ -1,6 +1,6 @@
 /* Path: src/styles/account.css
  * Purpose: Styles for the account screens: profile form, order history and address cards
- * Lines: 478
+ * Lines: 491
  */
 
 /* The account layer: the sign-in and registration screens, the account shell with its section navigation and
@@ -171,8 +171,13 @@
  * region is the success register of the alert family, composed by token because that family's first column is
  * its icon.
  */
+/* BLITZY [LAYOUT]: the track is declared rather than left to `auto`, whose minimum is min-content: a value
+ * long enough to be unbreakable — a name field accepts 80 characters — then widened the track from 924px to
+ * 1124.66px, and the document from 1280px to 1449px with it. minmax(0, 1fr) floors the track at zero, so the
+ * column's width is the column's own and never its contents'. */
 .sp-profile {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
 }
 .sp-profile__header {
@@ -187,6 +192,14 @@
   color: var(--color-text-muted);
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line-height);
+}
+/* BLITZY [LAYOUT]: the same defect one level down. These are flex items carrying the automatic minimum, so
+ * the stored name widened the row that shows it. min-inline-size: 0 releases that minimum, and
+ * overflow-wrap: anywhere breaks a value longer than its line inside itself — `break-word` does not, which is
+ * why the row grew instead of the value wrapping. */
+.sp-profile__meta > * {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 .sp-profile__form {
   display: grid;
@@ -396,8 +409,15 @@
  * their 44px targets and their states stay in controls.css. The removal confirmation is .sp-confirm from
  * data-display.css, which this sheet neither styles nor restates.
  */
+/* As many equal cards as the column holds, each wide enough to keep its own default-choice label on one line:
+ * the longer of the two measures 292px in the shipped 16px, and a card needs that beside its 20px box, its 8px
+ * gap and its two 20px paddings — 360px, taken to 23rem so the reader's own system font has a few pixels of
+ * room. tokens.css declares no card-floor token, so the floor is named here as layout.css names the shared
+ * grid's. auto-fit keeps an empty track out of the row, which is what the two fixed counts this replaces got
+ * wrong: two cards in a 924px column were given three 297px tracks and a spare 313px column beside them. */
 .sp-address-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
   gap: var(--space-4);
 }
 .sp-address-card {
@@ -413,11 +433,13 @@
   gap: var(--space-2);
 }
 /* A label the customer wrote and the generic default label are the same text to this sheet, so neither of them
- * needs a rule of its own. */
+ * needs a rule of its own. The value breaks inside itself where it is longer than the card, because the label
+ * is whatever the customer entered: a 40-character city token otherwise rendered 111px outside its own card. */
 .sp-address-card__label {
   font-size: var(--text-heading-3-size);
   font-weight: var(--text-heading-3-weight);
   line-height: var(--text-heading-3-line-height);
+  overflow-wrap: anywhere;
 }
 .sp-address-card__badges {
   display: flex;
@@ -425,10 +447,13 @@
   gap: var(--space-1);
 }
 /* The formatted address keeps the line breaks it was entered with, and any line after the first — a phone
- * number, a delivery note — is secondary to the address itself. */
+ * number, a delivery note — is secondary to the address itself. pre-line breaks at those newlines and at
+ * spaces but never inside a word, so a value the address rule accepts and the customer typed as one unbroken
+ * token is broken here rather than spilling outside the card. */
 .sp-address-card__body {
   font-size: var(--text-body-sm-size);
   white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 .sp-address-card__body > :not(:first-child) {
   color: var(--color-text-muted);
@@ -457,22 +482,10 @@
     flex-wrap: nowrap;
   }
 }
-@media (min-width: 768px) {
-  /* --breakpoint-md */
-  .sp-address-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (min-width: 1024px) {
-  /* --breakpoint-lg */
-  .sp-address-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 /* ==== Responsive summary ====
  * 480 (--breakpoint-sm): the address card's badge row and action row hold one line each. 768 (--breakpoint-md):
- * the account navigation becomes a sticky side column, the address grid runs two abreast, the order filters take
- * one wrapping line and the order detail's two addresses sit side by side. 1024 (--breakpoint-lg): the address
- * grid gains its third column.
+ * the account navigation becomes a sticky side column, the order filters take one wrapping line and the order
+ * detail's two addresses sit side by side. The address grid carries no stop of its own: it fills with as many
+ * label-wide cards as the column holds, so it runs one card while the column is under 752px and two from there
+ * on — about a 1108px client.
  */

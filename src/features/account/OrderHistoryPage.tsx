@@ -23,6 +23,7 @@ import {
   DATE_RANGE_COPY,
   FEEDBACK_COPY,
   PAGE_TITLES,
+  PAGING_NOUNS,
   VALIDATION_MESSAGES,
   documentTitle,
   rangeTooLongMessage,
@@ -44,7 +45,7 @@ import type {
   PaymentSummary,
 } from "@/types/commerce";
 import type { CurrencyCode, OrderId, PageResult, Result } from "@/types/common";
-import { sumBy } from "@/utils/collections";
+import { sumQuantities } from "@/utils/collections";
 import type { DateRangeErrorCode, DateRangeErrorField } from "@/utils/dates";
 import {
   formatDate,
@@ -139,11 +140,6 @@ function statusLabel(status: OrderStatus): string {
   return ORDER_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status;
 }
 
-/** How many units an order holds, counted from its snapshotted lines. */
-function unitCount(order: Order): number {
-  return sumBy(order.lines, (line) => line.quantity);
-}
-
 /** A line's quantity and the unit price it was bought at, both snapshotted, so nothing is looked up in the
  * catalogue again and nothing is multiplied here. */
 function lineFigures(line: OrderLine, currency: CurrencyCode): string {
@@ -196,8 +192,10 @@ function LoadPlaceholder(): ReactElement {
 
 /**
  * The history's columns: a link to the order, when it was placed, its status, its unit count and what it
- * came to. The total is the figure the order's kept priced cart already holds, never a sum taken here, and
- * the order number is a real link inside its cell rather than a clickable row, because a row that answers a
+ * came to. The unit count is the shared reading of an order's lines — `sumQuantities` in
+ * `src/utils/collections.ts` — so the dashboard's own column states the same figure for the same order. The
+ * total is the figure the order's kept priced cart already holds, never a sum taken here, and the
+ * order number is a real link inside its cell rather than a clickable row, because a row that answers a
  * pointer and not a keyboard is an accessibility defect the shared table deliberately refuses to offer.
  */
 const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
@@ -225,7 +223,7 @@ const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
     header: ACCOUNT_COPY.ORDERS_COLUMN_ITEMS,
     sortable: true,
     isNumeric: true,
-    value: (order) => unitCount(order),
+    value: (order) => sumQuantities(order.lines),
     format: "integer",
   },
   {
@@ -303,6 +301,8 @@ function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): 
   const pager = usePagination({ page, pageSize, total: data?.total ?? 0, onChange: changePage });
   const paging: DataTablePaging = {
     ...pager,
+    // The rows are orders, so the pager's caption counts orders rather than the catalogue's products.
+    countNoun: PAGING_NOUNS.ORDERS,
     onPageChange: pager.goTo,
     onPageSizeChange: pager.setPageSize,
   };

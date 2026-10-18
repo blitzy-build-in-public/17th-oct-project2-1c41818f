@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/validation.ts
  * Purpose: Every field and form validator, each returning a field-keyed error map
- * Lines: 596
+ * Lines: 597
  */
 
 import { PASSWORD_POLICY, SHIPPING_METHODS } from "@/constants/config";
@@ -435,18 +435,19 @@ export function validateRegistration(input: FormValues<RegistrationInput>): Fiel
   );
 }
 
-/** The rule the sign-in form is submitted by: both members present, and nothing more. The email's shape
- * and the password's policy are deliberately not judged — a returning visitor may hold a password
- * predating the current policy and is to be told their credentials do not match, not that their password
- * is the wrong length — and both empty fields share one generic sentence, so neither is singled out.
- * `input` is the credentials as typed; the result holds an `email` and `password` error while either is
- * empty. The rejected sign-in is answered by the seam with one generic message that
+/** The rule the sign-in form is submitted by: both members present, and the address's own shape once one is
+ * given. The address is judged by {@link validateEmail}, so a mistyped one is reported on the control it
+ * belongs to instead of only by the seam's form-level sentence; reading the value this way discloses nothing
+ * about the store, because the rule reads the field and never an account, and an address that names no
+ * account is still refused by the seam with the one generic sentence. The password's policy is deliberately
+ * not judged — a returning visitor may hold a password predating the current policy and is to be told their
+ * credentials do not match, not that their password is the wrong length — and both empty fields share one
+ * generic sentence, so neither is singled out. `input` is the credentials as typed; the result holds an
+ * `email` and `password` error while either is empty, or an `email` error alone while the address given is
+ * malformed. The rejected sign-in is answered by the seam with one generic message that
  * {@link fieldErrorsFromApiError} lands in this same map. */
 export function validateSignIn(input: FormValues<Credentials>): FieldErrors {
-  return mergeErrors(
-    validateRequired("email", input?.email),
-    validateRequired("password", input?.password),
-  );
+  return mergeErrors(validateEmail(input?.email), validateRequired("password", input?.password));
 }
 
 /** The rule the profile form is submitted by: a first and last name, and a phone number judged only when one

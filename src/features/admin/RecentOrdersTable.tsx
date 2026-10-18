@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/RecentOrdersTable.tsx
  * Purpose: The dashboard's most-recent-orders table with status badges
- * Lines: 235
+ * Lines: 240
  */
 
 import { useId } from "react";
@@ -17,6 +17,7 @@ import {
 import { DataTable, type DataTableColumn, type DataTableSort } from "@/components/ui/Table";
 import { ACCOUNT_COPY, ADMIN_COPY, EMPTY_STATES } from "@/constants/content";
 import type { Order } from "@/types/commerce";
+import { sumQuantities } from "@/utils/collections";
 import { formatDateTime } from "@/utils/dates";
 
 /*
@@ -100,8 +101,12 @@ function rowKeyOf(order: Order): string {
  * The six columns the dashboard's table shows, in display order: the only configuration this file adds to the
  * shared table.
  *
+ * The items column states the order's unit count, read through `sumQuantities` in `src/utils/collections.ts`:
+ * the account's order-history column states that same figure for the same order, so the two screens cannot
+ * report one order in two units under the one label they share.
+ *
  * Each column either reads a value the table renders through the product's cell formatter — the order number,
- * the customer's email, the line count as an integer and the placed order's own recorded
+ * the customer's email, the order's unit count as an integer and the placed order's own recorded
  * `pricedCart.grandTotalMinor` as money, never a recomputation of it — or draws its cell with a component
  * that already owns the rendering, which is the placed timestamp through `src/utils/dates.ts` and the status
  * through `OrderStatusBadge`. The two figure columns are marked numeric, so they align on their digits, and
@@ -135,7 +140,7 @@ const COLUMNS: readonly DataTableColumn<Order>[] = [
   {
     id: COLUMN_IDS.items,
     header: ACCOUNT_COPY.ORDERS_COLUMN_ITEMS,
-    value: (order) => order.lines.length,
+    value: (order) => sumQuantities(order.lines),
     format: "integer",
     isNumeric: true,
     sortable: true,
@@ -193,7 +198,7 @@ export interface RecentOrdersTableProps {
 
 /**
  * The dashboard's most recent orders: one row per placed order, with its number, when it was placed, the
- * customer's email, how many lines it holds, what it came to and where it stands.
+ * customer's email, how many units it holds, what it came to and where it stands.
  *
  * The rows are the period's last placements as the page read them, so this table is a window and not a
  * history: it holds no paging control, because the endpoint it is fed from is a limit-bounded list rather than

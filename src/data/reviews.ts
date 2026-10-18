@@ -1,7 +1,7 @@
 /**
  * Path: src/data/reviews.ts
  * Purpose: The seeded reviews, and the product rating aggregates derived from them
- * Lines: 576
+ * Lines: 571
  */
 
 import { BRAND_DEFINITIONS, CATEGORY_DEFINITIONS } from "@/constants/taxonomy";
@@ -27,6 +27,7 @@ import {
   toIsoDate,
   toIsoDateTime,
 } from "@/utils/dates";
+import { roundToTenths } from "@/utils/statistics";
 import { brandId, capitalise, categoryId, normaliseWhitespace, reviewId } from "@/utils/strings";
 
 // Deterministic stream ---------------------------------------------------------------------------
@@ -540,12 +541,6 @@ export const REVIEWS: readonly Review[] = buildReviews();
 export interface ProductRatingAggregate {
   readonly ratingAverage: number;
   readonly ratingCount: number;
-}
-
-/** Rounds a mean to the one decimal `src/data/products.ts` states a product's rating in, so the aggregate
- *  derived here and the figure the catalogue seeds are written the same way. */
-function roundToTenths(value: number): number {
-  return Math.round(value * RATING_TENTHS) / RATING_TENTHS;
 }
 
 /**

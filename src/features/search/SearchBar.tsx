@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchBar.tsx
  * Purpose: The search input with debounced suggestions, keyboard selection and recent history
- * Lines: 486
+ * Lines: 491
  */
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -11,7 +11,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SEARCH_SUGGESTION_DEBOUNCE_MS, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
-import { COMMON_ACTIONS, SEARCH_COPY, resultsUpdatedAnnouncement } from "@/constants/content";
+import { COMMON_ACTIONS, SEARCH_COPY, suggestionsUpdatedAnnouncement } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { SearchSuggestions, suggestionOptionId } from "@/features/search/SearchSuggestions";
 import { isBlankQuery, suggest } from "@/lib/searchService";
@@ -41,7 +41,7 @@ import { filtersToPath, setQuery as withQueryTerm } from "@/utils/queryParams";
  * path it points at and the seeded collections sit behind the transport. A product row therefore renders
  * its name alone here; the brand-and-price caption waits on a layer that can resolve a product.
  *
- * BLITZY [BUDGET]: the concern reached 486 lines against its 330-line budget and stays inside the
+ * BLITZY [BUDGET]: the concern reached 491 lines against its 330-line budget and stays inside the
  * 600-line ceiling, so its overrun is taken from the remainder rather than from a capability. The lines
  * hold the surface the plan names — `SearchBarProps` and `SearchBar` — plus the eight private members the
  * bar cannot do without: the class table, the two glyphs, the facet-derived name lookup the suggestion
@@ -231,6 +231,11 @@ export function SearchBar({
     : request.status === "success"
       ? suggestions.length
       : 0;
+  // The listbox the field's ARIA state describes: both places that render one — the recent terms here and
+  // the suggestions below — render a row per counted option, while the panel's loading ring, its failure
+  // alert and its empty line render no listbox at all. `aria-expanded`, `aria-controls` and the current
+  // row are read off this one flag, so none of them names a popup no element answers to.
+  const isListboxShown = isPanelShown && optionCount > 0;
 
   // The list the keyboard is on, as one string. The list's own contents decide the key, so a new answer
   // or a new first term is a new key and the current row is dropped rather than left pointing at a row
@@ -240,7 +245,7 @@ export function SearchBar({
     : `${request.status}${LIST_KEY_SEPARATOR}${settled}${LIST_KEY_SEPARATOR}${optionCount}`;
   const activeIndex = cursor.key === listKey ? cursor.index : -1;
   const activeDescendant =
-    isPanelShown && activeIndex >= 0 && activeIndex < optionCount
+    isListboxShown && activeIndex >= 0 && activeIndex < optionCount
       ? suggestionOptionId(listId, activeIndex)
       : undefined;
 
@@ -379,7 +384,7 @@ export function SearchBar({
   useOnClickOutside(containerRef, closePanel, { enabled: isPanelOpen });
 
   const announcement =
-    isPanelShown && !isBlank && optionCount > 0 ? resultsUpdatedAnnouncement(optionCount) : "";
+    isListboxShown && !isBlank ? suggestionsUpdatedAnnouncement(optionCount) : "";
 
   return (
     <div
@@ -399,10 +404,10 @@ export function SearchBar({
           autoComplete="off"
           enterKeyHint="search"
           role="combobox"
-          aria-expanded={isPanelShown}
-          // The reference exists while the popup does: collapsed, there is no element with that id, and
-          // `aria-expanded` already says the popup is shut and the combobox role already says it has one.
-          aria-controls={isPanelShown ? listId : undefined}
+          aria-expanded={isListboxShown}
+          // The reference exists while the listbox does: a popup rendering a loading ring, a failure or an
+          // empty line holds no element with that id, so the field names one only while one is rendered.
+          aria-controls={isListboxShown ? listId : undefined}
           aria-autocomplete="list"
           aria-activedescendant={activeDescendant}
           onChange={handleChange}
@@ -476,8 +481,8 @@ export function SearchBar({
         />
       ) : null}
       {/* Present from the first render and only ever given new text, because a live region inserted at the
-          moment of the update is not announced reliably. The wording is the search slice's own live-region
-          helper from `src/constants/content.ts`, the one the results announce with. */}
+          moment of the update is not announced reliably. The wording is the type-ahead's own live-region
+          helper from `src/constants/content.ts`, counting suggestions rather than the products found. */}
       <p className={CLASSES.visuallyHidden} role="status">
         {announcement}
       </p>

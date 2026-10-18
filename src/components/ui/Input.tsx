@@ -1,13 +1,12 @@
 /**
  * Path: src/components/ui/Input.tsx
  * Purpose: Input, text area and form field wrapper with label, hint, required and error handling
- * Lines: 491
+ * Lines: 537
  */
 
 import { useId, useState } from "react";
 import type { ChangeEvent, ComponentPropsWithRef, ReactElement, ReactNode } from "react";
 
-import { VALIDATION_MESSAGES } from "@/constants/content";
 import type { FieldErrors } from "@/types/common";
 
 // The field contract ------------------------------------------------------------------------------
@@ -55,7 +54,7 @@ export interface FormFieldProps {
   readonly hint?: string;
   /** The field's message; its presence is what marks the control invalid. */
   readonly error?: string;
-  /** Renders the visible required marker and the accessible required wording. */
+  /** Renders the visible required marker; the state itself is the control's native `required`. */
   readonly required?: boolean;
   /** Renders the control in its disabled state. */
   readonly isDisabled?: boolean;
@@ -241,11 +240,13 @@ function renderAddon(addon: ReactNode, id: string): ReactElement | null {
  * back this way is what lets every control family share one label, hint and error treatment instead
  * of restating it, and it is why {@link FieldControlProps} is exported.
  *
- * A required field states it three ways, each with one home: the native `required` attribute on the
- * control carries the state, the asterisk beside the label is hidden from assistive technology, and
- * the wording a screen reader hears comes from the message `src/constants/content.ts` owns. That
- * wording is part of the label, so a query for a required field's name has to match the label as a
- * pattern rather than as the exact string.
+ * A required field states it two ways, each with one home: the native `required` attribute on the
+ * control carries the state, and the asterisk beside the label marks it for sighted users. The
+ * asterisk is hidden from assistive technology, and no wording joins the label, because a control's
+ * accessible name has to be its label alone — a field that is missing a value says so through its own
+ * error paragraph, whose `role="alert"` speaks once a submission has failed and not before. The label
+ * still ends with that marker, so a query for a required field's name matches the copy as a pattern
+ * rather than as the exact string.
  *
  * @param props - The field's label, optional hint and error, the required and disabled flags, an
  *   optional class name and the control to render; `id` falls back to a generated one.
@@ -285,22 +286,67 @@ export function FormField({
             <span className="sp-field__required" aria-hidden="true">
               *
             </span>
-            <span className="sp-visually-hidden">{VALIDATION_MESSAGES.REQUIRED}</span>
           </>
         ) : null}
       </label>
       <div className="sp-field__control">{children(field)}</div>
-      {hintId === undefined ? null : (
-        <p className="sp-field__hint" id={hintId}>
-          {hint ?? ""}
-        </p>
-      )}
-      {errorId === undefined ? null : (
-        <p className="sp-field__error" id={errorId} role="alert">
-          {error ?? ""}
-        </p>
-      )}
+      <FieldHint id={hintId} text={hint} />
+      <FieldError id={errorId} text={error} />
     </div>
+  );
+}
+
+/**
+ * Everything {@link FieldHint} and {@link FieldError} accept: the id the control describes itself by and the
+ * wording the row carries.
+ */
+export interface FieldRowProps {
+  /** The element's id, which is the one the field puts on its control's `aria-describedby`. */
+  readonly id?: string;
+  /** The row's wording; absent, the row renders empty rather than missing. */
+  readonly text?: string;
+}
+
+/**
+ * The field's hint row: the supporting line the whole field family renders under a control.
+ *
+ * Exported beside {@link FormField} so the row is written once for the controls that a field wraps and for the
+ * ones that render their own anatomy around it. `src/components/ui/Select.tsx` composes a checkbox, a radio
+ * group and a switch outside this field, and imports this row — and {@link FieldError} — rather than restating
+ * either.
+ *
+ * The row exists only while it has an id, because the id is what the control points at through
+ * `aria-describedby` and a hint nothing describes is read by nobody; the text falls back to an empty string, so
+ * a row whose wording is missing renders nothing rather than the word `undefined`.
+ *
+ * @param props - The row's id and its wording, both optional; with no id the row renders nothing at all.
+ * @returns The `sp-field__hint` paragraph, or `null` when no id was given.
+ */
+export function FieldHint({ id, text }: FieldRowProps): ReactElement | null {
+  if (id === undefined) return null;
+  return (
+    <p className="sp-field__hint" id={id}>
+      {text ?? ""}
+    </p>
+  );
+}
+
+/**
+ * The field's error row: the message a field announces when its control is invalid.
+ *
+ * `role="alert"` is what makes a message that appears after a submission heard without the reader moving the
+ * focus, and the id-guard is the one {@link FieldHint} applies: the field describes its control by this row
+ * while the row exists, which is also the state the control's `aria-invalid` reports.
+ *
+ * @param props - The row's id and its message, both optional; with no id the row renders nothing at all.
+ * @returns The `sp-field__error` paragraph, or `null` when no id was given.
+ */
+export function FieldError({ id, text }: FieldRowProps): ReactElement | null {
+  if (id === undefined) return null;
+  return (
+    <p className="sp-field__error" id={id} role="alert">
+      {text ?? ""}
+    </p>
   );
 }
 

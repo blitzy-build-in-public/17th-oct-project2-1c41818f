@@ -1,10 +1,10 @@
 /**
  * Path: src/features/account/RegisterPage.tsx
  * Purpose: Registration form with field validation and duplicate-email handling
- * Lines: 331
+ * Lines: 375
  */
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -22,6 +22,7 @@ import {
   PAGE_TITLES,
   documentTitle,
   passwordHintLabel,
+  registeredMessage,
   signedInMessage,
 } from "@/constants/content";
 import { RETURN_TO_QUERY_KEY, ROUTES, loginPath } from "@/constants/routes";
@@ -40,14 +41,17 @@ import {
 
 /*
  * Class contract. `src/styles/account.css` is the sole definition site of the sign-in and registration block
- * and no file under `src/features/**` imports a stylesheet, so every class here is consumed by name: `sp-auth`
- * centres the panel, `sp-auth__panel` — carried beside the `sp-card` surface that gives it its border, radius
- * and shadow — is the panel at the narrow container's measure, `sp-auth__header`, `sp-auth__title` and
- * `sp-auth__lede` open it, `sp-auth__form` stacks its fields, `sp-auth__alert` leaves room for the form-level
- * failure, and `sp-auth__switch` is the rule-and-link line that puts the sign-in screen one click away. The
- * field family, the button family and the loading placeholder are `controls.css` and `components.css`, reached
- * through the primitives. The sheet declares the narrow reflow, so this file holds no media query and no
- * design value of its own.
+ * and no file under `src/features/**` imports a stylesheet, so every class here is consumed by name:
+ * `sp-container` with `sp-container--narrow` is `src/styles/layout.css`'s one geometry rule for the page's
+ * width and inline gutter, which the route carries itself because the shell's main region pads the block flow
+ * only; `section.sp-auth` — named through `aria-labelledby` by the heading of whichever of the three states
+ * is rendered — is the labelled-region landmark this route exposes, and inside it `sp-auth__panel` — carried
+ * beside the `sp-card` surface that gives it its border, radius and shadow — is the panel at the narrow
+ * container's measure, `sp-auth__header`, `sp-auth__title` and `sp-auth__lede` open it, `sp-auth__form`
+ * stacks its fields, `sp-auth__alert` leaves room for the form-level failure, and `sp-auth__switch` is the
+ * rule-and-link line that puts the sign-in screen one click away. The field family, the button family and the
+ * loading placeholder are `controls.css` and `components.css`, reached through the primitives. The sheet
+ * declares the narrow reflow, so this file holds no media query and no design value of its own.
  */
 
 /**
@@ -151,7 +155,9 @@ function returnPathOf(value: string | null): string | undefined {
  * revalidation of a stored session is still running, the panel holds a placeholder shaped like the form, so
  * a visitor who is already signed in is never shown a registration form that would be replaced a moment
  * later. A visitor whose session stands is told so and offered the way on, because a page that still asked
- * them to register would be asking for something they have. Everything else renders the form.
+ * them to register would be asking for something they have. That panel states the outcome this visit met:
+ * the greeting this page's own registration raised while the session it opened is being moved away from, and
+ * the sign-in greeting for a visitor who arrived already holding one. Everything else renders the form.
  *
  * The page guards nothing: it hands the visitor to the account route — or to the path a guarded route
  * preserved, when the route carried one — and `src/Router.tsx` is what refuses a screen the session cannot
@@ -161,6 +167,10 @@ function returnPathOf(value: string | null): string | undefined {
  * @returns The registration panel in whichever of its three states applies.
  */
 export function RegisterPage(): ReactElement {
+  // One id names the region whichever state renders, because exactly one of the three is in the document at
+  // a time: `section.sp-auth` points at it through `aria-labelledby`, so the route exposes the same labelled
+  // landmark the sign-in screen exposes.
+  const headingId = useId();
   useDocumentTitle(documentTitle(PAGE_TITLES.REGISTER));
 
   const { register } = useAuthDispatch();
@@ -174,6 +184,11 @@ export function RegisterPage(): ReactElement {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // The greeting this page's own registration raised, or `null` for a visitor who arrived already signed in.
+  // The panel the session's own branch renders outlives the navigation that follows a registration by a
+  // render or two, so without it that panel would greet an account created a moment ago with the sentence
+  // the sign-in screen keeps for a visitor who returned.
+  const [registeredGreeting, setRegisteredGreeting] = useState<string | null>(null);
 
   const preservedPath = returnPathOf(searchParams.get(RETURN_TO_QUERY_KEY));
   const destination = preservedPath ?? ROUTES.ACCOUNT;
@@ -182,6 +197,12 @@ export function RegisterPage(): ReactElement {
   // the control that started it reports the wait, and standing a placeholder over the form would take that
   // control off the page in the middle of the click that used it.
   const isRestoring = status === "loading" && !isSubmitting;
+  // What the session's own panel greets the visitor with: the sentence this page's registration raised, or the
+  // returning visitor's. A session whose identity projection has not resolved yet has no name to put in that
+  // sentence, and the panel leaves it out rather than render one with a name missing from it — the guard
+  // `LoginPage` applies to the same panel.
+  const signedInLede =
+    registeredGreeting ?? (displayName.trim().length > 0 ? signedInMessage(displayName) : null);
 
   /**
    * Writes one control's value into the draft and clears that control's message, so a corrected field stops
@@ -209,7 +230,12 @@ export function RegisterPage(): ReactElement {
       setErrors(toAuthFieldErrors(answer.error));
       return;
     }
-    toast.success(signedInMessage(answer.value.customer.firstName));
+    // The greeting is built once from the account this registration created and held, so the toast and the
+    // panel the session's branch renders until the navigation lands below carry the same sentence and both
+    // name the occasion the visitor met rather than the session they hold.
+    const greeting = registeredMessage(answer.value.customer.firstName);
+    toast.success(greeting);
+    setRegisteredGreeting(greeting);
     // `replace` so the registration screen is not a step the back button returns to once the visitor is in.
     void navigate(destination, { replace: true });
   }
@@ -248,84 +274,102 @@ export function RegisterPage(): ReactElement {
 
   if (isRestoring) {
     return (
-      <div className="sp-auth" aria-busy="true">
-        <Card className="sp-auth__panel">
-          <span className="sp-visually-hidden">{A11Y_COPY.LOADING_ANNOUNCEMENT}</span>
-          <Skeleton variant="heading" width={PLACEHOLDER_HEADING_WIDTH} />
-          <Skeleton lines={PLACEHOLDER_LINE_COUNT} />
-        </Card>
+      <div className="sp-container sp-container--narrow">
+        <section aria-busy="true" aria-labelledby={headingId} className="sp-auth">
+          <Card className="sp-auth__panel">
+            {/* The heading the skeleton stands in for: out of sight, because this state deliberately withholds
+                the registration title from a visitor who may already hold a session, but present so the region
+                carries a name of its own while the form it stands for loads. */}
+            <h1 className="sp-visually-hidden" id={headingId}>
+              {ACCOUNT_COPY.REGISTER_HEADING}
+            </h1>
+            <span className="sp-visually-hidden">{A11Y_COPY.LOADING_ANNOUNCEMENT}</span>
+            <Skeleton variant="heading" width={PLACEHOLDER_HEADING_WIDTH} />
+            <Skeleton lines={PLACEHOLDER_LINE_COUNT} />
+          </Card>
+        </section>
       </div>
     );
   }
 
   if (isAuthenticated) {
     return (
-      <div className="sp-auth">
-        <Card className="sp-auth__panel">
-          <header className="sp-auth__header">
-            <h1 className="sp-auth__title">{PAGE_TITLES.ACCOUNT}</h1>
-            <p className="sp-auth__lede">{signedInMessage(displayName)}</p>
-          </header>
-          <Link className="sp-btn sp-btn--primary sp-btn--block" to={destination}>
-            {COMMON_ACTIONS.CONTINUE}
-          </Link>
-        </Card>
+      <div className="sp-container sp-container--narrow">
+        <section aria-labelledby={headingId} className="sp-auth">
+          <Card className="sp-auth__panel">
+            <header className="sp-auth__header">
+              <h1 className="sp-auth__title" id={headingId}>
+                {PAGE_TITLES.ACCOUNT}
+              </h1>
+              {signedInLede === null ? null : <p className="sp-auth__lede">{signedInLede}</p>}
+            </header>
+            <Link className="sp-btn sp-btn--primary sp-btn--block" to={destination}>
+              {COMMON_ACTIONS.CONTINUE}
+            </Link>
+          </Card>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="sp-auth">
-      <Card className="sp-auth__panel">
-        <header className="sp-auth__header">
-          <h1 className="sp-auth__title">{ACCOUNT_COPY.REGISTER_HEADING}</h1>
-          <p className="sp-auth__lede">{ACCOUNT_COPY.REGISTER_SUBHEADING}</p>
-        </header>
+    <div className="sp-container sp-container--narrow">
+      <section aria-labelledby={headingId} className="sp-auth">
+        <Card className="sp-auth__panel">
+          <header className="sp-auth__header">
+            <h1 className="sp-auth__title" id={headingId}>
+              {ACCOUNT_COPY.REGISTER_HEADING}
+            </h1>
+            <p className="sp-auth__lede">{ACCOUNT_COPY.REGISTER_SUBHEADING}</p>
+          </header>
 
-        {/* `noValidate` leaves the judging to `src/utils/validation.ts` rather than to the browser, so a
-            refusal is worded once and the field keeps the `required` markup assistive technology reads. */}
-        <form className="sp-auth__form" onSubmit={handleSubmit} noValidate>
-          {formError === undefined ? null : (
-            <div className="sp-auth__alert">
-              <Alert tone="danger" title={FEEDBACK_COPY.ERROR_STATE_TITLE}>
-                {formError}
-              </Alert>
-            </div>
-          )}
+          {/* `noValidate` leaves the judging to `src/utils/validation.ts` rather than to the browser, so a
+              refusal is worded once and the field keeps the `required` markup assistive technology reads. */}
+          <form className="sp-auth__form" onSubmit={handleSubmit} noValidate>
+            {formError === undefined ? null : (
+              <div className="sp-auth__alert">
+                <Alert tone="danger" title={FEEDBACK_COPY.ERROR_STATE_TITLE}>
+                  {formError}
+                </Alert>
+              </div>
+            )}
 
-          {REGISTRATION_FIELDS.map((field) => (
-            <Input
-              key={field.member}
-              name={field.member}
-              label={field.label}
-              hint={field.hint}
-              type={field.type === "password" && isPasswordVisible ? "text" : field.type}
-              autoComplete={field.autoComplete}
-              errors={errors}
+            {REGISTRATION_FIELDS.map((field) => (
+              <Input
+                key={field.member}
+                name={field.member}
+                label={field.label}
+                hint={field.hint}
+                type={field.type === "password" && isPasswordVisible ? "text" : field.type}
+                autoComplete={field.autoComplete}
+                errors={errors}
+                isDisabled={isSubmitting}
+                required
+                value={draft[field.member]}
+                onChange={handleFieldChange}
+                trailingAddon={field.type === "password" ? passwordToggle : undefined}
+              />
+            ))}
+
+            <Switch
+              label={ACCOUNT_COPY.MARKETING_OPT_IN_LABEL}
+              checked={marketingOptIn}
               isDisabled={isSubmitting}
-              required
-              value={draft[field.member]}
-              onChange={handleFieldChange}
-              trailingAddon={field.type === "password" ? passwordToggle : undefined}
+              onChange={setMarketingOptIn}
             />
-          ))}
 
-          <Switch
-            label={ACCOUNT_COPY.MARKETING_OPT_IN_LABEL}
-            checked={marketingOptIn}
-            isDisabled={isSubmitting}
-            onChange={setMarketingOptIn}
-          />
+            <Button type="submit" isBlock isLoading={isSubmitting}>
+              {ACCOUNT_COPY.REGISTER_SUBMIT_LABEL}
+            </Button>
+          </form>
 
-          <Button type="submit" isBlock isLoading={isSubmitting}>
-            {ACCOUNT_COPY.REGISTER_SUBMIT_LABEL}
-          </Button>
-        </form>
-
-        <p className="sp-auth__switch">
-          <Link to={loginPath(preservedPath)}>{ACCOUNT_COPY.GO_TO_SIGN_IN_LABEL}</Link>
-        </p>
-      </Card>
+          <p className="sp-auth__switch">
+            <Link className="sp-btn sp-btn--link" to={loginPath(preservedPath)}>
+              {ACCOUNT_COPY.GO_TO_SIGN_IN_LABEL}
+            </Link>
+          </p>
+        </Card>
+      </section>
     </div>
   );
 }

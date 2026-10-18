@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/statistics.ts
- * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports.
- * Lines: 512
+ * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports
+ * Lines: 532
  */
 
 import type { BaselineKind, ChartPoint } from "@/types/analytics";
@@ -21,7 +21,9 @@ import { roundMinorUnits, type ChangeDirection } from "@/utils/format";
  * It owns what a period's figures are stated over as well as how they are computed: which orders a
  * period counts, through `periodOrders`, and how much revenue the goods of one order brought, through
  * `goodsRevenueMinor`, so the dashboard and the reports settle both questions here rather than each
- * answering them for itself.
+ * answering them for itself. It also owns the one-decimal form a rating mean is stated in, through
+ * `roundToTenths`, which the catalogue's seed, the reviews' aggregate and a submitted review's fold all
+ * call rather than each rounding for itself.
  *
  * Around it: `averageOf` and `sum` from `src/utils/collections.ts` are the plain mean and total;
  * rendering a figure, and the single rounding rule for money, are `src/utils/format.ts`'s; bucketing a
@@ -188,6 +190,24 @@ export function shareOf(part: number, total: number): number {
 }
 
 // Averages and centrality ---------------------------------------------------------------------------
+
+/**
+ * The one-decimal form a rating mean is stated in: `roundToTenths(4.25)` is `4.3`, on the `0.1`
+ * precision a rating average is written in.
+ *
+ * **This is the single home of that form.** Every figure stated this way passes through here — the
+ * average the catalogue seeds for a product, the aggregate the seeded reviews derive from their own rows
+ * and the fold a submitted review performs when it joins them — so the figure a seed derived and the one
+ * a submission recomputes are the same number rather than two arithmetics kept in step by hand.
+ *
+ * @param value - The mean to state, in rating points; a figure that is not finite carries no tenth to
+ * state and is returned unchanged.
+ * @returns The mean rounded to the nearest `0.1` as `Math.round` defines it, so one input yields one
+ * figure at every call site.
+ */
+export function roundToTenths(value: number): number {
+  return Math.round(value * 10) / 10;
+}
 
 /**
  * The average order value of a period: its revenue in minor units divided by the orders that produced

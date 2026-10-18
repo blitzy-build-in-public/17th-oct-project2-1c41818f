@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiClient.ts
  * Purpose: The single transport seam: one typed request function with latency, abort, error shaping and a test double
- * Lines: 371
+ * Lines: 396
  */
 
 import type { ApiError, ApiRequestOptions, HttpMethod, QueryParams, Result } from "@/types/common";
@@ -192,6 +192,31 @@ export function toApiError(cause: unknown, path: string): ApiError {
   if (isApiErrorShape(cause)) return cause;
   if (!isServablePath(path)) return transportFailure("INVALID_REQUEST_PATH");
   return transportFailure("UNEXPECTED_ERROR");
+}
+
+/**
+ * Shapes the failure a rejected promise is reported as: the one home of it, so a caller that awaits a
+ * promise directly instead of reading a `Result` has no reason to form the error itself, and the state
+ * layers that catch one report it in the vocabulary this file owns.
+ *
+ * A rejection is a case the shipped transport leaves to its caller's defensive branch. Everything
+ * {@link request} dispatches is resolved as a value — the dispatcher's throw and every refusal the seam
+ * reports alike — so this is reached only where a caller awaits something the transport did not resolve
+ * itself, and it is what keeps such a rejection from leaving a surface loading forever.
+ *
+ * It reports the transport's own `500 unexpected-error`, the failure of a request that reached no
+ * endpoint, because no endpoint refused it; and it carries the cause's own message rather than the
+ * sentence the seam publishes, because a rejection has a message to show and an unreached route has
+ * none. The `message` is empty when the cause is not an `Error`, which is the one case a surface renders
+ * as copy of its own.
+ *
+ * @param cause - What the rejected promise reported: the value it rejected with, an `Error` whose
+ * message names the failure.
+ * @returns The shaped failure, in the fields a refused request carries; never `null`, never an exception.
+ */
+export function toRejectionError(cause: unknown): ApiError {
+  const { status, code } = TRANSPORT_FAILURES.UNEXPECTED_ERROR;
+  return { status, code, message: cause instanceof Error ? cause.message : "" };
 }
 
 // The request pipeline ----------------------------------------------------------------------------

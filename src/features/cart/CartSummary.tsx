@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartSummary.tsx
  * Purpose: Totals panel with promo-code entry, discount lines and free-shipping progress
- * Lines: 358
+ * Lines: 385
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -13,7 +13,6 @@ import { Alert, ProgressBar, Skeleton } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import {
   CART_COPY,
-  CHECKOUT_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   freeShippingProgressLabel,
@@ -22,7 +21,7 @@ import {
   selectDiscountTotalMinor,
   selectFreeShippingProgress,
 } from "@/features/cart/cartSelectors";
-import { promoRejectionMessage, validatePromoCode } from "@/lib/pricingService";
+import { normalisePromoCode, promoRejectionMessage, validatePromoCode } from "@/lib/pricingService";
 import { useCart, useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import type { ApiError, AsyncStatus, FieldErrors } from "@/types/common";
@@ -42,8 +41,9 @@ import {
  * register: `sp-summary` with its padding and rhythm, `sp-summary__title`, `sp-summary__promo` (the field,
  * then the apply control, with a rejected code's reason spanning both columns), `sp-summary__row` with its
  * `--discount` and `--total` modifiers, and `sp-summary__progress` for the free-delivery band.
- * `src/styles/layout.css` contributes `sp-stack`, the rhythm the figures sit in so that the live region
- * wrapped around them costs the rows none of the panel's spacing.
+ * `src/styles/layout.css` contributes `sp-stack`, the rhythm the figures sit in on the definition list that
+ * holds the amount rows, and `src/styles/base.css` contributes `sp-visually-hidden`, which keeps the
+ * announcement out of sight while leaving it in the accessibility tree.
  */
 
 /** The control a promo rule and a promo failure both key their message to, as the seam names it. */
@@ -82,8 +82,8 @@ export interface CartSummaryProps {
 
 /**
  * The placeholder the figures region stands in with while a price is in flight: the shared skeleton rather
- * than zeroes, because a total that has not been quoted is not `$0.00`. The skeleton is silent, so the live
- * region holding it is what carries `aria-busy`.
+ * than zeroes, because a total that has not been quoted is not `$0.00`. The skeleton is silent, so the
+ * figures region holding it is what carries `aria-busy` for as long as the price is in flight.
  *
  * @returns The stacked placeholder lines.
  */
@@ -127,7 +127,8 @@ interface SummaryRowProps {
 }
 
 /**
- * One amount row: what it is on the leading edge and the figure on the trailing one.
+ * One amount row: what it is on the leading edge and the figure on the trailing one, as the term and the
+ * definition of a definition list so the pair is exposed rather than left to the visual alignment.
  *
  * The row holds no figure of its own — the amount arrives formatted — so this panel has one place that
  * decides how an amount row looks and no row can drift from the others.
@@ -143,8 +144,8 @@ function SummaryRow({ label, value, modifier }: SummaryRowProps): ReactElement {
 
   return (
     <div className={className}>
-      <span>{label}</span>
-      <span>{value}</span>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }
@@ -163,7 +164,8 @@ function SummaryRow({ label, value, modifier }: SummaryRowProps): ReactElement {
  * the figure comes from instead of promising one.
  *
  * @param props - The priced basket.
- * @returns The free-delivery band and the amount rows.
+ * @returns The free-delivery band and the amount rows, as the definition list pairing each label with its
+ *   figure.
  */
 function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): ReactElement {
   const { appliedPromos, currency, grandTotalMinor, shippingMinor, subtotalMinor, taxMinor } =
@@ -171,7 +173,7 @@ function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): React
   const showsDeliveryCharge = pricedCart.shippingMethodId !== null;
 
   return (
-    <>
+    <dl className="sp-stack">
       <FreeDeliveryProgress pricedCart={pricedCart} />
       <SummaryRow
         label={CART_COPY.SUMMARY_SUBTOTAL_LABEL}
@@ -206,7 +208,7 @@ function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): React
         modifier="total"
         value={formatMoney(grandTotalMinor, currency)}
       />
-    </>
+    </dl>
   );
 }
 
@@ -223,8 +225,15 @@ function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): React
  * The panel keeps rendering while its figures do not: the title and the promo entry stand whatever the
  * pricing request is doing, so a shopper can correct a rejected code at any moment. The figures follow the
  * states every data-backed surface renders — a placeholder while a price is in flight, the failure with its
- * retry, a placeholder rather than zeroes when no price exists yet, and the amounts once one does — inside a
- * polite live region, so a re-price is announced once without moving the focus the shopper is using.
+ * retry, a placeholder rather than zeroes when no price exists yet, and the amounts once one does — in a
+ * plain figures region, with the panel's own polite status node beside it. A re-price is announced once, by
+ * that node and as the basket's new total on its own, so the announcement states what changed instead of
+ * reading every row out again and never moves the focus the shopper is using.
+ *
+ * The amounts are a definition list: each row states its label as the term and its formatted figure as the
+ * definition, so the two are one pair to a reader who cannot see the column's alignment rather than two loose
+ * runs of text. The free-delivery band the rows open with is not a pair and rides inside the same list, which
+ * is the element carrying the rhythm, so neither the spacing nor the announcement changed with the structure.
  *
  * @param props - The priced basket, the request's lifecycle and the retry the failure state offers.
  * @returns The summary panel.
@@ -261,6 +270,16 @@ export function CartSummary({
   );
 
   const isLoading = status === "loading";
+  // The one figure a cart change moves, and the whole of what the panel announces: a new quantity, a code or
+  // a delivery method moves the total, while every row around it says the same thing again. A price in flight
+  // and a price that failed both leave the priced cart null, so nothing is stated until a total exists.
+  const totalAnnouncement =
+    pricedCart === null
+      ? ""
+      : `${CART_COPY.SUMMARY_TOTAL_LABEL} ${formatMoney(
+          pricedCart.grandTotalMinor,
+          pricedCart.currency,
+        )}`;
 
   const changeCode = (event: ChangeEvent<HTMLInputElement>): void => {
     setCode(event.target.value);
@@ -270,8 +289,9 @@ export function CartSummary({
 
   const checkPromoCode = async (): Promise<void> => {
     // A code is matched case-insensitively while its accepted shape is upper-case, so what a shopper typed
-    // is normalised before anything judges it.
-    const normalised = code.trim().toUpperCase();
+    // is normalised before anything judges it — through the rule's one home, which the request that
+    // validates and prices the code is handed as well.
+    const normalised = normalisePromoCode(code) ?? "";
     setFieldErrors({});
     setNotice(null);
     const shapeErrors = validatePromoCodeShape(normalised);
@@ -332,7 +352,7 @@ export function CartSummary({
   return (
     <Card aria-labelledby={headingId} as="section" className="sp-summary">
       <h2 className="sp-summary__title" id={headingId}>
-        {CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING}
+        {CART_COPY.SUMMARY_HEADING}
       </h2>
       <form className="sp-summary__promo" noValidate onSubmit={handleSubmit}>
         <Input
@@ -350,8 +370,15 @@ export function CartSummary({
         </Button>
         {notice === null ? null : <Alert tone="warning">{notice}</Alert>}
       </form>
-      <div aria-atomic="true" aria-busy={isLoading} aria-live="polite" className="sp-stack">
-        {renderFigures()}
+      <div aria-busy={isLoading}>{renderFigures()}</div>
+      {/* Present from the first render and only ever given new text, because a live region inserted at the
+          moment of its own update is not announced reliably. It carries the one figure a cart change moves —
+          the basket's total — rather than the whole block, so a new quantity is announced as the total it
+          produced and not as the progress sentence, the subtotal, the delivery charge and the tax read out
+          again. It stays empty while the price is in flight and after it has failed, because there is no
+          total to state then and a failure announces itself through the alert's own `role="alert"`. */}
+      <div className="sp-visually-hidden" role="status">
+        {totalAnnouncement}
       </div>
     </Card>
   );

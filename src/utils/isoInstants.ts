@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/isoInstants.ts
- * Purpose: Parses ISO 8601 text into local instants and resolves a range into the bounds a scan compares.
- * Lines: 102
+ * Purpose: Parses ISO 8601 text into local instants, moves an instant by whole days or hours, and resolves a range into the bounds a scan compares.
+ * Lines: 110
  */
 
 import type { DateRange, IsoDateString } from "@/types/common";
@@ -67,6 +67,14 @@ export const startOfLocalDay = (date: Date): Date =>
 /** An instant moved by whole local days, across month, year and daylight-saving boundaries. */
 export const addDaysToDate = (date: Date, amount: number): Date =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount);
+/** An instant moved by whole local hours, positive or negative, taken on the clock this instant already
+ * names rather than as a millisecond count, so the hour a caller asks for is the hour it gets. The
+ * instant given is left as it was. */
+export const addHoursToDate = (date: Date, amount: number): Date => {
+  const at = new Date(date.getTime());
+  at.setHours(at.getHours() + amount);
+  return at;
+};
 
 // A range resolved once ---------------------------------------------------------------------------
 

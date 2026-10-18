@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CartContext.tsx
  * Purpose: Cart lines, promo code, persistence, mini-cart visibility and the clear the checkout dispatches
- * Lines: 384
+ * Lines: 459
  */
 
 import {
@@ -38,12 +38,14 @@ import { readStored, writeStored } from "@/utils/storage";
  * What a consumer reads from the cart.
  *
  * This is the cart's state as the rest of the product sees it: the lines the shopper built, the
- * promo code they applied, when the cart last changed, and whether the mini-cart drawer is open.
- * Nothing here is derived — not the item count, not a line total, not a free-shipping shortfall —
- * because a count or an amount kept beside the lines it describes is a second answer to a question
- * the lines already answer, and the two drift apart. `src/features/cart/cartSelectors.ts` computes
- * what the cart surfaces display and `src/lib/pricingService.ts` produces every money total, both
- * from these lines.
+ * promo code they applied, and when the cart last changed. Nothing here is derived — not the item
+ * count, not a line total, not a free-shipping shortfall — because a count or an amount kept beside
+ * the lines it describes is a second answer to a question the lines already answer, and the two
+ * drift apart. `src/features/cart/cartSelectors.ts` computes what the cart surfaces display and
+ * `src/lib/pricingService.ts` produces every money total, both from these lines.
+ *
+ * Whether the mini-cart drawer is open is deliberately not a member: it travels in a context of its
+ * own, read through `useMiniCartOpen()`, so a toggle of it cannot re-render a consumer of the lines.
  */
 export interface CartView {
   /** The lines the shopper built, in the order they were added to, and never two for one product. */
@@ -52,12 +54,11 @@ export interface CartView {
   readonly promoCode: string | null;
   /** When the lines or the promo code last changed; unchanged by opening the mini-cart. */
   readonly updatedAt: IsoDateTimeString;
-  /** Whether the mini-cart drawer is open. Deliberately not persisted, so a reload starts closed. */
-  readonly isMiniCartOpen: boolean;
 }
 
 /**
- * Every change the cart accepts, one member each, stable across renders.
+ * Every change the cart accepts, one member each, stable across renders, together with the one read
+ * that lets a control see the lines without subscribing to them.
  *
  * A consumer receives this object in place of a reducer's `dispatch`, so the transitions the cart
  * supports are named rather than spelled out at each call site. Each member is a wrapped transition
@@ -66,11 +67,23 @@ export interface CartView {
  * promo code with the lines when the cart is cleared, and re-clamps restored lines. A caller can
  * therefore call `addItem` unconditionally and let the cart decide what that means.
  *
- * Every member is a `useCallback` over the stable `dispatch`, and the object holding them is
- * memoised, so a component that receives one as a prop or a dependency is not re-rendered merely
- * because the cart's provider rendered.
+ * Every member is a `useCallback` over the stable `dispatch` — or, for {@link CartActions.readLines},
+ * over a ref — and the object holding them is memoised, so a component that receives one as a prop or
+ * a dependency is not re-rendered merely because the cart's provider rendered.
  */
 export interface CartActions {
+  /**
+   * Reads the lines as they stand, without subscribing the caller to them.
+   *
+   * For a control whose activation needs the cart's current contents but whose rendering does not
+   * depend on the cart: the ceiling check a product card's quick add makes before it adds, and the
+   * same check on the product detail page. The value is read at the moment the control is activated,
+   * where reading the cart through `useCart()` would re-render that control — and with it the whole
+   * action row of every tile on screen — on every change to the cart.
+   *
+   * @returns The lines as they stand, in the order the shopper added them.
+   */
+  readLines(): readonly CartLine[];
   /**
    * Adds a product to the cart, one unit unless a quantity is given.
    *
@@ -132,10 +145,26 @@ const CartStateContext = createContext<CartView | null>(null);
  *
  * State and actions travel in two contexts on purpose. A component that only ever changes the cart —
  * the add button on a product card, the remove control on a line — reads this one, whose value is
- * memoised over stable callbacks, and is therefore not re-rendered when the lines change. One
- * context carrying both would re-render every such control on every quantity keystroke.
+ * memoised over stable callbacks, and is therefore not re-rendered when the lines change. It is also
+ * where a control reads the lines when only its activation needs them, through `readLines()`, without
+ * subscribing to them. One context carrying both would re-render every such control on every quantity
+ * keystroke.
  */
 const CartDispatchContext = createContext<CartActions | null>(null);
+
+/**
+ * Whether the mini-cart drawer is open, private to this module: consumers reach it through
+ * `useMiniCartOpen()`.
+ *
+ * The flag travels in a context of its own rather than beside the lines, because the two change for
+ * unrelated reasons and a context hands a new value to every one of its consumers whenever its own
+ * value changes. Toggling the drawer would otherwise re-render all of the cart's readers — the cart
+ * page, the summary, the add controls on a page of tiles — none of which displays the flag, while a
+ * change to the lines would re-render the two controls that do. The `null` default is the "no
+ * provider above this consumer" sentinel the other two contexts use, turned into an error by the hook
+ * rather than acting as a closed drawer that would hide a wiring mistake.
+ */
+const MiniCartContext = createContext<boolean | null>(null);
 
 // Hydration ------------------------------------------------------------------------------------
 
@@ -184,7 +213,10 @@ function isSameCartContent(current: Cart, candidate: Cart): boolean {
  *
  * The cart's state lives in the reducer and nowhere else: no component writes a line, and no other
  * provider keeps a copy of the lines. What this provider owns besides the state is the way the cart
- * survives a reload and whether the mini-cart drawer is open.
+ * survives a reload and whether the mini-cart drawer is open, and the two travel in different places
+ * on purpose: the state reaches its readers through `CartStateContext` and the drawer flag through
+ * `MiniCartContext`, rendered outermost, so opening or closing the drawer re-renders the controls
+ * that display the flag and nothing that reads the lines.
  *
  * Hydration happens once, in the reducer's lazy initialiser, so the stored cart is read before the
  * first render rather than arriving in an effect a frame later: the header's cart badge and the
@@ -199,7 +231,8 @@ function isSameCartContent(current: Cart, candidate: Cart): boolean {
  * back to.
  *
  * @param props.children - The subtree that may read the cart and dispatch its actions.
- * @returns The two providers, state outermost, wrapping the subtree.
+ * @returns The three providers — the drawer flag outermost, the lines within it, the actions
+ *   innermost — wrapping the subtree.
  */
 export function CartProvider({ children }: { children: ReactNode }): ReactElement {
   const [state, dispatch] = useReducer(cartReducer, undefined, hydrateCartState);
@@ -229,6 +262,21 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
     // costs the shopper the cart on their next reload and nothing before it.
     writeStored(STORAGE_KEYS.CART, cart);
   }, [state]);
+
+  /**
+   * The lines as the actions see them, kept in a ref so a reader of them can be stable.
+   *
+   * This is what lets `readLines` hand back the lines without subscribing its caller to them, which a
+   * `useCallback` that closed over the state could not do: such a callback would change identity on
+   * every change to the cart, and a changed identity re-renders every consumer of the actions — the
+   * re-render the split contexts exist to avoid. Kept current by an effect rather than during render,
+   * so no render writes it, the rule `react-hooks/refs` enforces and the one
+   * `src/state/AuthContext.tsx` follows for its own state ref.
+   */
+  const linesRef = useRef<readonly CartLine[]>(state.lines);
+  useEffect(() => {
+    linesRef.current = state.lines;
+  }, [state.lines]);
 
   const addItem = useCallback(
     (product: Product, quantity: number = 1): void => {
@@ -281,6 +329,8 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
     [dispatch],
   );
 
+  const readLines = useCallback((): readonly CartLine[] => linesRef.current, []);
+
   const openMiniCart = useCallback((): void => {
     setIsMiniCartOpen(true);
   }, []);
@@ -297,6 +347,7 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
 
   const actions = useMemo<CartActions>(
     () => ({
+      readLines,
       addItem,
       updateQuantity,
       removeItem,
@@ -309,6 +360,7 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
       toggleMiniCart,
     }),
     [
+      readLines,
       addItem,
       updateQuantity,
       removeItem,
@@ -327,30 +379,33 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
       lines: state.lines,
       promoCode: state.promoCode,
       updatedAt: state.updatedAt,
-      isMiniCartOpen,
     }),
-    [state.lines, state.promoCode, state.updatedAt, isMiniCartOpen],
+    [state.lines, state.promoCode, state.updatedAt],
   );
 
   return (
-    <CartStateContext value={value}>
-      <CartDispatchContext value={actions}>{children}</CartDispatchContext>
-    </CartStateContext>
+    <MiniCartContext value={isMiniCartOpen}>
+      <CartStateContext value={value}>
+        <CartDispatchContext value={actions}>{children}</CartDispatchContext>
+      </CartStateContext>
+    </MiniCartContext>
   );
 }
 
 // Consumer hooks -------------------------------------------------------------------------------
 
 /**
- * Reads the cart: its lines, the promo code applied, when it last changed and whether the mini-cart
- * is open.
+ * Reads the cart: its lines, the promo code applied and when it last changed.
  *
  * Returns the provider's memoised value, so every consumer receives the same object while nothing
- * about the cart changed and an unrelated parent render does not re-render a consumer. The value
- * carries the drawer flag beside the lines, so opening or closing the drawer does hand consumers a
- * new value and re-render a component that reads the cart through this hook. What keeps a memoised
- * child out of that render is receiving `lines` — whose identity does not change with the drawer —
- * as a prop instead of reading the cart itself.
+ * about the cart changed and an unrelated parent render does not re-render a consumer. The drawer flag
+ * is not part of it — `useMiniCartOpen()` reads that on its own — so opening or closing the drawer
+ * hands no consumer of this hook a new value, and a cart change reaches exactly the components that
+ * display the cart.
+ *
+ * A control that needs the lines only when it is activated rather than on every render — the ceiling
+ * check behind an add button — reads them through `useCartDispatch()`'s `readLines()` instead, so it
+ * is not re-rendered by a change to the cart at all.
  *
  * @returns The cart state as `CartView`.
  * @throws When called above every `CartProvider` — an application wiring mistake, not a state a
@@ -362,6 +417,26 @@ export function useCart(): CartView {
     throw new Error("useCart must be called from a component within a CartProvider.");
   }
   return value;
+}
+
+/**
+ * Reads whether the mini-cart drawer is open.
+ *
+ * The flag is not a member of `useCart()` because the two change for unrelated reasons and a consumer
+ * of one must not be re-rendered by the other: the lines are displayed by every cart surface, while
+ * the flag is displayed by the header's cart trigger and the drawer itself, which are the two
+ * components this hook re-renders when the shopper opens or closes the drawer.
+ *
+ * @returns Whether the mini-cart drawer is open.
+ * @throws When called above every `CartProvider` — an application wiring mistake, not a state a
+ *   visitor can reach — naming the missing provider.
+ */
+export function useMiniCartOpen(): boolean {
+  const isOpen = useContext(MiniCartContext);
+  if (isOpen === null) {
+    throw new Error("useMiniCartOpen must be called from a component within a CartProvider.");
+  }
+  return isOpen;
 }
 
 /**

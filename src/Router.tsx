@@ -1,7 +1,7 @@
 /**
  * Path: src/Router.tsx
  * Purpose: The route table with lazy slices, role guards, the suspension boundary and the not-found view
- * Lines: 399
+ * Lines: 393
  */
 
 import { Suspense, lazy, useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router
 import { ButtonGroup } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { A11Y_COPY, HEADER_COPY, NOT_FOUND_COPY } from "@/constants/content";
-import { ROUTES, loginPath } from "@/constants/routes";
+import { ROUTES, SECTION_ROLES, loginPath } from "@/constants/routes";
 import { useAuth } from "@/state/AuthContext";
 import type { Role } from "@/types/account";
 
@@ -21,9 +21,11 @@ import type { Role } from "@/types/account";
  *
  * It owns the route table: one `Route` per destination, each element bound lazily to the feature slice that
  * renders that screen; the two guarded sections — `/account/*` admits a customer or an administrator, and
- * `/admin/*` admits an administrator alone; and the catch-all that renders the not-found view composed
- * below. Every path here comes from `src/constants/routes.ts`, so a route string is written once in the
- * product and this table, the navigation and the path builders cannot drift apart.
+ * `/admin/*` admits an administrator alone, each list read from `SECTION_ROLES` in
+ * `src/constants/routes.ts`, which is where the role-to-section policy has its one home; and the catch-all
+ * that renders the not-found view composed below. Every path here comes from the same module, so a route
+ * string is written once in the product and this table, the navigation and the path builders cannot drift
+ * apart.
  *
  * No router is rendered here. `src/main.tsx` owns the application's `BrowserRouter` and
  * `tests/testUtils.tsx` supplies a `MemoryRouter` to the tests that render a routed screen, so this module
@@ -139,18 +141,7 @@ const ReportsPage = lazy(async () => ({
   default: (await import("@/features/reports/ReportsPage")).ReportsPage,
 }));
 
-// Guarded sections --------------------------------------------------------------------------------
-
-/**
- * The roles `/account/*` admits: the customer's own area, which an administrator may also read — the
- * account navigation adds the administrator's entries for exactly that reason.
- */
-const ACCOUNT_ROLES: readonly Role[] = ["customer", "admin"];
-
-/**
- * The role `/admin/*` admits, and no other: the dashboard and the reports read every customer's orders.
- */
-const ADMIN_ROLES: readonly Role[] = ["admin"];
+// Guarded sections and the paths nested under them ------------------------------------------------
 
 /**
  * The part of a route's path below its section root, which is the relative form a nested `Route` declares.
@@ -222,8 +213,8 @@ function useSessionSettled(): boolean {
 /** Everything {@link RequireRole} accepts. */
 interface RequireRoleProps {
   /**
-   * The roles the section admits, as a list from the guards' own declarations above. A session holding any
-   * other role is sent to sign-in with the path it asked for.
+   * The roles the section admits, as one of the two lists `SECTION_ROLES` in `src/constants/routes.ts`
+   * declares. A session holding any other role is sent to sign-in with the path it asked for.
    */
   readonly allow: readonly Role[];
 }
@@ -235,9 +226,12 @@ interface RequireRoleProps {
  * first answer has not arrived, and otherwise turns the visitor away to sign-in carrying the path they
  * wanted in `returnTo` — the query key `LoginPage` and `RegisterPage` read to continue to it once the
  * session is established. A role that is insufficient is treated exactly like a missing session, because
- * the two ask the visitor for the same thing and neither is a case for a screen of its own; the customer
- * who is refused `/admin` therefore lands on a sign-in screen that can sign them in as an administrator,
- * and one who is already signed in as a customer is offered the way back into their own account there.
+ * the two ask the visitor for the same thing and a screen of the guard's own would duplicate the sign-in
+ * route's. What the two cases then get differs, and `LoginPage` is where they part: a visitor with no
+ * session arrives at the form and is sent on to the preserved path once they sign in, while one who is
+ * already signed in as a customer is told that their role is what refuses them — the question that screen
+ * asks of the preserved path is `canReachPath` in `src/constants/routes.ts` — and is offered the account
+ * and the sign-out that can answer it.
  *
  * A session in force is judged on its role alone and renders its subtree whatever the context's status is,
  * so an action in flight — a profile save, a sign-out elsewhere — cannot blank a screen the visitor is
@@ -375,7 +369,7 @@ export function AppRoutes(): ReactElement {
 
         {/* The customer's own area: one guard and one shell, with the three views nested inside it so the
             shell survives a move between them. */}
-        <Route element={<RequireRole allow={ACCOUNT_ROLES} />}>
+        <Route element={<RequireRole allow={SECTION_ROLES.ACCOUNT} />}>
           <Route path={ROUTES.ACCOUNT} element={<AccountLayout />}>
             <Route index element={<ProfilePage />} />
             <Route path={ACCOUNT_SECTIONS.ORDERS} element={<OrderHistoryPage />} />
@@ -386,7 +380,7 @@ export function AppRoutes(): ReactElement {
 
         {/* The administrator's area: its own guard, because reports and analytics read every customer's
             orders rather than the session's own. */}
-        <Route element={<RequireRole allow={ADMIN_ROLES} />}>
+        <Route element={<RequireRole allow={SECTION_ROLES.ADMIN} />}>
           <Route path={ROUTES.ADMIN} element={<AdminDashboardPage />} />
           <Route path={ROUTES.ADMIN_REPORTS} element={<ReportsPage />} />
         </Route>

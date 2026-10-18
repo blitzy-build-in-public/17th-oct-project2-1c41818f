@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 276
+ * Lines: 289
  */
 
 import { useCallback } from "react";
@@ -96,6 +96,18 @@ const SENTENCE_SEPARATOR = ". ";
  * for a chart frame so a series in flight shifts nothing when it lands.
  */
 const CHART_SKELETON_HEIGHT = "calc(var(--space-20) * 2)";
+
+/**
+ * The chart's legend totals, keyed by series id. Only one of the report's two charted counts adds up: the
+ * accounts a period wins are disjoint from another period's, so `newCustomers` states its total, while
+ * `returningCustomers` counts the customers who ordered in a period without being created in it — the same
+ * customer, then, in every period they ordered in — so its periods must not be added together. That is the
+ * caveat `summarise` in `src/lib/reportService.ts` states when it leaves the column out of the report's
+ * totals, and the reason the table's totals cell and the export's totals row state nothing for it either.
+ * The legend states no figure for it for that same reason, so the chart's reading of the column and the
+ * paired table's reading of it agree.
+ */
+const LEGEND_TOTALS: Readonly<Record<string, boolean>> = { returningCustomers: false };
 
 /** How many table rows the loading placeholder stands in for: enough to hold a report's shape while it runs. */
 const PLACEHOLDER_ROWS = 4;
@@ -253,14 +265,18 @@ export function CustomerReport({ range, granularity }: CustomerReportProps): Rea
           </div>
         ))}
       </dl>
+      {/* The bands are periods, which is what the definition's first column holds, so the chart's paired
+          table names that column with the report's own word for it rather than an empty heading. */}
       <BarChart
         series={result.series}
         title={REPORTS_COPY.CUSTOMER_CHART_HEADING}
         description={definition.description}
+        labelHeader={definition.columns[0].label}
         footer={<p className={CLASSES.rangeNote}>{periodNote(from, to)}</p>}
         formatValue={formatInteger}
         formatAxisValue={formatCompactNumber}
         formatLabel={formatBandLabel}
+        legendTotals={LEGEND_TOTALS}
         emptyMessage={EMPTY_STATES.reportRange.title}
       />
       <ReportTable

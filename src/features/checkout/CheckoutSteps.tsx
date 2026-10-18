@@ -1,10 +1,9 @@
 /**
  * Path: src/features/checkout/CheckoutSteps.tsx
  * Purpose: The ordered step indicator with aria-current and per-step headings
- * Lines: 249
+ * Lines: 220
  */
 
-import { useEffect, useRef } from "react";
 import type { ReactElement } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -164,35 +163,20 @@ export interface CheckoutStepsProps {
  * filled disc and tick, and by the hidden status wording `stepIndicatorStatusLabel` words — so
  * nothing here rests on colour, and a greyscale rendering reads the same sequence.
  *
- * It holds no state: the current step arrives as a prop and the completed run is derived from it on
- * every render. Its one effect answers a return control, which the step change it asks for unmounts —
- * the control is drawn only for a completed step while the form flow is live — by handing the focus it held to the marker of the
- * step that just became current, so the keyboard is not dropped back at the top of the document. It
- * reads no context, because the step it needs is one the route already holds, and it never advances
- * or submits the checkout — those are the checkout context's transitions, run from the step's own
- * actions.
+ * It holds no state and runs no effect: the current step arrives as a prop and the completed run is
+ * derived from it on every render. Announcing a step change belongs to the step shell in
+ * `src/features/checkout/CheckoutPage.tsx`, which owns the new step's heading and moves the keyboard to
+ * it — the return control here is unmounted by the very move it asks for, so a hand-off of its own would
+ * be a second announcement of one change, onto a marker rather than onto the step's own words. This
+ * indicator only requests the move. It reads no context, because the step it needs is one the route
+ * already holds, and it never advances or submits the checkout — those are the checkout context's
+ * transitions, run from the step's own actions.
  *
  * @param props - The current step and the optional return handler.
  * @returns The ordered step list.
  */
 export function CheckoutSteps({ currentStep, onStepSelect }: CheckoutStepsProps): ReactElement {
   const lastStep = CHECKOUT_FORM_STEPS[CHECKOUT_FORM_STEPS.length - 1];
-  const markerRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  // The step a return control was activated for. The effect below hands the focus to that step's
-  // marker once the step change it asked for has rendered, because the control itself leaves the
-  // document with that change. Written from the handler and read in the effect, never during render.
-  const pendingStepRef = useRef<CheckoutFormStep | null>(null);
-
-  useEffect(() => {
-    const pending = pendingStepRef.current;
-    // A run whose rendered step is not the one the control asked for leaves the hand-off pending, so the
-    // effect that follows the matching step change still finds it.
-    if (pending === null || pending !== currentStep) return;
-    // The step is marked current by the render that follows the change, so its marker can take focus; the
-    // pending value is consumed here alone, on the run that rendered that step.
-    pendingStepRef.current = null;
-    markerRefs.current[CHECKOUT_FORM_STEPS.indexOf(pending)]?.focus();
-  }, [currentStep]);
 
   /**
    * Whether the shopper still has a step to work on. A return control follows the reducer's own
@@ -214,24 +198,11 @@ export function CheckoutSteps({ currentStep, onStepSelect }: CheckoutStepsProps)
             className={ITEM_CLASSES[status]}
             aria-current={status === "current" ? "true" : undefined}
           >
-            <span
-              className="sp-steps__marker"
-              ref={(element) => {
-                markerRefs.current[position] = element;
-              }}
-              tabIndex={status === "current" ? -1 : undefined}
-            >
+            <span className="sp-steps__marker">
               {status === "completed" ? <CompletedTick /> : position + 1}
             </span>
             {isReturnable ? (
-              <Button
-                variant="link"
-                className="sp-steps__label"
-                onClick={() => {
-                  pendingStepRef.current = step;
-                  onStepSelect(step);
-                }}
-              >
+              <Button variant="link" className="sp-steps__label" onClick={() => onStepSelect(step)}>
                 {CHECKOUT_STEP_TITLES[position]}
               </Button>
             ) : (

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutPage.tsx
  * Purpose: The checkout route: step indicator, the current step's view and the order summary panel
- * Lines: 592
+ * Lines: 398
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -9,23 +9,18 @@ import type { ReactElement } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import {
-  CART_COPY,
   CHECKOUT_COPY,
-  COMMON_ACTIONS,
   PAGE_TITLES,
-  appliedPromoLabel,
-  cartItemCountLabel,
   documentTitle,
   errorSummaryFieldAnchor,
-  freeShippingProgressLabel,
   stepProgressLabel,
 } from "@/constants/content";
 import { ROUTES, orderConfirmationPath } from "@/constants/routes";
 import { CheckoutSteps, checkoutStepCopy } from "@/features/checkout/CheckoutSteps";
 import type { CheckoutFormStep } from "@/features/checkout/CheckoutSteps";
+import { OrderSummaryPanel } from "@/features/checkout/OrderSummaryPanel";
 import { PaymentForm } from "@/features/checkout/PaymentForm";
 import { ReviewOrder } from "@/features/checkout/ReviewOrder";
 import { ShippingForm } from "@/features/checkout/ShippingForm";
@@ -34,9 +29,8 @@ import { useCheckout } from "@/state/CheckoutContext";
 import { CHECKOUT_FORM_STEPS } from "@/state/checkoutReducer";
 import type { CheckoutStep } from "@/state/checkoutReducer";
 import { useDocumentTitle } from "@/state/hooks";
-import type { ApiError, AsyncStatus, FieldErrors } from "@/types/common";
-import type { PricedCart } from "@/types/commerce";
-import { formatFreeShippingRemaining, formatMoney } from "@/utils/format";
+import { useScrollToTop } from "@/state/scrollHooks";
+import type { FieldErrors } from "@/types/common";
 
 /*
  * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
@@ -44,11 +38,10 @@ import { formatFreeShippingRemaining, formatMoney } from "@/utils/format";
  * file.
  *
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in, `sp-page`
- * the column of blocks at one rhythm, `sp-page__body` the region the route's own content lands in, `sp-split`
- * the frame whose aside track is `--layout-aside-width` from the large stop, and `sp-stack` the rhythm the
- * summary's figures sit in. `src/styles/commerce.css` owns the checkout's register: `sp-checkout` widens that
- * frame's row gap, `sp-checkout__main` narrows the step column and `sp-checkout__aside` is the summary column,
- * sticky below the header from the large stop.
+ * the column of blocks at one rhythm, `sp-page__body` the region the route's own content lands in, and
+ * `sp-split` the frame whose aside track is `--layout-aside-width` from the large stop. `src/styles/commerce.css`
+ * owns the checkout's register: `sp-checkout` widens that frame's row gap, `sp-checkout__main` narrows the step
+ * column and `sp-checkout__aside` is the summary column, sticky below the header from the large stop.
  *
  * The step shell is `sp-step` for the region, with `sp-step__header`, `sp-step__title`, `sp-step__count` and
  * `sp-step__errors` for the heading block and the summary of what is wrong, and `sp-step__body` for the region
@@ -56,10 +49,9 @@ import { formatFreeShippingRemaining, formatMoney } from "@/utils/format";
  * the one the sheet dims and closes to the pointer while the shell is `aria-busy`. Each step's action row is
  * `sp-step__actions`, rendered by that step's own file, and the indicator is `CheckoutSteps`' family.
  *
- * The order summary panel is `sp-summary` with `sp-summary__title`, the `sp-summary__row` register and its
- * `--discount` and `--total` modifiers, `sp-summary__note` and `sp-summary__progress-label`: the panel
- * register the cart's own summary draws, which is why this panel is a `Card` carrying that class rather than a
- * card of its own.
+ * The order summary panel the aside renders is `OrderSummaryPanel.tsx`'s, and that file's own comment holds its
+ * class contract. Of that register this file carries one class: `sp-summary__note`, the caption the step's
+ * supporting line is painted in, which is why the table below keeps `note`.
  */
 
 /** The classes this route puts on the page, written once so a rename is one edit. */
@@ -70,37 +62,17 @@ const CLASSES = {
   frame: "sp-checkout sp-split",
   main: "sp-checkout__main",
   aside: "sp-checkout__aside",
-  stack: "sp-stack",
   step: "sp-step",
   stepHeader: "sp-step__header",
   stepTitle: "sp-step__title",
   stepCount: "sp-step__count",
   stepErrors: "sp-step__errors",
   stepBody: "sp-step__body",
-  summary: "sp-summary",
-  summaryTitle: "sp-summary__title",
-  row: "sp-summary__row",
   note: "sp-summary__note",
-  progressLabel: "sp-summary__progress-label",
 } as const;
-
-/**
- * The sign a saving carries before its amount: the summary register paints the value in its success pair and
- * leaves the sign to the markup.
- */
-const DISCOUNT_SIGN = "−";
 
 /** The separator between a field and the group it sits in inside the flow's error map: `billing.city`. */
 const FIELD_QUALIFIER_SEPARATOR = ".";
-
-/** The two registers an amount row carries beyond the plain one, as the summary sheet names its modifiers. */
-const ROW_MODIFIER_CLASSES = {
-  discount: `${CLASSES.row} sp-summary__row--discount`,
-  total: `${CLASSES.row} sp-summary__row--total`,
-} as const;
-
-/** The register an amount row is painted in. */
-type RowModifier = keyof typeof ROW_MODIFIER_CLASSES;
 
 // Reading the step ------------------------------------------------------------------------------
 
@@ -173,28 +145,6 @@ function StepPlaceholder(): ReactElement {
   );
 }
 
-/** Everything {@link PricingFailure} renders from. */
-interface PricingFailureProps {
-  /** The failure the price request answered with. */
-  readonly error: ApiError;
-  /** Asks for the figures again, through the flow's own pass. */
-  readonly onRetry: () => void;
-}
-
-/**
- * The state a failed price request shows where the figures would be: the failure the seam shaped, in the danger
- * register, with the retry that asks for them again. No `try`/`catch` surrounds the request, because the seam
- * reports failures as values and the flow already holds the one it received.
- *
- * @param props - The failure and the retry.
- * @returns The failure with its retry action.
- */
-function PricingFailure({ error, onRetry }: PricingFailureProps): ReactElement {
-  return (
-    <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={onRetry} tone="danger" />
-  );
-}
-
 /** Everything {@link ErrorSummary} renders from. */
 interface ErrorSummaryProps {
   /** What is wrong with the flow's values, keyed by the field each message belongs to. */
@@ -231,192 +181,6 @@ function ErrorSummary({ errors, onJumpToField }: ErrorSummaryProps): ReactElemen
         ))}
       </ul>
     </Alert>
-  );
-}
-
-// The order summary panel -----------------------------------------------------------------------
-
-/** Everything {@link SummaryRow} renders from. */
-interface SummaryRowProps {
-  /** What the amount is, from the copy library. */
-  readonly label: string;
-  /** The amount, already formatted by `src/utils/format.ts`. */
-  readonly value: string;
-  /** The register the row is painted in: a saving, or the total. */
-  readonly modifier?: RowModifier;
-}
-
-/**
- * One amount row: what it is on the leading edge and the figure on the trailing one. The row holds no figure of
- * its own — the amount arrives formatted — so no row can drift from the others.
- *
- * @param props - The row's label, its formatted amount and the register it sits in.
- * @returns The row.
- */
-function SummaryRow({ label, value, modifier }: SummaryRowProps): ReactElement {
-  const className = modifier === undefined ? CLASSES.row : ROW_MODIFIER_CLASSES[modifier];
-
-  return (
-    <div className={className}>
-      <span>{label}</span>
-      <span>{value}</span>
-    </div>
-  );
-}
-
-/**
- * The basket's amounts and the state of its delivery, read from the priced cart the flow holds.
- *
- * Nothing is added up: every figure is the one `src/lib/pricingService.ts` computed, which keeps the cart, the
- * checkout steps, this panel and a placed order from disagreeing about one basket. The delivery row states a
- * charge only once a method has been chosen, because until then the basket is priced against the fallback
- * method and that figure is not a quote the shopper has been given. The saving row appears only where a
- * discount was taken, and the codes that earned it are named beneath the figures.
- *
- * @param props - The priced basket.
- * @returns The item count, the free-delivery note and the amount rows.
- */
-function SummaryRows({ snapshot }: { readonly snapshot: PricedCart }): ReactElement {
-  const {
-    appliedPromos,
-    currency,
-    discountTotalMinor,
-    freeShippingRemainingMinor,
-    grandTotalMinor,
-    lines,
-    shippingMethodId,
-    shippingMinor,
-    subtotalMinor,
-    taxMinor,
-  } = snapshot;
-
-  return (
-    <>
-      <p className={CLASSES.note}>{cartItemCountLabel(lines.length)}</p>
-      {freeShippingRemainingMinor > 0 ? (
-        <p className={CLASSES.progressLabel}>
-          {freeShippingProgressLabel(
-            formatFreeShippingRemaining(freeShippingRemainingMinor, currency),
-          )}
-        </p>
-      ) : null}
-      <SummaryRow
-        label={CART_COPY.SUMMARY_SUBTOTAL_LABEL}
-        value={formatMoney(subtotalMinor, currency)}
-      />
-      {discountTotalMinor > 0 ? (
-        <SummaryRow
-          label={CART_COPY.SUMMARY_DISCOUNT_LABEL}
-          modifier="discount"
-          value={`${DISCOUNT_SIGN}${formatMoney(discountTotalMinor, currency)}`}
-        />
-      ) : null}
-      <SummaryRow
-        label={CART_COPY.SUMMARY_SHIPPING_LABEL}
-        value={
-          shippingMethodId === null
-            ? CART_COPY.SUMMARY_SHIPPING_AT_CHECKOUT_LABEL
-            : formatMoney(shippingMinor, currency)
-        }
-      />
-      <SummaryRow label={CART_COPY.SUMMARY_TAX_LABEL} value={formatMoney(taxMinor, currency)} />
-      <SummaryRow
-        label={CART_COPY.SUMMARY_TOTAL_LABEL}
-        modifier="total"
-        value={formatMoney(grandTotalMinor, currency)}
-      />
-      {appliedPromos.length === 0 ? null : (
-        <div className={CLASSES.note}>
-          {appliedPromos.map((promo) => (
-            <p key={promo.code}>{appliedPromoLabel(promo.code)}</p>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-/** The figures' own placeholder, for the window between arriving at the route and the first quote. */
-function SummaryPlaceholder(): ReactElement {
-  return (
-    <>
-      <Skeleton variant="text" />
-      <Skeleton variant="row" />
-      <Skeleton variant="row" />
-      <Skeleton variant="row" />
-    </>
-  );
-}
-
-/** Everything {@link OrderSummaryPanel} renders from. */
-interface OrderSummaryPanelProps {
-  /** The priced cart the flow holds, or `null` before this basket has been priced. */
-  readonly snapshot: PricedCart | null;
-  /** Where the last price request stands, which decides whether the figures are being waited on. */
-  readonly status: AsyncStatus;
-  /** The failure the last price request answered with, or `null`. */
-  readonly error: ApiError | null;
-  /**
-   * Whether the step in hand reports the price request inside its own body, which the review step does: it
-   * stands its own placeholder and its own failure with a retry in, so the report reaches the shopper once.
-   */
-  readonly isReportedByStep: boolean;
-  /** Asks the flow for the basket's figures again, for the failure's retry. */
-  readonly onRetry: () => void;
-}
-
-/**
- * What the panel states where the figures go: the failure with its retry where the panel owns the report, the
- * placeholder while no figures exist, and the amounts once they do. A failure the step in hand reports itself
- * leaves the panel its placeholder, because the failure and its retry are stated inches away by that step.
- *
- * @param props - The priced cart, the request's lifecycle and the step's own claim on the report.
- * @returns The failure, the placeholder or the amounts.
- */
-function summaryBody(props: OrderSummaryPanelProps): ReactElement {
-  if (props.error !== null) {
-    return props.isReportedByStep ? (
-      <SummaryPlaceholder />
-    ) : (
-      <PricingFailure error={props.error} onRetry={props.onRetry} />
-    );
-  }
-  return props.snapshot === null ? (
-    <SummaryPlaceholder />
-  ) : (
-    <SummaryRows snapshot={props.snapshot} />
-  );
-}
-
-/**
- * The order summary panel beside the steps: what the basket comes to, from the priced cart the flow holds.
- *
- * It restates and it computes nothing — no subtotal, no discount, no delivery charge, no total and no
- * free-delivery threshold. Every figure arrives already priced, and this is where each one is formatted. The
- * heading stands whatever the price request is doing, so the shopper always has the panel the figures will
- * land in, and the figures sit in a polite live region: a re-price is announced once, without moving the focus
- * the shopper is using.
- *
- * @param props - The priced cart, the request's lifecycle, the step's own claim on the report and the retry.
- * @returns The summary panel.
- */
-function OrderSummaryPanel(props: OrderSummaryPanelProps): ReactElement {
-  const headingId = useId();
-
-  return (
-    <Card aria-labelledby={headingId} as="section" className={CLASSES.summary}>
-      <h2 className={CLASSES.summaryTitle} id={headingId}>
-        {CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING}
-      </h2>
-      <div
-        aria-atomic="true"
-        aria-busy={props.status === "loading"}
-        aria-live="polite"
-        className={CLASSES.stack}
-      >
-        {summaryBody(props)}
-      </div>
-    </Card>
   );
 }
 
@@ -461,6 +225,15 @@ export function CheckoutPage(): ReactElement {
    */
   const stepBodyRef = useRef<HTMLDivElement>(null);
 
+  /** The step's own heading: where a step change moves the keyboard, and what states which step is in hand. */
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  /** The step already announced, so the step this page opened on is not treated as a change to announce. */
+  const announcedStepRef = useRef<CheckoutStep>(step);
+
+  /** Names the step's position in the flow, so focusing its heading reports where in the flow it stands. */
+  const stepCountId = useId();
+
   /** The checkout cannot proceed without lines, and the cart is emptied the moment an order is placed — so an
    *  empty basket here is one the shopper arrived with, never the aftermath of their own order. */
   const isCartEmpty = lines.length === 0 && order === null;
@@ -478,14 +251,40 @@ export function CheckoutPage(): ReactElement {
   useDocumentTitle(documentTitle(isCartEmpty ? PAGE_TITLES.CHECKOUT : pageTitle(step)));
 
   /*
-   * A placed order belongs to the confirmation route, which reads it by its identifier from the path and
-   * survives a reload; this route's copy of it is a courtesy, not the source. The move is a replace, so Back
-   * returns to the cart or the catalogue rather than into a checkout that has already been completed.
+   * The view follows the flow rather than the step before it: a step change opens at the step's own top, so
+   * its indicator, its heading and the summary of what is wrong above it are on screen. The value that names
+   * the view is the flow's own `step`, so a return to an earlier step lands there the same way.
    */
+  useScrollToTop(step);
+
+  /*
+   * A step change is announced once, from the step shell, because the control the shopper pressed leaves the
+   * document with the advance: without the move below the keyboard falls back to the document body, and nothing
+   * says which step is now on screen. The keyboard goes to the step's own heading — the element that names the
+   * step — and `aria-describedby` carries its position in the flow alongside it, so one focus move announces
+   * both what the step is and where it stands. The move takes no scroll with it: where the view sits is the
+   * scroll above's decision, taken for this same step, and a focus-driven scroll would undo it.
+   *
+   * The step the page opened on is not a change, so the run that mounts moves nothing, and the confirmation —
+   * where the flow places the order and this route hands over — has no heading of its own to move to, which the
+   * optional read covers.
+   */
+  useEffect(() => {
+    const announced = announcedStepRef.current;
+    announcedStepRef.current = step;
+    if (announced === step) return;
+    stepHeadingRef.current?.focus({ preventScroll: true });
+  }, [step]);
+
+  /* A placed order belongs to the confirmation route, which reads it by its identifier and survives a
+   * reload, so this route's copy of it is a courtesy, not the source — and `reset`, the flow's one return to
+   * a fresh first step, gives that copy up here, because a copy kept in a flow mounted for the whole document
+   * would send every later entry to /checkout to the old confirmation, never to a second basket. */
   useEffect(() => {
     if (order === null) return;
     void navigate(orderConfirmationPath(order.id), { replace: true });
-  }, [navigate, order]);
+    actions.reset();
+  }, [actions, navigate, order]);
 
   /**
    * Returns to an earlier step, which the flow performs and the reducer refuses for any move but a return: the
@@ -556,8 +355,15 @@ export function CheckoutPage(): ReactElement {
         <div aria-busy={isStepRegionBusy} className={CLASSES.step}>
           {form === null ? null : (
             <div className={CLASSES.stepHeader}>
-              <h2 className={CLASSES.stepTitle}>{form.copy.heading}</h2>
-              <p className={CLASSES.stepCount}>
+              <h2
+                aria-describedby={stepCountId}
+                className={CLASSES.stepTitle}
+                ref={stepHeadingRef}
+                tabIndex={-1}
+              >
+                {form.copy.heading}
+              </h2>
+              <p className={CLASSES.stepCount} id={stepCountId}>
                 {stepProgressLabel(form.position, CHECKOUT_FORM_STEPS.length)}
               </p>
               <p className={CLASSES.note}>{form.copy.supporting}</p>

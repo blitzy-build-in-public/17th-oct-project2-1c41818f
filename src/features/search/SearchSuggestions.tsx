@@ -8,7 +8,7 @@ import type { ReactElement } from "react";
 
 import { Alert, Spinner } from "@/components/ui/Feedback";
 import type { AlertProps } from "@/components/ui/Feedback";
-import { COMMON_ACTIONS, EMPTY_STATES, SEARCH_COPY } from "@/constants/content";
+import { COMMON_ACTIONS, SEARCH_COPY } from "@/constants/content";
 import { groupSuggestionsByKind, highlightSegments, tokenise } from "@/lib/searchService";
 import type { SearchLookup, SuggestionGroup } from "@/lib/searchService";
 import type { Product, SearchSuggestion, SuggestionKind } from "@/types/catalog";
@@ -27,9 +27,9 @@ import { formatDiscount, formatMoney, formatScaledPercent } from "@/utils/format
  * loading and empty states share. The listbox element itself carries no class: it needs only its id, its
  * role and its accessible name, and every group inside it is laid out by the sheet's own grid.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: no sheet declares a rule for `mark`, the element a matched run is marked
- * with, so it paints in the engine's own marking colour rather than in a token — a rule only the sheet
- * can add, since a class invented here or an inline style would put a value outside `tokens.css`.
+ * BLITZY [CONTRACT]: a matched run is marked with the `mark` element inside a row's item class, whose
+ * element default `src/styles/base.css` paints with the accent-subtle and accent-contrast tokens, so the
+ * marking colour reaches the document through `tokens.css` like every other value on this surface.
  *
  * BLITZY [BUDGET]: the concern reached 309 lines against its 270-line budget — the class contract, the
  * four data states, the ARIA wiring of a labelled listbox and the extraction of the option row — and
@@ -265,7 +265,7 @@ export function SearchSuggestions({
     return (
       <div className={panelClass}>
         <p className={CLASSES.empty} role="status">
-          {EMPTY_STATES.searchResults.title}
+          {SEARCH_COPY.SUGGESTIONS_EMPTY}
         </p>
       </div>
     );

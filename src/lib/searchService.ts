@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/searchService.ts
  * Purpose: Tokenising, weighted scoring and type-ahead suggestions for product search
- * Lines: 598
+ * Lines: 599
  */
 
 import { SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -28,7 +28,7 @@ import { normaliseForMatch } from "@/utils/strings";
  * The field weights of {@link scoreProduct}, highest first: the product's definition of relevance,
  * held as one named table rather than as literals scattered through the scorer.
  *
- * A field contributes its weight once per query token it holds, so a product matching two tokens
+ * A field contributes its weight once per query token it answers, so a product matching two tokens
  * outranks one matching a single token in the same field. The name is worth an order of magnitude
  * more than any other single field, and the summary — which every product has and which mentions
  * many words — is worth least, so a summary match can never outrank a name or a brand match.
@@ -36,15 +36,15 @@ import { normaliseForMatch } from "@/utils/strings";
 const MATCH_WEIGHT = {
   /** The product's whole name is the query: the shopper typed exactly this product's title. */
   NAME_EXACT: 1000,
-  /** A query token appears as a word of the product's name. */
+  /** A query token is a word of the product's name, or the opening of one. */
   NAME_TOKEN: 60,
-  /** A query token appears as a word of the product's brand name. */
+  /** A query token is a word of the product's brand name, or the opening of one. */
   BRAND_TOKEN: 30,
-  /** A query token appears as a word of the product's category name. */
+  /** A query token is a word of the product's category name, or the opening of one. */
   CATEGORY_TOKEN: 20,
-  /** A query token appears as a word of one of the product's tags. */
+  /** A query token is a word of one of the product's tags, or the opening of one. */
   TAG_TOKEN: 15,
-  /** A query token appears as a word of the product's summary. */
+  /** A query token is a word of the product's summary, or the opening of one. */
   SUMMARY_TOKEN: 5,
 } as const;
 
@@ -62,7 +62,7 @@ const MIN_TOKEN_LENGTH = 2;
 const SUGGESTION_TIER = {
   /** A product whose name begins with the query: the completion the shopper is reaching for. */
   PRODUCT_PREFIX: 0,
-  /** A product whose name holds a query token as a whole word, further into the name. */
+  /** A product whose name answers a query token further in rather than leading with the query. */
   PRODUCT_TOKEN: 1,
   /** A brand whose name matches. */
   BRAND: 2,
@@ -233,22 +233,22 @@ function nameMatchOf(text: string): NameMatch {
   return derived;
 }
 
-/** Whether `token` is one of `words`, compared as whole words so "desk" never matches "desktop". */
+/** Whether `words` answers `token`: a word that is the token, or one that begins with it, so a typed
+ *  prefix completes the longer word — "cam" answers "cameras" and "aur" answers "aurelia". */
 function holdsWord(words: readonly string[], token: string): boolean {
-  return words.includes(token);
+  return words.some((word) => word.startsWith(token));
 }
 
 /**
  * Whether a name *is* the query rather than merely containing part of it: the same number of words,
- * every one of them a query token.
+ * every one of them a query token, compared exactly rather than by {@link holdsWord}'s opening rule.
  *
- * The comparison is over normalised words, so the extra token in `"aurora desk lamp white"` keeps the
- * product off the exact-match tier while its name tokens still score it below that tier and above a
- * summary match.
+ * A token that is only the opening of a name word therefore earns that word's token weight instead,
+ * and the extra token in `"aurora desk lamp white"` still keeps the product off the exact-match tier.
  */
 function isExactName(nameWords: readonly string[], tokens: readonly string[]): boolean {
   if (tokens.length === 0 || nameWords.length !== tokens.length) return false;
-  return nameWords.every((word) => holdsWord(tokens, word));
+  return nameWords.every((word) => tokens.includes(word));
 }
 
 // Scoring ----------------------------------------------------------------------------------------
@@ -257,10 +257,10 @@ function isExactName(nameWords: readonly string[], tokens: readonly string[]): b
  * Scores one product against a query's tokens, by the weights in {@link MATCH_WEIGHT}.
  *
  * The relevance definition, in one place: an exact name match adds `NAME_EXACT` once, then every token
- * adds a field's weight each time it appears as a whole word in that field — the name, the brand name,
- * the category name, any tag, the summary. A product holding no token in any field scores `0`, which is
- * what {@link applyTextMatch} drops, and a blank token list scores `0` for every product, because an
- * absent query says nothing about any of them.
+ * adds a field's weight each time a word of that field answers it — the name, the brand name, the
+ * category name, any tag, the summary. A product that answers no token in any field scores `0`, which
+ * {@link applyTextMatch} drops, and a blank token list scores `0` for every product, because an absent
+ * query says nothing about any of them.
  *
  * Pure and deterministic: a sum of integers over the words {@link nameMatchOf} derived, so equal
  * inputs always score equal, and neither the product nor the lookup is mutated.
@@ -429,10 +429,11 @@ function bestRanked(candidates: readonly RankedSuggestion[], count: number): Ran
 /**
  * Builds the type-ahead list for a term typed so far: the products, brands and categories whose names
  * answer it, ranked best first and capped. A candidate is admitted when its name begins with the term
- * — how an unfinished word completes — or holds one of the term's tokens as a whole word, and carries
- * the keys it is ranked by from that one reading; repeated wording is dropped, one row per kind and
- * normalised text, the first kept; and the cap keeps the best {@link resolveSuggestionLimit} rows
- * without ordering the admitted set.
+ * — how an unfinished word completes — or answers one of the term's tokens, and carries the keys it is
+ * ranked by from that one reading; repeated wording is dropped, one row per kind and normalised text,
+ * the first kept; and the cap keeps the best {@link resolveSuggestionLimit} rows without ordering the
+ * admitted set. Every product it offers answers that term in the results listing too, because both
+ * surfaces match through {@link holdsWord}, so no suggestion leads to a results page with nothing on it.
  *
  * @param input - The collections, the term, the route builders and the cap.
  * @returns The suggestions, best first, at most the cap; empty for a term with no token.
@@ -488,12 +489,13 @@ export function groupSuggestionsByKind(
 
 /**
  * Splits a value into the runs a suggestion list or a results header highlights: each word a query
- * token matched, marked, and every run between the words, unmarked.
+ * token answers, marked, and every run between the words, unmarked.
  *
- * Matching reads the normalised word and highlighting keeps the original text, so a token that matched
- * a word marks exactly that word and the two can never disagree. Concatenating the segments reproduces
- * the value byte for byte — accents, case and punctuation included, because a segment is a slice of the
- * input rather than a rendering of its normalised form.
+ * Marking is {@link holdsWord}'s own rule, so matching and highlighting can never disagree: a token
+ * marks the word that is it or begins with it, and a prefix completion the scorer counted on a row is
+ * marked on that row. Concatenating the segments reproduces the value byte for byte — accents, case
+ * and punctuation included, because a segment is a slice of the input rather than a rendering of its
+ * normalised form.
  *
  * @param text - The value to segment.
  * @param tokens - The query's tokens, as {@link tokenise} produced them.
@@ -501,12 +503,11 @@ export function groupSuggestionsByKind(
  */
 export function highlightSegments(text: string, tokens: readonly string[]): SearchSegment[] {
   if (text === "") return [];
-  const wanted = new Set(tokens);
   const segments: SearchSegment[] = [];
   for (const part of text.split(WORD_SPLIT_PATTERN)) {
     if (part === "") continue;
-    const matched =
-      wanted.size > 0 && WORD_RUN_PATTERN.test(part) && wanted.has(normaliseForMatch(part));
+    const word = WORD_RUN_PATTERN.test(part) ? normaliseForMatch(part) : "";
+    const matched = word !== "" && tokens.some((token) => holdsWord([word], token));
     segments.push({ text: part, matched });
   }
   return segments;

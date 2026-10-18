@@ -15,7 +15,9 @@ import {
   useState,
 } from "react";
 import type { ReactElement, ReactNode } from "react";
+import { flushSync } from "react-dom";
 
+import { toRejectionError } from "@/lib/apiClient";
 import { buildOrderInput, createIdempotencyKey, createOrder } from "@/lib/orderService";
 import type { OrderContact } from "@/lib/orderService";
 import { priceCart } from "@/lib/pricingService";
@@ -260,18 +262,6 @@ function stepErrors(step: CheckoutStep, values: CheckoutValues): FieldErrors {
   }
 }
 
-/** The failure a rejected promise is reported as. Every call this file makes resolves its failures as
- *  `Result` values and never rejects, so nothing reaches this through the transport the product ships
- *  with: it exists so an answer that never arrived leaves a retry rather than a surface loading
- *  forever. */
-function rejectionFailure(cause: unknown): ApiError {
-  return {
-    status: 500,
-    code: "unexpected-error",
-    message: cause instanceof Error ? cause.message : "",
-  };
-}
-
 /** The state a fresh mount starts from: the contact email the session already holds, and the key this
  *  attempt is submitted under. `useReducer` calls this once, as its lazy initialiser, so the key is read
  *  for the flow rather than for every render and the shipping step is prefilled before the first
@@ -379,7 +369,9 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
         },
         (cause: unknown) => {
           if (controller.signal.aborted || isAbortError(cause)) return;
-          setPricing({ status: "error", error: rejectionFailure(cause) });
+          // Unreachable through the shipped transport, which resolves every failure as a value: kept so
+          // a rejection could not leave the surface loading forever.
+          setPricing({ status: "error", error: toRejectionError(cause) });
         },
       );
     });
@@ -402,10 +394,11 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
     dispatch(checkoutActions.updateValues({ contact: { email: sessionEmail } }));
   }, [dispatch, sessionEmail, contactEmail]);
 
-  /** Whether a submission is in flight, set the moment an attempt starts. This is the synchronous half
-   *  of the double-submission guard, and `state.submitting` is the half that survives a render: two clicks
-   *  raised before React commits the first one's transition would both read the state as it was. The
-   *  idempotency key is the guard behind both, and the one the endpoint enforces. */
+  /** Whether a submission is in flight, set the moment an attempt starts: the second line of the
+   *  double-submission guard, behind the submit control's own disabled state, which the synchronous commit
+   *  in `submit` puts in place before that handler returns. It still refuses an activation that reaches
+   *  `submit` from anywhere other than the control's own listener. The idempotency key is the guard behind
+   *  both, and the one the endpoint enforces. */
   const submittingRef = useRef(false);
   const submitControllerRef = useRef<AbortController | null>(null);
 
@@ -470,7 +463,14 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
     superseded?.abort();
     submittingRef.current = true;
 
-    dispatch(checkoutActions.submitStarted(current.idempotencyKey));
+    // The submitting state is committed to the DOM before this handler returns, because the control's own
+    // disabled state is what refuses the second press: a React update cannot be committed between two
+    // activations of one control raised in the same task, so both would otherwise reach this callback while
+    // the control still reads as enabled. The flush belongs here, in a click handler — never in a render or
+    // a lifecycle method, where it has nothing left to flush.
+    flushSync(() => {
+      dispatch(checkoutActions.submitStarted(current.idempotencyKey));
+    });
 
     const answer = await createOrder(
       buildOrderInput(snapshot, orderContactOf(current.values), current.idempotencyKey),

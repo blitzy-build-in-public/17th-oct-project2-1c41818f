@@ -1,12 +1,12 @@
 /* Path: src/styles/catalog.css
  * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
- * Lines: 543
+ * Lines: 598
  */
 
 /* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
  * the filter panel with its active chips, the search bar with its suggestions, and the result summary. Loaded
  * fifth — after tokens, base, layout, controls, data-display and components — so it composes the primitives those
- * sheets own (.sp-btn/.sp-button, .sp-input, .sp-select and .sp-select__wrap, .sp-choice, .sp-card and
+ * sheets own (.sp-btn, .sp-input, .sp-select and .sp-select__wrap, .sp-choice, .sp-card and
  * .sp-card--interactive, .sp-badge, .sp-drawer, .sp-tabs, .sp-rating, .sp-price, .sp-quantity, .sp-empty,
  * .sp-alert, .sp-skeleton) and restates no rule of theirs. Every value is a var() from tokens.css; the only
  * literals are the media-query stops and the documented structural numbers (the artboard ratios, the clamp).
@@ -98,10 +98,6 @@
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
     overflow-x: visible;
   }
-  /* The related strip is four across from here, where the catalogue itself is three. */
-  .sp-product-grid--related {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 }
 @media (min-width: 1024px) {
   /* --breakpoint-lg */
@@ -113,11 +109,13 @@
 /* ==== Product card ====
  * The tile composes .sp-card and .sp-card--interactive, which own its surface, hairline border and hover elevation;
  * this sheet adds the tile's own column layout, its media box, its clamped name and its quick-add reveal. __rating
- * carries the .sp-rating primitive and takes the alignment below; __price carries the .sp-price primitive and needs
- * no rule of its own. */
+ * carries the .sp-rating primitive and takes the alignment below; __price carries the .sp-price primitive and takes
+ * the place at the foot of the body that puts one row's availability sentence on one baseline, with the discount
+ * pill out of its flow in the grid placements. */
 .sp-product-card {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   align-content: start;
   overflow: hidden;
@@ -135,15 +133,22 @@
   inset-block-start: var(--space-2);
   inset-inline-start: var(--space-2);
 }
+/* The body is a column flex container rather than a grid because the price block at its foot is pinned there by
+ * `margin-block-start: auto`, which only a flex line honours. The card's stretched row is what gives the body its
+ * height, so pinning the price block puts its last line — the availability sentence — at one offset on every tile
+ * of a row, whatever the tiles above it need. */
 .sp-product-card__body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
-  align-content: start;
   padding: var(--space-4);
+  min-inline-size: 0;
 }
-/* The name is an h3 in markup and takes the heading-3 role from base.css. Two lines, clamped: the -webkit-box form
- * is the only spelling every engine renders, so the fallback pair travels with it, and min-block-size reserves both
- * lines so a clamped tile and a short one align. */
+/* The name is an h3 in markup and takes the heading-3 role from base.css. It is clamped rather than left to run: the
+ * -webkit-box form is the only spelling every engine renders, so the fallback pair travels with it, and
+ * min-block-size reserves every lane the clamp allows, so a clamped tile and a short one align. Two lanes where
+ * three or four tiles share a row; the block at the foot of this section raises the clamp, the reservation and the
+ * link inside the heading together at the four-column stop. */
 .sp-product-card__name {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -154,10 +159,29 @@
   text-decoration-line: none;
 }
 /* Whether the name class sits on the heading or on the link inside it, that link takes the heading's colour and
- * carries no underline of its own. */
+ * carries no underline of its own. It is clamped to the same lane count as the heading, so the link's own box is the
+ * clamped box: an unclamped inline anchor inside a clamped heading keeps a box as tall as the whole name and lays its
+ * hit area over the rating row beneath it, even though the heading clips the paint. The heading's clamp stays the
+ * outer guard; this one makes the target match the ink. */
 .sp-product-card__name > a {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   color: inherit;
   text-decoration-line: none;
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg, the stop at which the grid shows four columns: a track there holds about 181px of card content
+   * and the longest name the data layer generates takes four lanes in it, so the heading, the link inside it and the
+   * heading's reservation all move to four together and the tiles of a row stay aligned. */
+  .sp-product-card__name {
+    -webkit-line-clamp: 4;
+    min-block-size: calc(var(--text-heading-3-line-height) * 4em);
+  }
+  .sp-product-card__name > a {
+    -webkit-line-clamp: 4;
+  }
 }
 .sp-product-card__brand {
   color: var(--color-text-muted);
@@ -167,8 +191,32 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The rating starts the row it sits in rather than stretching across it: the body is a flex column, where the
+ * inline-axis alignment of a grid item (`justify-self`) is inert and this property carries it instead. */
 .sp-product-card__rating {
-  justify-self: start;
+  align-self: flex-start;
+}
+/* The price block is pinned to the foot of the body, so the availability sentence — its last line — lands at the
+ * same offset on every tile of a row however many lines the figures above it take. */
+.sp-product-card__price {
+  margin-block-start: auto;
+}
+/* The availability sentence takes a lane of the price block's own, so the block holds the same lanes on a discounted
+ * tile as on a plain one. Sharing the figures' line its box would sit a baseline's width above the block's foot and
+ * drop to the foot once the struck list price wrapped the row — the two-pixel step that put a discounted tile's
+ * availability line below its neighbours' on the featured and related strips. */
+.sp-product-card__price .sp-product-card__stock {
+  flex-basis: 100%;
+}
+/* A saving must not cost a row a line. For the grid placements — the catalogue and category results, the search
+ * results, the featured strip and the related strip, which all wear .sp-product-grid — the pill leaves the price
+ * row's flow and paints over the media's free top-right corner, the top-left one being the flag's. Its text is
+ * unchanged and it stays in the accessibility tree, so nothing about the saving rests on where the pill is painted.
+ * The list placement (.sp-product-list) keeps the pill inline in the row it belongs to, where there is room. */
+.sp-product-grid .sp-product-card__price .sp-price__discount {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
 }
 /* The availability text state, in one home for both surfaces that render it: the tile and the detail's buy column.
  * The value is text first and colour second — the low and out states carry the warning and danger tokens and their
@@ -220,9 +268,13 @@
 }
 
 /* ==== Catalogue layout and facet panel ====
- * Below --breakpoint-md the panel is not in the page flow: FilterPanel renders it inside the .sp-drawer that
- * data-display.css owns, opened by .sp-facets__toggle. From --breakpoint-md it is this sheet's sticky first column
- * and the toggle leaves the layout. */
+ * Below --breakpoint-xl the panel is not in the page flow: FilterPanel renders it inside the .sp-drawer that
+ * data-display.css owns, opened by .sp-facets__toggle. From --breakpoint-xl it is this sheet's sticky first column
+ * and the toggle leaves the layout. The column starts at the extra-large stop and not the medium one because the
+ * results column has to hold cards of their own content width — a card body is 198px wide at its narrowest, so
+ * three of them and their gaps need 642px — and a 260px facet column beside them leaves 420px at the medium stop,
+ * where the grid's three tracks come out 124px and cut every card's text against its own overflow. The panel and
+ * the grid therefore share the width only from the stop at which four cards genuinely fit beside the column. */
 .sp-catalog-layout {
   display: grid;
   gap: var(--space-6);
@@ -303,8 +355,8 @@
     align-items: center;
   }
 }
-@media (min-width: 768px) {
-  /* --breakpoint-md */
+@media (min-width: 1280px) {
+  /* --breakpoint-xl */
   .sp-catalog-layout {
     grid-template-columns: var(--layout-facet-width) minmax(0, 1fr);
   }
@@ -536,8 +588,11 @@
 
 /* ==== Responsive summary ====
  * At --breakpoint-sm: two product columns, the facet range's two bounds side by side, a list row's media fixed at
- * one token's width. At --breakpoint-md: three product columns with the featured strip and the related strip four
- * to a row, the panel a sticky
- * first column with the drawer toggle gone and a scrolling value list, the sort closed to the end of the result
- * row, and the result meta on a single line. At --breakpoint-lg: four product columns.
+ * one token's width. At --breakpoint-md: three product columns with the featured strip several to a row, the facet
+ * panel still the drawer with its trigger beside the results, the sort closed to the end of the result row and the
+ * result meta on a single line. At --breakpoint-lg: four product columns, with the tile's name clamped to four lanes
+ * instead of two because a track at this stop holds fewer words, and the availability sentence on a lane of the price
+ * block's own so the block holds the same lanes on a discounted tile as on a plain one. At --breakpoint-xl: the panel
+ * leaves the drawer for the sticky first column and the trigger leaves the layout — the first stop at which the 260px
+ * column and a row of the grid share the width with every card at its own content width.
  */

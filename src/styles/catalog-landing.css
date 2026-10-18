@@ -8,7 +8,7 @@
  * catalog-detail.css. Split out of src/styles/catalog.css, which the plan maps, because the catalogue and search
  * family does not fit one file inside the request's 600-line ceiling; catalog.css loads this sheet with @import
  * ahead of its own rules, so the entry point still imports the eight mapped stylesheets and the cascade order is
- * unchanged. It composes the primitives the component sheets own (.sp-btn/.sp-button, .sp-card) and restates none
+ * unchanged. It composes the primitives the component sheets own (.sp-btn, .sp-card) and restates none
  * of their rules, and every value is a var() from tokens.css.
  *
  * The hero and trust names are the ones the committed src/features/home/HeroSection.tsx renders — it carries its

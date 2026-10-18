@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/ProfilePage.tsx
  * Purpose: Profile view and edit with validation and a success confirmation
- * Lines: 347
+ * Lines: 346
  */
 
 import { useId, useState } from "react";
@@ -90,9 +90,9 @@ function profileInputOf(customer: Customer): ProfileUpdateInput {
  *
  * Failures are values rather than exceptions, so nothing here catches one: a failed read renders the shared
  * error state with a retry action, and a failed write lands on the control it belongs to or, when it names no
- * control, on the toast where the customer is looking. A save confirms itself twice over: the sentence the
- * sheet's aria-live block carries, which is what a screen reader announces on this page, and a toast for the
- * transient feedback both surfaces can rely on.
+ * control, on the toast where the customer is looking. A save confirms itself once: the sentence the sheet's
+ * aria-live block carries appears beside the control that saved it, which is where the customer is looking, and
+ * a toast carrying the same sentence would announce one outcome twice.
  *
  * @returns The profile section, with its form and its confirmation.
  */
@@ -209,7 +209,6 @@ export function ProfilePage(): ReactElement {
     setDraft(profileInputOf(result.value));
     setFieldErrors({});
     setIsSaved(true);
-    toasts.success(FEEDBACK_COPY.TOAST_PROFILE_SAVED);
     // The header's account menu reads the identity projection the session context holds, and this page is the
     // only surface that changes the name behind it, so the projection is refreshed with the save.
     await refresh();

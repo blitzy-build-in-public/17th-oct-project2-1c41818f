@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Modal.tsx
  * Purpose: Modal, drawer and confirm dialog with dialog semantics, focus trap and an inert background
- * Lines: 441
+ * Lines: 427
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import type { KeyboardEventHandler, ReactElement, ReactNode, RefObject } from "react";
 
 import { Button, IconButton } from "@/components/ui/Button";
+import { CloseIcon } from "@/components/ui/icons";
 import { useOverlay } from "@/components/ui/overlayEngine";
 import { A11Y_COPY, COMMON_ACTIONS } from "@/constants/content";
 
@@ -188,7 +189,7 @@ export function Modal({
         {isDismissible ? (
           <IconButton
             className={CLOSE_CLASS}
-            icon={<CloseGlyph />}
+            icon={<CloseIcon />}
             label={closeLabel ?? A11Y_COPY.CLOSE_DIALOG_LABEL}
             onClick={onClose}
             variant="ghost"
@@ -201,21 +202,6 @@ export function Modal({
       )}
     </OverlayFrame>,
     document.body,
-  );
-}
-
-/** The close control's glyph, decorative because the control carrying it owns the accessible name. */
-function CloseGlyph(): ReactElement {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path
-        d="M6 6 18 18M18 6 6 18"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth={2}
-      />
-    </svg>
   );
 }
 
@@ -315,7 +301,7 @@ export function Drawer(props: DrawerProps): ReactElement | null {
           {isDismissible ? (
             <IconButton
               className={CLOSE_CLASS}
-              icon={<CloseGlyph />}
+              icon={<CloseIcon />}
               label={closeLabel ?? A11Y_COPY.CLOSE_DIALOG_LABEL}
               onClick={onClose}
               variant="ghost"

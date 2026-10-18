@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 542
+ * Lines: 551
  */
 
 @import "./tabs-accordion.css";
@@ -353,8 +353,9 @@
   pointer-events: none;
   transition: opacity var(--duration-base) var(--ease-standard);
 }
+/* The centred cards: the modal and the confirm dialog are clamped to the viewport's block size as well. The
+ * drawer is fixed to both viewport edges and owns its own block size in its own rule below, so it is not here. */
 .sp-modal,
-.sp-drawer,
 .sp-confirm {
   display: flex;
   flex-direction: column;
@@ -417,11 +418,19 @@
  * which is the state that also resolves a Popover and a Tooltip. The global reduced-motion rule in base.css
  * removes the travel, and the panel is then simply present. */
 /* A fixed element makes no scrollable overflow, so the panel is clamped to the viewport the way the modal
- * widths are: at the raw 380px token a 360px phone loses the strip past its inline-start edge for good. */
+ * widths are: at the raw 380px token a 360px phone loses the strip past its inline-start edge for good. Its
+ * block size is the viewport's instead, because the panel is fixed to both block edges: the shared register's
+ * 90dvh clamp won over that `inset-block: 0` and stopped the panel 90px short of the bottom edge at every width
+ * — measured, a 380x810 panel in a 900px viewport over a band of dimmed backdrop — where the centred cards above
+ * keep the clamp and this panel's own body scrolls inside it. */
 .sp-drawer {
   position: fixed;
   inset-block: 0;
   inline-size: min(var(--drawer-width), 100%);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-3);
   border-radius: var(--radius-none);
   transition: transform var(--duration-base) var(--ease-decelerate);
 }

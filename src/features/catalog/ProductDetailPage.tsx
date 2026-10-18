@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 584
+ * Lines: 585
  */
 
 import { useId, useState } from "react";
@@ -36,7 +36,7 @@ import { BRAND_DEFINITIONS } from "@/constants/taxonomy";
 import { ProductReviews } from "@/features/catalog/ProductReviews";
 import { API_ERROR_CODES, API_PATHS, getJson } from "@/lib/apiClient";
 import { getProduct, getRelated } from "@/lib/catalogService";
-import { useCart, useCartDispatch } from "@/state/CartContext";
+import { useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Category, Product, ProductSpec, ProductStatus } from "@/types/catalog";
@@ -294,12 +294,14 @@ function DescriptionPanel({ product }: { readonly product: Product }): ReactElem
 /**
  * The buy column: who made the product, what it costs, how many to take and the two ways to order it.
  *
- * A component of its own for the reason `src/components/product/ProductCard.tsx` gives for its quick add: it is the
- * only part of the page that has to know what the cart already holds, and reading the cart re-renders its reader on
- * every change to it, so keeping that read here leaves the gallery, the tabs and the reviews independent of the
- * cart. Every figure is the shared components' own — the rating states its value and its count as text, the price
- * tag states the discount and the availability in words, the stepper confines the quantity to the stock the product
- * carries — and the only number held here is the quantity the shopper chose.
+ * A component of its own because it is the only part of the page that has to know what the cart already holds — a
+ * second activation must report the ceiling rather than pass silently — and it holds no subscription to that
+ * cart: the line it checks is read through `useCartDispatch()`'s `readLines()` when a buy control is activated,
+ * which is the only moment the line is needed, so a change to the cart elsewhere re-renders neither this panel
+ * nor the gallery, the tabs and the reviews beside it. Reading the cart during render instead re-rendered all of
+ * them on every change to it. Every figure is the shared components' own — the rating states its value and its
+ * count as text, the price tag states the discount and the availability in words, the stepper confines the
+ * quantity to the stock the product carries — and the only number held here is the quantity the shopper chose.
  *
  * The add is one call: the reducer merges a repeated add into the line the product already holds and clamps it to
  * that line's ceiling, so the single case reported rather than absorbed is a cart that can take no more of it. Both
@@ -311,7 +313,6 @@ function DescriptionPanel({ product }: { readonly product: Product }): ReactElem
  * @returns The buy column.
  */
 function PurchasePanel({ product }: { readonly product: Product }): ReactElement {
-  const { lines } = useCart();
   // The action object is held rather than its members destructured: `CartActions` declares its members in method
   // position, and a member separated from the object it belongs to is the shape `unbound-method` exists to catch.
   const cartActions = useCartDispatch();
@@ -323,11 +324,11 @@ function PurchasePanel({ product }: { readonly product: Product }): ReactElement
   const availability = formatAvailability(product.stockOnHand, product.lowStockThreshold);
   const brand = brandNameFor(product.brandId);
   const canBuy = availability.available && product.status === SELLABLE_STATUS;
-  const held = lines.find((line) => line.productId === product.id);
 
   /** Adds the quantity chosen, or reports the ceiling the cart has reached and adds nothing. */
   const add = (): boolean => {
     if (!canBuy) return false;
+    const held = cartActions.readLines().find((line) => line.productId === product.id);
     if (held !== undefined && held.quantity >= held.maxQuantity) {
       toast.error(lowStockLabel(held.maxQuantity));
       return false;

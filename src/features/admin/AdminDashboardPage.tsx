@@ -1,33 +1,19 @@
 /**
  * Path: src/features/admin/AdminDashboardPage.tsx
  * Purpose: The administrator dashboard: dated range, KPI cards, revenue chart, breakdown and tables
- * Lines: 563
+ * Lines: 335
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, ReactElement } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/Button";
+import { DateRangeControl } from "@/components/ui/DateRangeControl";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
-import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
-import {
-  ADMIN_COPY,
-  COMMON_ACTIONS,
-  DATE_RANGE_COPY,
-  PAGE_TITLES,
-  VALIDATION_MESSAGES,
-  documentTitle,
-  lastDaysLabel,
-  rangeTooLongMessage,
-  resolvedRangeLabel,
-} from "@/constants/content";
+import { ADMIN_COPY, COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
-import { BASELINE_OPTIONS } from "@/constants/taxonomy";
 import { KpiCard, type KpiKind } from "@/features/admin/KpiCard";
 import { RecentOrdersTable } from "@/features/admin/RecentOrdersTable";
 import { SalesChart } from "@/features/admin/SalesChart";
@@ -57,28 +43,17 @@ import type {
 } from "@/types/analytics";
 import type { ApiError, DateRange } from "@/types/common";
 import type { Order } from "@/types/commerce";
-import {
-  defaultReportRange,
-  formatDate,
-  formatDateRange,
-  fromDateInputValue,
-  maxReportRange,
-  reportRangePresets,
-  resolveBaselineRange,
-  toDateInputValue,
-  toFieldErrors,
-  validateDateRange,
-} from "@/utils/dates";
-import type { DateRangeErrorCode, DateRangeErrorField, ReportRangePreset } from "@/utils/dates";
+import { defaultReportRange, maxReportRange, resolveBaselineRange } from "@/utils/dates";
 
 /*
  * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
  * `src/styles/**` — so every class below is adopted by name from the sheet that declares it.
  * `src/styles/admin-reports.css` owns the administrator register this page is written in: `sp-admin__main` for
- * the content column, `sp-kpi-grid`, `sp-dashboard__section` and `sp-dashboard__row` for the block rhythm,
- * `sp-chart__title` and `sp-chart__frame` for the chart family, and `sp-date-range` with its `__presets`,
- * `__fields`, `__summary`, `__error` and `__baseline` regions plus `sp-range-note` for the range control. The
- * primitives bring their own classes from the sheets `src/styles/components.css` loads.
+ * the content column, `sp-kpi-grid`, `sp-dashboard__section` and `sp-dashboard__row` for the block rhythm, and
+ * `sp-chart__title` and `sp-chart__frame` for the chart family. The range control's own classes — `sp-date-range`
+ * with its `__presets`, `__fields`, `__summary`, `__error` and `__baseline` regions, plus `sp-range-note` — are
+ * the shared control's, and `src/components/ui/DateRangeControl.tsx` is where that control's contract is
+ * written. The primitives bring their own classes from the sheets `src/styles/components.css` loads.
  */
 
 // The page's own vocabulary ----------------------------------------------------------------------
@@ -101,45 +76,6 @@ const KPI_ORDER = [
  */
 const RECENT_ORDERS_LIMIT = 8;
 
-/** The wording of every rule `validateDateRange` can break, keyed by the code it reports, so this file writes
- *  no rule sentence and no rule itself. */
-const RANGE_MESSAGES: Readonly<Record<DateRangeErrorCode, string>> = {
-  "date-invalid": VALIDATION_MESSAGES.REQUIRED,
-  "range-inverted": DATE_RANGE_COPY.RANGE_INVERTED_MESSAGE,
-  "range-in-future": DATE_RANGE_COPY.RANGE_IN_FUTURE_MESSAGE,
-  "range-too-long": rangeTooLongMessage(MAX_REPORT_RANGE_DAYS),
-};
-
-/** The field keys the range rule reports under, which are also the `name` each date control carries, so one
- *  error map lands on the control that owns it. No field renders the third, so the alert reads it. */
-const FROM_FIELD: DateRangeErrorField = "from";
-const TO_FIELD: DateRangeErrorField = "to";
-const RANGE_FIELD: DateRangeErrorField = "range";
-
-/** Whether two ranges cover the same two days: what marks a preset as the one in force. */
-function isSameRange(left: DateRange, right: DateRange): boolean {
-  return left.from === right.from && left.to === right.to;
-}
-
-/** The wording of one preset, by the key `src/utils/dates.ts` derives it under: the month- and year-to-date
- *  presets have their own names in the copy module and a trailing preset is named for its days. */
-function presetLabel(preset: ReportRangePreset): string {
-  switch (preset.key) {
-    case "this-month":
-      return DATE_RANGE_COPY.THIS_MONTH_PRESET_LABEL;
-    case "this-year":
-      return DATE_RANGE_COPY.THIS_YEAR_PRESET_LABEL;
-    default:
-      return lastDaysLabel(preset.days);
-  }
-}
-
-/** The baseline a select reported, or `null` for a value outside the offered choices, so a string cannot
- *  reach a query as a comparison the service cannot resolve. */
-function toBaselineKind(value: string): BaselineKind | null {
-  return BASELINE_OPTIONS.find((option) => option.value === value)?.value ?? null;
-}
-
 /** The figure one KPI states, read off the summary as the service reported it: money in integer minor units
  *  and a count as a count, because the card owns both formats. */
 function kpiValue(kind: KpiKind, summary: KpiSummary): number {
@@ -153,174 +89,6 @@ function kpiValue(kind: KpiKind, summary: KpiSummary): number {
     case "average-order-value":
       return summary.averageOrderValueMinor;
   }
-}
-
-/** Everything {@link DashboardRangeControl} renders with. */
-interface DashboardRangeControlProps {
-  /** The applied range, owned by the page: the days every read beneath the control runs over. */
-  readonly value: DateRange;
-  /** Reports a range the reader applied: a preset, or a pair of dates the range rules accept. */
-  readonly onChange: (range: DateRange) => void;
-  /** The comparison in force, shown as the select's selection and never left for a figure to imply. */
-  readonly baseline: BaselineKind;
-  /** Reports the comparison the reader chose. */
-  readonly onBaselineChange: (baseline: BaselineKind) => void;
-}
-
-/**
- * The dashboard's range control: the presets, the two date fields, the range they resolve to in words, and the
- * named comparison the KPI cards are measured against.
- *
- * That it is this page's own control is a boundary rather than a duplication: the reports view's picker lives
- * in `src/features/reports/DateRangePicker.tsx`, no feature slice imports another, and the two share their
- * primitives plus the range arithmetic in `src/utils/dates.ts` rather than a module — `reportRangePresets`
- * supplies the presets, `validateDateRange` judges a pair of dates, `formatDateRange` states the applied range
- * and `resolveBaselineRange` resolves the period the comparison names. The picker's persisted last-used range
- * is deliberately absent, its only declared consumer being that picker; a shared control belongs in
- * `src/components` behind a plan amendment, never in a cross-slice import.
- *
- * The applied range belongs to the page; the fields hold a draft while they are edited, and a pair the rules
- * refuse is shown to the reader with the sentence for the rule it broke rather than clamped or swapped.
- *
- * @param props - The applied range, the two callbacks and the comparison in force.
- * @returns The range and baseline control.
- */
-function DashboardRangeControl({
-  value,
-  onChange,
-  baseline,
-  onBaselineChange,
-}: DashboardRangeControlProps): ReactElement {
-  // Taken once per mount, from one reading of the clock, so a preset cannot move out from under the reader
-  // who just pressed it.
-  const presets = useMemo<readonly ReportRangePreset[]>(() => reportRangePresets(), []);
-
-  // What the reader is typing, or `null` while the fields show the applied range: the applied range stays the
-  // page's, so the days every figure was computed from exist in exactly one component.
-  const [draft, setDraft] = useState<DateRange | null>(null);
-  // Whether a refusal has been shown: a half-typed date is not an error yet, so the messages appear once the
-  // reader asks to apply what the fields hold, and go again as soon as they change it.
-  const [showErrors, setShowErrors] = useState(false);
-
-  const fieldRange = draft ?? value;
-  const validation = useMemo(
-    () => validateDateRange(fieldRange.from, fieldRange.to),
-    [fieldRange.from, fieldRange.to],
-  );
-  const fieldErrors = showErrors ? toFieldErrors(validation, RANGE_MESSAGES) : {};
-  const rangeError = showErrors ? fieldErrors[RANGE_FIELD] : undefined;
-  const hasPendingDraft = draft !== null && !isSameRange(draft, value);
-  const comparisonRange = resolveBaselineRange({ from: value.from, to: value.to }, baseline);
-
-  const applyRange = useCallback(
-    (next: DateRange): void => {
-      setDraft(null);
-      setShowErrors(false);
-      onChange(next);
-    },
-    [onChange],
-  );
-
-  /** Applies what the fields hold, or reports the rule it broke: the validator owns the rule, so a refused
-   *  pair never reaches the page as a range to display. */
-  const commitDraft = useCallback((): void => {
-    if (draft === null) return;
-    if (!validation.valid) {
-      setShowErrors(true);
-      return;
-    }
-    applyRange(draft);
-  }, [applyRange, draft, validation]);
-
-  /** One field's half of the draft, keeping the other end as it stands. */
-  const changeFrom = useCallback(
-    (event: ChangeEvent<HTMLInputElement>): void => {
-      const parsed = fromDateInputValue(event.target.value);
-      setDraft((previous) => ({ from: parsed, to: previous?.to ?? value.to }));
-      setShowErrors(false);
-    },
-    [value.to],
-  );
-
-  /** The end date's half of the draft; see {@link changeFrom}. */
-  const changeTo = useCallback(
-    (event: ChangeEvent<HTMLInputElement>): void => {
-      const parsed = fromDateInputValue(event.target.value);
-      setDraft((previous) => ({ from: previous?.from ?? value.from, to: parsed }));
-      setShowErrors(false);
-    },
-    [value.from],
-  );
-
-  const changeBaseline = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>): void => {
-      const kind = toBaselineKind(event.target.value);
-      if (kind !== null) onBaselineChange(kind);
-    },
-    [onBaselineChange],
-  );
-
-  return (
-    <div className="sp-date-range" role="group" aria-label={DATE_RANGE_COPY.LABEL}>
-      <div className="sp-date-range__presets">
-        {presets.map((preset) => (
-          <Button
-            key={preset.key}
-            className="sp-date-range__preset"
-            variant="secondary"
-            size="sm"
-            aria-pressed={isSameRange(preset.range, value)}
-            onClick={() => {
-              applyRange(preset.range);
-            }}
-          >
-            {presetLabel(preset)}
-          </Button>
-        ))}
-      </div>
-      <div className="sp-date-range__fields">
-        <Input
-          type="date"
-          name={FROM_FIELD}
-          label={DATE_RANGE_COPY.FROM_LABEL}
-          value={toDateInputValue(fieldRange.from)}
-          onChange={changeFrom}
-          errors={fieldErrors}
-        />
-        <Input
-          type="date"
-          name={TO_FIELD}
-          label={DATE_RANGE_COPY.TO_LABEL}
-          value={toDateInputValue(fieldRange.to)}
-          onChange={changeTo}
-          errors={fieldErrors}
-        />
-      </div>
-      <Button variant="secondary" onClick={commitDraft} disabled={!hasPendingDraft}>
-        {DATE_RANGE_COPY.APPLY_LABEL}
-      </Button>
-      <p className="sp-date-range__summary" aria-live="polite">
-        {formatDateRange(value.from, value.to)}
-      </p>
-      {rangeError === undefined ? null : (
-        <Alert className="sp-date-range__error" tone="danger">
-          {rangeError}
-        </Alert>
-      )}
-      <div className="sp-date-range__baseline">
-        <Select
-          label={ADMIN_COPY.BASELINE_CONTROL_LABEL}
-          options={BASELINE_OPTIONS}
-          value={baseline}
-          onChange={changeBaseline}
-        />
-        <p className="sp-date-range__summary">
-          {resolvedRangeLabel(formatDate(comparisonRange.from), formatDate(comparisonRange.to))}
-        </p>
-      </div>
-      <p className="sp-range-note">{DATE_RANGE_COPY.LOCAL_TIME_NOTE}</p>
-    </div>
-  );
 }
 
 /**
@@ -399,6 +167,10 @@ function RevenueBreakdown({
  * The page owns the entire query — the range, the bucket, the split, the comparison and the ranking metric —
  * and performs all four reads, so no figure is fetched twice and none is recomputed: every number on screen is
  * the service's, and one `getRevenueSeries` result feeds both the line chart and the breakdown ring.
+ *
+ * The control over those two state values is the shared one, `src/components/ui/DateRangeControl.tsx`, which
+ * the reports slice renders as well: this page hands it the range and the comparison in force and takes back
+ * whatever a reader applies or chooses, so one range rule serves both surfaces instead of one copy each.
  *
  * The four states every data page renders are explicit. A pending read is each block's own skeleton, driven by
  * the flag passed down; a failure is the single page-level alert this view owns, whose retry re-runs every read
@@ -551,7 +323,7 @@ export function AdminDashboardPage(): ReactElement {
           </Link>
         }
       />
-      <DashboardRangeControl
+      <DateRangeControl
         value={range}
         onChange={setRange}
         baseline={baseline}

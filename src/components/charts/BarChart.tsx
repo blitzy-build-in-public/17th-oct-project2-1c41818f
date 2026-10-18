@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/BarChart.tsx
  * Purpose: Vertical, horizontal, grouped and stacked bars with value labels
- * Lines: 353
+ * Lines: 381
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -29,7 +29,7 @@ import type {
   ValueFormatter,
 } from "@/components/charts/chartScales";
 import { EmptyState } from "@/components/ui/Feedback";
-import { EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
+import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
 import { formatMoney, formatMoneyCompact } from "@/utils/format";
 
@@ -51,6 +51,13 @@ import { formatMoney, formatMoneyCompact } from "@/utils/format";
 
 /** What separates a readout's band from each series' reading of it. */
 const READOUT_SEPARATOR = " · ";
+
+/**
+ * The legend-total record of a caller that suppresses nothing: it names no series, so every series keeps the
+ * total the chart reads from its own points. It is passed as the prop's default instead of a fresh `{}`,
+ * because an object built at every render would recompute the legend items with it.
+ */
+const DEFAULT_LEGEND_TOTALS: Readonly<Record<string, boolean>> = {};
 
 /** The one line a readout shows: the band's label, then every series' reading of it, so both inputs read alike. */
 function readoutText(
@@ -84,6 +91,18 @@ export interface BarChartProps {
   readonly showValues?: boolean;
   /** Whether the legend is drawn. Drawn for more than one series unless this is `false`. */
   readonly showLegend?: boolean;
+  /**
+   * Whether each series' legend entry states its total, keyed by series id.
+   *
+   * The chart reads a series by the sum of its points, and a series this record does not mention keeps that
+   * reading; a series mapped to `false` states no value at all. The exception exists for a series whose
+   * figures are per-band counts that must not be added together: a count of returning customers is one
+   * customer in each band they appear in, so summing the bands counts them once per band and contradicts the
+   * paired data table, which states no total for such a column either. Suppression reaches the legend alone —
+   * the swatch and the label are still drawn, because the series must stay tellable apart, and every band's
+   * figure stays in its value label, in the readout and in the paired table.
+   */
+  readonly legendTotals?: Readonly<Record<string, boolean>>;
   /** Whether the value axis is widened to carry zero. Defaults to `true`: an axis starting above zero misleads. */
   readonly includeZero?: boolean;
   /** Reads the value labels, the legend totals and the readout. Defaults to {@link formatMoney}. */
@@ -96,16 +115,25 @@ export interface BarChartProps {
   readonly ariaLabel?: string;
   /** The empty state's wording, in place of the shared one for a period with no activity. */
   readonly emptyMessage?: string;
+  /**
+   * The paired table's leading column heading — the dimension the bands are drawn along: a period, a product,
+   * a channel. Defaults to {@link CHART_COLUMN_LABELS.GROUP_LABEL}, because that alternative is the chart's
+   * own statement of its figures and a column of them must say what it holds.
+   */
+  readonly labelHeader?: string;
 }
 
 /**
  * Bars over a shared baseline: grouped side by side or stacked one on another, vertical or horizontal, each
- * bar's value written at its outer end, a legend naming the series and their totals, a readout that reports
- * one band under the pointer or the arrow keys, and the paired data table that repeats every figure the
- * graphic draws — so no value is reachable through colour or geometry alone.
+ * bar's value written at its outer end, a legend naming the series and — for each series whose figures add
+ * up — their total, a readout that reports one band under the pointer or the arrow keys, and the paired data
+ * table that repeats every figure the graphic draws — so no value is reachable through colour or geometry
+ * alone.
  *
  * It reads nothing outside its props: no router, no context, no measured element and no clock, so a caller
- * mounts it with `series` alone. Money arrives as integer minor units and is written only by
+ * mounts it with `series` alone. A series whose per-band figures must not be summed is named in `legendTotals`
+ * and its legend entry then states no total, which is the one thing about a reading this component takes from
+ * its caller rather than from the points. Money arrives as integer minor units and is written only by
  * `src/utils/format.ts`, which the two formatting defaults supply.
  *
  * @param props - The series and the frame, the heading and controls, the wording slots and the formatters.
@@ -122,12 +150,14 @@ export function BarChart({
   mode = "grouped",
   showValues = true,
   showLegend,
+  legendTotals = DEFAULT_LEGEND_TOTALS,
   includeZero = true,
   formatValue = formatMoney,
   formatAxisValue = formatMoneyCompact,
   formatLabel = defaultLabelFormatter,
   ariaLabel,
   emptyMessage,
+  labelHeader = CHART_COLUMN_LABELS.GROUP_LABEL,
 }: BarChartProps): ReactElement {
   const titleId = useId();
   const captionId = useId();
@@ -162,17 +192,25 @@ export function BarChart({
     ],
   );
   // One table model serves both the accessible alternative and the readout, so the two can never disagree
-  // about a band's label or a figure's wording.
-  const table = useMemo(() => buildSeriesDataTable(series, formatValue), [series, formatValue]);
+  // One table model serves both the accessible alternative and the readout, so the two can never disagree
+  // about a band's label or a figure's wording. The leading heading is the caller's word for the dimension
+  // the bands are drawn along, or the shared one for a group.
+  const table = useMemo(
+    () => buildSeriesDataTable(series, formatValue, { labelHeader }),
+    [series, formatValue, labelHeader],
+  );
+  // A legend entry's figure is the series' own total, except where the caller named the series in
+  // `legendTotals` as one whose bands must not be summed: that entry states no value rather than one the
+  // paired table below it does not state.
   const legendItems = useMemo(
     () =>
       series.map((one, index) => ({
         id: one.id,
         className: seriesClassName(one.color, index),
         label: one.label,
-        total: formatValue(chartSeriesTotal([one])),
+        total: legendTotals[one.id] === false ? null : formatValue(chartSeriesTotal([one])),
       })),
-    [series, formatValue],
+    [series, formatValue, legendTotals],
   );
   const activeRow = useMemo(
     () => (activeBand === null ? undefined : table.rows.find((row) => row.key === activeBand)),
@@ -309,7 +347,9 @@ export function BarChart({
             <li className="sp-chart__legend-item" key={item.id}>
               <span className={`sp-chart__legend-swatch ${item.className}`} aria-hidden="true" />
               <span className="sp-chart__legend-label">{item.label}</span>
-              <span className="sp-chart__legend-value">{item.total}</span>
+              {item.total === null ? null : (
+                <span className="sp-chart__legend-value">{item.total}</span>
+              )}
             </li>
           ))}
         </ul>

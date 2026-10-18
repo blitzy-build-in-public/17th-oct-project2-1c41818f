@@ -79,8 +79,7 @@ export function missing(code: ApiErrorCode): Common.Result<never> {
 // Reading members --------------------------------------------------------------------------------
 
 /** The named members of a request — a parsed body or a query record — with nothing assumed about the
- * values. One reader set serves both, so a hand-made request cannot be accepted where the form that
- * fills the same endpoint would have been refused. */
+ * values: one reader set serves both, so a hand-made request is refused where a form would fail. */
 export type RequestMembers = Readonly<Record<string, unknown>>;
 
 /** Whether a value is an object with named members, narrowing to a record rather than to `any`. */
@@ -98,8 +97,7 @@ export function memberValue(members: RequestMembers | undefined, key: string): u
   return members?.[key];
 }
 
-/** One member read as text: the text, a number or a boolean stringified, or a repeated parameter's
- * first entry. */
+/** One member read as text: text, a number or a boolean stringified, or a repeat's first entry. */
 export function memberText(members: RequestMembers | undefined, key: string): string | undefined {
   const value = members?.[key];
   if (typeof value === "string") return value;
@@ -112,8 +110,7 @@ export function memberTextOrEmpty(members: RequestMembers | undefined, key: stri
   return memberText(members, key) ?? "";
 }
 
-/** Every value a member carries, empty entries dropped, so a repeated parameter and a caller's array
- * arrive as the same list. */
+/** Every value a member carries, empty entries dropped, so a repeat and an array arrive alike. */
 export function memberTextList(
   members: RequestMembers | undefined,
   key: string,
@@ -226,17 +223,15 @@ const BASELINES: readonly Analytics.BaselineKind[] = BASELINE_OPTIONS.map((optio
 const REPORT_KINDS: readonly Analytics.ReportKind[] = REPORT_DEFINITIONS.map(
   (definition) => definition.kind,
 );
-/** The two ways a revenue series is split and the two metrics a ranking is ordered by. No option list
- * for either exists in `src/constants/taxonomy.ts`, so each is asserted against its union in
- * `src/types/analytics.ts`: a member added there fails this file's type check rather than diverging. */
+/** The two ways a revenue series is split and the two metrics a ranking is ordered by: no option list
+ * exists for either, so each is asserted against its union in `src/types/analytics.ts` instead. */
 const REVENUE_GROUP_BY_VALUES = [
   "category",
   "channel",
 ] as const satisfies readonly Analytics.RevenueGroupBy[];
 const METRIC_VALUES = ["revenue", "units"] as const satisfies readonly Analytics.Metric[];
 
-/** The rejection wording by code, built from `src/constants/content.ts`'s record rather than restating
- * the reasons, which the type system already holds. */
+/** The rejection wording by code, built from `src/constants/content.ts`'s record rather than restated. */
 const PROMO_REJECTION_WORDING: ReadonlyMap<string, string> = new Map(
   Object.entries(PROMO_REJECTION_MESSAGES),
 );
@@ -270,8 +265,14 @@ function readVocabulary<TValue extends string>(
   return isOneOf(text, allowed) ? text : null;
 }
 
-/** A page and a page size read from a query: the size is one of the configured sizes, so an unknown
- * one becomes the default rather than paging at a width the product never offers. */
+/** One numeric filter member read from a query: `undefined` when absent, the whole number when it is
+ * one, and `null` when present but unreadable — which a filter refuses rather than reading as absent. */
+function readFilterNumber(query: QueryRecord, key: string): number | null | undefined {
+  const text = memberText(query, key)?.trim();
+  return text === undefined || text === "" ? undefined : (memberInteger(query, key) ?? null);
+}
+
+/** A page and a page size read from a query, the size falling back to the configured default. */
 export function readPaging(query: QueryRecord): {
   readonly page: number;
   readonly pageSize: number;
@@ -283,8 +284,7 @@ export function readPaging(query: QueryRecord): {
   };
 }
 
-/** The dated range a query carries, refused with the field-keyed errors the range rules produce: a
- * half-given range included, because both ends are required wherever a range is read. */
+/** The dated range a query carries, refused by the range rules, a half-given pair included. */
 export function readRange(
   query: QueryRecord,
 ): Common.Result<{ readonly from: string; readonly to: string }> {
@@ -299,31 +299,34 @@ export function readRange(
 /** The filter half of a catalogue or facet query, refused when a member is outside the domain it
  * declares. Paging and sort are absent because `GET /api/facets` takes neither. */
 export function readFilterFields(query: QueryRecord): Common.Result<Catalog.FacetQuery> {
-  const rawRating = memberInteger(query, FILTER_PARAMS.MIN_RATING);
+  const rawRating = readFilterNumber(query, FILTER_PARAMS.MIN_RATING);
+  if (rawRating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
   const minRating: Catalog.RatingValue | null = isRatingValue(rawRating) ? rawRating : null;
   if (rawRating !== undefined && minRating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
-  const minPriceMinor = memberInteger(query, FILTER_PARAMS.MIN_PRICE);
-  const maxPriceMinor = memberInteger(query, FILTER_PARAMS.MAX_PRICE);
+  const minPriceMinor = readFilterNumber(query, FILTER_PARAMS.MIN_PRICE);
+  if (minPriceMinor === null) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
+  const maxPriceMinor = readFilterNumber(query, FILTER_PARAMS.MAX_PRICE);
+  if (maxPriceMinor === null) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
   if ((minPriceMinor ?? 0) < 0) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
   if ((maxPriceMinor ?? 0) < 0) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
-  const inverted = minPriceMinor !== undefined && maxPriceMinor !== undefined;
-  if (inverted && minPriceMinor > maxPriceMinor) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
+  // An inverted pair is swapped, not refused, the reading src/utils/queryParams.ts gives the same pair.
+  const descending =
+    minPriceMinor !== undefined && maxPriceMinor !== undefined && minPriceMinor > maxPriceMinor;
   const inStockOnly = memberBoolean(query, FILTER_PARAMS.IN_STOCK);
   if (inStockOnly === null) return fieldProblem(FILTER_PARAMS.IN_STOCK);
   return ok({
     q: memberText(query, FILTER_PARAMS.QUERY) ?? "",
     categoryIds: memberTextList(query, FILTER_PARAMS.CATEGORY_IDS) as readonly Common.CategoryId[],
     brandIds: memberTextList(query, FILTER_PARAMS.BRAND_IDS) as readonly Common.BrandId[],
-    minPriceMinor: minPriceMinor ?? null,
-    maxPriceMinor: maxPriceMinor ?? null,
+    minPriceMinor: descending ? (maxPriceMinor ?? null) : (minPriceMinor ?? null),
+    maxPriceMinor: descending ? (minPriceMinor ?? null) : (maxPriceMinor ?? null),
     minRating,
     inStockOnly: inStockOnly ?? false,
     tags: memberTextList(query, FILTER_PARAMS.TAGS),
   });
 }
 
-/** The whole query state of a catalogue or search listing: the filter half plus the sort and the page,
- * with an absent sort read as relevance, the order the control offers while a term is present. */
+/** A listing's whole query: the filter half, the sort — relevance with a term — and the page. */
 export function readFilterState(query: QueryRecord): Common.Result<Catalog.FilterState> {
   const fields = readFilterFields(query);
   if (!fields.ok) return fields;
@@ -534,9 +537,8 @@ function readLine(value: unknown): Commerce.CartLine | undefined {
 }
 
 /** The cart lines a request carries, refused with `422` when a line is not usable and with
- * `insufficient-stock` when a line asks for more than the ceiling it recorded: whether a product is
- * still in stock is the pricing rules' business, which read the catalogue as it stands, while the
- * ceiling travels on the line itself and is what the request already answers. */
+ * `insufficient-stock` when it exceeds the ceiling it recorded. Shelf stock is the pricing rules'
+ * business, while that ceiling travels on the line itself and is what the request already answers. */
 export function readCartLines(value: unknown): Common.Result<readonly Commerce.CartLine[]> {
   if (!isList(value)) return fieldProblem("lines");
   const lines: Commerce.CartLine[] = [];
@@ -572,9 +574,8 @@ const LINE_AMOUNT_KEYS = [
 ] as const;
 
 /** The priced cart an order is built from, or `undefined` when it is not usable. Every amount is
- * checked and every line read by the shared cart-line reader, but the totals are then passed on as
- * submitted: an order keeps the amounts the buyer reviewed rather than recomputing them, which is what
- * stops a later price change from moving a placed order. */
+ * checked and every line read by the shared cart-line reader, but the totals pass on as submitted: an
+ * order keeps the amounts the buyer reviewed, which stops a later price change from moving it. */
 export function readOrderSnapshot(value: unknown): Commerce.OrderSnapshot | undefined {
   if (!isMembers(value)) return undefined;
   if (!SNAPSHOT_AMOUNT_KEYS.every((key) => memberAmount(value, key) !== undefined))
@@ -593,8 +594,7 @@ export function readOrderSnapshot(value: unknown): Commerce.OrderSnapshot | unde
 }
 
 /** The wording for a promo rejection the pricing rules reported, or `undefined` when the failure is not
- * one of the eight reasons. The map is built from `src/constants/content.ts`'s record rather than
- * restating the reasons, which the type system already holds. */
+ * one of the eight reasons: the map above, keyed by the record `src/constants/content.ts` holds. */
 export function promoRejectionWording(code: string): string | undefined {
   return PROMO_REJECTION_WORDING.get(code);
 }

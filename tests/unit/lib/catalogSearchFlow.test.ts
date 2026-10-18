@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/catalogSearchFlow.test.ts
  * Purpose: Search scoring, type-ahead suggestions, the debounced input path and the transport-backed reads.
- * Lines: 375
+ * Lines: 392
  */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -107,14 +107,16 @@ describe("search matching", () => {
     expect([search.tokenise("a b 7"), search.tokenise("")]).toEqual([[], []]);
   });
 
-  it("treats a term holding nothing searchable as blank, and matches whole words only", () => {
+  it("treats a term holding nothing searchable as blank, and completes the word a token opens", () => {
     for (const blank of ["", "   ", " - ", "a", "7"]) expect(search.isBlankQuery(blank)).toBe(true);
     for (const term of ["au", "lamp"]) expect(search.isBlankQuery(term)).toBe(false);
     const matched = search.applyTextMatch(MATCHINGS, "  ", LOOKUP);
     expect([idsOf(matched), matched === MATCHINGS]).toEqual([idsOf(MATCHINGS), false]);
     expect(search.applyTextMatch(MATCHINGS, "zzzz", LOOKUP)).toEqual([]);
-    expect(search.applyTextMatch(MATCHINGS, "apertur", LOOKUP)).toEqual([]);
     const lens = productNamed("Aperture Prime Lens").id;
+    // "apertur" is only the opening of the name's first word, and the opening is what the whole word a
+    // prefix completes answers, so the listing reaches what a type-ahead row for the same term offers.
+    expect(idsOf(search.applyTextMatch(MATCHINGS, "apertur", LOOKUP))).toEqual([lens]);
     expect(idsOf(search.applyTextMatch(MATCHINGS, "lens", LOOKUP))).toEqual([lens]);
     const exact = idsOf(search.applyTextMatch(MATCHINGS, "aurelia radio", LOOKUP));
     expect(exact[0]).toBe(productNamed("Aurelia Radio").id);
@@ -245,6 +247,21 @@ describe("type-ahead suggestions", () => {
     expect(unmatched.map((one) => one.matched)).toEqual([false, false, false]);
     expect(search.highlightSegments("", ["speaker"])).toEqual([]);
   });
+
+  // The rule that keeps the panel and the listing from disagreeing: whatever product a row offers for a
+  // term, the listing reaches that product for the same term. Each case names a term whose word the
+  // panel completes, and every product it is offered for must be there when the term itself is searched.
+  it.each(["aur", "kett", "speak", "apertur"])(
+    "reaches in the listing every product the term %s is offered for",
+    (term) => {
+      const offered = asked(MATCHINGS, [AURELIA, KESTREL], term).filter(
+        (one) => one.kind === "product",
+      );
+      const reached = idsOf(search.applyTextMatch(MATCHINGS, term, LOOKUP));
+      expect(offered.length).toBeGreaterThan(0);
+      for (const one of offered) expect(reached).toContain(productNamed(one.text).id);
+    },
+  );
 });
 
 describe("the debounced type-ahead path", () => {

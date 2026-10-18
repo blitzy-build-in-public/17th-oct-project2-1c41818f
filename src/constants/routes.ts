@@ -1,8 +1,10 @@
 /**
  * Path: src/constants/routes.ts
  * Purpose: Every route path and its builder, so no route string is written twice
- * Lines: 177
+ * Lines: 296
  */
+
+import type { Role } from "@/types/account";
 
 /**
  * Dynamic route segment keys, read through `useParams` by the feature routes that own them.
@@ -70,13 +72,68 @@ export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
  * The two guarded sections: `/account/*` requires a session and `/admin/*` requires an
  * administrator.
  *
- * Consumers: `src/Router.tsx` guards on these prefixes, and `Header.tsx`, `AccountLayout.tsx` and
- * `AdminSidebar.tsx` pass them to {@link isActivePath} to mark the section the visitor is in.
+ * Consumers: `Header.tsx`, `AccountLayout.tsx` and `AdminSidebar.tsx` pass them to
+ * {@link isActivePath} to mark the section the visitor is in, and {@link SECTION_ROLES} keys the policy
+ * below by them.
  */
 export const ROUTE_PREFIXES = {
   ACCOUNT: ROUTES.ACCOUNT,
   ADMIN: ROUTES.ADMIN,
 } as const;
+
+/**
+ * The roles each guarded section admits, so the role-to-section rule has one home rather than one per
+ * reader.
+ *
+ * `/account/*` is the customer's own area, which an administrator may also read — the account navigation
+ * adds the administrator's entries for exactly that reason — while `/admin/*` is the administrator's
+ * alone, because the dashboard and the reports read every customer's orders.
+ *
+ * Consumers: `src/Router.tsx`, whose `RequireRole` guards one section with each list, and
+ * {@link canReachPath}, which answers the same question about a single path.
+ */
+export const SECTION_ROLES: Readonly<Record<keyof typeof ROUTE_PREFIXES, readonly Role[]>> = {
+  ACCOUNT: ["customer", "admin"],
+  ADMIN: ["admin"],
+};
+
+/** Where a location's path ends and its query string or fragment begins. */
+const LOCATION_SUFFIX_START = /[?#]/;
+
+/** The path portion of a location, cut before any query string or fragment so a path is matched by its
+ * route alone: `src/Router.tsx` preserves the search as well as the pathname it turned a visitor away
+ * from, and `/admin?range=30` is inside `/admin`. */
+function pathnameOf(path: string): string {
+  const start = path.search(LOCATION_SUFFIX_START);
+  return start === -1 ? path : path.slice(0, start);
+}
+
+/**
+ * Whether a role can reach a path: false for a path inside a guarded section that role is not admitted
+ * to, and true for every open route and for a guarded section the role may read.
+ *
+ * The section match is {@link isActivePath}'s, so a path counts as inside a section here exactly when the
+ * navigation marks it as inside one. This decides a screen and not an access: what a request is allowed
+ * to read is settled in `src/lib/mockServer.ts`, which re-checks the session on every privileged
+ * endpoint.
+ *
+ * Consumer: `src/features/account/LoginPage.tsx`, which refuses a preserved return path the visitor's role
+ * cannot reach rather than offering to continue into a second refusal, and honours one it can.
+ *
+ * @param path - The path to judge, with or without a query string or fragment.
+ * @param role - The role of the session that would reach it.
+ * @returns Whether that role can open the path.
+ */
+export function canReachPath(path: string, role: Role): boolean {
+  const pathname = pathnameOf(path);
+  if (isActivePath(pathname, ROUTE_PREFIXES.ACCOUNT)) {
+    return SECTION_ROLES.ACCOUNT.includes(role);
+  }
+  if (isActivePath(pathname, ROUTE_PREFIXES.ADMIN)) {
+    return SECTION_ROLES.ADMIN.includes(role);
+  }
+  return true;
+}
 
 /**
  * Query-string key carrying the path a visitor intended to reach through the sign-in screen.
@@ -101,6 +158,30 @@ function withTrailingSegment(pattern: string, value: string): string {
   const head = pattern.slice(0, pattern.lastIndexOf(PATH_SEPARATOR) + 1);
   return `${head}${encodeURIComponent(value)}`;
 }
+
+/**
+ * Derives the section a route pattern sits in by dropping its trailing segment, so `/category/:slug`
+ * reads as `/category`.
+ *
+ * Private to this module, and the reason it exists is the constant below: a parameterised pattern's
+ * own section is derived from {@link ROUTES} rather than typed out as a second literal, so the path
+ * the pattern declares and the section built from it cannot drift. A pattern with no separator to
+ * drop is returned unchanged.
+ */
+function sectionPath(pattern: string): string {
+  const separatorIndex = pattern.lastIndexOf(PATH_SEPARATOR);
+  return separatorIndex === -1 ? pattern : pattern.slice(0, separatorIndex);
+}
+
+/**
+ * The catalogue's own section, shared by the catalogue listing and every category listing.
+ *
+ * Consumer: `src/components/layout/Header.tsx` marks the catalogue destination current on this path
+ * as well as on `ROUTES.CATALOG`, because the catalogue listing and each category listing are one
+ * section of the storefront — `CatalogPage` serves both `/catalog` and `/category/:slug` — so a
+ * visitor who arrives at a category sees the navigation say where they are.
+ */
+export const CATEGORY_SECTION_PATH = sectionPath(ROUTES.CATEGORY);
 
 /** Builds the product detail path for a product slug. */
 export function productPath(slug: string): string {
@@ -174,4 +255,42 @@ export function isActivePath(pathname: string, path: string, options?: ActivePat
     return current === target;
   }
   return current === target || current.startsWith(`${target}${PATH_SEPARATOR}`);
+}
+
+/**
+ * A navigation destination as {@link isDestinationCurrent} reads it: the route the destination links to,
+ * whether it is current only where the two paths are equal, and any further sections the same destination
+ * also covers.
+ *
+ * Consumer: `src/components/layout/Header.tsx`, whose primary navigation declares one entry per
+ * destination. The shape is structural, so a consumer's own destination type satisfies it as it stands.
+ */
+export interface ActiveDestination {
+  /** The route the destination links to, taken from {@link ROUTES}. */
+  readonly to: string;
+  /** Match only where the two paths are equal, instead of matching the route's whole section. */
+  readonly end?: boolean;
+  /** Sections the same destination also covers, each one matched as a section of its own. */
+  readonly sections?: readonly string[];
+}
+
+/**
+ * Reports whether the current location sits in a navigation destination, which is the rule a navigation
+ * marks its current entry by: the destination's own route through {@link isActivePath}, matched exactly
+ * where the destination asks for that, and then each section the destination also covers.
+ *
+ * It exists for the one destination that two routes reach — the catalogue listing and every category
+ * listing are one section of the storefront, so the catalogue's entry covers
+ * {@link CATEGORY_SECTION_PATH} — and it composes {@link isActivePath} rather than repeating it, so the
+ * comparison keeps one home. Both a destination's route and its sections come from this module, so no
+ * consumer writes a path.
+ *
+ * @param pathname - The current location's pathname.
+ * @param destination - The destination to test; see {@link ActiveDestination}.
+ * @returns True when the location is inside that destination.
+ */
+export function isDestinationCurrent(pathname: string, destination: ActiveDestination): boolean {
+  if (isActivePath(pathname, destination.to, { exact: destination.end === true })) return true;
+  const sections = destination.sections ?? [];
+  return sections.some((path) => isActivePath(pathname, path));
 }

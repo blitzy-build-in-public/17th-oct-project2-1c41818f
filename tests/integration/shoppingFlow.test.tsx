@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/shoppingFlow.test.tsx
  * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states.
- * Lines: 517
+ * Lines: 589
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +12,7 @@ import {
   SEARCH_SUGGESTION_LIMIT,
 } from "@/constants/config";
 import * as content from "@/constants/content";
-import { ROUTES, productPath } from "@/constants/routes";
+import { ROUTES, categoryPath, productPath } from "@/constants/routes";
 import { CATEGORY_DEFINITIONS, FACET_DEFINITIONS } from "@/constants/taxonomy";
 import { BRANDS } from "@/data/categories";
 import { PRODUCTS } from "@/data/products";
@@ -46,11 +46,13 @@ import type { UserEvent } from "../testUtils";
  * sentence, the taxonomy owns the sort keys, and the seeded collections own the subjects.
  */
 const {
+  A11Y_COPY,
   CATALOG_COPY,
   CART_COPY,
   COMMON_ACTIONS,
   EMPTY_STATES,
   FEEDBACK_COPY,
+  HEADER_COPY,
   HOME_COPY,
   SEARCH_COPY,
   cartButtonLabel,
@@ -58,6 +60,7 @@ const {
   productCountAnnouncement,
   productCountLabel,
   quantityLabel,
+  quickAddLabel,
   ratingSummaryLabel,
   removeFilterLabel,
 } = content;
@@ -183,7 +186,7 @@ async function headingNamed(name: string | RegExp, level = 1): Promise<HTMLEleme
   return screen.findByRole("heading", { level, name });
 }
 
-/** The facet drawer, opened when it is not already up: below the medium breakpoint the panel is the
+/** The facet drawer, opened when it is not already up: below the extra-large stop the panel is the
  *  drawer's contents, so the facets are reached the way a phone reaches them. */
 async function facetDrawer(user: UserEvent): Promise<HTMLElement> {
   const open = screen.queryByRole("dialog", { name: SEARCH_COPY.FILTER_PANEL_HEADING });
@@ -196,6 +199,14 @@ async function facetDrawer(user: UserEvent): Promise<HTMLElement> {
 /** The link a name reaches, which is how every destination in the product is offered. */
 function linkNamed(name: string | RegExp): HTMLElement {
   return screen.getByRole("link", { name });
+}
+
+/** The header navigation's current destination(s), read from the attribute the sheet paints the state from. */
+function currentDestinations(): HTMLElement[] {
+  const nav = screen.getByRole("navigation", { name: A11Y_COPY.MAIN_NAV_LABEL });
+  return within(nav)
+    .getAllByRole("link")
+    .filter((link) => link.getAttribute("aria-current") === "page");
 }
 
 /** The button a name reaches. */
@@ -265,6 +276,27 @@ describe("the shopper's browse-and-add journey", () => {
     expect(tileNames()).toHaveLength(Math.min(tile.count, DEFAULT_PAGE_SIZE));
     const chips = screen.getByRole("list", { name: SEARCH_COPY.ACTIVE_FILTERS_HEADING });
     expect(within(chips).getByText(tile.label)).toBeInTheDocument();
+
+    // The scoped listing is a catalogue listing, so the header marks the catalogue destination and nothing
+    // else while the visitor is on it.
+    const current = currentDestinations();
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveAccessibleName(HEADER_COPY.NAV_CATALOG_LABEL);
+  });
+
+  it("marks the catalogue destination current on a category's own route", async () => {
+    const category = CATEGORY_DEFINITIONS.find((definition) => definition.parentSlug !== null);
+    if (category === undefined) throw new Error("The taxonomy declares no category listing.");
+
+    // The route is loaded directly rather than reached from a tile: a category's own pathname, `/category/<slug>`,
+    // is not inside `/catalog` as a path, which is the case the header's rule has to cover for the one
+    // destination two routes reach.
+    renderApp({ route: categoryPath(category.slug) });
+    await settledTiles();
+
+    const current = currentDestinations();
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveAccessibleName(HEADER_COPY.NAV_CATALOG_LABEL);
   });
 
   it("pages the catalogue and marks the page it is showing", async () => {
@@ -436,10 +468,15 @@ describe("the shopper's browse-and-add journey", () => {
     const { user } = renderApp({ route: ROUTES.CATALOG });
     await settledTiles();
 
+    // WCAG 2.5.3 (Label in Name): the words a control shows have to be inside the name it answers to. An
+    // empty cart draws no badge, so the name has the word alone to carry.
+    const emptyCart = buttonNamed(cartButtonLabel(0));
+    expect(emptyCart.getAttribute("aria-label")).toContain(textOf(emptyCart));
+
     const tile = tileHeadings()[0];
     const product = productNamed(textOf(tile));
     const quickAdd = within(tile.closest("li") ?? tile).getByRole("button", {
-      name: CATALOG_COPY.QUICK_ADD_LABEL,
+      name: quickAddLabel(product.name),
     });
     const name = { name: CART_COPY.MINI_CART_HEADING };
     const rowsOf = (scope: HTMLElement): HTMLElement[] =>
@@ -457,6 +494,22 @@ describe("the shopper's browse-and-add journey", () => {
     await user.click(quickAdd);
 
     expect(await screen.findByRole("button", { name: cartButtonLabel(2) })).toBeInTheDocument();
+
+    // The same rule once a badge is drawn: its digit is visible text, so the name has to carry the words
+    // "Cart 2" as well as the count it spells out.
+    const filled = buttonNamed(cartButtonLabel(2));
+    expect(filled.getAttribute("aria-label")).toContain(textOf(filled));
+
+    // And no two navigation landmarks answer to one name: the shell draws the header's row and the mobile
+    // panel under two labels, and only the width decides which of them the visitor meets.
+    const landmarkNames = screen
+      .getAllByRole("navigation", { hidden: true })
+      .map((landmark) => landmark.getAttribute("aria-label"));
+    expect(landmarkNames).toEqual(
+      expect.arrayContaining([A11Y_COPY.MAIN_NAV_LABEL, A11Y_COPY.MOBILE_NAV_LABEL]),
+    );
+    expect(new Set(landmarkNames).size).toBe(landmarkNames.length);
+
     await user.click(buttonNamed(cartButtonLabel(2)));
     const rows = rowsOf(await screen.findByRole("dialog", name));
     expect(rows).toHaveLength(1);
@@ -499,6 +552,25 @@ describe("the shopper's browse-and-add journey", () => {
     expect(await headingNamed(categoryPageHeading(category.name))).toBeInTheDocument();
     await waitFor(() => expect(tileNames().length).toBeGreaterThan(0));
   });
+
+  // A term holding nothing searchable filters nothing — that is the search's own documented reading — so the
+  // catalogue stands rather than the route claiming a match, and the notice says the address's term was not
+  // applied. Both terms here hold no token: one is a lone character, the other punctuation only.
+  it.each(["q", "<<>>&&\"\"''%%;;--"])(
+    "says the term %s was not applied rather than listing the catalogue as its answer",
+    async (ignored) => {
+      renderApp({ route: filtersToPath(ROUTES.SEARCH, setQuery(DEFAULT_FILTER_STATE, ignored)) });
+
+      const notice = await screen.findByRole("status", {
+        name: SEARCH_COPY.QUERY_NOT_APPLIED_TITLE,
+      });
+      expect(notice).toHaveTextContent(SEARCH_COPY.QUERY_NOT_APPLIED_TITLE);
+      expect(notice).toHaveTextContent(SEARCH_COPY.QUERY_NOT_APPLIED_DESCRIPTION);
+      // The term filters nothing, so the catalogue is listed as it is without one, and the page says the term
+      // was not applied rather than leaving the listing to read as that term's own answer.
+      expect(await settledTiles()).toHaveLength(DEFAULT_PAGE_SIZE);
+    },
+  );
 
   it("renders the seam's own failure with a retry that recovers", async () => {
     const failure = failNext({ path: API_PATHS.PRODUCTS });

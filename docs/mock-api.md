@@ -181,7 +181,8 @@ Sign-in works from a fresh clone because every seeded account carries a digest p
 The dataset a caller is querying is generated deterministically by one seeded generator, so the same build produces the same data: **20 categories** (8 parents
 and 12 children, and only the children hold products), **12 brands**, **140 products**, **40 customers** of whom 2 are administrators, about **1,100 orders**
 across the trailing 365 days of which **60 belong to the seeded accounts**, about **420 reviews**, **8 promo codes** and **5 shipping methods**, plus the daily
-sales fact rows derived from those same generated orders across 20 categories and 3 channels (`web`, `mobile`, `store`). The volumes are approximate:
+sales fact rows derived from those same generated orders across the **12 leaf categories** — only the children hold products, so no order line can file under a
+parent — and 3 channels (`web`, `mobile`, `store`). The volumes are approximate:
 `tests/unit/lib/mockServer.test.ts` asserts the relational invariants and that two bootstrap passes agree, not the literal figures.
 
 A card number is **never stored**: the seam reads it, validates it and records only its brand, its last four digits and a decision. `DEMO_CARD_NUMBERS` in

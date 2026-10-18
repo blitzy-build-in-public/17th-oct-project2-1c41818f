@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 566
+ * Lines: 573
  */
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -22,6 +22,7 @@ import {
   COMMON_ACTIONS,
   EMPTY_STATES,
   FEEDBACK_COPY,
+  PAGING_NOUNS,
   reviewBodyLengthMessage,
   reviewTitleLengthMessage,
 } from "@/constants/content";
@@ -387,15 +388,17 @@ export interface ProductReviewsProps {
  * replaced it.
  *
  * Paging is the shared control's, reached through `usePagination`, so the page count, the two bounds and the
- * page buttons cannot disagree with the payload the endpoint answered. The read itself is issued with the page
- * the reader asked for rather than with the clamped one: while a page is in flight the previous total is not
- * in hand, and clamping against an absent total would re-issue the first page instead of the chosen one.
+ * page buttons cannot disagree with the payload the endpoint answered, and the caption beside them counts
+ * reviews rather than the catalogue's products. The read itself is issued with the page the reader asked for
+ * rather than with the clamped one: while a page is in flight the previous total is not in hand, and clamping
+ * against an absent total would re-issue the first page instead of the chosen one.
  *
  * All four states are derived during render — the placeholder rows while the read is in flight, the alert
  * carrying the failure's own message with its retry, the empty state when the product has no reviews at all or
  * when the chosen rating matches none of them, and the list otherwise — so nothing is mirrored into state and
  * no placeholder is ever shown beside a stale list. The summary's count is an always-present polite live
- * region, so a count changed by a filter is announced rather than only seen.
+ * region, so a count changed by a filter is announced rather than only seen, and the pager defers to it: its
+ * caption states that figure while its own region announces the page alone.
  *
  * @param props - The product to read reviews of, and the section's extra classes.
  * @returns The labelled section holding the summary, the reviews and the form.
@@ -527,6 +530,10 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
             pageCount={pager.pageCount}
             hasNext={pager.hasNext}
             hasPrevious={pager.hasPrevious}
+            // The rows are reviews, so the caption counts reviews rather than the catalogue's products.
+            countNoun={PAGING_NOUNS.REVIEWS}
+            // The summary above announces the count from its own always-present region, so this defers to it.
+            isCountAnnouncedByCaller
             pageSizeOptions={PAGE_SIZE_OPTIONS}
             onPageChange={(page): void => applyPaging(page, paging.pageSize)}
             onPageSizeChange={(pageSize): void => applyPaging(1, pageSize)}

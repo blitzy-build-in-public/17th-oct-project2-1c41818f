@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
  * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines.
- * Lines: 555
+ * Lines: 596
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
@@ -19,6 +19,7 @@ import {
   MAX_REPORT_RANGE_DAYS,
 } from "@/constants/config";
 import { BASELINE_OPTIONS } from "@/constants/taxonomy";
+import { ORDERS } from "@/data/orders";
 import { salesProDataSource } from "@/data/repositories";
 import * as analytics from "@/lib/analyticsService";
 import { API_PATHS, handleRequest, registerDataSource } from "@/lib/mockServer";
@@ -28,12 +29,14 @@ import type {
   BucketGranularity,
   Metric,
   ProductPerformance,
+  ReportKind,
   RevenueQuery,
   SalesRecord,
   TopProductsQuery,
 } from "@/types/analytics";
 import type { CategoryId, DateRange, Result } from "@/types/common";
 import type { Order, OrderStatus } from "@/types/commerce";
+import { sumBy } from "@/utils/collections";
 import * as dates from "@/utils/dates";
 import * as statistics from "@/utils/statistics";
 
@@ -509,6 +512,44 @@ describe("the administrator-only reads, through the service and the seam", () =>
     const query: RevenueQuery = { ...seededRange, bucket: "week", groupBy: "category" };
     const first = valueOf(await analytics.getRevenueSeries(query, admin()));
     expect(valueOf(await analytics.getRevenueSeries(query, admin()))).toEqual(first);
+  });
+});
+
+// One period, one set of figures -------------------------------------------------------------------
+
+/** The two seeded periods the figures below are stated over: one month, and the trailing year. */
+const MONTH: DateRange = { from: "2026-09-19", to: "2026-10-18" };
+const TRAILING_YEAR: DateRange = { from: "2025-10-18", to: "2026-10-18" };
+
+/** The six figures the fact rows of each period total, in the order the sales report states them. */
+const SEEDED_TOTALS: readonly (readonly [DateRange, readonly number[]])[] = [
+  [MONTH, [111, 836, 14_425_301, 225_097, 1_263_633, 12_936_571]],
+  [TRAILING_YEAR, [983, 7_264, 128_857_068, 2_470_194, 19_554_394, 106_832_480]],
+];
+
+/** The units one seeded order's lines sold, which the fact rows count and the product report sums. */
+const unitsOf = (order: Order) => sumBy(order.lines, (line) => line.quantity);
+
+describe("one period, one set of figures: the fact rows against the orders they came from", () => {
+  it.each(SEEDED_TOTALS)("totals %o on the period's own basis", async (range, totals) => {
+    const [orders, units, gross, discounts, refunds, net] = totals;
+    const standing = statistics.periodOrders(ORDERS, range);
+    const reported = (kind: ReportKind) =>
+      valueOf(salesProDataSource.runReport({ kind, ...range, bucket: "day" })).summary.items;
+    const stated = (kind: ReportKind, key: string) =>
+      reported(kind).find((item) => item.key === key)?.value;
+    // The sales report sums the fact rows' six columns over the range in its own column order, and the
+    // identities below are what the reduction those columns came from must satisfy.
+    expect(reported("sales").map((item) => item.value)).toEqual(totals);
+    expect(gross - discounts - refunds).toBe(net);
+    expect([orders, units]).toEqual([standing.length, sumBy(standing, unitsOf)]);
+    expect(net).toBe(sumBy(standing, statistics.goodsRevenueMinor));
+    // One range, every surface: the dashboard's KPIs and the three reports state the same figures.
+    const kpis = valueOf(await analytics.getKpis({ ...range, bucket: "day" }, admin()));
+    expect([kpis.orders, kpis.units, kpis.revenueMinor]).toEqual([orders, units, net]);
+    expect([stated("products", "unitsSold"), stated("products", "revenue")]).toEqual([units, net]);
+    expect(stated("customers", "orders")).toBe(orders);
+    expect(stated("customers", "revenue")).toBe(net);
   });
 });
 

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 353
+ * Lines: 380
  */
 
 import { useEffect, useRef } from "react";
@@ -61,8 +61,11 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * figures, and `CartSummary.tsx` stands its own placeholder in them rather than this page standing a
  * page-sized skeleton over data it has. A failed price is the panel's as well — its alert states the message
  * the seam shaped and its retry is this page's `reload` — while the rows stay usable, so a cart the shopper
- * can still correct is never hidden behind an error. What remains, lines beside figures, is the loaded
- * state, the only one of the four that draws every region of the route.
+ * can still correct is never hidden behind an error; that same failure is the one state in which the way on
+ * to checkout is refused, because a basket whose price could not be read has no total to check out with, and
+ * the retry beside it can restore one here rather than send the shopper into a flow that cannot total what
+ * they hold. What remains, lines beside figures, is the loaded state, the only one of the four that draws
+ * every region of the route.
  *
  * Accessibility here is by construction rather than by attribute. The route's one `<h1>` is `PageHeader`'s;
  * the rows are a list of items and are marked as one; every control is a real `Button` or a real anchor
@@ -80,15 +83,10 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * marker: its rows are grid items and therefore paint no marker box, which is the pairing `src/styles/
  * base.css` documents as what keeps list semantics without a visible marker. And `src/constants/content.ts`
  * holds no cart-scoped label for the clear control, so that control reads the copy library's generic
- * `Clear`, and the removal sentence a cleared cart reports is the one written for a single line — see the
- * gap flags below.
+ * `Clear` — see the gap flag below.
  */
 
 /*
- * BLITZY [DESIGN_SYSTEM_GAP]: the copy library holds no sentence for a cart emptied as a whole, so the
- * confirmation states `FEEDBACK_COPY.TOAST_REMOVED_FROM_CART`, the nearest existing wording, rather than a
- * sentence composed here. One cart-scoped key is all this page needs to speak its own register.
- *
  * BLITZY [DESIGN_SYSTEM_GAP]: `COMMON_ACTIONS.CLEAR` is the copy library's generic clear, because no
  * cart-scoped label for this control exists. A key naming what is cleared would let the control read the
  * way its own register would.
@@ -245,7 +243,7 @@ export function CartPage(): ReactElement {
   const clearCart = (): void => {
     isFocusRestorePending.current = true;
     cart.clearCart();
-    toasts.success(FEEDBACK_COPY.TOAST_REMOVED_FROM_CART);
+    toasts.success(FEEDBACK_COPY.TOAST_CART_CLEARED);
   };
 
   /**
@@ -265,7 +263,7 @@ export function CartPage(): ReactElement {
       <CartLines lines={lines} pricedLinesById={pricedLinesById} />
       <aside className={CLASSES.aside}>
         <CartSummary error={error} onRetry={retryPricing} pricedCart={pricedCart} status={status} />
-        <CartActions />
+        <CartActions isCheckoutAvailable={status !== "error"} />
       </aside>
     </div>
   );
@@ -327,6 +325,16 @@ function CartLines({ lines, pricedLinesById }: CartLinesProps): ReactElement {
   );
 }
 
+/** Everything {@link CartActions} renders from. */
+interface CartActionsProps {
+  /**
+   * Whether the basket currently has a total to check out with: `false` only while the pricing request that
+   * produces the total is failing. A price merely in flight leaves it `true` — the panel stands its own
+   * placeholder in the figures and the shopper has been told nothing is wrong.
+   */
+  readonly isCheckoutAvailable: boolean;
+}
+
 /**
  * The two ways on from the cart, in the summary column beneath the panel: to checkout, or back to the
  * catalogue.
@@ -337,12 +345,31 @@ function CartLines({ lines, pricedLinesById }: CartLinesProps): ReactElement {
  * members of it. The block modifier fills the column, as the class contract above states the action block
  * asks of the markup inside it, and the primary register is spent on the one action a cart exists for.
  *
+ * The checkout control is offered in every state of the page except the one the summary panel cannot price:
+ * while the pricing request that produces the total is failing, there is no total to check out with, so the
+ * activation is refused here rather than handed to a flow that could not complete it. Refused and not
+ * withdrawn, because the route's inventory names this control as part of itself and the failure is
+ * recoverable in place — the panel's alert carries the retry that restores the figures and the control with
+ * them. The refusal is stated through `aria-disabled` rather than the native attribute, so the control keeps
+ * its place in the tab order and the panel's own explanation stays beside it, and it is enforced by
+ * preventing the default of the click: `Link` runs this handler first and navigates only when the event is
+ * unprevented, and Enter on a focused anchor fires that same click, so the keyboard is refused as the pointer
+ * is.
+ *
+ * @param props - Whether the basket has a total to check out with.
  * @returns The stacked pair of navigation controls.
  */
-function CartActions(): ReactElement {
+function CartActions({ isCheckoutAvailable }: CartActionsProps): ReactElement {
   return (
     <div className={CLASSES.actions}>
-      <Link className={CHECKOUT_ACTION_CLASS} to={ROUTES.CHECKOUT}>
+      <Link
+        aria-disabled={isCheckoutAvailable ? undefined : "true"}
+        className={CHECKOUT_ACTION_CLASS}
+        onClick={(event) => {
+          if (!isCheckoutAvailable) event.preventDefault();
+        }}
+        to={ROUTES.CHECKOUT}
+      >
         {CART_COPY.PROCEED_TO_CHECKOUT_LABEL}
       </Link>
       <Link className={CONTINUE_SHOPPING_ACTION_CLASS} to={ROUTES.CATALOG}>

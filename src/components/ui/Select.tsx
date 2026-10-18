@@ -1,13 +1,13 @@
 /**
  * Path: src/components/ui/Select.tsx
  * Purpose: Select, checkbox, radio group and switch with accessible labelling
- * Lines: 582
+ * Lines: 560
  */
 
 import { useCallback, useEffect, useId, useRef } from "react";
 import type { ComponentPropsWithRef, MouseEvent, ReactElement, ReactNode } from "react";
 
-import { FormField } from "@/components/ui/Input";
+import { FieldError, FieldHint, FormField } from "@/components/ui/Input";
 import type { FieldControlProps } from "@/components/ui/Input";
 import type { FieldErrors, OptionGroup, SelectOption } from "@/types/common";
 
@@ -15,11 +15,13 @@ import type { FieldErrors, OptionGroup, SelectOption } from "@/types/common";
  * The class contract this family renders against.
  *
  * No stylesheet may be imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every
- * class below is consumed by name, and this list is what `src/styles/controls.css` owes the file:
- * `sp-field` and its `__label`, `__hint` and `__error` for the field anatomy `FormField` renders;
- * `sp-select` and `sp-select__wrap` for the native list and the element that hosts its chevron; `sp-choice`
- * and `sp-choice__label` for a labelled choice row; `sp-checkbox`, `sp-radio` and `sp-radio-group` for the
- * boxes and the group that stacks them; and `sp-switch` with its `__track` and `__thumb` for the toggle.
+ * class below is consumed by name, and this list is what `src/styles/controls.css` owes the file: `sp-field`
+ * and its `__label`, `__hint` and `__error` for the field anatomy — the label `FormField` renders and the
+ * hint and error rows `src/components/ui/Input.tsx` renders through `FieldHint` and `FieldError` for this
+ * file's controls as well; `sp-select` and `sp-select__wrap` for the native list and the element that hosts
+ * its chevron; `sp-choice` and `sp-choice__label` for a labelled choice row; `sp-checkbox`, `sp-radio` and
+ * `sp-radio-group` for the boxes and the group that stacks them; and `sp-switch` with its `__track` and
+ * `__thumb` for the toggle.
  *
  * State is carried by attributes and pseudo-classes, never by a second class: `:checked`, `:indeterminate`
  * and `:disabled` on the boxes, `[aria-checked="true"]` and `[aria-disabled="true"]` on the switch, and
@@ -402,21 +404,9 @@ export function Checkbox({
         />
         <span className="sp-choice__label">{label}</span>
       </label>
-      {descriptionId === undefined ? null : (
-        <p className="sp-field__hint" id={descriptionId}>
-          {description ?? ""}
-        </p>
-      )}
-      {hintId === undefined ? null : (
-        <p className="sp-field__hint" id={hintId}>
-          {hint ?? ""}
-        </p>
-      )}
-      {errorId === undefined ? null : (
-        <p className="sp-field__error" id={errorId} role="alert">
-          {error ?? ""}
-        </p>
-      )}
+      <FieldHint id={descriptionId} text={description} />
+      <FieldHint id={hintId} text={hint} />
+      <FieldError id={errorId} text={error} />
     </div>
   );
 }
@@ -476,11 +466,7 @@ export function RadioGroup({
       )}
     >
       <legend className="sp-field__label">{legend}</legend>
-      {hintId === undefined ? null : (
-        <p className="sp-field__hint" id={hintId}>
-          {hint ?? ""}
-        </p>
-      )}
+      <FieldHint id={hintId} text={hint} />
       {options.map((option) => (
         <label className={choiceClasses(optionClassName)} key={option.value}>
           <input
@@ -499,11 +485,7 @@ export function RadioGroup({
           </span>
         </label>
       ))}
-      {errorId === undefined ? null : (
-        <p className="sp-field__error" id={errorId} role="alert">
-          {error ?? ""}
-        </p>
-      )}
+      <FieldError id={errorId} text={error} />
     </fieldset>
   );
 }
@@ -572,11 +554,7 @@ export function Switch({
         <span className="sp-switch__thumb" aria-hidden="true" />
         <span className="sp-choice__label">{label}</span>
       </button>
-      {hintId === undefined ? null : (
-        <p className="sp-field__hint" id={hintId}>
-          {hint ?? ""}
-        </p>
-      )}
+      <FieldHint id={hintId} text={hint} />
     </div>
   );
 }

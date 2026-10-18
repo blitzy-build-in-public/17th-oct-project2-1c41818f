@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/FilterPanel.tsx
  * Purpose: The facet panel for category, brand, price, rating and availability, with counts and clear actions
- * Lines: 540
+ * Lines: 541
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -42,7 +42,7 @@ import { fieldErrorsFromApiError } from "@/utils/validation";
  * and `src/styles/components.css` are reached only through the primitives composed here, which apply their own
  * names (`.sp-visually-hidden`, `.sp-field`, `.sp-choice`, `.sp-alert`, `.sp-empty`, `.sp-skeleton`).
  *
- * `sp-facets` is the panel and, from the medium stop up, the sticky first column of `.sp-catalog-layout`; the
+ * `sp-facets` is the panel and, from the extra-large stop up, the sticky first column of `.sp-catalog-layout`; the
  * sheet hides it below that stop because the drawer takes over, so exactly one of the two is ever rendered and
  * no control id or label reaches the document twice. `sp-facets--drawer` is the same element inside the drawer,
  * resetting the sticky positioning and the panel's own scroll, and the sheet writes it after `sp-facets`, so its
@@ -50,7 +50,7 @@ import { fieldErrorsFromApiError } from "@/utils/validation";
  * action out in a two-column first row; `__group` and `__range` span both tracks; `__legend` is a group heading;
  * `__values`, `__value`, `__label` and `__count` are a value list, its rows, the growing label side of a row and
  * the count beside it; `__clear` is a clear action aligned to the end of its row; `__toggle` is the small-screen
- * trigger, hidden from the medium stop up and so rendered only while the panel is a drawer; and the dash between
+ * trigger, hidden from the extra-large stop up and so rendered only while the panel is a drawer; and the dash between
  * the two price bounds is the `__range > :nth-child(2)` the sheet styles.
  *
  * BLITZY [CONTRACT]: the sheet speaks of "the panel's heading" but declares no `sp-facets__heading` rule, so the
@@ -75,8 +75,9 @@ const CLASSES = {
   toggle: "sp-facets__toggle",
 } as const;
 
-/** The stop the panel is a column from and a drawer below, built from the token so no width is written here. */
-const COLUMN_QUERY = `(min-width: ${BREAKPOINTS.MEDIUM}px)`;
+/** The stop the panel is a column from and a drawer below, built from the token so no width is written here: the
+ *  column holds 260px of the layout, which the grid's 198px cards need in their own right below that width. */
+const COLUMN_QUERY = `(min-width: ${BREAKPOINTS.XLARGE}px)`;
 
 /** The value a single-choice facet carries to mean "no value": the "any rating" choice that clears the filter. */
 const ANY_VALUE = "";
@@ -324,7 +325,7 @@ export interface FilterPanelProps {
 
 /**
  * The filter panel: five facet groups over the catalogue's own facet response, shown as a sticky column from the
- * medium stop up and as a focus-trapped drawer below it.
+ * extra-large stop up and as a focus-trapped drawer below it.
  *
  * The URL is the store of everything selected: the panel reads its selection from the filter state and writes
  * only through the catalogue provider's setters, which apply the writer `src/utils/queryParams.ts`, so a
@@ -340,9 +341,9 @@ export interface FilterPanelProps {
  * own: no predicate, no comparator and no second count.
  *
  * @param props - The facets and filter state to render, the change observer, the panel's id and extra classes.
- * @returns The column from the medium stop up, or the trigger with its drawer below it.
+ * @returns The column from the extra-large stop up, or the trigger with its drawer below it.
  *
- * BLITZY [BUDGET]: 540 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was added
+ * BLITZY [BUDGET]: 541 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was added
  * to reach a number and none was cut to leave one. The five data-driven groups, the four controls they dispatch
  * to, the price field's DOM-side draft, the class contract and the four data states are what the surface needs,
  * and the plan's own remedy — a second file — would break the path this slice's page imports.

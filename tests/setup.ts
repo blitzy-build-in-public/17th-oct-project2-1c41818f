@@ -1,14 +1,21 @@
 /**
  * Path: tests/setup.ts
  * Purpose: Loads the jest-dom matchers and clears state between tests
- * Lines: 149
+ * Lines: 156
  */
 
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/dom";
 import { afterEach, vi } from "vitest";
 
 import { BREAKPOINTS } from "@/constants/config";
 import { resetMockServerState } from "@/lib/mockServer";
+
+// Every `waitFor` and `findBy*` in the suite waits for an interface the product paints, and the
+// library's one-second default expires while the host is busy — the integration flows render the whole
+// application, so a first paint can take longer than that with the other files running. One ceiling is
+// set here rather than at fifty call sites; no assertion changes, only how long it may take to hold.
+configure({ asyncUtilTimeout: 5_000 });
 
 // Stubbed at module scope rather than in a hook: a setup file is evaluated before any test
 // module, so this is the only point that lands before the mock server reads the value it turns

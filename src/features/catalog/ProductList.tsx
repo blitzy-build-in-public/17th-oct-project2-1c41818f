@@ -31,8 +31,8 @@ import type { ApiError, AsyncStatus } from "@/types/common";
  * Two deliberate omissions. `Button` is not imported although the empty state renders one, because
  * `Feedback.tsx` builds that control itself from `actionLabel` and `onAction`, so an import here would be an
  * unused binding. And the result count is not rendered here: the page's own result-meta row owns the count
- * and its polite live region, and `Pagination` announces the same number beside the page number, so a count
- * in this file would announce one change three times.
+ * and its polite live region, the pager states that same number and leaves its announcement to that region,
+ * so a count in this file would announce one change three times.
  */
 
 /** Every class this file puts on the page, named once so a render body repeats no string. */

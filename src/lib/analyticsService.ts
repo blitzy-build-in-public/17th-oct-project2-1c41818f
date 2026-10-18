@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/analyticsService.ts
  * Purpose: Period bucketing, KPI aggregation, comparison baselines and top-product performance
- * Lines: 595
+ * Lines: 598
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -41,6 +41,7 @@ import {
   bucketKey as dateBucketKey,
   bucketStart,
   eachBucket,
+  formatBandLabel,
   formatBucketLabel,
   formatDateRange,
   isWithinPreparedRange,
@@ -346,16 +347,17 @@ function seriesGroups(
 }
 
 /** One point of a series: the bucket's key, the net revenue it earned — zero for a bucket the group did
- * not sell in — and the label a readout and the accessible data table show. */
+ * not sell in — and the band's label, worded from the run's own `keys` so no two bands word alike. */
 function seriesPoint(
   bucket: DateBucket,
   byBucket: ReadonlyMap<string, number> | undefined,
   granularity: BucketGranularity,
+  keys: readonly string[],
 ): ChartPoint {
   return {
     x: bucket.key,
     y: roundMinorUnits(byBucket?.get(bucket.key) ?? 0),
-    label: bucketLabel(bucket.key, granularity),
+    label: formatBandLabel(bucket.key, granularity, keys),
   };
 }
 
@@ -374,6 +376,7 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
   const bounds = prepareRange(range);
   const granularity = query.bucket ?? DEFAULT_BUCKET_GRANULARITY;
   const buckets = eachBucket(range, granularity);
+  const keys = buckets.map((bucket) => bucket.key);
   const totals = new Map<string, Map<string, number>>();
   // The whole-period series stands even when the range holds nothing, so an empty period is a drawn
   // zero line rather than an absent chart.
@@ -393,7 +396,7 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
     id: group.id,
     label: group.label,
     color: CHART_SERIES_TOKEN_REFERENCES[index % CHART_SERIES_TOKEN_REFERENCES.length],
-    points: buckets.map((bucket) => seriesPoint(bucket, totals.get(group.id), granularity)),
+    points: buckets.map((bucket) => seriesPoint(bucket, totals.get(group.id), granularity, keys)),
   }));
 }
 

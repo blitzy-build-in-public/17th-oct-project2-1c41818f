@@ -1,21 +1,28 @@
 /**
  * Path: tests/components/Table.test.tsx
  * Purpose: Column rendering, sorting, the empty state and the pagination contract
- * Lines: 240
+ * Lines: 278
  */
 
 import { describe, expect, it, vi } from "vitest";
 
 import { DataTable } from "@/components/ui/Table";
-import type { DataTableColumn, DataTableProps, DataTableSort } from "@/components/ui/Table";
+import type {
+  DataTableColumn,
+  DataTablePaging,
+  DataTableProps,
+  DataTableSort,
+} from "@/components/ui/Table";
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "@/constants/config";
 import {
   A11Y_COPY,
   COMMON_ACTIONS,
   EMPTY_STATES,
+  PAGE_SIZE_LABEL,
+  PAGING_NOUNS,
   REPORTS_COPY,
   pageAnnouncement,
-  productCountAnnouncement,
+  pagingCountLabel,
 } from "@/constants/content";
 import type { Product } from "@/types/catalog";
 import { pageWindow } from "@/utils/collections";
@@ -91,16 +98,30 @@ function headerCell(columnId: string): HTMLElement {
   return screen.getAllByRole("columnheader")[index];
 }
 
+/** The rest of the pager's caption contract a case hands the table: the collection it counts, and whether the
+ *  surface that mounts it announces that count in a region of its own. */
+type PagerCaption = Pick<DataTablePaging, "countNoun" | "isCountAnnouncedByCaller">;
+
 /** The paging a listing hands the table at one page: the catalogue's own fields, plus the handlers. */
-function pagingFor(page: number, onChange: OnPageChange, onSizeChange?: OnPageChange) {
+function pagingFor(
+  page: number,
+  onChange: OnPageChange,
+  onSizeChange?: OnPageChange,
+  pager?: PagerCaption,
+) {
   const catalogue = makePageResult(ROWS, { page, total: CATALOGUE.total });
-  return { ...catalogue, onPageChange: onChange, onPageSizeChange: onSizeChange };
+  return { ...catalogue, onPageChange: onChange, onPageSizeChange: onSizeChange, ...pager };
 }
 
 /** Renders the table at one page and returns it with the paging control it composes beneath it. */
-async function renderPage(page: number, onChange: OnPageChange, onSizeChange?: OnPageChange) {
+async function renderPage(
+  page: number,
+  onChange: OnPageChange,
+  onSizeChange?: OnPageChange,
+  pager?: PagerCaption,
+) {
   const harness = renderWithProviders(
-    <DataTable {...TABLE_PROPS} paging={pagingFor(page, onChange, onSizeChange)} />,
+    <DataTable {...TABLE_PROPS} paging={pagingFor(page, onChange, onSizeChange, pager)} />,
   );
   const nav = await screen.findByRole("navigation", { name: A11Y_COPY.PAGINATION_LABEL });
   return { ...harness, nav };
@@ -182,7 +203,7 @@ describe("Pagination", () => {
     const pages = slots.flatMap((slot) => (slot.kind === "page" ? [formatNumber(slot.page)] : []));
     expect(slots.some((slot) => slot.kind === "gap")).toBe(true);
     const status = within(nav).getByRole("status");
-    expect(status).toHaveTextContent(productCountAnnouncement(CATALOGUE.total));
+    expect(status).toHaveTextContent(pagingCountLabel(CATALOGUE.total, PAGING_NOUNS.PRODUCTS));
     expect(status).toHaveTextContent(pageAnnouncement(3, CATALOGUE.pageCount));
     const buttons = within(nav).getAllByRole("button");
     const pageControls = buttons.filter((button) => /^\d/.test(button.textContent ?? ""));
@@ -228,7 +249,7 @@ describe("Pagination", () => {
   it("offers the configured page sizes only when a size handler is supplied", async () => {
     const onPageSizeChange = vi.fn();
     const { user, nav } = await renderPage(1, vi.fn(), onPageSizeChange);
-    const select = within(nav).getByRole("combobox", { name: A11Y_COPY.PAGINATION_LABEL });
+    const select = within(nav).getByRole("combobox", { name: PAGE_SIZE_LABEL });
     const options = within(select).getAllByRole<HTMLOptionElement>("option");
     expect(select).toHaveValue(String(DEFAULT_PAGE_SIZE));
     expect(options.map((option) => option.value)).toEqual(PAGE_SIZE_OPTIONS.map(String));
@@ -236,5 +257,22 @@ describe("Pagination", () => {
     const largest = PAGE_SIZE_OPTIONS[PAGE_SIZE_OPTIONS.length - 1];
     await user.selectOptions(select, String(largest));
     expect(onPageSizeChange).toHaveBeenCalledWith(largest);
+  });
+
+  it("counts the collection the caller names instead of counting every collection in products", async () => {
+    const { nav } = await renderPage(1, vi.fn(), undefined, { countNoun: PAGING_NOUNS.ORDERS });
+    const status = within(nav).getByRole("status");
+    expect(status).toHaveTextContent(pagingCountLabel(CATALOGUE.total, PAGING_NOUNS.ORDERS));
+    expect(status).not.toHaveTextContent(PAGING_NOUNS.PRODUCTS.plural);
+    expect(status).toHaveTextContent(pageAnnouncement(1, CATALOGUE.pageCount));
+  });
+
+  it("announces only the page where the mounting surface announces the count itself", async () => {
+    const { nav } = await renderPage(3, vi.fn(), undefined, { isCountAnnouncedByCaller: true });
+    expect(within(nav).getAllByRole("status")).toHaveLength(1);
+    expect(within(nav).getByRole("status").textContent).toBe(
+      pageAnnouncement(3, CATALOGUE.pageCount),
+    );
+    expect(nav).toHaveTextContent(pagingCountLabel(CATALOGUE.total, PAGING_NOUNS.PRODUCTS));
   });
 });

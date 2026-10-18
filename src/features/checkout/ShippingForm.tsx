@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ShippingForm.tsx
  * Purpose: The shipping step: address entry or reuse of a saved address, with per-field validation
- * Lines: 582
+ * Lines: 533
  */
 
 import { useEffect, useRef } from "react";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { RadioGroup, Select } from "@/components/ui/Select";
 import { ACCOUNT_COPY, CHECKOUT_COPY, COMMON_ACTIONS } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
-import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
+import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES, type AddressFieldMember } from "@/constants/taxonomy";
 import {
   addressLabel,
   buildAddressInput,
@@ -25,7 +25,7 @@ import { listShippingMethods } from "@/lib/pricingService";
 import { useAuth } from "@/state/AuthContext";
 import { useCheckout } from "@/state/CheckoutContext";
 import { useAsync } from "@/state/hooks";
-import type { Address, AddressInput, Session } from "@/types/account";
+import type { Address, Session } from "@/types/account";
 import type { PricedCart, ShippingMethod } from "@/types/commerce";
 import type { CurrencyCode, MinorUnits, Result, SelectOption } from "@/types/common";
 import { formatInteger, formatMoney } from "@/utils/format";
@@ -45,17 +45,7 @@ import { formatInteger, formatMoney } from "@/utils/format";
  * renders rather than by a step transition. A path written here would give one route two homes.
  */
 
-// Field vocabulary -------------------------------------------------------------------------------
-
-/** One member of the delivery address a field writes: `AddressInput`'s members bar the label, which names
- * an address-book entry and which an order's delivery address does not carry. */
-type ShippingAddressMember = Exclude<keyof AddressInput, "label">;
-
-/** The country choices, from the taxonomy that owns the set, its labels and its postal patterns. */
-const COUNTRY_OPTIONS: readonly SelectOption[] = SUPPORTED_COUNTRIES.map((country) => ({
-  value: country.code,
-  label: country.label,
-}));
+// Address fields ---------------------------------------------------------------------------------
 
 /** One configured country's code and its label, keyed for the picker's address lines. */
 const COUNTRY_LABELS: ReadonlyMap<string, string> = new Map(
@@ -65,7 +55,7 @@ const COUNTRY_LABELS: ReadonlyMap<string, string> = new Map(
 /** The patch each address field writes, keyed by the member its control binds to: a control's `name` is
  * both the key it reads its error by and the key it writes its value under, so the two cannot drift. */
 const ADDRESS_PATCHES: Readonly<
-  Record<ShippingAddressMember, (value: string) => Partial<Record<ShippingAddressMember, string>>>
+  Record<AddressFieldMember, (value: string) => Partial<Record<AddressFieldMember, string>>>
 > = {
   fullName: (value) => ({ fullName: value }),
   line1: (value) => ({ line1: value }),
@@ -76,47 +66,6 @@ const ADDRESS_PATCHES: Readonly<
   country: (value) => ({ country: value }),
   phone: (value) => ({ phone: value }),
 };
-
-/** One field of the delivery address: the member it writes, its label and whether the address rule
- * requires it. The country brings choices because it is chosen rather than typed, the phone its own input
- * type, and the two optional members carry the hint the content library words for them. No autofill token
- * is carried — the layout is not this file's to set, and `AddressBookPage.tsx` made the same trade. */
-interface AddressFieldSpec {
-  readonly member: ShippingAddressMember;
-  readonly label: string;
-  readonly required: boolean;
-  readonly hint?: string;
-  readonly type?: "text" | "tel";
-  readonly options?: readonly SelectOption[];
-}
-
-/** The address's fields, in the order the form renders them, so no field's markup is written twice. */
-const ADDRESS_FIELDS: readonly AddressFieldSpec[] = [
-  { member: "fullName", label: CHECKOUT_COPY.FULL_NAME_LABEL, required: true },
-  { member: "line1", label: CHECKOUT_COPY.ADDRESS_LINE_1_LABEL, required: true },
-  {
-    member: "line2",
-    label: CHECKOUT_COPY.ADDRESS_LINE_2_LABEL,
-    hint: CHECKOUT_COPY.ADDRESS_LINE_2_HINT,
-    required: false,
-  },
-  { member: "city", label: CHECKOUT_COPY.CITY_LABEL, required: true },
-  { member: "region", label: CHECKOUT_COPY.REGION_LABEL, required: true },
-  { member: "postalCode", label: CHECKOUT_COPY.POSTAL_CODE_LABEL, required: true },
-  {
-    member: "country",
-    label: CHECKOUT_COPY.COUNTRY_LABEL,
-    required: true,
-    options: COUNTRY_OPTIONS,
-  },
-  {
-    member: "phone",
-    label: CHECKOUT_COPY.PHONE_LABEL,
-    hint: CHECKOUT_COPY.PHONE_HINT,
-    required: false,
-    type: "tel",
-  },
-];
 
 /** The key lists the two loading states map over. The keys are positional on purpose: each placeholder is
  * the same decorative box, with no identity for a key to preserve. */
@@ -376,7 +325,7 @@ export function ShippingForm(): ReactElement {
 
   /** Writes the one member an address field carries, through that member's own writer. */
   const writeAddress =
-    (member: ShippingAddressMember) =>
+    (member: AddressFieldMember) =>
     (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
       actions.updateValues({ shipping: ADDRESS_PATCHES[member](event.target.value) });
     };
@@ -545,6 +494,7 @@ export function ShippingForm(): ReactElement {
             <Input
               key={field.member}
               ref={index === 0 ? firstAddressFieldRef : undefined}
+              autoComplete={field.autoComplete}
               errors={errors}
               hint={field.hint}
               label={field.label}
@@ -557,6 +507,7 @@ export function ShippingForm(): ReactElement {
           ) : (
             <Select
               key={field.member}
+              autoComplete={field.autoComplete}
               errors={errors}
               label={field.label}
               name={field.member}

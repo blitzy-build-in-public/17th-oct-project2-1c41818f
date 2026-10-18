@@ -1,7 +1,7 @@
 /**
  * Path: vitest.config.ts
  * Purpose: Test configuration: the node and jsdom projects, setup file, globals, coverage thresholds and `passWithNoTests`
- * Lines: 68
+ * Lines: 72
  */
 
 import { fileURLToPath, URL } from "node:url";
@@ -21,6 +21,10 @@ export default defineConfig({
   test: {
     // Ambient describe/it/expect in every test file; tsconfig.json supplies their types.
     globals: true,
+    // The integration flows mount the whole application and drive real forms, so a case measures one to
+    // four seconds on an idle host and more while the other files run; the five-second default fails
+    // them for reasons no assertion describes. The ceiling is raised here, once, for both projects.
+    testTimeout: 15_000,
     // The build's phase gate is `npm test` exiting zero from phase 1, thirty-three phases
     // before the first test file exists: removing this option invalidates it for all of them.
     passWithNoTests: true,

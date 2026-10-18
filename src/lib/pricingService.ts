@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/pricingService.ts
  * Purpose: Line and order totals, promo application, shipping and tax for the cart and checkout
- * Lines: 578
+ * Lines: 585
  */
 
 import {
@@ -96,8 +96,15 @@ function isPromoRejectionReason(code: string): code is PromoRejectionReason {
  * because a code is matched case-insensitively while its shape is upper-case. Every entry point normalises
  * before it matches or sends, so a shopper who types `summer20` is refused for what the code is worth and
  * not for the case they typed. Whitespace alone normalises to `null` — no code at all.
+ *
+ * This is the comparison rule's single home: the data layer's stored-code lookup in `src/data/repositories.ts`
+ * calls it rather than restating the spelling, so a submitted code and a stored one are matched by one
+ * implementation.
+ *
+ * @param code - The spelling as it was typed, pasted or stored, or `null`/`undefined` for no code at all.
+ * @returns The trimmed upper-case spelling, or `null` when nothing but whitespace was given.
  */
-function normalisePromoCode(code: string | null | undefined): string | null {
+export function normalisePromoCode(code: string | null | undefined): string | null {
   const normalised = (code ?? "").trim().toUpperCase();
   return normalised.length === 0 ? null : normalised;
 }

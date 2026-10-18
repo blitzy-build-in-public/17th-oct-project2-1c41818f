@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/AddressBookPage.tsx
  * Purpose: Address cards with add, edit, remove and set-default actions, and a confirm dialog on removal
- * Lines: 590
+ * Lines: 545
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -15,7 +15,6 @@ import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { Checkbox, Select } from "@/components/ui/Select";
 import {
   ACCOUNT_COPY,
-  CHECKOUT_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   PAGE_TITLES,
@@ -23,7 +22,7 @@ import {
   editSectionLabel,
   removeAddressLabel,
 } from "@/constants/content";
-import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
+import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import {
   addAddress,
   addressLabel,
@@ -39,14 +38,15 @@ import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Address, AddressInput, AddressKind } from "@/types/account";
-import type { AddressId, FieldErrors, Result, SelectOption } from "@/types/common";
+import type { AddressId, FieldErrors, Result } from "@/types/common";
 import { FORM_ERROR_KEY, hasErrors, validateAddress } from "@/utils/validation";
 
 /*
  * Class contract. `src/styles/account.css` is the sole definition site of the address-book family and no
  * file under `src/features/**` imports a stylesheet, so every class here is consumed by name:
- * `sp-address-grid` for the card grid (one column, two at 768, three at 1024) and `sp-address-card` with its
- * `__header`, `__label`, `__badges`, `__body`, `__defaults` and `__actions` parts on the `sp-card` frame.
+ * `sp-address-grid` for the card grid, which holds as many label-wide cards as its column fits, and
+ * `sp-address-card` with its `__header`, `__label`, `__badges`, `__body`, `__defaults` and `__actions` parts on
+ * the `sp-card` frame.
  * `sp-address-form` is the address field grid `src/styles/commerce.css` shares with the checkout's address
  * entry, `sp-stack` gives the section its rhythm, the set-default controls are `sp-choice` rows (the
  * touch-target floor `src/styles/controls.css` gives that family), and the removal confirmation is
@@ -57,53 +57,6 @@ import { FORM_ERROR_KEY, hasErrors, validateAddress } from "@/utils/validation";
  * with `403`, so this page reads the id and the token from the session `src/state/AuthContext.tsx` holds and
  * assembles neither.
  */
-
-/** The country choices, mapped from the taxonomy, which owns the set, its labels and its postal patterns. */
-const COUNTRY_OPTIONS = SUPPORTED_COUNTRIES.map((country) => ({
-  value: country.code,
-  label: country.label,
-}));
-
-/** One field of the address form: the body member it writes, its label and whether the rule requires it.
- * The country brings options because it is chosen from a list rather than typed, and the phone its own input
- * type for a numeric keypad. */
-interface AddressFieldSpec {
-  readonly member: keyof AddressInput;
-  readonly label: string;
-  readonly required: boolean;
-  readonly hint?: string;
-  readonly type?: "tel";
-  readonly options?: readonly SelectOption[];
-}
-
-/** The address body's fields, in the order the form renders them: what each control carries is stated once
- * here and the form iterates the list. */
-const ADDRESS_FIELDS: readonly AddressFieldSpec[] = [
-  { member: "fullName", label: CHECKOUT_COPY.FULL_NAME_LABEL, required: true },
-  { member: "line1", label: CHECKOUT_COPY.ADDRESS_LINE_1_LABEL, required: true },
-  {
-    member: "line2",
-    label: CHECKOUT_COPY.ADDRESS_LINE_2_LABEL,
-    hint: CHECKOUT_COPY.ADDRESS_LINE_2_HINT,
-    required: false,
-  },
-  { member: "city", label: CHECKOUT_COPY.CITY_LABEL, required: true },
-  { member: "region", label: CHECKOUT_COPY.REGION_LABEL, required: true },
-  { member: "postalCode", label: CHECKOUT_COPY.POSTAL_CODE_LABEL, required: true },
-  {
-    member: "country",
-    label: CHECKOUT_COPY.COUNTRY_LABEL,
-    required: true,
-    options: COUNTRY_OPTIONS,
-  },
-  {
-    member: "phone",
-    label: CHECKOUT_COPY.PHONE_LABEL,
-    hint: CHECKOUT_COPY.PHONE_HINT,
-    required: false,
-    type: "tel",
-  },
-];
 
 /** The values a new address starts from: every member of the body, because an update describes the whole
  * address, with the country opening on the first configured one. */
@@ -186,6 +139,7 @@ function AddressForm({
           <Input
             key={field.member}
             ref={index === 0 ? firstFieldRef : undefined}
+            autoComplete={field.autoComplete}
             errors={errors}
             hint={field.hint}
             label={field.label}
@@ -198,6 +152,7 @@ function AddressForm({
         ) : (
           <Select
             key={field.member}
+            autoComplete={field.autoComplete}
             errors={errors}
             label={field.label}
             name={field.member}
@@ -306,7 +261,7 @@ function AddressCard({
           aria-label={removeAddressLabel(name)}
           onClick={(): void => onRemove(address)}
           size="sm"
-          variant="link"
+          variant="danger"
         >
           {COMMON_ACTIONS.REMOVE}
         </Button>

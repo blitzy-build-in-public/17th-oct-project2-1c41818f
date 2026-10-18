@@ -1,20 +1,19 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 593
+ * Lines: 584
  */
 
 /* ==== Buttons ====
- * BLITZY [CONTRACT]: .sp-button, .sp-button--primary and .sp-button--secondary are accepted as aliases of the
- * .sp-btn family, because the committed src/features/home/HeroSection.tsx uses those names for its two calls
- * to action; each alias shares its declaration with the .sp-btn class and a page written from here on uses
- * .sp-btn. The primary fill's text is the on-accent pair tokens.css measures at 6.29:1, where
- * --color-accent-contrast is the pair for the accent tint rather than for the fill.
+ * BLITZY [CONTRACT]: the family has exactly one name, .sp-btn, with .sp-btn--primary and
+ * .sp-btn--secondary for its two filled variants. The sheet declares no alias, because no call site
+ * wears one: the hero's calls to action wear .sp-btn like every other page, so one name is all a
+ * reader has to know. The primary fill's text is the on-accent pair tokens.css measures at 6.29:1,
+ * where --color-accent-contrast is the pair for the accent tint rather than for the fill.
  */
 /* base.css leaves the underline to the class an anchor carries, and the user agent paints one on every link,
  * so the family states the absence itself: an anchor wearing a button keeps the button's skin and no rule
  * runs through its label. The link modifier's hover rule below is the family's only underline. */
-.sp-btn,
-.sp-button {
+.sp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -35,14 +34,12 @@
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard);
 }
-.sp-btn--primary,
-.sp-button--primary {
+.sp-btn--primary {
   color: var(--color-text-on-accent);
   background-color: var(--color-accent);
   border-color: var(--color-accent);
 }
-.sp-btn--secondary,
-.sp-button--secondary {
+.sp-btn--secondary {
   background-color: var(--color-surface);
   border-color: var(--color-border-strong);
 }
@@ -62,8 +59,7 @@
 /* Hover is offered only to a device that can hover, so a tap never leaves a button in a state the finger has
  * already left; active sits outside the query, because press feedback matters most where there is no pointer. */
 @media (hover: hover) {
-  .sp-btn--primary:hover:not(:disabled):not([aria-disabled="true"]),
-  .sp-button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  .sp-btn--primary:hover:not(:disabled):not([aria-disabled="true"]) {
     background-color: var(--color-accent-hover);
     border-color: var(--color-accent-hover);
   }
@@ -72,7 +68,6 @@
     border-color: var(--color-danger-hover);
   }
   .sp-btn--secondary:hover:not(:disabled):not([aria-disabled="true"]),
-  .sp-button--secondary:hover:not(:disabled):not([aria-disabled="true"]),
   .sp-btn--ghost:hover:not(:disabled):not([aria-disabled="true"]) {
     background-color: var(--color-surface-sunken);
   }
@@ -80,8 +75,7 @@
     text-decoration-line: underline;
   }
 }
-.sp-btn--primary:active:not(:disabled):not([aria-disabled="true"]),
-.sp-button--primary:active:not(:disabled):not([aria-disabled="true"]) {
+.sp-btn--primary:active:not(:disabled):not([aria-disabled="true"]) {
   background-color: var(--color-accent-active);
   border-color: var(--color-accent-active);
 }
@@ -89,8 +83,7 @@
   background-color: var(--color-danger);
   border-color: var(--color-danger);
 }
-.sp-btn--secondary:active:not(:disabled):not([aria-disabled="true"]),
-.sp-button--secondary:active:not(:disabled):not([aria-disabled="true"]) {
+.sp-btn--secondary:active:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--color-accent);
 }
 .sp-btn--ghost:active:not(:disabled):not([aria-disabled="true"]),
@@ -161,9 +154,7 @@
  * specificity, so the class rule here is the one that decides it and the base rule's intent is honoured
  * only if it is stated again. The hover and active rules above exclude a disabled control either way. */
 .sp-btn:disabled,
-.sp-btn[aria-disabled="true"],
-.sp-button:disabled,
-.sp-button[aria-disabled="true"] {
+.sp-btn[aria-disabled="true"] {
   opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }

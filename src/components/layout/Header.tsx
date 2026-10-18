@@ -1,7 +1,7 @@
 /**
  * Path: src/components/layout/Header.tsx
  * Purpose: Logo, primary navigation, search entry, cart badge and account menu, compressed below the small breakpoint
- * Lines: 564
+ * Lines: 632
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -17,22 +17,30 @@ import {
   PAGE_TITLES,
   cartButtonLabel,
 } from "@/constants/content";
-import { ROUTES, loginPath, registerPath } from "@/constants/routes";
-import type { RoutePath } from "@/constants/routes";
+import {
+  CATEGORY_SECTION_PATH,
+  ROUTES,
+  isDestinationCurrent,
+  loginPath,
+  registerPath,
+} from "@/constants/routes";
+import type { ActiveDestination, RoutePath } from "@/constants/routes";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
-import { useCart, useCartDispatch } from "@/state/CartContext";
+import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
 import { useMediaQuery, useOnClickOutside } from "@/state/hooks";
+import { sumQuantities } from "@/utils/collections";
 
 /*
  * Class contract. Every class rendered below is defined in `src/styles/` and none of it is defined here:
  * `src/styles/layout.css` owns the header skeleton, the primary navigation (`sp-nav`, `sp-nav__list` and
- * `sp-nav__link`, whose current destination the router marks through `[aria-current="page"]`), the mobile
+ * `sp-nav__link`, whose current destination the navigation marks through `[aria-current="page"]`), the mobile
  * panel, and the cart and account triggers with their panels; `src/styles/catalog.css` owns the search row
  * the collapsed slot grows into (`sp-search-bar__form`, `sp-search-bar__input`, `sp-search-bar__submit`)
  * with `sp-input` and the button family of `src/styles/controls.css`; `src/styles/base.css` owns
- * `sp-visually-hidden`. The row switches at the medium stop, which is also where the search slot changes
- * what it holds. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * and no colour, length, radius or breakpoint of this file's own appears below.
+ * `sp-visually-hidden`. The row's navigation and the menu trigger that stands in for it swap at the small
+ * stop, while the search slot changes what it holds at the medium one. No stylesheet is imported here —
+ * `src/main.tsx` is the only importer of `src/styles/**` — and no colour, length, radius or breakpoint of
+ * this file's own appears below.
  */
 
 /**
@@ -77,7 +85,7 @@ const HEADER_ICON_PATHS: Readonly<Record<HeaderIconName, string>> = {
   /** A cross: the menu button closing the panel it opened. */
   close:
     "M6.4 4.9 12 10.5l5.6-5.6 1.5 1.5-5.6 5.6 5.6 5.6-1.5 1.5-5.6-5.6-5.6 5.6-1.5-1.5 5.6-5.6-5.6-5.6z",
-  /** Three bars: the navigation the row cannot hold below the medium stop. */
+  /** Three bars: the navigation the row cannot hold below the small stop. */
   menu: "M3 5.5h18v2.4H3zM3 10.8h18v2.4H3zM3 16.1h18v2.4H3z",
   /** A magnifier: the search ring with the handle that crosses it. */
   search:
@@ -123,14 +131,15 @@ function HeaderGlyph({
   );
 }
 
-/** One destination in the primary navigation. */
-interface HeaderNavItem {
+/**
+ * One destination in the primary navigation: a label over the route it reaches, plus the sections the
+ * destination also covers, which {@link isDestinationCurrent} reads.
+ */
+interface HeaderNavItem extends ActiveDestination {
   /** The destination's name, from `HEADER_COPY`; it is the link's visible and accessible name. */
   readonly label: string;
   /** The route it reaches, taken from `ROUTES` so no path is written in this file. */
   readonly to: RoutePath;
-  /** Matches the route exactly, so the landing page is current only on the landing page itself. */
-  readonly end?: boolean;
 }
 
 /**
@@ -141,29 +150,39 @@ interface HeaderNavItem {
  */
 const HEADER_NAV_ITEMS: readonly HeaderNavItem[] = [
   { label: HEADER_COPY.NAV_HOME_LABEL, to: ROUTES.HOME, end: true },
-  { label: HEADER_COPY.NAV_CATALOG_LABEL, to: ROUTES.CATALOG },
+  { label: HEADER_COPY.NAV_CATALOG_LABEL, to: ROUTES.CATALOG, sections: [CATEGORY_SECTION_PATH] },
 ];
 
 /**
- * The primary navigation: one list, rendered by the header row above the medium stop and by the panel the
+ * The primary navigation: one list, rendered by the header row above the small stop and by the panel the
  * menu button toggles below it.
  *
  * One body for both placements is the point: `src/styles/layout.css` lays the same `sp-nav__list` out as a row
  * in the header and as a column in the panel, so the destinations a visitor can reach cannot differ with the
- * width of the window. Marking the current destination is `NavLink`'s, and the `end` a home link carries keeps
- * exactly one item marked, because no other route sits inside a prefix of `/`.
+ * width of the window. The destination the visitor is in is decided by `isDestinationCurrent` — the one home of
+ * that comparison, which reads `isActivePath` — and written onto the link as `aria-current="page"`, the
+ * attribute `src/styles/layout.css` paints the accent colour and the underline from. `NavLink` is deliberately
+ * not used for these links: its active test compares the location against the resolved destination alone, so
+ * the catalogue's own category listings could never be marked. Exactly one item is current at a time, because
+ * the home destination matches exactly and nothing else sits inside a prefix of `/`.
  *
  * @param props.items - The destinations to render, in reading order.
  * @returns An unordered list of navigation links.
  */
 function HeaderNavList({ items }: { readonly items: readonly HeaderNavItem[] }): ReactElement {
+  const { pathname } = useLocation();
+
   return (
     <ul className="sp-nav__list">
       {items.map((item) => (
         <li key={item.to}>
-          <NavLink className="sp-nav__link" end={item.end} to={item.to}>
+          <Link
+            aria-current={isDestinationCurrent(pathname, item) ? "page" : undefined}
+            className="sp-nav__link"
+            to={item.to}
+          >
             {item.label}
-          </NavLink>
+          </Link>
         </li>
       ))}
     </ul>
@@ -265,17 +284,76 @@ function returnFocusToTrigger(panel: HTMLElement | null, trigger: HTMLElement | 
 }
 
 /**
+ * The header's cart trigger: the button that reports what the basket holds and opens the mini-cart drawer.
+ *
+ * It is a component of its own for the reason `src/state/CartContext.tsx` splits its contexts. This is the
+ * only control in the header that displays the cart, so a change to the lines or a toggle of the drawer must
+ * re-render this button's subtree and not the header's: keeping the read here leaves the wordmark, the
+ * navigation (rendered twice, in the row and in the mobile panel), the search row and the account menu out
+ * of every cart change, which the header they all sit in would otherwise take as its own render.
+ *
+ * It reads the lines for the count the badge shows and the label announces, and the drawer flag for
+ * `aria-expanded` — both of which are facts about the cart, which is why they are read here rather than
+ * handed in as props by a header that would then have to read the cart itself. The count is summed during
+ * render and stored nowhere: a count kept beside the lines it counts is a second answer to one question.
+ * `src/features/cart/cartSelectors.ts` owns the cart's own reading of the lines and is deliberately not
+ * imported, because this file sits below the feature layer.
+ *
+ * @returns The cart button, with its badge whenever the basket holds anything.
+ */
+function CartTrigger(): ReactElement {
+  const { lines } = useCart();
+  const isMiniCartOpen = useMiniCartOpen();
+  // The cart's actions are read as the object they are, not destructured: `CartActions` declares its
+  // members with method syntax, and a method taken off its receiver is what the type-aware lint rule
+  // treats as unsafe.
+  const cartActions = useCartDispatch();
+
+  // The count is one fact about the lines, so it is read through the shared aggregation helper during
+  // render and stored nowhere: the same reading the cart slice uses, so the badge cannot disagree with the
+  // cart page, the mini-cart or the checkout's summary panel about one basket.
+  const itemCount = sumQuantities(lines);
+
+  return (
+    <button
+      aria-expanded={isMiniCartOpen}
+      aria-haspopup="dialog"
+      aria-label={cartButtonLabel(itemCount)}
+      className="sp-cart-button"
+      onClick={() => {
+        cartActions.toggleMiniCart();
+      }}
+      type="button"
+    >
+      {HEADER_COPY.NAV_CART_LABEL}
+      {/* A real separator text node, not layout: the WCAG 2.5.3 audit compares the accessible name with
+          the element's own text nodes concatenated, and the absolutely positioned badge would otherwise
+          read as "Cart1" beside the name "Cart 1 item". A whitespace-only text run is not rendered by a
+          flex container, so the button looks exactly as it did. */}
+      {itemCount > 0 ? (
+        <>
+          {" "}
+          <span aria-hidden="true" className="sp-cart-badge">
+            {itemCount}
+          </span>
+        </>
+      ) : null}
+    </button>
+  );
+}
+
+/**
  * The site header: the wordmark, the primary navigation, the search entry, the cart and the account.
  *
  * `src/components/layout/AppLayout.tsx` renders it above the routed content on every screen, with no props, so
  * it paints with the rest of the shell on first load: a visitor with no session and an empty cart sees the
  * complete header.
  *
- * What it reads. The session, for the account menu's contents and the administrator link; the cart, for the
- * count on the cart button and the state of the mini-cart drawer; and the location, for the return path the
- * sign-in links carry and for the key the open panel is compared against. The count is summed during render
- * from the cart's lines and stored nowhere, because a count kept beside the lines it counts is a second answer
- * to one question.
+ * What it reads. The session, for the account menu's contents and the administrator link; and the location,
+ * for the return path the sign-in links carry and for the key the open panel is compared against. The cart is
+ * the one thing in the row this component does not read: the count on the cart button and the state of the
+ * mini-cart drawer belong to the private {@link CartTrigger} below, so a cart change or a drawer toggle
+ * re-renders that button's subtree rather than this component and everything it holds.
  *
  * The two disclosures. The account menu and the mobile navigation are disclosures rather than modals, which is
  * what `src/styles/layout.css` states for the dropdown: the trigger keeps the focus, so there is no trap to
@@ -284,9 +362,11 @@ function returnFocusToTrigger(panel: HTMLElement | null, trigger: HTMLElement | 
  * and the focus goes back to the trigger when the panel was holding it. A panel is also keyed to the location
  * it was opened at, which is how a navigation closes it without an effect.
  *
- * Layout below the medium stop is the stylesheet's, not this file's: the sheet takes the navigation out of the
- * row and hides the menu button above the stop, so the only thing the markup decides is which of the two things
- * the search slot holds. That stop is read through the shared media-query hook from the width
+ * Layout is shared between the sheet and this file at the navigation's stop: below the small breakpoint the
+ * sheet takes the row's navigation out and the markup renders the menu button, and above it the sheet puts the
+ * navigation back and the markup renders no button at all, so no control is left with nothing to open. The
+ * search slot's own stop, where it holds the field rather than a trigger, is the medium one and is the only
+ * thing the markup decides there. Both stops are read through the shared media-query hook from the widths
  * `src/constants/config.ts` owns, never from a literal here.
  *
  * @returns The header landmark, with the mobile navigation panel it can open beneath the row.
@@ -294,14 +374,15 @@ function returnFocusToTrigger(panel: HTMLElement | null, trigger: HTMLElement | 
 export function Header(): ReactElement {
   const { displayName, email, isAdministrator, isAuthenticated } = useAuth();
   const { signOut } = useAuthDispatch();
-  const { isMiniCartOpen, lines } = useCart();
-  // The cart's actions are read as the object they are, not destructured: `CartActions` declares its
-  // members with method syntax, and a method taken off its receiver is what the type-aware lint rule
-  // treats as unsafe. `signOut` above is a function-valued property, so it travels on its own.
-  const cartActions = useCartDispatch();
   const location = useLocation();
 
   const isWideRow = useMediaQuery(`(min-width: ${BREAKPOINTS.MEDIUM}px)`);
+  // The navigation's stop is the small one, so from there the row's own list carries every destination and
+  // the trigger that would open the panel is not rendered at all — a control left in the DOM above the stop
+  // would stay visible, focusable and in the tab order with nothing for it to open. Below the stop it is
+  // rendered and toggles the panel exactly as before. Both widths come from `src/constants/config.ts`
+  // through the shared media-query hook, never from a literal here.
+  const showsMenuButton = !useMediaQuery(`(min-width: ${BREAKPOINTS.SMALL}px)`);
 
   const [openPanel, setOpenPanel] = useState<OpenPanel | null>(null);
 
@@ -330,10 +411,6 @@ export function Header(): ReactElement {
       : `${location.pathname}${location.search}`;
 
   const accountName = displayName === "" ? (email ?? "") : displayName;
-
-  // The count is a fact about the lines, so it is summed during render and stored nowhere:
-  // `src/features/cart/cartSelectors.ts` owns the cart's own reading of them and is not imported.
-  const itemCount = lines.reduce((total, line) => total + line.quantity, 0);
 
   /**
    * Opens the disclosure a trigger names, or closes it when it is already the open one. The location it is
@@ -420,7 +497,7 @@ export function Header(): ReactElement {
           </Link>
         </div>
 
-        {/* The row's navigation. The sheet removes it below the medium stop, where the panel takes over. */}
+        {/* The row's navigation. The sheet removes it below the small stop, where the panel takes over. */}
         <nav aria-label={A11Y_COPY.MAIN_NAV_LABEL} className="sp-header__nav sp-nav">
           <HeaderNavList items={HEADER_NAV_ITEMS} />
         </nav>
@@ -439,42 +516,33 @@ export function Header(): ReactElement {
             )}
           </div>
 
-          <button
-            aria-controls={mobilePanelId}
-            aria-expanded={isMobileNavOpen}
-            aria-label={
-              isMobileNavOpen
-                ? HEADER_COPY.MOBILE_MENU_CLOSE_LABEL
-                : HEADER_COPY.MOBILE_MENU_OPEN_LABEL
-            }
-            className="sp-btn sp-btn--icon sp-header__menu-button"
-            onClick={() => {
-              togglePanel("mobile");
-            }}
-            ref={mobileMenuButtonRef}
-            type="button"
-          >
-            <HeaderGlyph name={isMobileNavOpen ? "close" : "menu"} />
-          </button>
+          {
+            // Rendered only below the small stop, where it is the row's only way to the primary navigation;
+            // above it the row holds the navigation itself and the control has nothing to open.
+            showsMenuButton ? (
+              <button
+                aria-controls={mobilePanelId}
+                aria-expanded={isMobileNavOpen}
+                aria-label={
+                  isMobileNavOpen
+                    ? HEADER_COPY.MOBILE_MENU_CLOSE_LABEL
+                    : HEADER_COPY.MOBILE_MENU_OPEN_LABEL
+                }
+                className="sp-btn sp-btn--icon sp-header__menu-button"
+                onClick={() => {
+                  togglePanel("mobile");
+                }}
+                ref={mobileMenuButtonRef}
+                type="button"
+              >
+                <HeaderGlyph name={isMobileNavOpen ? "close" : "menu"} />
+              </button>
+            ) : null
+          }
 
-          <button
-            aria-expanded={isMiniCartOpen}
-            aria-haspopup="dialog"
-            aria-label={cartButtonLabel(itemCount)}
-            className="sp-cart-button"
-            onClick={() => {
-              cartActions.toggleMiniCart();
-            }}
-            type="button"
-          >
-            {HEADER_COPY.NAV_CART_LABEL}
-            {itemCount > 0 ? (
-              <span aria-hidden="true" className="sp-cart-badge">
-                {itemCount}
-              </span>
-            ) : null}
-          </button>
-
+          {/* The cart read is the trigger's own, so a cart change or a drawer toggle re-renders this button
+              and not the row it sits in. */}
+          <CartTrigger />
           <div className="sp-account-menu" ref={accountRegionRef}>
             <button
               aria-controls={accountPanelId}
@@ -548,14 +616,14 @@ export function Header(): ReactElement {
       </div>
 
       {/* The navigation the row cannot hold, toggled by the menu button and removed by the sheet at and above
-          the medium stop, where the row's own navigation returns. */}
+          the small stop, where the row's own navigation returns. */}
       <div
         className="sp-nav-menu"
         hidden={!isMobileNavOpen}
         id={mobilePanelId}
         ref={mobilePanelRef}
       >
-        <nav aria-label={A11Y_COPY.MAIN_NAV_LABEL} className="sp-nav sp-nav-menu__panel">
+        <nav aria-label={A11Y_COPY.MOBILE_NAV_LABEL} className="sp-nav sp-nav-menu__panel">
           <HeaderNavList items={HEADER_NAV_ITEMS} />
         </nav>
       </div>

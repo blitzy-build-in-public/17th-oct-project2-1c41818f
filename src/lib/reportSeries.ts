@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/reportSeries.ts
  * Purpose: The series charted beside a report's table: the band of each row, its wording, and one series per charted column
- * Lines: 116
+ * Lines: 124
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -13,7 +13,7 @@ import type {
   ReportKind,
   ReportRow,
 } from "@/types/analytics";
-import { formatBucketLabel } from "@/utils/dates";
+import { formatBandLabel } from "@/utils/dates";
 
 /*
  * A §0.5.5 split of `src/lib/reportService.ts`, which was at the 600-line ceiling with this concern inside it:
@@ -27,7 +27,10 @@ import { formatBucketLabel } from "@/utils/dates";
  * bucket that recorded the same number into a single band, drops the buckets that lose the collision, and
  * leaves the axis, the readout and the paired data table with no bucket to name — which is what this file
  * exists to prevent. `x` is the band's key, `label` is its wording, and the figure is `y` alone, rendered by
- * each chart through its own value formatter.
+ * each chart through its own value formatter. A day's wording carries its year whenever the run's periods
+ * leave one calendar year, because two periods of one run that worded alike would key to a single band; the
+ * rule itself is `src/utils/dates.ts`'s `formatBandLabel`, the one home it shares with the dashboard's own
+ * series, and this file supplies it the run's period cells.
  */
 
 /** The column a report leads with: the one its definition marks as the figure its table totals. */
@@ -43,20 +46,23 @@ function bandKeyOf(row: ReportRow, axisKey: string): string {
   return typeof axis === "string" ? axis : row.id;
 }
 
-/** A band's display wording: the bucket the axis cell opens, said in the wording of the cut that ran, and the
- *  key as it stands when that cell holds no date — a product's name is already the wording it reads by, so
- *  every band carries one. The wording is also the band's identity, which is why it is never the figure. */
-function bandLabelOf(key: string, granularity: BucketGranularity): string {
-  return formatBucketLabel(key, granularity) || key;
+/** The period cells one run is charted over: the keys its bands' wording is read against, so a day of a run
+ *  that leaves one calendar year carries its year. A row without a period cell contributes none, and the
+ *  reading of a key's calendar year is `src/utils/dates.ts`'s. */
+function runKeysOf(rows: readonly ReportRow[]): string[] {
+  return rows.map((row) => String(row.cells.period ?? ""));
 }
 
-/** One charted column: its identity, its heading and a point per row whose band is named, not valued. */
+/** One charted column: its identity, its heading and a point per row whose band is named, not valued. A band
+ *  is worded by `src/utils/dates.ts`'s `formatBandLabel` against the `keys` of the run it belongs to — the
+ *  one home for that rule, shared with the dashboard's series — so no two bands of one run word alike. */
 function seriesOfColumn(
   rows: readonly ReportRow[],
   column: ReportColumn,
   seriesIndex: number,
   axisKey: string,
   granularity: BucketGranularity,
+  keys: readonly string[],
 ): ChartSeries {
   return {
     id: column.key,
@@ -68,7 +74,7 @@ function seriesOfColumn(
       return {
         x: key,
         y: typeof value === "number" ? value : 0,
-        label: bandLabelOf(key, granularity),
+        label: formatBandLabel(key, granularity, keys),
       };
     }),
   };
@@ -87,7 +93,8 @@ function seriesOfColumn(
  * @param definition - The definition that ran: the source of the columns, their headings and their formats.
  * @param granularity - The cut the rows were bucketed by, which is what a period band is named in. Defaults
  *   to the definition's own cut, which is the cut a run that asked for none used.
- * @returns One series per charted column, each point's band keyed by its period and worded by that cut.
+ * @returns One series per charted column, each point's band keyed by its period and worded by that cut — a
+ *   day carrying its year when the run's own periods leave one calendar year.
  */
 export function buildReportSeries(
   kind: ReportKind,
@@ -95,22 +102,23 @@ export function buildReportSeries(
   definition: ReportDefinition,
   granularity: BucketGranularity = definition.granularity,
 ): ChartSeries[] {
+  const keys = runKeysOf(rows);
   switch (kind) {
     case "sales": {
       const headline = headlineColumn(definition);
       return headline === undefined
         ? []
-        : [seriesOfColumn(rows, headline, 0, "period", granularity)];
+        : [seriesOfColumn(rows, headline, 0, "period", granularity, keys)];
     }
     case "products": {
       const headline = headlineColumn(definition);
       return headline === undefined
         ? []
-        : [seriesOfColumn(rows, headline, 0, "product", granularity)];
+        : [seriesOfColumn(rows, headline, 0, "product", granularity, keys)];
     }
     case "customers":
       return definition.columns
         .filter((column) => column.key === "newCustomers" || column.key === "returningCustomers")
-        .map((column, index) => seriesOfColumn(rows, column, index, "period", granularity));
+        .map((column, index) => seriesOfColumn(rows, column, index, "period", granularity, keys));
   }
 }

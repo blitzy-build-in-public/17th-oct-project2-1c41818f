@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 287
+ * Lines: 307
  */
 
 import { useId } from "react";
@@ -19,6 +19,7 @@ import {
   COMMON_ACTIONS,
   EMPTY_STATES,
   PAGE_TITLES,
+  SEARCH_COPY,
   documentTitle,
   resultsUpdatedAnnouncement,
   searchSummaryLabel,
@@ -48,13 +49,13 @@ import { hasActiveFilters } from "@/utils/queryParams";
  * landing sheet `catalog.css` loads with `@import`, and the heading that names the results region wears
  * `sp-visually-hidden`, the utility `src/styles/base.css` owns.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: no sheet declares a rule for `mark`, the element a matched run of the summary is
- * marked with, so a matched word paints in the engine's own marking colour rather than in a token — the same
- * gap `src/features/search/SearchSuggestions.tsx` records for the suggestion list. One rule closes it.
+ * BLITZY [DESIGN_SYSTEM_GAP]: closed — `src/styles/base.css` declares the element default a matched run once
+ * lacked: its `:where(mark)` rule paints `mark` in --color-accent-subtle with --color-accent-contrast, so the
+ * summary's marked run here and the suggestion list's own reach the page through tokens.css, never the engine.
  *
  * BLITZY [LAYOUT]: `.sp-result-meta`'s own comment expects the filter drawer's trigger in its row, but the
  * panel is rendered once, as `sp-catalog-layout`'s first child, which is where it is the sticky column from
- * the medium stop up — so below that stop the trigger stands above the results instead of inside the toolbar.
+ * the extra-large stop up — so below that stop the trigger stands above the results, not inside the toolbar.
  * Moving it would take a trigger prop on the panel or a second panel instance, which would put one panel's
  * controls and its open drawer into the document twice.
  *
@@ -62,10 +63,11 @@ import { hasActiveFilters } from "@/utils/queryParams";
  * field, the filter panel and the chips — so the header carries the title and the action slot alone, and the
  * query summary carries the state of the search.
  *
- * The outcome sentence is the content library's own: `resultsUpdatedAnnouncement` in the toolbar's live region
- * and inside `Pagination`, which speaks the same wording for a new count and a new page. No number is
- * formatted here, because the sentence's own template carries it and the catalogue holds three digits at
- * most, so `src/utils/format.ts` is not reached.
+ * The outcome sentence is the content library's own: `resultsUpdatedAnnouncement` in the toolbar's live region,
+ * which is this page's only count region, and the pager is told so — its caption states that count beside the
+ * page number while its own region speaks the page alone. No number is formatted here, because the sentence's
+ * own template carries it and the catalogue holds three digits at most, so `src/utils/format.ts` is not
+ * reached.
  */
 
 /** The placeholders the loading results stand in with, each named so that a decorative tile has an identity of
@@ -126,6 +128,10 @@ export interface SearchPageProps {
  * one action that helps when the query matched nothing; and otherwise the grid with its paging. The toolbar
  * above them stays usable throughout, so a shopper can refine the query that just failed.
  *
+ * A term with nothing searchable in it filters nothing and is not an error, so it is not one of those states:
+ * the catalogue stands as it does without a term, and the notice above the count says the address's term was
+ * not applied rather than leaving the listing to read as its answer. That notice stands over all four states.
+ *
  * Accessibility is structural: `PageHeader` renders the route's only `<h1>`, the filter panel's heading and
  * the results heading nest under it without skipping a level, the results region is named by a heading that is
  * present but not painted, the count is announced politely from a region that is present from the first
@@ -149,6 +155,9 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
   // route the whole catalogue when the address carries no term: the wording and the highlighting both follow
   // that reading, and neither of them re-splits or re-cases the text — `src/lib/searchService.ts` does.
   const isBrowsing = isBlankQuery(query);
+  // A term the address carries that holds nothing searchable: no token survived tokenising, so nothing was
+  // filtered by it. Without the notice below, the whole catalogue would read as that term's own answer.
+  const isTermIgnored = query.trim() !== "" && isBrowsing;
   // The page in hand, and only while the last load did not fail: a failure is reported by the alert below, and
   // a count beside it would describe a query the surface could not answer.
   const answer = view.error === null ? view.page : null;
@@ -232,6 +241,8 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           onPageChange={(page) => catalog.setPage(page)}
           onPageSizeChange={(pageSize) => catalog.setPageSize(pageSize)}
+          // The count region above is this page's, so the pager announces the page alone.
+          isCountAnnouncedByCaller
         />
       </>
     );
@@ -246,10 +257,19 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
       <div className="sp-page">
         <PageHeader title={PAGE_TITLES.SEARCH} breadcrumbs={BREADCRUMBS} actions={<SearchBar />} />
         <div className="sp-catalog-layout">
-          {/* The panel renders itself once: the sticky column from the medium stop up, and its own
+          {/* The panel renders itself once: the sticky column from the extra-large stop up, and its own
               focus-trapped drawer with its own trigger below it. */}
           <FilterPanel />
           <div className="sp-page__body">
+            {/* A term the search could not use states that above the count, in the polite register the count
+                itself speaks in, so the catalogue below is not read as an answer to the term. It stands over
+                every state the results can be in, because the term was dropped whatever the catalogue then
+                renders: the placeholders of a load, a failure, an empty result and the grid alike. */}
+            {isTermIgnored ? (
+              <Alert tone="info" title={SEARCH_COPY.QUERY_NOT_APPLIED_TITLE}>
+                {SEARCH_COPY.QUERY_NOT_APPLIED_DESCRIPTION}
+              </Alert>
+            ) : null}
             {summary === null ? null : (
               <p className="sp-result-count">
                 {segments.map((segment, position) =>
@@ -265,7 +285,8 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
             )}
             <div className="sp-result-meta">
               {/* Present from the first render and only ever given new text, because a region inserted at the
-                  moment of the update is not announced reliably. This is the page's only count region. */}
+                  moment of the update is not announced reliably. This is the page's only count region, and
+                  `Pagination` is told so, so the pager announces the page alone. */}
               <p className="sp-result-count" role="status">
                 {announcement}
               </p>
@@ -284,4 +305,3 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
     </div>
   );
 }
-
