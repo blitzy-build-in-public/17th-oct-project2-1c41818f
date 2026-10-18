@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/dates.ts
  * Purpose: Parses, formats and buckets dates and computes the comparison periods the dashboard and reports use.
- * Lines: 589
+ * Lines: 599
  */
 
 import { DEFAULT_REPORT_RANGE_DAYS, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -49,13 +49,11 @@ export {
   type DateDisplayStyle,
 } from "@/utils/dateDisplay";
 
-/**
- * The conventions every date decision here shares. **Local time:** timestamps are ISO 8601 in the
+/** The conventions every date decision here shares. **Local time:** timestamps are ISO 8601 in the
  * visitor's local time, in which "today", bucketing and the comparisons are computed, so
  * `"2025-01-30"` is local midnight on the 30th and never slides back a day west of UTC. **Monday
  * weeks:** a week bucket is an ISO week, which a Sunday start would split in two. **An injectable
- * clock:** any function needing the current time takes an optional `now: Date` last.
- */
+ * clock:** any function needing the current time takes an optional `now: Date` last. */
 /** Milliseconds in a day, the unit the range arithmetic counts in. */
 const MS_PER_DAY = 86_400_000;
 /** The two bucket keys that are not a plain date: an ISO week and a calendar month. */
@@ -219,7 +217,8 @@ export function formatBucketLabel(
 /** The word a report's period cell shows for the bucket `iso` falls in at `granularity`: the day the bucket
  *  opens, as `formatDate` writes it, or — when `range` clips the bucket — the days of it the range covers in
  *  that same calendar style (`Sep 19 – 20, 2026`). The cell's own value stays the bucket's ISO day, so the
- *  column's sort, the row's identity and the CSV export are unchanged; only the words are qualified. */
+ *  column's sort and the row's identity are unchanged, and only these words are qualified: a download states
+ *  those same days through {@link formatBucketCellForExport}. */
 export function formatBucketCell(
   iso: IsoDateString,
   granularity: BucketGranularity,
@@ -229,6 +228,18 @@ export function formatBucketCell(
   if (key === "") return "";
   const covered = coveredSpan(key, granularity, range);
   return covered === null ? formatDate(bucketStart(key, granularity)) : coveredLabel(covered, true);
+}
+/** `formatBucketCell`'s export twin: the days a bucket's period cell states, written raw and ISO, so a
+ *  downloaded file names the period the table shows while every date in it stays machine-shaped — the clipped
+ *  days for a bucket the `range` clips, the opening day otherwise, and `""` for a value naming no bucket. */
+export function formatBucketCellForExport(
+  iso: IsoDateString,
+  granularity: BucketGranularity,
+  range: DateRange,
+): string {
+  const key = bucketKey(iso, granularity);
+  const covered = coveredSpan(key, granularity, range);
+  return covered === null ? bucketStart(key, granularity) : `${covered.start} – ${covered.end}`;
 }
 
 /** Whether a run's `keys` leave one calendar year: the one cut whose wording can repeat inside a run,
@@ -261,8 +272,7 @@ export function formatBandLabel(
 
 // Range arithmetic -------------------------------------------------------------------------------
 
-/** The calendar date the ISO `iso` falls on, normalised to `YYYY-MM-DD`: what every range end stores;
- * `""` when unparsable. */
+/** The `YYYY-MM-DD` day `iso` names, normalised: the stored form of every range end; `""` when unparsable. */
 export function startOfDay(iso: IsoDateString): IsoDateString {
   const date = parseIso(iso);
   return date ? isoOf(startOfLocalDay(date)) : "";

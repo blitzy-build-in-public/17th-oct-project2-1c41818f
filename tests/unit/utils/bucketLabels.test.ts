@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/bucketLabels.test.ts
  * Purpose: The wording of a bucket the selected range clips: the chart's axis label and the report's period cell
- * Lines: 190
+ * Lines: 233
  */
 
 import { describe, expect, it } from "vitest";
@@ -12,10 +12,10 @@ import * as dates from "@/utils/dates";
 
 /*
  * A §0.5.5 split of `tests/unit/utils/formatting.test.ts`, which was at the 600-line ceiling with the bucket
- * labels inside it: the wording of a bucket that the range it is charted over clips — the axis label and the
- * report table's period cell — is its own case table here. Both functions are reached through `@/utils/dates`,
- * their one home, and every expectation is a literal string, so a wording that changes without the reader
- * seeing it fails here.
+ * labels inside it: the wording of a bucket that the range it is charted over clips — the axis label, the report
+ * table's period cell and the period cell the same report's download states — is its own case table here. Every
+ * function is reached through `@/utils/dates`, their one home, and every expectation is a literal string, so a
+ * wording that changes without the reader seeing it fails here.
  */
 
 /** The range every expectation is anchored on: the product's default trailing window, as the live app resolves
@@ -133,6 +133,49 @@ describe("formatBucketCell: the report's period cell", () => {
     { bucket: "garbage", cut: "week", range: CUT_RANGE, label: "" },
   ])("words $bucket at $cut as $label", ({ bucket, cut, range, label }) => {
     expect(dates.formatBucketCell(bucket, cut, range)).toBe(label);
+  });
+});
+
+describe("formatBucketCellForExport: the period cell the same report's file states", () => {
+  it.each<CellCase>([
+    // A bucket the range covers whole states the day it opens, unchanged from the raw value the file has
+    // always held: a day bucket, and a month the range opens on its own first day.
+    { bucket: "2026-09-19", cut: "day", range: CUT_RANGE, label: "2026-09-19" },
+    {
+      bucket: "2026-09-01",
+      cut: "month",
+      range: { from: "2026-09-01", to: "2026-10-18" },
+      label: "2026-09-01",
+    },
+    // A bucket the range clips states the days of it the range covers, both ends raw and ISO — the days the
+    // table's own cell words, so a file recovered from a month-bucketed run names the period it holds.
+    { bucket: "2026-09-01", cut: "month", range: CUT_RANGE, label: "2026-09-19 – 2026-09-30" },
+    { bucket: "2026-10-01", cut: "month", range: CUT_RANGE, label: "2026-10-01 – 2026-10-18" },
+    { bucket: "2026-09-14", cut: "week", range: CUT_RANGE, label: "2026-09-19 – 2026-09-20" },
+    {
+      bucket: "2025-12-29",
+      cut: "week",
+      range: YEAR_CROSSING_RANGE,
+      label: "2025-12-31 – 2026-01-04",
+    },
+    // A range that cannot be read, or is inverted, leaves the day the bucket opens.
+    {
+      bucket: "2026-09-01",
+      cut: "month",
+      range: { from: "garbage", to: CUT_RANGE.to },
+      label: "2026-09-01",
+    },
+    {
+      bucket: "2026-09-01",
+      cut: "month",
+      range: { from: CUT_RANGE.to, to: CUT_RANGE.from },
+      label: "2026-09-01",
+    },
+    // A value that names no bucket states nothing, so the caller's own rendering of it stands.
+    { bucket: "Total", cut: "month", range: CUT_RANGE, label: "" },
+    { bucket: "garbage", cut: "week", range: CUT_RANGE, label: "" },
+  ])("states $bucket at $cut as $label", ({ bucket, cut, range, label }) => {
+    expect(dates.formatBucketCellForExport(bucket, cut, range)).toBe(label);
   });
 });
 

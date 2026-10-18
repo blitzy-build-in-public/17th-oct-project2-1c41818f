@@ -18,7 +18,7 @@ import { COMMON_ACTIONS, PAGING_NOUNS } from "@/constants/content";
 import { ADMIN_COPY, CHANNEL_LABELS as SALES_CHANNELS } from "@/constants/content-reports";
 import { CATEGORY_DEFINITIONS, GRANULARITY_OPTIONS } from "@/constants/taxonomy";
 import { bucketLabel } from "@/lib/analyticsService";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import type { BucketGranularity, ChartSeries, RevenueGroupBy } from "@/types/analytics";
 import type { ApiError, DateRange } from "@/types/common";
 import { bucketCount, formatDateRange } from "@/utils/dates";

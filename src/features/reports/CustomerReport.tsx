@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 337
+ * Lines: 340
  */
 
 import { useCallback } from "react";
@@ -316,21 +316,24 @@ export function CustomerReport({
         description={definition.description}
         labelHeader={definition.columns[0].label}
         countNoun={PAGING_NOUNS.PERIODS}
-        footer={<p className={CLASSES.rangeNote}>{periodNote(from, to)}</p>}
+        footer={<p className={CLASSES.rangeNote}>{periodNote(result.from, result.to)}</p>}
         formatValue={formatInteger}
         formatAxisValue={formatCompactNumber}
         formatLabel={formatBandLabel}
         legendTotals={LEGEND_TOTALS}
         emptyMessage={EMPTY_STATES.reportRange.title}
       />
+      {/* The run's own period, not the page's prop: this view keeps the last answered run on screen while a
+          superseded one is in flight, so a caption, a run identity or a download named by the prop would state
+          a period the rows below it do not cover. */}
       <ReportTable
         isBusy={isBusy}
         kind={REPORT_KIND}
         definition={definition}
         rows={result.rows}
         summary={result.summary}
-        range={range}
-        granularity={granularity}
+        range={{ from: result.from, to: result.to }}
+        granularity={result.granularity}
       />
     </div>
   );

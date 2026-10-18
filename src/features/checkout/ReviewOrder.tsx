@@ -23,7 +23,7 @@ import { ROUTES } from "@/constants/routes";
 import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { useCheckout } from "@/state/CheckoutContext";
 import type { CheckoutActions, CheckoutView } from "@/state/CheckoutContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import type { AddressInput } from "@/types/account";
 import type { ApiError, CurrencyCode } from "@/types/common";

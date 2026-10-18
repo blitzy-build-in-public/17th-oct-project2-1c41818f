@@ -24,7 +24,7 @@ import { useCart } from "@/state/CartContext";
 import { useCheckout } from "@/state/CheckoutContext";
 import { CHECKOUT_FORM_STEPS } from "@/state/checkoutReducer";
 import type { CheckoutStep } from "@/state/checkoutReducer";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useDocumentTitle } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";
 

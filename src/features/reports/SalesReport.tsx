@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/SalesReport.tsx
  * Purpose: The sales report: bucketed table, totals row, summary metrics and paired chart
- * Lines: 309
+ * Lines: 312
  */
 
 import { useCallback } from "react";
@@ -284,14 +284,17 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
           formatLabel={formatLabel}
           countNoun={PAGING_NOUNS.PERIODS}
         />
+        {/* The run's own period, not the page's prop: this view keeps the last answered run on screen while
+            a superseded one is in flight, so a caption, a run identity or a download named by the prop would
+            state a period the rows below it do not cover. */}
         <ReportTable
           isBusy={isLoading}
           kind={DEFINITION.kind}
           definition={DEFINITION}
           rows={report.rows}
           summary={report.summary}
-          range={range}
-          granularity={granularity}
+          range={{ from: report.from, to: report.to }}
+          granularity={report.granularity}
         />
       </>
     );

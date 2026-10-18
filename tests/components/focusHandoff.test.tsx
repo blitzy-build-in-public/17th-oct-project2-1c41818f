@@ -11,12 +11,12 @@ import { act } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Button } from "@/components/ui/Button";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 
 import { renderWithProviders, screen } from "../testUtils";
 
 /*
- * The rule `src/state/focusHandoff.ts` owns, read where it can be observed: at the keyboard focus. A control
+ * The rule `src/components/ui/focusHandoff.ts` owns, read where it can be observed: at the keyboard focus. A control
  * that unmounts with the commit its own action causes gives its focus up, and the browser drops it onto
  * `document.body`; the handoff is what puts it on the region the outcome lands in instead, or — when an open
  * overlay has made the page inert and the region inside it therefore refuses the focus — on the container of the

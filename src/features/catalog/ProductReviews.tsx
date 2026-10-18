@@ -33,7 +33,7 @@ import { FACET_DEFINITIONS } from "@/constants/taxonomy";
 import { listProductReviews, submitProductReview } from "@/lib/catalogReads";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync } from "@/state/hooks";
 import type { FacetId, RatingValue, Review, ReviewInput } from "@/types/catalog";
 import type {

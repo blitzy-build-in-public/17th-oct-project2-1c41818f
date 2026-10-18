@@ -1,13 +1,23 @@
 /**
- * Path: src/lib/orderPlacements.ts
+ * Path: src/utils/orderPlacements.ts
  * Purpose: The read credential this browser holds for each order it placed without an account
- * Lines: 94
+ * Lines: 104
  */
 
 import { STORAGE_KEYS } from "@/constants/config";
 import type { Order } from "@/types/commerce";
 import type { OrderId } from "@/types/common";
 import { readStored, writeStored } from "@/utils/storage";
+
+/**
+ * Why this lives in Foundations rather than beside `src/lib/orderService.ts`, the file it was split
+ * out of: both of its readers are above it — the submission half of the seam,
+ * `src/lib/apiOrders.ts`, in Data access, and `src/lib/orderService.ts` itself in Domain services —
+ * and it imports Foundations alone (`src/constants/config`, `src/types/commerce.ts`,
+ * `src/types/common.ts` and `src/utils/storage.ts`), so the dependency runs one way and nothing
+ * imports upward. Its concern — the read credential this browser holds for each order it placed
+ * without an account — has exactly one home here, and both readers reach it at this path.
+ */
 
 // The credential a placement is remembered by ------------------------------------------------------
 // The client-side half of the order-read credential `src/lib/apiOrders.ts` keeps at the seam: the

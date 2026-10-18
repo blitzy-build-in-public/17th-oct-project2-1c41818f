@@ -34,7 +34,7 @@ import { highlightSegments, isBlankQuery, tokenise } from "@/lib/searchService";
 import type { SearchSegment } from "@/lib/searchService";
 import { useQuickAdd } from "@/state/CartContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useDocumentTitle } from "@/state/hooks";
 import { hasActiveFilters } from "@/utils/queryParams";
 

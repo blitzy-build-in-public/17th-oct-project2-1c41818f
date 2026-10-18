@@ -28,7 +28,7 @@ import {
   type OrderCreationRequest,
   type RouteContext,
 } from "@/lib/apiContract";
-import { clearPlacements, placementTokenFor, rememberPlacement } from "@/lib/orderPlacements";
+import { clearPlacements, placementTokenFor, rememberPlacement } from "@/utils/orderPlacements";
 import {
   invalidFields,
   isMembers,
@@ -111,7 +111,7 @@ interface RememberedSubmission {
 const rememberedOrders = new Map<string | null, Map<string, RememberedSubmission>>();
 
 /** The credential of every account-less order this process created, keyed by the identifier: this
- * document's own record of what it placed, kept beside the durable one `src/lib/orderPlacements.ts`
+ * document's own record of what it placed, kept beside the durable one `src/utils/orderPlacements.ts`
  * writes so a read is answered even where there is no store to read (a build with Web Storage refused,
  * a unit case running without one). */
 const guestOrderCredentials = new Map<Common.OrderId, string>();
@@ -122,7 +122,7 @@ const guestOrderCredentials = new Map<Common.OrderId, string>();
  * account is read through the session that owns it — which is why a seeded account-less order holds no
  * entry and is readable by an administrator alone. It is a demonstration-grade capability rather than a
  * production credential, the note `src/utils/strings.ts` carries for the digest applying here too, and
- * it is held in the durable store `src/lib/orderPlacements.ts` writes through `src/utils/storage.ts`,
+ * it is held in the durable store `src/utils/orderPlacements.ts` writes through `src/utils/storage.ts`,
  * so the confirmation of an order placed here reopens after a reload rather than only in the document
  * that placed it. */
 

@@ -20,7 +20,7 @@ import {
 import { FACET_DEFINITIONS } from "@/constants/taxonomy";
 import type { FacetDefinition } from "@/constants/taxonomy";
 import type { CatalogFilters } from "@/state/CatalogContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import type { Facet, FacetId, FilterState } from "@/types/catalog";
 import { indexBy } from "@/utils/collections";
 import { formatNumber } from "@/utils/format";

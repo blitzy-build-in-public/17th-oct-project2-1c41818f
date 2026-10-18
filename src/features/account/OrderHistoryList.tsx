@@ -29,7 +29,7 @@ import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
 // repeat of the read could answer differently is a fact about the refusal, and `src/lib/apiContract.ts` owns it.
 import { isSessionFailure } from "@/lib/apiClient";
 import { listOrders } from "@/lib/orderService";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync } from "@/state/hooks";
 import type { Order, OrderHistoryQuery } from "@/types/commerce";
 import type { PageResult, Result } from "@/types/common";

@@ -28,7 +28,7 @@ import {
 } from "@/lib/customerService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Customer, ProfileUpdateInput } from "@/types/account";
 import type { FieldErrors, Result } from "@/types/common";

@@ -30,7 +30,7 @@ import { getOrder } from "@/lib/orderService";
 // tell a visitor whose session has not survived why it has nothing to show. `src/state/AuthContext.tsx`
 // is the product's single home for it, and the account area's sibling views read it the same way.
 import { useAuth } from "@/state/AuthContext";
-import { useFocusHandoff, handOffThen } from "@/state/focusHandoff";
+import { useFocusHandoff, handOffThen } from "@/components/ui/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Order, OrderStatus, PaymentSummary, PricedCartLine } from "@/types/commerce";
 import type { CurrencyCode, OrderId, Result } from "@/types/common";

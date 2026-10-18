@@ -30,7 +30,7 @@ import {
 import { priceCart, promoRejectionMessage } from "@/lib/pricingService";
 import { useCart, useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { LineId } from "@/types/common";
 import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";

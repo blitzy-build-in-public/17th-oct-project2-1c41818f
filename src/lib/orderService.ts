@@ -40,7 +40,7 @@ import {
   getJson,
   postJson,
 } from "@/lib/apiClient";
-import { placementTokenFor, rememberPlacement } from "@/lib/orderPlacements";
+import { placementTokenFor, rememberPlacement } from "@/utils/orderPlacements";
 
 // The public surface -----------------------------------------------------------------------------
 // The order rules this module is named for — the numbering, the snapshot construction and the status machine

@@ -35,7 +35,7 @@ import { ProductList } from "@/features/catalog/ProductList";
 import { flattenCategoryTree, listCategories } from "@/lib/catalogReads";
 import type { CatalogFilters } from "@/state/CatalogContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { CategoryNode, Facet, FilterState } from "@/types/catalog";
 import type { ApiError, AsyncStatus, CategoryId } from "@/types/common";

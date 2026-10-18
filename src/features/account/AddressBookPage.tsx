@@ -36,7 +36,7 @@ import {
 } from "@/lib/customerService";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Address, AddressInput, AddressKind } from "@/types/account";

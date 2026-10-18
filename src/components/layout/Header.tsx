@@ -19,7 +19,7 @@ import {
   registerPath,
 } from "@/constants/routes";
 import type { ActiveDestination, RoutePath } from "@/constants/routes";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 
 /*
  * Class contract. Every class rendered below is defined in `src/styles/` and none of it is defined here:

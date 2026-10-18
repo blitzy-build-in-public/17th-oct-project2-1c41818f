@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 526
+ * Lines: 530
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -61,10 +61,11 @@ import { formatCellValue } from "@/utils/format";
  * paginator, so no comparator, page window or cell formatter is written here: the order comes from `sortByKey`
  * over each column's raw cell, a cell is rendered by `formatCellValue` from the `ReportCellFormat` its column
  * declares — except the period column, whose wording is `formatBucketCell`'s so that a bucket the selected
- * range clips states the days of it the range covers — and the export is built by `reportService.toCsvMatrix`
- * from the same rows, the same definition and the same summary the table renders over — which is what stops
- * the download from disagreeing with the screen, down to the totals row, which is `totalsRowCells`' output in
- * both.
+ * range clips states the days of it the range covers, while `formatBucketCellForExport` words that same
+ * column in the download so the file states the period the rows under it cover — and the export is built by
+ * `reportService.toCsvMatrix` from the same rows, the same definition, the same summary and the same run the
+ * table renders over, which is what stops the download from disagreeing with the screen, down to the totals
+ * row, which is `totalsRowCells`' output in both.
  *
  * The order and the page are this file's, and both are applied to the whole run before the primitive is handed
  * anything. `DataTable` sorts only what it is given, and what it is given is one page, so an order left to the
@@ -240,9 +241,9 @@ const PERIOD_COLUMN_KEY = "period";
 
 /** The wording one row's period cell shows: the day the bucket opens when the range covers it whole, and the
  *  days of it the range holds when the range clips it — both `src/utils/dates.ts`'s. The row keeps the
- *  bucket's ISO day as its cell value, so the sort of the column, the row's identity and the CSV export are
- *  unchanged and only this text is qualified; a cell holding no date is printed as it stands, as the shared
- *  cell dispatcher does. */
+ *  bucket's ISO day as its cell value, so the sort of the column and the row's identity are unchanged and only
+ *  this text is qualified; the export words the same column through `formatBucketCellForExport`, the same days
+ *  written raw, and a cell holding no date is printed as it stands, as the shared cell dispatcher does. */
 function periodCellOf(row: ReportRow, granularity: BucketGranularity, range: DateRange): ReactNode {
   const period = row.cells[PERIOD_COLUMN_KEY];
   return typeof period === "string" ? formatBucketCell(period, granularity, range) || period : null;
@@ -465,14 +466,17 @@ export function ReportTable({
   const exportLabel = `${REPORTS_COPY.EXPORT_LABEL}: ${definition.name}`;
 
   const handleExport = useCallback((): void => {
-    const result = buildCsvResult(toCsvMatrix(definition, rows, summary), {
+    // The run these rows came from travels with them, because the matrix words the period column from its
+    // range and cut: a bucket the range clips is stated in the file as the days the range holds, which is
+    // the period the table's own row states.
+    const result = buildCsvResult(toCsvMatrix(definition, rows, summary, { range, granularity }), {
       fileName: exportFileName,
     });
     const download = downloadCsv(result.fileNameSuggestion ?? exportFileName, result.text);
     setPrepared({ result, runKey });
     if (download.ok) toast.success(FEEDBACK_COPY.TOAST_EXPORT_READY);
     else toast.error(FEEDBACK_COPY.TOAST_EXPORT_FAILED);
-  }, [definition, rows, summary, exportFileName, runKey, toast]);
+  }, [definition, rows, summary, range, granularity, exportFileName, runKey, toast]);
 
   // What the note beside the control states: the cap the export is bounded by, from the two limits
   // `src/constants/config.ts` owns. A limit and a count are different facts, so the count a prepared file

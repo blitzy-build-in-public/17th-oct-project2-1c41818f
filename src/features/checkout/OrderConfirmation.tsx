@@ -33,7 +33,7 @@ import { isNotFoundFailure, isSessionFailure } from "@/lib/apiClient";
 import { getOrder } from "@/lib/orderService";
 import type { OrderServiceOptions } from "@/lib/orderService";
 import { useAuth } from "@/state/AuthContext";
-import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import type { AsyncQueryState } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";

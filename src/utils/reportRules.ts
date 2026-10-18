@@ -1,17 +1,16 @@
 /**
  * Path: src/utils/reportRules.ts
- * Purpose: The report rules the report service and the seeded repositories both compose: the catalogue, row building, summaries, chart series and the CSV matrix for export
- * Lines: 591
+ * Purpose: The report rules the report service and the seeded repositories both compose: the catalogue, row building, summaries and chart series
+ * Lines: 554
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
-import { REPORTS_COPY, resolvedRangeLabel } from "@/constants/content";
+import { resolvedRangeLabel } from "@/constants/content";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import type { Customer } from "@/types/account";
 import type {
   BucketGranularity,
   ChartSeries,
-  CsvMatrix,
   ReportCellValue,
   ReportColumn,
   ReportDefinition,
@@ -38,27 +37,29 @@ import {
   startOfDay,
   toIsoDateTime,
 } from "@/utils/dates";
-import { formatCellValueForExport, roundMinorUnits } from "@/utils/format";
+import { roundMinorUnits } from "@/utils/format";
 import { averageOrderValue, goodsRevenueMinor, periodOrders, shareOf } from "@/utils/statistics";
 
 /**
  * The report rules, and the only home of each: the catalogue the reports view opens on, the rows the three
- * reports are built from, the summary figures stated over those rows, the totals row and the export matrix, the
- * composition the seam's `runReport` calls, and the series charted beside a table.
+ * reports are built from, the summary figures stated over those rows, the composition the seam's `runReport`
+ * calls, and the series charted beside a table.
  *
  * They live here, in the foundations, rather than in the service that publishes them, because two layers need
  * them and the layer order lets a file import only from its own layer or from a layer below it:
  * `src/data/repositories.ts` answers the seam's `runReport` by composing {@link findDefinition} and
  * {@link runReportDefinition} over the collections it holds, and `src/lib/reportService.ts` re-exports every
  * name below, so a caller keeps importing the surface it always did while the data layer reaches this one home
- * from a layer below it.
+ * from a layer below it. The export matrix — which only the view that downloads a report reads — lives with that
+ * service rather than here, where this file's 600-line ceiling left no room for the wording a bucket the range
+ * clips states in a download.
  *
  * The rows are built once and everything else derives from them, so the three reports cannot disagree:
- * {@link summarise} states the totals from those rows, {@link buildReportSeries} charts them, and
- * {@link toCsvMatrix} flattens them with the definition's own columns. An empty range is a valid result, not a
- * failure: no rows, a zeroed summary and empty series. Column keys, headings and cell formats come from
- * `REPORT_DEFINITIONS`, sentences from the copy module, bucket keys and range rules from `src/utils/dates.ts`,
- * and escaping, clipping and the row cap from `src/utils/csv.ts`, which is handed an already-formatted matrix.
+ * {@link summarise} states the totals from those rows and {@link buildReportSeries} charts them. An empty range
+ * is a valid result, not a failure: no rows, a zeroed summary and empty series. Column keys, headings and cell
+ * formats come from `REPORT_DEFINITIONS`, sentences from the copy module, bucket keys and range rules from
+ * `src/utils/dates.ts`, and escaping, clipping and the row cap from `src/utils/csv.ts`, which is handed an
+ * already-formatted matrix.
  */
 
 // What a report is built from ---------------------------------------------------------------------
@@ -306,7 +307,7 @@ export function buildRows(
   }
 }
 
-// Summaries and the export matrix -----------------------------------------------------------------
+// Summaries ----------------------------------------------------------------------------------------
 
 /** The summary items for `definition`, from the totals a kind's rows state: each figure keyed by the
  *  column it belongs to and labelled by that column, so the table and the export read one list. */
@@ -369,8 +370,8 @@ function summariseCustomers(
  *
  * One function produces both the metrics a report shows and the totals row its table ends with, which is
  * what makes the export match the screen: the table renders a cell from the item whose key is the
- * column's key, `toCsvMatrix` writes the same item, and neither computes a total itself. An empty range
- * totals to zero, because zero is what nothing came to.
+ * column's key, `reportService.toCsvMatrix` writes the same item, and neither computes a total itself. An
+ * empty range totals to zero, because zero is what nothing came to.
  *
  * @param _query - The run the rows came from: every total is read from the rows alone, so the query is
  * accepted for the shape the run composes with and is deliberately not read.
@@ -390,44 +391,6 @@ export function summarise(
     case "customers":
       return { items: summariseCustomers(rows, definition) };
   }
-}
-
-/** The totals row a report's table ends with, one cell per column in the table's own column order: the
- *  definition's totals-row label in the leading column, the summary's figure for every column it states
- *  one for, and an empty cell for a column with no total. */
-export function totalsRowCells(
-  definition: ReportDefinition,
-  summary: ReportSummary,
-): readonly ReportCellValue[] {
-  const totals = new Map(summary.items.map((item) => [item.key, item.value] as const));
-  return definition.columns.map((column, index) =>
-    index === 0 ? REPORTS_COPY.TOTALS_ROW_LABEL : (totals.get(column.key) ?? null),
-  );
-}
-
-/** The flattened export matrix `src/utils/csv.ts` serialises: the definition's own headings, one row per
- *  report row, then the totals row, so the file a reader opens is the table they were reading and the
- *  totals row is the one the table renders rather than a second sum.
- *
- * Cells are rendered by `formatCellValueForExport`, which writes money as the plain decimal a spreadsheet
- * can sum — the same figure the table shows, written for the reader a download serves — while escaping,
- * clipping and the row cap are left to the CSV module, which owns them. */
-export function toCsvMatrix(
-  definition: ReportDefinition,
-  rows: readonly ReportRow[],
-  summary: ReportSummary,
-): CsvMatrix {
-  const { columns } = definition;
-  const totals = totalsRowCells(definition, summary);
-  return {
-    header: columns.map((column) => column.label),
-    rows: [
-      ...rows.map((row) =>
-        columns.map((column) => formatCellValueForExport(row.cells[column.key], column.format)),
-      ),
-      columns.map((column, index) => formatCellValueForExport(totals[index], column.format)),
-    ],
-  };
 }
 
 // The composition the data source runs ------------------------------------------------------------

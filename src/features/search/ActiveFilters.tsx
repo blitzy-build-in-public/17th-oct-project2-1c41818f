@@ -12,7 +12,7 @@ import { CloseIcon } from "@/components/ui/icons";
 import { COMMON_ACTIONS, SEARCH_COPY, removeFilterLabel } from "@/constants/content";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import type { CatalogFilters } from "@/state/CatalogContext";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import type { Facet, FacetId, FilterState } from "@/types/catalog";
 import { formatMoney } from "@/utils/format";
 import { activeFilterEntries } from "@/utils/queryParams";

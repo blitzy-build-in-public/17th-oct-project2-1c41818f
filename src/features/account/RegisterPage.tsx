@@ -29,7 +29,7 @@ import { RETURN_TO_QUERY_KEY, ROUTES, loginPath } from "@/constants/routes";
 import { toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
 import type { RegistrationInput } from "@/types/account";

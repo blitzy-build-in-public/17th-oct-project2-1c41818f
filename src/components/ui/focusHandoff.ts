@@ -1,5 +1,5 @@
 /**
- * Path: src/state/focusHandoff.ts
+ * Path: src/components/ui/focusHandoff.ts
  * Purpose: The one home of the focus-handoff rule: when the control that had the focus goes away, hand the focus to the region the action's outcome lands in
  * Lines: 292
  */
@@ -8,13 +8,13 @@ import { useCallback, useEffect, useRef } from "react";
 import type { RefObject } from "react";
 
 /*
- * Why this is its own module rather than one more hook in `src/state/hooks.ts`: that file is at 599 of the
- * 600-line ceiling the request sets, so the concern is split into a second file rather than the ceiling being
- * raised — the same reason `src/components/ui/overlayEngine.ts` sits beside `Modal.tsx` and owns the overlay
- * contract both of its components share. The dependency direction is downward and single: this module imports
- * React alone — its three hooks and its `RefObject` type — and nothing from `src/state/hooks.ts`, from a
- * context, from a service or from a component, so a feature, a component or a context may all consume it
- * without an import cycle.
+ * Why this sits beside the primitives rather than in `src/state/hooks.ts`: its readers include the
+ * layout's `src/components/layout/Header.tsx`, which is Shared presentation and sits BELOW State, and
+ * the feature pages that compose that surface reach it downward — exactly why the four view-facing
+ * hooks live in `src/components/ui/hooks.ts`. Split out of `src/state/hooks.ts` at 599 of the 600-line
+ * ceiling, it keeps the dependency downward and single: it imports React alone — its three hooks and
+ * its `RefObject` type — and nothing from a context, a service, a component or a state module, while
+ * `src/state/hooks.ts` keeps the hooks whose readers are the contexts.
  *
  * What it exists for. A control that unmounts, or that goes native-disabled while a request is in flight,
  * gives the focus up, and the browser then drops it onto `document.body`. Every keyboard user's position is

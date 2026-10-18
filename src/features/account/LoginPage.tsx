@@ -24,7 +24,7 @@ import { RETURN_TO_QUERY_KEY, ROUTES, canReachPath, registerPath } from "@/const
 import { authErrorMessage, roleHomePath, toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
 import type { Credentials } from "@/types/account";
