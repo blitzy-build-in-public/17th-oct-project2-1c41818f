@@ -133,8 +133,8 @@ and a successful call is a created order, not proof of payment. The store and th
 
 There is no server, so there is no request quota to enforce and none is simulated. The protections that stand in for one are client-side, listed here so the
 absence is not mistaken for a gap: search suggestions are debounced by `SEARCH_SUGGESTION_DEBOUNCE_MS` (250 ms) and capped at `SEARCH_SUGGESTION_LIMIT` (8); a
-type-ahead request is cancelled when a newer keystroke arrives, through the abort signal on `apiClient`, which answers the superseded call with `request-
-aborted` (`499`) rather than an error a page renders; a view keeps at most `MAX_IN_FLIGHT_REQUESTS_PER_VIEW` (1) request of its own in flight; an order's
+type-ahead request is cancelled when a newer keystroke arrives, through the abort signal on `apiClient`, which answers the superseded call with the code
+`request-aborted` (`499`) rather than an error a page renders; a view keeps at most `MAX_IN_FLIGHT_REQUESTS_PER_VIEW` (1) request of its own in flight; an
 idempotency key is retained for the session; and CSV export is capped at `CSV_MAX_ROWS` (10,000 rows) with every cell clipped to `CSV_MAX_CELL_LENGTH` (32,000
 characters). All five limits live in `src/constants/config.ts`; `src/utils/csv.ts` enforces the export caps, reached through the CSV matrix
 `src/lib/reportService.ts` builds. **CSV is the only export format — there is no PDF export and no print stylesheet.**
