@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
  * Purpose: Route matching, error mapping, idempotency replay, the unregistered-source failure and seed determinism.
- * Lines: 439
+ * Lines: 470
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,6 +26,7 @@ import {
   toApiError,
 } from "@/lib/apiClient";
 import {
+  API_ERROR_CODES,
   FALLBACK_FAILURE_MESSAGE,
   SESSION_TOKEN_HEADER,
   clearInjectedFailures,
@@ -43,6 +44,7 @@ import type { Category, Product } from "@/types/catalog";
 import type { ApiError, LineId, PageResult, Result } from "@/types/common";
 import type { CartLine, Order, PricedCart } from "@/types/commerce";
 import { createAbortError, isAbortError } from "@/utils/async";
+import { compareIso } from "@/utils/dates";
 
 import { FIXED_DATE_RANGE, FIXED_NOW, makeAddress, makeFilterState } from "../../fixtures";
 
@@ -155,17 +157,30 @@ async function orderBody(idempotencyKey: string, cardNumber: string): Promise<ob
   };
 }
 
+/** The product a bootstrap's review read is scoped by: the one the pass's own catalogue page holds with the
+ * most reviews, so the scoping the determinism case asserts is asserted over rows rather than over an empty
+ * list, and both passes pick the same product without a seeded identifier being written down here. */
+function mostReviewed(products: readonly Product[]): Product {
+  return products.reduce(
+    (best, one) => (one.ratingCount > best.ratingCount ? one : best),
+    firstOf(products),
+  );
+}
+
 /** One independent bootstrap of the seeded data, read through the data source's own accessors. The module
  * registry is reset first, so two passes share no module state and the second is not the first's store. */
 async function captureSeed() {
   vi.resetModules();
   const data = await import("@/data/repositories");
   const booted = data.createSalesProDataSource();
+  const products = booted.listProducts(makeFilterState({ pageSize: PAGE_SIZE }));
+  const reviewed = mostReviewed(products.items);
   return {
     categories: booted.listCategories(),
     brands: booted.listBrands(),
-    products: booted.listProducts(makeFilterState({ pageSize: PAGE_SIZE })),
-    reviews: booted.listProductReviews({ page: 1, pageSize: PAGE_SIZE }),
+    products,
+    reviewed,
+    reviews: booted.listProductReviews({ productId: reviewed.id, page: 1, pageSize: PAGE_SIZE }),
     orders: booted.getRecentOrders(ORDER_SAMPLE),
     credential: booted.findSignInCredential(DEMO_ACCOUNTS.CUSTOMER_EMAIL),
     kpis: booted.getKpis(FIXED_DATE_RANGE),
@@ -416,6 +431,22 @@ describe("seed determinism", () => {
     expect(first.revenue.length).toBeGreaterThan(0);
     expect(first.kpis.orders).toBeGreaterThan(0);
     expect(first.credential?.digest.hash).toBe(second.credential?.digest.hash);
+    // The reviews read is scoped to the product it names: its rows are that product's own, its total is that
+    // product's own review count from the same bootstrap, and they lead with the newest first.
+    expect(first.reviews.items.length).toBeGreaterThan(0);
+    const own = first.reviewed.id;
+    expect(first.reviews.items.every((review) => review.productId === own)).toBe(true);
+    expect(first.reviews.total).toBe(first.reviewed.ratingCount);
+    const stamps = first.reviews.items.map((review) => review.createdAt);
+    expect([...stamps].sort(compareIso).reverse()).toEqual(stamps);
+    // An identifier the catalogue does not hold is refused, as the write route on the same path refuses it,
+    // rather than answered with the collection.
+    expectRefusal(
+      await refusalOf(getJson("/api/products/prod_not-in-the-catalogue/reviews")),
+      404,
+      API_ERROR_CODES.PRODUCT_NOT_FOUND,
+      "the reviews of an unknown product",
+    );
     for (const order of first.orders) {
       const priced = order.pricedCart;
       for (const line of priced.lines) {

@@ -1,7 +1,7 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 461
+ * Lines: 463
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
@@ -80,6 +80,7 @@ import type { CartLine, Order, OrderLine, PricedCart, PromoCode } from "@/types/
 import { averageOf, clampNumber, paginate } from "@/utils/collections";
 import {
   isWithinRange,
+  sortByIso,
   startOfDay,
   toFieldErrors,
   toIsoDate,
@@ -144,20 +145,21 @@ function suggestionList(
 }
 
 /**
- * One page of the stored reviews, newest first, optionally narrowed to a single rating.
+ * One page of a product's own reviews, newest first, optionally narrowed to a single rating.
  *
- * The declared query carries the page, its size and the rating but no product: the transport's reviews handler
- * reads the page and the rating out of the request and never passes the identifier the path carries, so the
- * half that would scope this read to one product is missing from the contract this member implements, and no
- * data source can recover it. The rows are therefore paged as the contract asks — the collection's own order,
- * which is each product's newest first — and the absent identifier is reported for the handler that owns it.
+ * The rows come from the store's per-product index, keyed by the `productId` the query names — resolved by
+ * the transport's handler from the identifier the request path carries — so the rows, the `total` and the
+ * page count all describe that one product: a product nothing has been written about answers an empty page,
+ * and the rating narrowing leaves only that product's rows carrying the rating asked for. The ordering is
+ * `src/utils/dates.ts`'s own, so a review submitted at runtime, which the write path unshifts onto the same
+ * index, leads the first page because it is the newest.
  */
 function reviewPage(store: DataStore, query: ReviewQuery): PageResult<Review> {
+  const rows = store.reviewsByProduct.get(query.productId) ?? [];
   const matching =
-    query.rating === undefined
-      ? store.reviews
-      : store.reviews.filter((review) => review.rating === query.rating);
-  return paginate(matching, query.page, query.pageSize);
+    query.rating === undefined ? rows : rows.filter((review) => review.rating === query.rating);
+  const ordered = sortByIso(matching, (review) => review.createdAt, "desc");
+  return paginate(ordered, query.page, query.pageSize);
 }
 
 /** The one-decimal form the catalogue states a rating in, so an average computed here and a seeded one are

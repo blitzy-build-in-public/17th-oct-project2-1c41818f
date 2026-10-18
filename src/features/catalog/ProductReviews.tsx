@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 565
+ * Lines: 566
  */
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -112,13 +112,14 @@ const PLACEHOLDER_ROW_KEYS = ["first", "second", "third"] as const;
  * as a value for the caller to render.
  *
  * @param productId - The product whose reviews are wanted.
- * @param query - The page, its size and the rating to narrow to.
+ * @param query - The page, its size and the rating to narrow to; the product travels in the path, so the
+ * query carries the paging and the rating alone.
  * @param signal - The abort signal of the read a newer one supersedes.
  * @returns One page of reviews, or the shaped failure; never a rejection.
  */
 function readReviews(
   productId: ProductId,
-  query: ReviewQuery,
+  query: Omit<ReviewQuery, "productId">,
   signal: AbortSignal,
 ): Promise<Result<PageResult<Review>>> {
   return getJson<PageResult<Review>>(fillApiPath(API_PATHS.PRODUCT_REVIEWS, { id: productId }), {

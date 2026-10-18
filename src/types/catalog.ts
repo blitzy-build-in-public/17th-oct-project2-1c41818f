@@ -1,7 +1,7 @@
 /**
  * Path: src/types/catalog.ts
  * Purpose: Catalogue shapes: product, image, category, brand, review, inventory, facet and filter types
- * Lines: 394
+ * Lines: 401
  */
 
 import type {
@@ -203,13 +203,20 @@ export interface ReviewInput {
 }
 
 /**
- * The read side of a product's reviews: which page to fetch, and the optional rating narrowing.
+ * The read side of one product's reviews: the product whose reviews are wanted, which page to fetch,
+ * and the optional rating narrowing.
+ *
+ * `productId` names the product the rows belong to, which is what scopes the read: the transport's
+ * handler resolves it from the `:id` the request path carries, and the data layer answers that
+ * product's reviews alone, so `PageResult.total` counts them and a product with none answers an empty
+ * page.
  *
  * `rating` is absent for the unfiltered list the reviews tab opens with, and present to show
  * exactly that many stars. It cannot express "4 and up" — the catalogue's minimum-rating filter,
  * `FilterState.minRating`, is what narrows a listing that way.
  */
 export interface ReviewQuery {
+  readonly productId: ProductId;
   readonly page: number;
   readonly pageSize: number;
   readonly rating?: RatingValue;

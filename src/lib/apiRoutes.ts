@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 459
+ * Lines: 467
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -141,10 +141,18 @@ function listRelatedProducts(context: RouteContext): Common.Result<unknown> {
 }
 
 function listProductReviews(context: RouteContext): Common.Result<unknown> {
+  const productId = context.params.id as Common.ProductId;
+  if (context.source.getProduct(productId) === undefined) {
+    return missing(API_ERROR_CODES.PRODUCT_NOT_FOUND);
+  }
   const rawRating = memberInteger(context.query, "rating");
   const rating: Catalog.RatingValue | null = isRatingValue(rawRating) ? rawRating : null;
   if (rawRating !== undefined && rating === null) return fieldProblem("rating");
-  const query: Catalog.ReviewQuery = { ...readPaging(context.query), rating: rating ?? undefined };
+  const query: Catalog.ReviewQuery = {
+    productId,
+    ...readPaging(context.query),
+    rating: rating ?? undefined,
+  };
   return ok(context.source.listProductReviews(query));
 }
 
