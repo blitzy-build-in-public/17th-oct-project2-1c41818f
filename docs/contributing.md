@@ -1,0 +1,154 @@
+<!--
+Path: docs/contributing.md
+Purpose: Naming, file-size, no-duplication and formatting conventions for anyone adding a file
+Lines: 154
+-->
+
+# Contributing to SalesPro
+
+How a file in this repository is named, placed, sized, formatted and verified before it is added. The layers and their import direction are in [`architecture.md`](./architecture.md); the data seam's contract is in [`mock-api.md`](./mock-api.md); every file's budget, delivered count and status is in [`../generation-manifest.md`](../generation-manifest.md). Each rule below is stated once and names the file that already embodies it.
+
+## 1. Naming and placement
+
+| Artefact             | Convention                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Components and pages | `PascalCase.tsx`, one component family per file, named exports and no default export                                        |
+| Every other module   | `camelCase.ts` with named exports                                                                                           |
+| Hooks                | `useX`, in `src/state/hooks.ts` unless the hook is a context's own consumer hook                                            |
+| Reducers             | `camelCase.ts` named for the state they own: `cartReducer.ts`, `checkoutReducer.ts`, `catalogReducer.ts`                    |
+| Contexts             | `PascalCase.tsx`, one provider family per file                                                                              |
+| Stylesheets          | `kebab-case.css`, one per concern; `tokens.css` is the only place a design value is declared                                |
+| Tests                | Named after their subject: `.test.tsx` when they render, `.test.ts` when they do not, under the matching `tests/` subfolder |
+| Constants            | `SCREAMING_SNAKE_CASE` for exported constant objects and, where those act as enumerations, their keys                       |
+| Types and interfaces | `PascalCase`, no `I` prefix; a type-only import is written `import type`                                                    |
+| Documentation        | `kebab-case.md` under `docs/`; `README.md` and `generation-manifest.md` are the exceptions by path                          |
+
+Where a new file lands, by the concern it owns:
+
+- `src/types` — shapes and unions only.
+- `src/constants` — literals, configuration and every user-facing sentence.
+- `src/utils` — pure functions, with no React and no data access.
+- `src/lib` — the domain rules and the two transport modules.
+- `src/data` — the seeded collections and their only readers.
+- `src/state` — contexts, reducers and the shared hooks.
+- `src/components` — anything two or more features render: `layout`, `ui`, `product`, `charts`.
+- `src/features/<module>` — one route-shaped slice each.
+- `src/styles` — the stylesheets; `src/main.tsx` is their only importer.
+- `tests` — by concern rather than by folder: `unit`, `components`, `integration`.
+- `docs` — the three supporting documents.
+
+Two placement rules are hard. No barrel `index.ts` exists anywhere: an importer names the concrete path that owns the concern, so no folder acquires an implicit public API. And no feature slice imports another feature slice — anything two features need is promoted into `src/components`, `src/lib`, `src/state` or `src/utils`; [`architecture.md`](./architecture.md) holds the layer table that settles the rest.
+
+A file that renders carries a class contract: the classes it renders, listed in a comment at the top, with the stylesheet that declares them named there. No file under `src/components/**` or `src/features/**` may import a stylesheet, so every class is consumed by name. A stylesheet concern that cannot fit one file is split, and the parent loads the sibling with `@import "./sibling.css";` at the position the moved rules held in the cascade.
+
+## 2. One authoritative home per concern
+
+A file that needs one of these imports it. A second implementation of anything in this table is a defect, not a convenience.
+
+| Module                                                                | The single concern it owns                                                                                                                                            |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/types/*`                                                         | Every shape and union in the product                                                                                                                                  |
+| `src/constants/*`                                                     | Routes and path builders, storage keys and configuration, all copy, and the taxonomy of categories, brands, sort keys, statuses, facet and report definitions         |
+| `src/utils/format.ts`                                                 | Money, number and percentage formatting, and the single minor-unit rounding rule                                                                                      |
+| `src/utils/dates.ts`                                                  | Parsing, formatting, range arithmetic, bucketing boundaries and comparison periods                                                                                    |
+| `src/utils/strings.ts`                                                | Slug, case, truncation and initials helpers, the prefixed identifier generators, and the demonstration credential digest the seed data and the sign-in path both call |
+| `src/utils/validation.ts`                                             | Every field and form validator, each returning a field-keyed error map                                                                                                |
+| `src/utils/collections.ts`                                            | Grouping, sorting, uniqueness, chunking, indexing, aggregation and pagination                                                                                         |
+| `src/utils/statistics.ts`                                             | Percentages, growth, averages, moving averages and percentiles                                                                                                        |
+| `src/utils/queryParams.ts`                                            | URL query state, read and written with normalisation and default omission                                                                                             |
+| `src/utils/storage.ts`                                                | Typed, versioned, failure-tolerant `localStorage` access                                                                                                              |
+| `src/utils/async.ts`                                                  | Debounce, throttle, retry with backoff and timeout                                                                                                                    |
+| `src/utils/csv.ts`                                                    | CSV serialisation, escaping, row capping and download                                                                                                                 |
+| `src/lib/apiClient.ts`                                                | The only transport seam, and the only place a failure becomes a `Result` value                                                                                        |
+| `src/lib/mockServer.ts`                                               | The only in-process route table, latency model and idempotency store                                                                                                  |
+| `src/lib/*Service.ts`                                                 | One domain rule each: filtering and faceting, search, pricing, orders, authentication, customers, aggregation and reports                                             |
+| `src/data/repositories.ts`                                            | The only data-access surface over the seeded collections                                                                                                              |
+| `src/state/cartReducer.ts`, `checkoutReducer.ts`, `catalogReducer.ts` | The cart, checkout and catalogue transitions, exhaustively typed                                                                                                      |
+| `src/state/hooks.ts`                                                  | The shared hooks: storage-backed state, debounced value, pagination, media query, async data, document title, outside click                                           |
+| `src/components/ui/*`                                                 | One implementation per control, which features compose instead of a raw `<button>`, `<input>`, `<select>` or `<table>`                                                |
+| `src/components/layout/*`, `src/components/product/*`                 | The page shell, and the product presentation catalog, search, cart and home share                                                                                     |
+| `src/components/charts/*`                                             | The chart scale and geometry mathematics first, then the three renderers over it                                                                                      |
+| `src/styles/tokens.css`                                               | Every colour, spacing, typography, radius, shadow and z-index value                                                                                                   |
+
+What that centralises, so no later file reimplements it: money and number formatting, date arithmetic and bucketing, string and identifier generation, validation, the collection and statistical helpers, URL query state, local persistence, async timing, CSV export, transport and error shaping, seeded data access, the cart and checkout transitions, pagination behaviour, overlay behaviour and focus management, the loading, empty and error states, and the design tokens every stylesheet reads.
+
+## 3. File size, budgets and splits
+
+- **No file exceeds 600 lines.** The largest budget the plan allocates is 500, and the ceiling is never raised.
+- Every file carries a line budget in the tree and the manifest. A budget is an allocation, not padding: nothing is added to a finished file to reach a number, and no working code is cut to stay inside one.
+- The remainder rule, in the four cases it occurs: **under budget** — the difference returns to the remainder and is reallocated to files not yet generated; **over budget and inside the ceiling** — the overrun is taken from the remainder, with a note naming what grew; **over budget and unable to fit** — the concern is split into a second file, the split is recorded in the manifest, and the second file is generated in the current or the next phase; **beyond 10% of budget either way** — recorded in the manifest's reconciliation ledger with a reason.
+- A split produces what the manifest calls a split path: a part of a counted file, carrying no budget of its own, drawing on the budget of the file it came from, and re-exported from that file's path wherever a consumer imported it there.
+- Counted in the 50,000-line total: the plan's 157 files — TypeScript and TSX under `src/` and `tests/`, CSS under `src/styles/`, the root tooling files and the four Markdown documents — plus each split path, whose lines count against the file it came from. Excluded: `package-lock.json`, `node_modules/`, `dist/` and `generation-manifest.md`.
+- The plan allocates those 50,000 lines and keeps the delivered total within ±5% of it. The manifest, not this guide, is the authority for the delivered figure, and it records that figure next to the target.
+
+## 4. The header comment every file opens with
+
+Before any import or content, in the file's own comment syntax:
+
+```text
+/**
+ * Path: src/utils/format.ts
+ * Purpose: The one-sentence purpose the plan states for that file.
+ * Lines: 380
+ */
+```
+
+- `.css` uses `/* Path: … * Purpose: … * Lines: … */`, with `Path` opening the first line and `Purpose` and `Lines` continuing on their own. `.md` uses an HTML comment with the three fields on their own lines, as this file's header above does. `.gitignore` and `.env.example` use `# Path:`, then `# Purpose:`, then `# Lines:`.
+- `Path` is repository-root-relative and identical to the path the tree lists. `Purpose` is the file's one-sentence purpose from the plan. `Lines` is the file's real total length, the header included: set it once the content is final, and record the same number in the manifest.
+- Exempt, because the format permits no comment: `package.json`, `tsconfig.json` and `.prettierrc.json`. Their counts are still recorded in the manifest.
+
+## 5. The per-phase output contract
+
+A phase generates **3 to 5 files from the tree, in tree order**, each exactly once; it may hold fewer only when fewer than three pending files remain. Its output is the files' content and then exactly one progress line — no prose between files, no summary, no preview of the next phase:
+
+```text
+Total lines so far: N / 50000
+```
+
+`N` is the delivered cumulative total the manifest records. Generation then stops until the reply is the single word `continue`, and no phase begins without it.
+
+One file, once: a generated file is never regenerated. A defect found later is fixed in the file that owns the concern, never by duplicating the logic into the file that found it. The only file rewritten across phases is `generation-manifest.md`, and only as bookkeeping.
+
+## 6. Resuming through the manifest
+
+`generation-manifest.md` at the repository root is the authority: the tree with each file's budget, actual count and status; the phase schedule with planned, actual and cumulative lines; the reconciliation ledger; and the output contract above. Its status vocabulary is `Pending`, `In progress` and `Done`, and `Done` means the content is complete and the header's `Lines` value equals the file's real length.
+
+To continue the build: run `npm install` if `node_modules/` is absent, then `npm run typecheck` and `npm test` and confirm both green before writing anything. Read the manifest and take the next 3 to 5 `Pending` files **in schedule order — never from memory, never skipping one**. Then, before the progress line, set each written file's status to `Done`, record its real count, update the phase row and the cumulative total, append any reconciliation note, and rewrite the manifest in full. Where the manifest and the working tree disagree — a file present but `Pending`, or `Done` but absent — **the file on disk wins**, and the manifest is corrected to match.
+
+## 7. TypeScript, React, errors and comments
+
+TypeScript: `strict` stays on. No `any` — `unknown` with narrowing, a generic or a discriminated union instead. No non-null assertion where a guard reads better, and no `@ts-ignore` (`@ts-expect-error` with a one-line reason only where a suppression is genuinely required). Every `switch` over a union is exhaustive; a value that is not reassigned is `readonly`; a signature that would otherwise take four or more positional arguments takes a named parameter object. `verbatimModuleSyntax` means a type-only import is written `import type`; `erasableSyntaxOnly` means no `enum`, no value-bearing `namespace` and no parameter properties.
+
+React: the hooks rules are lint errors — no conditional hooks, complete dependency arrays, and effects only to synchronise with something outside React. A derived value is computed during render, never stored in state and never synced by an effect. A provider's value is memoised with stable callbacks; a list is keyed by a stable identifier and never by the array index; `React.lazy` calls sit at module top level. No `dangerouslySetInnerHTML`, no `eval`, no `new Function`.
+
+Errors and diagnostics: a failure at the data seam is a value — `Result<T>` — and never an exception thrown across a module boundary; a service turns one into a field-keyed error or a user-facing message, and a component renders an error state with a retry action. An empty `catch` is forbidden, and work that can outlive its component is cancelled through the abort signal rather than set into unmounted state. The user-facing surfaces are the toast system and the error boundary; there is no logging library and no remote logging, and a `console` call added while debugging is removed before the file is complete.
+
+Comments: every exported interface, type, function, hook and component carries a JSDoc block stating what it does, what it returns and what it assumes; inline comments explain why, never what; no file carries commented-out code; and the header comment is the only boilerplate a file owes. A decision a later reader could otherwise undo is recorded at the code that makes it, under one of the markers this repository already uses — `BLITZY [CONTRACT]`, `[BUDGET]`, `[LAYOUT]`, `[COPY]`, `[A11Y]` or `[DESIGN_SYSTEM_GAP]`.
+
+Accessibility and responsiveness: interactive elements are real buttons and links; every input has a label and an error association; overlays use the dialog contract; every chart carries a data alternative; layout uses the tokenised grid, with breakpoints read from tokens rather than hard-coded pixel queries in component code. The domain invariants — money as integer minor units, ISO dates, generated identifiers, `localStorage` only through `src/utils/storage.ts` — are stated in [`architecture.md`](./architecture.md).
+
+## 8. Formatting, linting and the gate commands
+
+Prettier 3.6.2 is the sole formatting authority, configured by `.prettierrc.json` and plugin-free. ESLint's stylistic rules are deliberately off, so `eslint.config.js` carries the type-aware TypeScript rules and the React hooks rules and no formatting rule, and the two tools cannot disagree. Imports are grouped external packages first, then the `@/` alias, then relative paths. The alias `@/*` → `src/*` is declared in `tsconfig.json` and mirrored in `vite.config.ts` and `vitest.config.ts`.
+
+| Script               | What it does                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run dev`        | Vite dev server                                                                              |
+| `npm run build`      | `tsc --noEmit && vite build`                                                                 |
+| `npm run preview`    | Serves the built output                                                                      |
+| `npm test`           | `vitest run`; `passWithNoTests: true` keeps the gate valid before the first test file exists |
+| `npm run test:watch` | `vitest` in watch mode, for local work only                                                  |
+| `npm run coverage`   | `vitest run --coverage`, V8 provider and the configured thresholds                           |
+| `npm run lint`       | `eslint .`                                                                                   |
+| `npm run typecheck`  | `tsc --noEmit`                                                                               |
+| `npm run format`     | `prettier --write .`                                                                         |
+
+There is no CI, release, container or deployment workflow in this repository: a contributor runs these commands locally, and the build is verified by running them.
+
+## 9. Definition of done
+
+A file is done when `npm run typecheck`, `npm run lint` and `npm test` all pass for the tree as it stands, its header `Lines` value equals its real length, and the manifest records its status and count. The suite is green before any test file exists, because `passWithNoTests: true` is configured, and green against real coverage from the first test file onward. The coverage bar is 85% of statements and 80% of branches for `src/utils`, `src/lib` and `src/state`, 80% of statements overall, and at least one integration test per feature module.
+
+A phase is done when every file it generated meets that, the manifest carries each one's status and count and the new cumulative total, and the phase closes with the single progress line before it stops for `continue`.
+
+Write against what earlier phases actually produced, not against an anticipated interface. If a phase finds that an earlier file cannot support it, the phase stops and reports the conflict rather than duplicating the missing behaviour into its own files.
