@@ -61,16 +61,16 @@ Every package is pinned to an exact version in `package.json` — no ranges, no 
 | ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `react`            | 19.2.0  | The only framework in the product.                                                                                                                                                                |
 | `react-dom`        | 19.2.0  | Renders React into the document.                                                                                                                                                                  |
-| `react-router-dom` | 7.9.5   | Client-side routing, in **declarative mode only** — `BrowserRouter`/`Routes`/`Route` with `React.lazy`, and `MemoryRouter` in tests. No data mode, no framework mode, no Vite plugin, no loaders. |
+| `react-router-dom` | 7.18.4  | Client-side routing, in **declarative mode only** — `BrowserRouter`/`Routes`/`Route` with `React.lazy`, and `MemoryRouter` in tests. No data mode, no framework mode, no Vite plugin, no loaders. |
 
 Everything else is development tooling, and nothing under `src/` imports any of it:
 
-| Area            | Packages                                                                                                                                                                                             |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build           | `typescript` 5.9.3, `vite` 7.1.12, `@vitejs/plugin-react` 5.1.0, `@types/node` 22.18.13                                                                                                              |
-| Test            | `vitest` 4.0.6, `jsdom` 27.1.0, `@testing-library/react` 16.3.0, `@testing-library/dom` 10.4.1, `@testing-library/jest-dom` 6.9.1, `@testing-library/user-event` 14.6.1, `@vitest/coverage-v8` 4.0.6 |
-| Lint and format | `eslint` 9.39.0, `@eslint/js` 9.39.0, `typescript-eslint` 8.46.2, `eslint-plugin-react-hooks` 7.0.1, `globals` 16.4.0, `prettier` 3.6.2                                                              |
-| Types           | `@types/react` 19.2.2, `@types/react-dom` 19.2.2                                                                                                                                                     |
+| Area            | Packages                                                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Build           | `typescript` 5.9.3, `vite` 7.3.7, `@vitejs/plugin-react` 5.1.0, `@types/node` 22.18.13                                                                                                                 |
+| Test            | `vitest` 4.1.12, `jsdom` 27.1.0, `@testing-library/react` 16.3.0, `@testing-library/dom` 10.4.1, `@testing-library/jest-dom` 6.9.1, `@testing-library/user-event` 14.6.1, `@vitest/coverage-v8` 4.1.12 |
+| Lint and format | `eslint` 9.39.0, `@eslint/js` 9.39.0, `typescript-eslint` 8.58.2, `eslint-plugin-react-hooks` 7.0.1, `globals` 16.4.0, `prettier` 3.6.2                                                                |
+| Types           | `@types/react` 19.2.2, `@types/react-dom` 19.2.2                                                                                                                                                       |
 
 **Nothing outside that list is added.** The stack boundary is hard: no other UI framework or meta-framework, no state, form, chart, table, HTTP, date, i18n or utility library, no component kit, and no CSS framework or preprocessor. Everything a library would have supplied is built here — validation in `src/utils/validation.ts`, the charts in `src/components/charts/`, the table in `src/components/ui/Table.tsx`, formatting across `src/utils/format.ts` and `src/utils/dates.ts`, and CSV export in `src/utils/csv.ts`. The stylesheets are hand-written CSS, with every value declared once in `src/styles/tokens.css`.
 
