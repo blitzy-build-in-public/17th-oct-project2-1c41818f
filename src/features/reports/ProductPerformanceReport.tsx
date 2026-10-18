@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ProductPerformanceReport.tsx
  * Purpose: The product-performance report: units, revenue and share by product
- * Lines: 313
+ * Lines: 322
  */
 
 import { useCallback, useMemo } from "react";
@@ -95,10 +95,10 @@ const PLACEHOLDER_FIGURE_COUNT = 3;
 const PLACEHOLDER_ROW_COUNT = 6;
 
 /**
- * The level the empty state's headline renders at: the level the paired chart fixes its own heading at, so
- * the first heading inside this view keeps its level whether the period recorded activity or not.
+ * The level the empty state's headline renders at: the report body is a section of the page, one level below
+ * its `h1`, so a period with no activity states itself at that section's level rather than deeper.
  */
-const EMPTY_HEADING_LEVEL = 3;
+const EMPTY_HEADING_LEVEL = 2;
 
 /**
  * What joins the resolved period and the caveat under the chart. Neither half is worded here: the period is
@@ -174,6 +174,9 @@ export interface ProductPerformanceReportProps {
   readonly range: DateRange;
   /** The cut the run is bucketed by. */
   readonly granularity: BucketGranularity;
+  /** The one action this report's no-activity state offers, asked of the page that owns the period: it widens
+   *  the range to the widest the product accepts, so a period that recorded nothing has a way out. */
+  readonly onWidenRange: () => void;
 }
 
 /**
@@ -191,12 +194,14 @@ export interface ProductPerformanceReportProps {
  * Four states are rendered in the order they can occur: the placeholders while the run is in flight, the
  * alert with its retry when it failed, the empty state when the period recorded no activity, and the report.
  *
- * @param props - The period to run over and the cut to run it by; see {@link ProductPerformanceReportProps}.
+ * @param props - The period to run over, the cut to run it by and the action its empty state offers; see
+ * {@link ProductPerformanceReportProps}.
  * @returns The report body: its summary figures, its chart and its table.
  */
 export function ProductPerformanceReport({
   range,
   granularity,
+  onWidenRange,
 }: ProductPerformanceReportProps): ReactElement {
   const { session } = useAuth();
   const sessionToken = session?.token ?? "";
@@ -257,8 +262,10 @@ export function ProductPerformanceReport({
   if (data.rows.length === 0) {
     // A period with no activity is a well-formed report and not a failure: nothing sold, so the summary
     // totals zero and the chart has no series to draw. The state explains that with the words the content
-    // module holds for a reporting range — and no control, because the action those words name belongs to the
-    // range control the page above this view owns, and a control this view cannot back would reach nothing.
+    // module holds for a reporting range, and it carries the one action that resolves it — the page's, since
+    // the period is the page's, and all it does is widen the period to the widest this product accepts. The
+    // label says so rather than "Choose another period", which would promise a choice this control does not
+    // give: narrowing a period is the range control's job above the reports.
     return (
       <div className={CLASSES.body}>
         <EmptyState
@@ -266,6 +273,8 @@ export function ProductPerformanceReport({
           description={EMPTY_STATES.reportRange.description}
           headingLevel={EMPTY_HEADING_LEVEL}
           className={CLASSES.empty}
+          actionLabel={EMPTY_STATES.dashboardRange.actionLabel}
+          onAction={onWidenRange}
         />
       </div>
     );

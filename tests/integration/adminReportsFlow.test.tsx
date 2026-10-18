@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/adminReportsFlow.test.tsx
- * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range
- * Lines: 599
+ * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range.
+ * Lines: 600
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,7 @@ import {
   chartDataTableCaption,
   documentTitle,
   exportNote,
+  exportRowCountNote,
   lastDaysLabel,
 } from "@/constants/content";
 import {
@@ -57,7 +58,7 @@ import type { RenderHarness, UserEvent } from "../testUtils";
 // acceptance signals are here: the guard with the endpoint's own role check, and the CSV a report exports
 // against the table it was taken from.
 
-/** The sign-in form's controls; a required field's label also carries its marker, hence the patterns. */
+/** The sign-in form's controls; a required field's label also carries the hidden requirement text. */
 const EMAIL_FIELD = new RegExp(`^${ACCOUNT_COPY.EMAIL_LABEL}`);
 const PASSWORD_FIELD = new RegExp(`^${ACCOUNT_COPY.PASSWORD_LABEL}`);
 
@@ -508,12 +509,11 @@ describe("the export a report offers", () => {
         sameCellValue(renderedTotals[index] ?? "", exportedTotals[index] ?? "", column.format),
       ).toBe(true);
     }
-    // The note then states what the file holds rather than the cap it was bounded by.
-    await waitFor(() =>
-      expect(screen.getByText(exportNote(csv.length - 1, CSV_MAX_CELL_LENGTH))).toBeInTheDocument(),
-    );
+    // The cap that bounds the download stands unchanged by the export; the rows the file held are separate.
+    expect(screen.getByText(exportNote(CSV_MAX_ROWS, CSV_MAX_CELL_LENGTH))).toBeInTheDocument();
+    expect(screen.getByText(exportRowCountNote(csv.length - 1))).toBeInTheDocument();
 
-    // The range last used is the one the next visit opens on; the dashboard keeps its own period.
+    // The range last used is the one the next visit opens on, on either administrator surface.
     const chosen = { from: addDays(today, -13), to: today };
     const fromField = (): HTMLElement => screen.getByLabelText(DATE_RANGE_COPY.FROM_LABEL);
     await applyRange(user, chosen.from, chosen.to);
@@ -526,7 +526,7 @@ describe("the export a report offers", () => {
 
     renderApp({ route: ROUTES.ADMIN });
     await screen.findByRole("heading", { name: PAGE_TITLES.DASHBOARD, level: 1 });
-    expect(fromField()).toHaveValue(toDateInputValue(defaultReportRange().from));
+    expect(screen.getByText(formatDateRange(chosen.from, chosen.to))).toBeInTheDocument();
   });
 });
 
@@ -552,7 +552,8 @@ describe("a period that recorded nothing", () => {
 
     const dashboard = renderApp({ route: ROUTES.ADMIN });
     await screen.findByRole("heading", { name: PAGE_TITLES.DASHBOARD, level: 1 });
-    await applyRange(dashboard.user, quiet.from, quiet.to);
+    // The dashboard opens on that stored range, so a window a day earlier is what its fields can apply.
+    await applyRange(dashboard.user, addDays(quiet.from, -1), quiet.to);
     expect(
       await screen.findByRole("heading", { name: EMPTY_STATES.dashboardRange.title }),
     ).toBeVisible();

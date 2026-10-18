@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 696
+ * Lines: 712
  */
 
 import type { LoyaltyTier } from "@/types/account";
@@ -199,6 +199,19 @@ export const searchSummaryLabel = (query: string, count: number): string =>
 /** Filter-chip, live-region and paging labels. Consumers: `src/features/search/*` and `Pagination.tsx`. */
 export const clearFacetLabel = (facetLabel: string): string => `Clear ${facetLabel}`;
 export const removeFilterLabel = (filterLabel: string): string => `Remove filter: ${filterLabel}`;
+/** A facet whose values are chosen one at a time, and which therefore opens with an "any" choice. */
+export type SingleChoiceFacetId = "price" | "rating";
+/**
+ * The "any" choice the two single-choice facets' groups open with, keyed by the facet it belongs to: the state
+ * a group holds when the facet applies nothing, worded as that state and never with the clearing verb, which
+ * belongs to the facet's own clear action beside the group. Consumers:
+ * `src/features/search/FilterPanel.tsx` and `src/features/catalog/CatalogPage.tsx`, each of which renders the
+ * price bands and the rating floors as one radio group.
+ */
+export const FACET_ANY_LABELS: Readonly<Record<SingleChoiceFacetId, string>> = {
+  price: "Any price",
+  rating: "Any rating",
+};
 export const resultsUpdatedAnnouncement = (count: number): string =>
   productCountAnnouncement(count);
 export const suggestionsUpdatedAnnouncement = (count: number): string =>
@@ -498,6 +511,9 @@ export const REPORTS_COPY = {
 /** Describes the export's row cap and cell limit, and whose clock its dates use. */
 export const exportNote = (rowCap: number, cellLimit: number): string =>
   `The export holds up to ${rowCap} rows and clips each cell at ${cellLimit} characters, so it opens in a spreadsheet. Dates and times are yours, not the server's.`;
+/** States how many rows the export produced. Consumer: `src/features/reports/ReportTable.tsx`. Worded here because this module is the one home of every user-facing sentence, which is why the file is over the request's 600-line ceiling. */
+export const exportRowCountNote = (rowCount: number): string =>
+  `The last export held ${rowCount} ${noun(rowCount, "row", "rows")}.`;
 
 // Shared actions --------------------------------------------------------------------------------
 /** Shared verbs, so one action is never labelled two ways. Consumers: every feature and component. */

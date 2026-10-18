@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/DateRangePicker.tsx
- * Purpose: The report range control with presets, validation and the persisted last-used range
- * Lines: 154
+ * Purpose: The reports slice's range control: the shared range control plus the persisted last-used range
+ * Lines: 135
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -10,7 +10,8 @@ import type { ReactElement } from "react";
 import { DateRangeControl } from "@/components/ui/DateRangeControl";
 import { STORAGE_KEYS } from "@/constants/config";
 import { useLocalStorage } from "@/state/hooks";
-import { defaultReportRange, validateDateRange } from "@/utils/dates";
+import { defaultReportRange } from "@/utils/dates";
+import { storedRangeOr } from "@/utils/storage";
 import type { BaselineKind } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
 
@@ -23,27 +24,6 @@ import type { DateRange } from "@/types/common";
  */
 
 // The picker's own concern ------------------------------------------------------------------------
-
-/**
- * Proves a payload read back from the store is a range before either end is parsed. It checks the shape
- * alone, because a payload that is not one of these is what the storage hook discards in favour of the
- * caller's fallback, and whether the days it names are usable is the range rule's answer, asked by
- * {@link initialRangeOf}, so no rule is restated here.
- */
-function isStoredRange(value: unknown): value is DateRange {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { readonly from?: unknown; readonly to?: unknown };
-  return typeof candidate.from === "string" && typeof candidate.to === "string";
-}
-
-/**
- * The range a mount opens on: the stored one while it still satisfies every range rule, and the trailing
- * window otherwise. A payload that is absent, one written by an older build, and one whose days have since
- * become inverted, future-dated or longer than the cap all resolve to the same window.
- */
-function initialRangeOf(stored: DateRange, fallback: DateRange): DateRange {
-  return validateDateRange(stored.from, stored.to).valid ? stored : fallback;
-}
 
 /** Everything {@link DateRangePicker} accepts. */
 export interface DateRangePickerProps {
@@ -82,12 +62,13 @@ export interface DateRangePickerProps {
  *
  * The rendering, the preset vocabulary, the draft the fields are edited into, the wording of the range rules
  * and the named comparison all belong to `src/components/ui/DateRangeControl.tsx`, promoted there so the
- * dashboard and this picker cannot drift apart on what a range means. What is left here is persistence, and it
- * is this slice's own: **this file owns the stored range**, being the product's only feature-layer consumer of
- * `src/utils/storage.ts` — the key comes from `STORAGE_KEYS` in `src/constants/config.ts`, and both the read
- * and the write go through `useLocalStorage` in `src/state/hooks.ts`, which owns the versioned envelope and the
- * degradation. Nothing here touches `window.localStorage`, no key is written out, and no other file needs to
- * know the range is persisted.
+ * dashboard and this picker cannot drift apart on what a range means. What is left here is the last-used
+ * range, and both administrator range controls share it: the key comes from `STORAGE_KEYS` in
+ * `src/constants/config.ts`, both the read and the write go through `useLocalStorage` in `src/state/hooks.ts`,
+ * which owns the versioned envelope and the degradation, and what a payload means is one shared reading —
+ * `storedRangeOr` in `src/utils/storage.ts`, which asks the range rules of the days it names and answers the
+ * caller's fallback for anything it cannot use. Nothing here touches `window.localStorage` and no key is
+ * written out here.
  *
  * That is what the restore is for. On mount the stored range is read once, checked against the range rules —
  * a payload may predate the cap, or the rules that accept it — and handed to the shared control as the range
@@ -121,12 +102,12 @@ export function DateRangePicker({
   const [storedRange, setStoredRange] = useLocalStorage<DateRange>(
     STORAGE_KEYS.REPORT_RANGE,
     fallbackRange,
-    { validate: isStoredRange },
   );
 
   // The range this mount opened on, frozen for the life of the mount: it is what the page is told to adopt,
-  // and a later change to the page's own range must not re-derive it or report it a second time.
-  const [restoredRange] = useState<DateRange>(() => initialRangeOf(storedRange, fallbackRange));
+  // and a later change to the page's own range must not re-derive it or report it a second time. The payload
+  // is read through `storedRangeOr`, the one home of what a stored range means, so no rule is restated here.
+  const [restoredRange] = useState<DateRange>(() => storedRangeOr(storedRange, fallbackRange));
 
   // The fields, the range they resolve to in words, the rules' wording and the baseline comparison are the
   // shared control's; this file adds the store to what it reports. A range the control resolved is the range

@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 382
+ * Lines: 387
  */
 
 import type { CurrencyCode } from "@/types/common";
@@ -321,11 +321,12 @@ export const PASSWORD_POLICY = {
 /**
  * The token references the chart series are coloured with, in assignment order.
  *
- * These are references, not colours: `src/styles/tokens.css` declares the eight `--chart-series-N`
+ * These are references, not colours: `src/styles/tokens.css` declares the twelve `--chart-series-N`
  * values and holds the colour literals alone, so no TypeScript module carries one.
  * `src/lib/analyticsService.ts` assigns a reference to each `ChartSeries.color` by index, and
- * `src/styles/admin-reports.css` maps the same references onto its series classes. A series index
- * past the eighth wraps back to the first.
+ * `src/styles/chart-series.css` maps the same references onto its series classes. The product's
+ * twelve revenue categories — the widest split any chart of this product draws — each carry their
+ * own reference, so no wrap occurs; a series index past the twelfth wraps back to the first.
  */
 export const CHART_SERIES_TOKEN_REFERENCES = [
   "var(--chart-series-1)",
@@ -336,6 +337,10 @@ export const CHART_SERIES_TOKEN_REFERENCES = [
   "var(--chart-series-6)",
   "var(--chart-series-7)",
   "var(--chart-series-8)",
+  "var(--chart-series-9)",
+  "var(--chart-series-10)",
+  "var(--chart-series-11)",
+  "var(--chart-series-12)",
 ] as const;
 
 // Demonstration surface ------------------------------------------------------------------------

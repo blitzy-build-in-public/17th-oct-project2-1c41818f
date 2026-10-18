@@ -1,0 +1,122 @@
+/* Path: src/styles/commerce-steps.css
+ * Purpose: Styles for the checkout's ordered step indicator, split out of src/styles/commerce.css, which loads this sheet with @import
+ * Lines: 122
+ */
+
+/* The step indicator family, and the sole definition site of the .sp-steps* classes
+ * src/features/checkout/CheckoutSteps.tsx renders. Split out of src/styles/commerce.css, which loads this sheet
+ * with @import and holds the family's responsive override in its medium-stop block, because the sheet had reached
+ * 607 lines and cannot hold this family and the rest of the cart and checkout contract inside the request's
+ * 600-line ceiling; the plan's remedy for a concern that cannot fit is the split, never the ceiling, and this
+ * family is the one its sheet gives up whole. A CSS @import is inlined where it sits, so these rules hold the
+ * cascade position they held inside commerce.css: src/main.tsx still imports the eight mapped stylesheets, no file
+ * under src/features/** imports a stylesheet, and every class here is consumed by name.
+ * State is carried by the attribute and the modifier the component writes, as the other sheets carry it: the
+ * current step by `[aria-current="true"]` and by `.sp-steps__item--current`, the completed one by
+ * `.sp-steps__item--done`. Every value is a var() from tokens.css, except inside a forced-colours block, where a
+ * system colour keyword is the one colour a sheet may name because the environment rather than the design
+ * decides it, as components.css states over its own block.
+ */
+
+/* ==== Step indicator ==== */
+/* Read as a sequence at every width: markers numbered, each step's own name beside its marker, and the row wrapping
+ * rather than dropping a name; the state wording is `.sp-steps__status`, hidden by base.css's utility. */
+.sp-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.sp-steps__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The items that carry a connector take the row's free space, so the connector's own `flex: 1` has somewhere to
+ * grow: content-sized it computed to 0px and no run painted between two markers (157px with this rule at a 640px
+ * row). The last item keeps its content width, so the row ends flush with the final label. */
+.sp-steps__item:not(:last-child) {
+  flex: 1;
+}
+/* The number always sits in the disc, so a step is identifiable by its position and never by hue alone. */
+.sp-steps__marker {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--control-height-sm);
+  block-size: var(--control-height-sm);
+  color: var(--color-text-muted);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption-size);
+}
+/* Every step's name paints at every width: an unnamed marker would leave a step unidentifiable on a phone. */
+.sp-steps__label {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
+}
+.sp-steps__item--current .sp-steps__label,
+.sp-steps__item[aria-current="true"] .sp-steps__label {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+/* The line between two markers takes the colour of the step it leaves, so only a completed run turns green. */
+.sp-steps__connector {
+  flex: 1;
+  block-size: var(--border-width-thick);
+  background-color: var(--color-border);
+}
+.sp-steps__item--done .sp-steps__connector {
+  background-color: var(--color-success);
+}
+/* The current step: the filled accent marker, the semibold label and the attribute the component sets. */
+.sp-steps__item--current .sp-steps__marker,
+.sp-steps__item[aria-current="true"] .sp-steps__marker {
+  color: var(--color-text-on-accent);
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+/* A completed step carries the success disc and the tick glyph, which a greyscale rendering still shows. */
+.sp-steps__item--done .sp-steps__marker {
+  color: var(--color-text-inverse);
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+}
+/* The tick's weight comes from the connector's token, so the sheet weighs the glyph, not the component. */
+.sp-steps__item--done .sp-steps__marker > svg {
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  stroke-width: var(--border-width-thick);
+}
+.sp-steps__label.sp-btn {
+  padding-block: var(--space-3); /* the variant zeroes padding, so it reaches --touch-target-min */
+}
+
+/* In this mode the user agent replaces the current step's accent disc and every upcoming marker's boundary with the
+ * same two system colours, so the step the shopper stands on was told apart by its semibold label alone. The current
+ * marker takes the mode's own fill and its matching text, so the disc is filled again and the number stays legible
+ * inside it, and keeps a boundary in the same colour so the disc reads as one shape. Highlight and HighlightText are
+ * system keywords — the one colour a sheet may name in this block, because the environment and not the design
+ * decides it, as components.css states over its own. The disc keeps its size: the token declares its border box,
+ * and only the colours change. */
+@media (forced-colors: active) {
+  .sp-steps__item--current .sp-steps__marker,
+  .sp-steps__item[aria-current="true"] .sp-steps__marker {
+    background-color: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* --breakpoint-md, 768px, from tokens.css: a query cannot read a custom property. From the medium stop the step
+ * row gives its markers the wider gap, because every label then sits beside its marker on one line. The rule
+ * moved here with the family: it stood in src/styles/commerce.css's own medium-stop block, whose remaining
+ * overrides belong to the step shell and the cart that sheet still owns. */
+@media (min-width: 768px) {
+  .sp-steps {
+    gap: var(--space-3);
+  }
+}

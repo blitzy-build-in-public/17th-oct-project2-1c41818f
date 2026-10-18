@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 289
+ * Lines: 306
  */
 
 import { useCallback } from "react";
@@ -131,8 +131,8 @@ function periodNote(from: IsoDateString, to: IsoDateString): string {
 export interface CustomerReportProps {
   /**
    * The period to report on, owned by `src/features/reports/ReportsPage.tsx` beside its range control: this
-   * view runs over the range it is given and changes nothing about it, so the control that set the period is
-   * the same control that widens one which recorded no activity.
+   * view runs over the range it is given and changes nothing about it, so a range that recorded no activity is
+   * widened by the page through the callback below rather than by a control this view would have to hold.
    */
   readonly range: DateRange;
   /**
@@ -141,6 +141,11 @@ export interface CustomerReportProps {
    * states its buckets in the wording of the cut that produced them.
    */
   readonly granularity: BucketGranularity;
+  /**
+   * The one action this report's no-activity state offers, asked of the page that owns the period: it widens
+   * the range to the widest the product accepts, so a period that recorded nothing has a way out.
+   */
+  readonly onWidenRange: () => void;
 }
 
 /**
@@ -160,10 +165,15 @@ export interface CustomerReportProps {
  * period that gained no account and took no order; and then the report itself — its figures, its chart and its
  * table, because a reader wants the headline before the detail.
  *
- * @param props - The page's range and its bucket; see {@link CustomerReportProps}.
+ * @param props - The page's range and its bucket, and the action its no-activity state offers; see
+ * {@link CustomerReportProps}.
  * @returns The report's body: its summary figures, its paired chart and its table with the export.
  */
-export function CustomerReport({ range, granularity }: CustomerReportProps): ReactElement {
+export function CustomerReport({
+  range,
+  granularity,
+  onWidenRange,
+}: CustomerReportProps): ReactElement {
   const { session } = useAuth();
   const sessionToken = session?.token;
   const { from, to } = range;
@@ -237,18 +247,22 @@ export function CustomerReport({ range, granularity }: CustomerReportProps): Rea
   const result = request.data;
 
   // A period that gained no account and took no order: the run succeeded and holds no rows, so the state says
-  // so. The control `EMPTY_STATES.reportRange` names belongs to the range picker that set this period, which is
-  // the page's and stands above this view, so the state states the emptiness and offers no second control here.
+  // so and offers the one action that resolves it. The period is the page's, so the action is the page's too,
+  // and all it does is widen the period to the widest this product accepts — the label names that widening
+  // rather than the choice "Choose another period" would promise, which belongs to the range control above.
+  // The state wears the block's own padding class itself, as the sibling views' states do, so the three tabs
+  // render one state rather than one state at two sizes.
   if (result.rows.length === 0) {
     return (
       <div className={CLASSES.body}>
-        <div className={CLASSES.empty}>
-          <EmptyState
-            title={EMPTY_STATES.reportRange.title}
-            description={EMPTY_STATES.reportRange.description}
-            headingLevel={3}
-          />
-        </div>
+        <EmptyState
+          title={EMPTY_STATES.reportRange.title}
+          description={EMPTY_STATES.reportRange.description}
+          headingLevel={2}
+          className={CLASSES.empty}
+          actionLabel={EMPTY_STATES.dashboardRange.actionLabel}
+          onAction={onWidenRange}
+        />
       </div>
     );
   }

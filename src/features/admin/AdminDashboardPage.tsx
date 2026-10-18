@@ -1,10 +1,10 @@
 /**
  * Path: src/features/admin/AdminDashboardPage.tsx
  * Purpose: The administrator dashboard: dated range, KPI cards, revenue chart, breakdown and tables
- * Lines: 335
+ * Lines: 361
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
@@ -12,6 +12,7 @@ import { DonutChart } from "@/components/charts/DonutChart";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DateRangeControl } from "@/components/ui/DateRangeControl";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { STORAGE_KEYS } from "@/constants/config";
 import { ADMIN_COPY, COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { KpiCard, type KpiKind } from "@/features/admin/KpiCard";
@@ -30,7 +31,7 @@ import {
   getTopProducts,
 } from "@/lib/analyticsService";
 import { useAuth } from "@/state/AuthContext";
-import { useAsync, useBreakpoint, useDocumentTitle } from "@/state/hooks";
+import { useAsync, useBreakpoint, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import { useToast } from "@/state/ToastContext";
 import type {
   BaselineKind,
@@ -44,6 +45,7 @@ import type {
 import type { ApiError, DateRange } from "@/types/common";
 import type { Order } from "@/types/commerce";
 import { defaultReportRange, maxReportRange, resolveBaselineRange } from "@/utils/dates";
+import { storedRangeOr } from "@/utils/storage";
 
 /*
  * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
@@ -170,7 +172,10 @@ function RevenueBreakdown({
  *
  * The control over those two state values is the shared one, `src/components/ui/DateRangeControl.tsx`, which
  * the reports slice renders as well: this page hands it the range and the comparison in force and takes back
- * whatever a reader applies or chooses, so one range rule serves both surfaces instead of one copy each.
+ * whatever a reader applies or chooses, so one range rule serves both surfaces instead of one copy each. The
+ * range itself is the product's persisted last-used one — adopted at mount through `storedRangeOr` over
+ * `STORAGE_KEYS.REPORT_RANGE` and written back by the one handler below — so a range applied on either
+ * administrator surface is what the next visit to either opens on.
  *
  * The four states every data page renders are explicit. A pending read is each block's own skeleton, driven by
  * the flag passed down; a failure is the single page-level alert this view owns, whose retry re-runs every read
@@ -187,7 +192,18 @@ export function AdminDashboardPage(): ReactElement {
   const toast = useToast();
   useDocumentTitle(documentTitle(PAGE_TITLES.DASHBOARD));
 
-  const [range, setRange] = useState<DateRange>(() => defaultReportRange());
+  // The trailing window, taken once per mount from one reading of the clock, and the last-used range both
+  // administrator surfaces read and write through `useLocalStorage`: the stored days are this page's range
+  // while the range rules accept them, and this window is what an absent or unusable payload opens on. The
+  // payload's shape and the rules are one shared reading, `storedRangeOr` in `src/utils/storage.ts`.
+  const fallbackRange = useMemo<DateRange>(() => defaultReportRange(), []);
+  const [storedRange, setStoredRange] = useLocalStorage<DateRange>(
+    STORAGE_KEYS.REPORT_RANGE,
+    fallbackRange,
+  );
+
+  // The range this page is read over: the product's last-used one while the range rules accept it.
+  const [range, setRange] = useState<DateRange>(() => storedRangeOr(storedRange, fallbackRange));
   const [bucket, setBucket] = useState<BucketGranularity>(DEFAULT_BUCKET_GRANULARITY);
   const [groupBy, setGroupBy] = useState<RevenueGroupBy>("category");
   const [baseline, setBaseline] = useState<BaselineKind>(DEFAULT_BASELINE_KIND);
@@ -255,10 +271,20 @@ export function AdminDashboardPage(): ReactElement {
     if (hasRenderedRef.current) toast.error(firstError.message);
   }, [firstError, toast]);
 
-  /** The empty state's one action: the widest range the product accepts. */
+  /** Applies a range: the page's own range and the stored last-used one together, so the two can never
+   *  disagree about what was last read and the next visit to either administrator surface opens on it. */
+  const applyRange = useCallback(
+    (next: DateRange): void => {
+      setRange(next);
+      setStoredRange(next);
+    },
+    [setStoredRange],
+  );
+
+  /** The empty state's one action: the widest range the product accepts, applied and remembered alike. */
   const widenPeriod = useCallback((): void => {
-    setRange(maxReportRange());
-  }, []);
+    applyRange(maxReportRange());
+  }, [applyRange]);
 
   const renderBlocks = (): ReactElement => (
     <>
@@ -325,7 +351,7 @@ export function AdminDashboardPage(): ReactElement {
       />
       <DateRangeControl
         value={range}
-        onChange={setRange}
+        onChange={applyRange}
         baseline={baseline}
         onBaselineChange={setBaseline}
       />

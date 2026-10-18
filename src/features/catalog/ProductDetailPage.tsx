@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 585
+ * Lines: 537
  */
 
 import { useId, useState } from "react";
@@ -18,8 +18,9 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { PriceTag, QuantityStepper, Rating } from "@/components/ui/Rating";
 import { Tabs } from "@/components/ui/Tabs";
 import type { TabItem } from "@/components/ui/Tabs";
-import { PAGE_SIZE_OPTIONS, RELATED_PRODUCTS_LIMIT } from "@/constants/config";
+import { RELATED_PRODUCTS_LIMIT } from "@/constants/config";
 import {
+  A11Y_COPY,
   CATALOG_COPY,
   COMMON_ACTIONS,
   EMPTY_STATES,
@@ -34,13 +35,14 @@ import { ROUTE_PARAMS, ROUTES, categoryPath } from "@/constants/routes";
 import type { RoutePath } from "@/constants/routes";
 import { BRAND_DEFINITIONS } from "@/constants/taxonomy";
 import { ProductReviews } from "@/features/catalog/ProductReviews";
-import { API_ERROR_CODES, API_PATHS, getJson } from "@/lib/apiClient";
-import { getProduct, getRelated } from "@/lib/catalogService";
+import { API_ERROR_CODES } from "@/lib/apiClient";
+import { flattenCategoryTree, getProductBySlug, listCategories } from "@/lib/catalogReads";
+import { getRelated } from "@/lib/catalogService";
 import { useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
-import type { Category, Product, ProductSpec, ProductStatus } from "@/types/catalog";
-import type { ApiError, PageResult, ProductId, Result } from "@/types/common";
+import type { CategoryNode, Product, ProductSpec, ProductStatus } from "@/types/catalog";
+import type { ApiError, ProductId } from "@/types/common";
 import { indexBy } from "@/utils/collections";
 import { formatAvailability, formatRating } from "@/utils/format";
 
@@ -88,9 +90,9 @@ const CLASSES = {
   stack: "sp-stack",
 } as const;
 
-/** The catalogue lifecycle a product must hold to be bought. The detail endpoint answers a product whatever its
- *  status, so the sellable one is stated where the buy controls are guarded, as `src/data/products.ts` spells it at
- *  the seeding end. */
+/** The catalogue lifecycle a product must hold to be bought. The catalogue serves sellable records only, so this
+ *  guard restates that requirement of the buy controls rather than filtering anything here, and `src/data/products.ts`
+ *  spells the same status at the seeding end. */
 const SELLABLE_STATUS: ProductStatus = "active";
 
 /** The identifiers of the three tabs, named once so no render body repeats a string. */
@@ -99,10 +101,6 @@ const TAB_IDS = {
   SPECIFICATIONS: "specifications",
   REVIEWS: "reviews",
 } as const;
-
-/** The page size the slug lookup reads the listing at: the product's own largest configured size, because the
- *  lookup's only requirement of the payload is that the ranked matches fit inside one page. */
-const LOOKUP_PAGE_SIZE = PAGE_SIZE_OPTIONS[PAGE_SIZE_OPTIONS.length - 1];
 
 /** The placeholder cards a loading strip stands in with, one per related product the endpoint answers with at most;
  *  each carries its own identity rather than a position, so no key is an index. */
@@ -128,62 +126,11 @@ function brandNameFor(brandIdentifier: string): string | null {
   return BRAND_NAME_BY_SLUG.get(slugOfIdentifier(brandIdentifier)) ?? null;
 }
 
-/** The identifier the detail endpoint's path takes, from the segment the route carries. The route is declared
- *  `/product/:slug` and the endpoint's parameter is `:id`, so the two are one position in a request without this
- *  file deciding whether the value names a product: that answer is the seam's, and an identifier it holds nothing
- *  for is the `404` the not-found state renders. The cast is the visible signal that the value did not come from the
- *  generator `src/utils/strings.ts` owns, the one module this file may not call. */
-function asProductIdentifier(segment: string): ProductId {
-  return segment as ProductId;
-}
-
-/** Whether a failure is the detail endpoint reporting that it holds no product under the identifier asked for. */
+/** Whether a failure is the read reporting that the catalogue holds no product under the segment the route
+ *  carries: the code the detail endpoint answers an unknown identifier with, which the slug read resolves for a
+ *  segment naming nothing, so the not-found state has one trigger whichever read produced it. */
 function isMissingProduct(error: ApiError): boolean {
   return error.code === API_ERROR_CODES.PRODUCT_NOT_FOUND;
-}
-
-/** The product one slug names, read from the catalogue listing by the slug itself. Exact by construction: the
- *  listing's term is the slug the route carries, the endpoint ranks the product whose name the slug was built from
- *  above every partial match, and the row whose `slug` equals the segment is the product asked for. `null` reports a
- *  listing that answered without holding it, which leaves the detail endpoint's own refusal standing.
- *
- *  The request goes through `src/lib/apiClient.ts` with the two parameters the lookup needs, so the endpoint's own
- *  normalisation of a partial query supplies the rest. `catalogService.listProducts` is not used because it takes a
- *  complete `FilterState`, whose defaults `src/utils/queryParams.ts` owns and this file may not import. */
-async function findProductBySlug(
-  slug: string,
-  signal: AbortSignal,
-): Promise<Result<Product | null>> {
-  const listing = await getJson<PageResult<Product>>(API_PATHS.PRODUCTS, {
-    query: { q: slug, pageSize: LOOKUP_PAGE_SIZE },
-    signal,
-  });
-  if (!listing.ok) return listing;
-  return { ok: true, value: listing.value.items.find((one) => one.slug === slug) ?? null };
-}
-
-/**
- * Resolves the product the route names, so the rest of the page works from the product and its own identifier.
- *
- * The route carries the readable slug and the endpoint takes the prefixed identifier, and neither can be derived
- * from the other on the client: an identifier's suffix is cut and disambiguated with a hash once a name passes the
- * readable maximum, so `prod_` plus a slug is the wrong identifier for a long name and nothing recovers the right
- * one here. The endpoint is therefore asked first with the value the route carries, because it is the authority on
- * whether a product exists; the one `404` a mismatch between the two spellings produces is then resolved once
- * through the listing, which holds every product under the slug it was seeded with. The lookup happens once per
- * route and nowhere else in this file, so no second resolution rule exists.
- *
- * @param slug - The slug the route carries.
- * @param signal - The abort signal of a read a newer one supersedes.
- * @returns The product, or the shaped failure to render; never a rejection.
- */
-async function resolveProduct(slug: string, signal: AbortSignal): Promise<Result<Product>> {
-  const read = await getProduct(asProductIdentifier(slug), { signal });
-  if (read.ok || !isMissingProduct(read.error)) return read;
-
-  const found = await findProductBySlug(slug, signal);
-  if (!found.ok) return found;
-  return found.value === null ? read : { ok: true, value: found.value };
 }
 
 /** The route a category crumb navigates to. `src/constants/routes.ts` builds the path and `BreadcrumbItem` types
@@ -197,12 +144,16 @@ function categoryCrumbTarget(slug: string): RoutePath {
  *  label is a name the data carries, so no crumb is a prettified slug and none is a string written here. A category
  *  the read did not answer with leaves the trail at home and the product rather than inventing a crumb: the trail is
  *  the only thing this page's category read feeds, so a failure there shortens it and never replaces the product the
- *  shopper asked for. */
+ *  shopper asked for.
+ *
+ *  The read answers a tree and a product's category is a leaf, so the tree is walked into one list before the
+ *  lookup: indexing the payload as it arrives would see the parents alone and shorten every trail to home and the
+ *  product. */
 function categoryTrailFor(
   product: Product,
-  categories: readonly Category[],
+  categories: readonly CategoryNode[],
 ): readonly BreadcrumbItem[] {
-  const byId = indexBy(categories, (category) => category.id);
+  const byId = indexBy(flattenCategoryTree(categories), (category) => category.id);
   const category = byId.get(product.categoryId);
   const trail: BreadcrumbItem[] = [{ label: PAGE_TITLES.HOME, to: ROUTES.HOME }];
 
@@ -243,6 +194,9 @@ function DetailPlaceholders(): ReactElement {
         <Skeleton variant="text" lines={3} />
         <Skeleton variant="block" height="var(--space-20)" />
       </div>
+      <span className="sp-visually-hidden" role="status">
+        {A11Y_COPY.LOADING_ANNOUNCEMENT}
+      </span>
     </div>
   );
 }
@@ -509,13 +463,14 @@ function ProductDetailBody({ product }: { readonly product: Product }): ReactEle
 /**
  * The product detail route: everything one product is bought from, composed from the shared primitives.
  *
- * The route segment is the product's readable slug and `resolveProduct` is the single place that turns it into the
- * product; the product's own identifier then serves the two reads that need one — the related strip and the reviews.
+ * The route segment is the product's readable slug and `getProductBySlug` in `src/lib/catalogReads.ts` is the single
+ * read that turns it into the product, so no request here asks the detail endpoint for an identifier the segment is
+ * not; the product's own identifier then serves the two reads that need one — the related strip and the reviews.
  * The category read feeds the breadcrumb trail alone and runs beside the product rather than before it, so the page
  * renders as soon as it knows what it is showing. All four states are derived during render — the placeholders while
- * the read is in flight, the not-found state the endpoint's own refusal produces, the alert carrying a failure's
- * message with its retry, and the loaded product — so nothing is mirrored into state and no placeholder is ever
- * shown beside a stale product.
+ * the read is in flight, the not-found state that read's own refusal produces, the alert carrying any other
+ * failure's message with its retry, and the loaded product — so nothing is mirrored into state and no placeholder
+ * is ever shown beside a stale product.
  *
  * @returns The route: its heading block, and whichever of the four states the read is in.
  */
@@ -524,13 +479,10 @@ export function ProductDetailPage(): ReactElement {
   const slug = (params[ROUTE_PARAMS.PRODUCT_SLUG] ?? "").trim();
   const hasSlug = slug !== "";
 
-  const product = useAsync<Product>((signal) => resolveProduct(slug, signal), [slug], {
+  const product = useAsync<Product>((signal) => getProductBySlug(slug, { signal }), [slug], {
     enabled: hasSlug,
   });
-  const categories = useAsync<Category[]>(
-    (signal) => getJson<Category[]>(API_PATHS.CATEGORIES, { signal }),
-    [],
-  );
+  const categories = useAsync<CategoryNode[]>((signal) => listCategories({ signal }), []);
 
   const loaded = product.data;
   const isMissing = !hasSlug || (product.error !== null && isMissingProduct(product.error));

@@ -1,20 +1,20 @@
 /**
  * Path: src/features/search/FilterPanel.tsx
  * Purpose: The facet panel for category, brand, price, rating and availability, with counts and clear actions
- * Lines: 541
+ * Lines: 450
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { FocusEvent, KeyboardEvent, ReactElement, ReactNode } from "react";
+import { useCallback, useId, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { Input } from "@/components/ui/Input";
 import { Drawer } from "@/components/ui/Modal";
 import { Checkbox, RadioGroup, Switch } from "@/components/ui/Select";
 import { BREAKPOINTS } from "@/constants/config";
 import {
   COMMON_ACTIONS,
+  FACET_ANY_LABELS,
   SEARCH_COPY,
   clearFacetLabel,
   productCountLabel,
@@ -24,17 +24,9 @@ import type { FacetDefinition } from "@/constants/taxonomy";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { useMediaQuery } from "@/state/hooks";
 import type { Facet, FacetValue, FilterState } from "@/types/catalog";
-import type { FieldErrors, MinorUnits } from "@/types/common";
 import { indexBy } from "@/utils/collections";
-import { formatMinorAsInput, formatNumber, parseMoneyToMinor } from "@/utils/format";
-import {
-  FILTER_PARAMS,
-  PRICE_FILTER_FLOOR_MINOR,
-  activeFilterEntries,
-  countActiveFilters,
-  facetValueMatches,
-} from "@/utils/queryParams";
-import { fieldErrorsFromApiError } from "@/utils/validation";
+import { formatNumber } from "@/utils/format";
+import { activeFilterEntries, countActiveFilters, facetValueMatches } from "@/utils/queryParams";
 
 /*
  * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
@@ -47,16 +39,16 @@ import { fieldErrorsFromApiError } from "@/utils/validation";
  * no control id or label reaches the document twice. `sp-facets--drawer` is the same element inside the drawer,
  * resetting the sticky positioning and the panel's own scroll, and the sheet writes it after `sp-facets`, so its
  * `display: grid` holds at every width. `sp-facets__panel` is the bordered box laying the heading and the clear
- * action out in a two-column first row; `__group` and `__range` span both tracks; `__legend` is a group heading;
- * `__values`, `__value`, `__label` and `__count` are a value list, its rows, the growing label side of a row and
- * the count beside it; `__clear` is a clear action aligned to the end of its row; `__toggle` is the small-screen
- * trigger, hidden from the extra-large stop up and so rendered only while the panel is a drawer; and the dash between
- * the two price bounds is the `__range > :nth-child(2)` the sheet styles.
+ * action out in a two-column first row; `__group` spans both tracks; `__legend` is a group heading; `__values`,
+ * `__value`, `__label` and `__count` are a value list, its rows, the growing label side of a row and the count
+ * beside it; `__clear` is a clear action aligned to the end of its row; and `__toggle` is the small-screen
+ * trigger, hidden from the extra-large stop up and so rendered only while the panel is a drawer.
  *
  * BLITZY [CONTRACT]: the sheet speaks of "the panel's heading" but declares no `sp-facets__heading` rule, so the
  * heading borrows `sp-facets__legend` — the register and separator a filter column's own title should wear. The
- * rating facet is likewise one `fieldset`, whose legend `RadioGroup` renders, rather than a group fieldset
- * wrapping a second one, so a single legend names the group instead of two announcing the same words.
+ * price and rating facets are likewise one `fieldset` each, whose legend `RadioGroup` renders, rather than a
+ * group fieldset wrapping a second one, so a single legend names the group instead of two announcing the same
+ * words.
  */
 
 /** The classes this surface composes, written once so a sheet rename is one edit. */
@@ -65,7 +57,6 @@ const CLASSES = {
   drawer: "sp-facets--drawer",
   panel: "sp-facets__panel",
   group: "sp-facets__group",
-  range: "sp-facets__range",
   legend: "sp-facets__legend",
   values: "sp-facets__values",
   value: "sp-facets__value",
@@ -79,34 +70,8 @@ const CLASSES = {
  *  column holds 260px of the layout, which the grid's 198px cards need in their own right below that width. */
 const COLUMN_QUERY = `(min-width: ${BREAKPOINTS.XLARGE}px)`;
 
-/** The value a single-choice facet carries to mean "no value": the "any rating" choice that clears the filter. */
+/** The value that means "no value": the state choice a single-choice facet's group opens with. */
 const ANY_VALUE = "";
-
-/**
- * The two price bounds a shopper types, named by the query keys the URL and `GET /api/products` both carry, so a
- * bound the endpoint rejects can mark its own field.
- *
- * BLITZY [COPY]: `src/constants/content.ts` holds no wording for a price bound — its only price strings are the
- * taxonomy's band labels — so the two labels are stated here. They belong in the content library.
- */
-const PRICE_BOUNDS = {
-  min: { name: FILTER_PARAMS.MIN_PRICE, label: "Minimum price" },
-  max: { name: FILTER_PARAMS.MAX_PRICE, label: "Maximum price" },
-} as const;
-
-/** One price bound: the query key it writes and the wording of its label. */
-type PriceBoundFieldDefinition = (typeof PRICE_BOUNDS)[keyof typeof PRICE_BOUNDS];
-
-/**
- * The bound a field's text names, as minor units, or `null` when it names none: an empty field, a value typed
- * without a digit, or an amount at or below the price floor, which the query writer reads as no bound at all. A
- * bound above the catalogue's ceiling is kept as typed — confining bounds is the writer's own rule.
- */
-function readBound(text: string): MinorUnits | null {
-  if (!/[0-9]/.test(text)) return null;
-  const amount = parseMoneyToMinor(text);
-  return amount > PRICE_FILTER_FLOOR_MINOR ? amount : null;
-}
 
 /** One facet's group: its vocabulary entry, whether it holds anything, the action that resets it alone and the
  *  control its kind needs. */
@@ -195,34 +160,43 @@ function TermFacet({ facet, filters, onToggle }: TermFacetProps): ReactElement {
   );
 }
 
-/** Everything {@link RatingFacet} renders from: the group's own members, the floor facet and the write that
- *  chooses one — including the choice that clears the filter. */
-interface RatingFacetProps extends Omit<FacetGroupProps, "children"> {
+/** Everything {@link SingleChoiceFacet} renders from: the group's own members, the facet and the value the
+ *  query applies, the "any" choice's own wording, and the write that chooses a value — the one that clears the
+ *  facet included. */
+interface SingleChoiceFacetProps extends Omit<FacetGroupProps, "children"> {
   readonly facet: Facet;
   readonly filters: FilterState;
+  readonly selection: string;
+  readonly anyLabel: string;
   readonly onSelect: (value: string) => void;
 }
 
 /**
- * The rating facet: a single-choice list of the star floors the vocabulary declares, opened by the choice that
- * clears the filter. Counts are rendered through each option's own label node, so the number a floor would leave
- * is part of the control's name rather than a decoration beside it.
+ * A single-choice facet — the price bands and the rating floors — as one radio group: the vocabulary's own
+ * legend, the "any" choice that holds the state a facet applying nothing is in, and every value beside the
+ * count the response already carries, rendered through each option's own label node so the number a choice
+ * would leave is part of the control's name.
  *
- * BLITZY [COPY]: `src/constants/content.ts` declares no wording for an "any" choice, so the choice that clears
- * the facet is labelled with the library's own clear-action template for the facet rather than with a sentence
- * written here. A dedicated string belongs in the content library.
+ * Choosing a value replaces the selection, because the state holds one band or one floor at a time and the
+ * writer this control calls replaces the facet rather than adding to it — so two contradictory bands cannot
+ * both apply and no choice is silently discarded. A value the filters have emptied keeps its place, disabled
+ * while it is not the selected one, and a selected value stays operable so it can be replaced or cleared. The
+ * legend is the group's own `fieldset` legend, which `RadioGroup` renders, so one legend names the group; the
+ * facet's clear action beside the group is the single clearing affordance, never a value of the group.
  */
-function RatingFacet({
+function SingleChoiceFacet({
   definition,
   facet,
   filters,
+  selection,
+  anyLabel,
   isApplied,
   onClear,
   onSelect,
-}: RatingFacetProps): ReactElement {
+}: SingleChoiceFacetProps): ReactElement {
   const counts = indexBy(facet.values, (value) => value.value);
   const options = [
-    { value: ANY_VALUE, label: clearFacetLabel(definition.label) },
+    { value: ANY_VALUE, label: anyLabel },
     ...facet.values.map((value) => ({
       value: value.value,
       label: value.label,
@@ -235,7 +209,7 @@ function RatingFacet({
       <RadioGroup
         name={`${facet.id}-filter`}
         legend={definition.label}
-        value={filters.minRating === null ? ANY_VALUE : String(filters.minRating)}
+        value={selection}
         options={options}
         onChange={onSelect}
         renderOptionLabel={(option) => {
@@ -254,62 +228,6 @@ function RatingFacet({
   );
 }
 
-/** Everything {@link PriceBoundField} renders from: the bound to show and write, the field errors a failed
- *  request named, and the write that opens or closes that side of the range. */
-interface PriceBoundFieldProps {
-  readonly field: PriceBoundFieldDefinition;
-  readonly bound: MinorUnits | null;
-  readonly errors: FieldErrors;
-  readonly onCommit: (bound: MinorUnits | null) => void;
-}
-
-/**
- * One price bound's field: an amount entered in major units and written to the filter in minor units.
- *
- * The field's text is the DOM's own while it is being typed — a controlled value would rewrite the caret on
- * every keystroke, an entered `1299` canonicalising to `1299.00` — and the effect below is what keeps the field
- * in step with the filter state when that changes elsewhere: a clear-all, a removed chip, a range reopened. No
- * selection is mirrored into React state and the amount is the URL's; the field holds only what is being typed.
- *
- * The bound is written when the field is left, and on Enter, which leaves it the same way: a settled pair is what
- * the writer `src/utils/queryParams.ts` normalises, so a half-typed maximum cannot invert the range and swap the
- * minimum the shopper has already entered. Nothing here rejects an amount — the writer swaps an inverted range,
- * clamps a bound to the catalogue's ceiling and reads one at the floor as no bound at all.
- */
-function PriceBoundField({ field, bound, errors, onCommit }: PriceBoundFieldProps): ReactElement {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const text = bound === null ? "" : formatMinorAsInput(bound);
-
-  useEffect(() => {
-    const node = inputRef.current;
-    if (node === null || node === document.activeElement) return;
-    if (node.value !== text) node.value = text;
-  }, [text]);
-
-  const settle = (node: HTMLInputElement): void => {
-    const amount = readBound(node.value);
-    node.value = amount === null ? "" : formatMinorAsInput(amount);
-    onCommit(amount);
-  };
-
-  return (
-    <Input
-      ref={inputRef}
-      name={field.name}
-      label={field.label}
-      errors={errors}
-      defaultValue={text}
-      inputMode="decimal"
-      autoComplete="off"
-      spellCheck={false}
-      onBlur={(event: FocusEvent<HTMLInputElement>): void => settle(event.currentTarget)}
-      onKeyDown={(event: KeyboardEvent<HTMLInputElement>): void => {
-        if (event.key === "Enter") event.currentTarget.blur();
-      }}
-    />
-  );
-}
-
 /** Everything {@link FilterPanel} accepts: the facets and filter state to render — read from the catalogue
  *  context when either is omitted — the change observer the page announces from, and the panel's id and
  *  classes. The filter state is a read override only; writes still go through the provider's setters, so the
@@ -318,7 +236,8 @@ export interface FilterPanelProps {
   readonly facets?: readonly Facet[];
   readonly filters?: FilterState;
   readonly onChange?: () => void;
-  /** The panel's element id, which the small-screen trigger's `aria-controls` points at. */
+  /** The panel's element id, which the small-screen trigger's `aria-controls` points at while the drawer is
+   *  open — the state the panel exists in. */
   readonly panelId?: string;
   readonly className?: string;
 }
@@ -343,10 +262,10 @@ export interface FilterPanelProps {
  * @param props - The facets and filter state to render, the change observer, the panel's id and extra classes.
  * @returns The column from the extra-large stop up, or the trigger with its drawer below it.
  *
- * BLITZY [BUDGET]: 541 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was added
- * to reach a number and none was cut to leave one. The five data-driven groups, the four controls they dispatch
- * to, the price field's DOM-side draft, the class contract and the four data states are what the surface needs,
- * and the plan's own remedy — a second file — would break the path this slice's page imports.
+ * BLITZY [BUDGET]: 450 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was
+ * added to reach a number and none was cut to leave one. The five data-driven groups, the three controls they
+ * dispatch to, the class contract and the four data states are what the surface needs, and the plan's own
+ * remedy — a second file — would break the path this slice's page imports.
  */
 export function FilterPanel({
   facets: facetsProp,
@@ -377,22 +296,14 @@ export function FilterPanel({
   );
   const closeDrawer = useCallback((): void => setDrawerOpen(false), []);
   const clearAll = (): void => write(() => catalog.clearAll());
-  const selectRating = (value: string): void =>
-    write(() => catalog.setRating(value === ANY_VALUE ? null : Number(value)));
-  const setBound = (side: "min" | "max", bound: MinorUnits | null): void =>
-    write(() =>
-      catalog.setPriceRange(
-        side === "min" ? bound : filters.minPriceMinor,
-        side === "max" ? bound : filters.maxPriceMinor,
-      ),
-    );
+  // One write serves both single-choice facets: the provider's setter replaces the facet's whole selection, so a
+  // band or a floor replaces the one already applied, and the "any" choice clears it.
+  const selectValue = (facetId: FacetDefinition["id"], value: string): void =>
+    write(() => catalog.setFacetValue(facetId, value === ANY_VALUE ? null : value));
 
   // The response matched to the vocabulary by id, so a definition and its values never pair by position.
   const facetIndex = indexBy(facets, (facet) => facet.id);
   const appliedCount = countActiveFilters(filters);
-  // A failure that named a filter parameter marks the bound that carried it; one that named none is shown by the
-  // alert above the groups, which is where a failure belonging to no single control belongs.
-  const priceErrors: FieldErrors = view.error === null ? {} : fieldErrorsFromApiError(view.error);
 
   const renderFacet = (definition: FacetDefinition): ReactElement => {
     const facet = facetIndex.get(definition.id);
@@ -404,16 +315,33 @@ export function FilterPanel({
         </div>
       );
     }
-    // Whether a facet holds anything is asked of the query writer's own chip list rather than of a rule restated
-    // here, so this answer and the chips above the results cannot disagree about what is applied.
-    const isApplied = activeFilterEntries(filters).some(
-      (entry) => entry.kind === "facet" && entry.facetId === definition.id,
+    // What a facet applies, and which of its values is the selected one, are both asked of the query writer's own
+    // chip list rather than of rules restated here, so this panel and the chips above the results cannot disagree
+    // about the state. A price band's chip carries the band's own key, which is what the group's options carry.
+    const entry = activeFilterEntries(filters).find(
+      (candidate) => candidate.kind === "facet" && candidate.facetId === definition.id,
     );
+    const isApplied = entry !== undefined;
+    const selection = entry === undefined ? ANY_VALUE : entry.value;
     const group = {
       definition,
       isApplied,
       onClear: (): void => write(() => catalog.clearFacet(definition.id)),
     };
+
+    // The one element a single-choice facet's group is rendered as, so the rating floors below and the price
+    // bands below that share it instead of repeating it: its own wording for the "any" choice is all that differs.
+    const singleChoice = (anyLabel: string): ReactElement => (
+      <SingleChoiceFacet
+        key={definition.id}
+        {...group}
+        facet={facet}
+        filters={filters}
+        selection={selection}
+        anyLabel={anyLabel}
+        onSelect={(value) => selectValue(definition.id, value)}
+      />
+    );
 
     switch (definition.kind) {
       case "terms":
@@ -430,34 +358,14 @@ export function FilterPanel({
             )}
           </FacetGroup>
         ) : (
-          <RatingFacet
-            key={definition.id}
-            {...group}
-            facet={facet}
-            filters={filters}
-            onSelect={selectRating}
-          />
+          singleChoice(FACET_ANY_LABELS.rating)
         );
       case "range":
-        return (
-          <FacetGroup key={definition.id} {...group}>
-            <div className={CLASSES.range}>
-              <PriceBoundField
-                field={PRICE_BOUNDS.min}
-                bound={filters.minPriceMinor}
-                errors={priceErrors}
-                onCommit={(bound) => setBound("min", bound)}
-              />
-              <span aria-hidden="true">{"\u2013"}</span>
-              <PriceBoundField
-                field={PRICE_BOUNDS.max}
-                bound={filters.maxPriceMinor}
-                errors={priceErrors}
-                onCommit={(bound) => setBound("max", bound)}
-              />
-            </div>
-          </FacetGroup>
-        );
+        // The price facet is the vocabulary's own five bands, chosen one at a time like a rating floor: choosing
+        // a band replaces the selection, which is what the state's single minimum and maximum pair can hold, so
+        // two contradictory bands cannot both apply and no choice is silently discarded. The bounds themselves
+        // stay the query writer's rule: a hand-written pair is still floored, clamped and swapped when it is read.
+        return singleChoice(FACET_ANY_LABELS.price);
       case "boolean": {
         const value: FacetValue | undefined = facet.values[0];
         return (
@@ -520,7 +428,8 @@ export function FilterPanel({
         variant="secondary"
         size="sm"
         aria-expanded={isDrawerOpen}
-        aria-controls={id}
+        // The reference exists while the panel does: collapsed, no element carries that id.
+        aria-controls={isDrawerOpen ? id : undefined}
         onClick={() => setDrawerOpen(true)}
       >
         {SEARCH_COPY.OPEN_FILTERS_LABEL}

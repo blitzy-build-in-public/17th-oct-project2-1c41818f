@@ -1,0 +1,154 @@
+/* Path: src/styles/chart-series.css
+ * Purpose: Styles for the chart series paint: the shared mark treatment, the twelve per-series rules and the legend swatch, split out of src/styles/admin-reports.css, which loads this sheet with @import
+ * Lines: 154
+ */
+
+/* The chart-series family, and the sole definition site of the .sp-chart__series-1..12 classes
+ * src/components/charts/chartGeometry.ts emits: what paints a mark, and what tells one series from
+ * another. Split out of src/styles/admin-reports.css, which stood at exactly 600 lines — the request's
+ * ceiling — and could take no rule of its own, while the series paint had to grow from eight rules to
+ * twelve: the product's revenue breaks into twelve categories, and two series that differ in neither
+ * hue nor rhythm are one series to a reader. The plan's remedy for a concern that cannot fit is the
+ * split, never the ceiling. admin-reports.css loads this sheet with @import above its first rule, so
+ * these rules hold the cascade position they held inside it: the sheet sets a series' colour, its
+ * stroke rhythm and its bar opacity, and the .sp-chart__point, .sp-chart__bar and .sp-chart__slice
+ * rules that follow read those declarations to reset the dash a slice or a bar does not carry.
+ *
+ * Every value is a var() from tokens.css, which is the only file in the folder that declares one, and
+ * every class here is consumed by name: no file under src/components/** imports a stylesheet, and the
+ * eight mapped sheets src/main.tsx imports are unchanged.
+ *
+ * Separation is one concern in two channels, and this sheet holds both. Hue is the first: twelve
+ * --chart-series-N tokens spaced in hue and in lightness, each clearing 3:1 on the surface. Rhythm is
+ * the second, and it is what carries a series once hue is gone — a series is drawn in greyscale, in a
+ * colour-blind rendering or on a monochrome print — so no two of the twelve share a stroke-dasharray,
+ * and the legend swatch is sampled from the very period its own mark is drawn at, so the swatch cannot
+ * state a rhythm its line does not carry. The bar opacity ladder is the third: two bar series whose
+ * hues sit close together still step apart in lightness. Series 1 is the solid one, which is why the
+ * swatch's fallbacks leave a series with no dash token solid rather than inventing a rhythm for it.
+ */
+
+/* ==== Series paint ====
+ * The shared mark treatment, in one rule over every series: the paint is currentColor, so each series
+ * class below declares only its own `color` — which is also what lets an HTML legend swatch paint
+ * itself with no colour written anywhere in this folder. The --chart-area-opacity wash keeps the grid
+ * lines visible under an area, and a bar, a slice or a point raises the opacity back below. */
+.sp-chart__series-1,
+.sp-chart__series-2,
+.sp-chart__series-3,
+.sp-chart__series-4,
+.sp-chart__series-5,
+.sp-chart__series-6,
+.sp-chart__series-7,
+.sp-chart__series-8,
+.sp-chart__series-9,
+.sp-chart__series-10,
+.sp-chart__series-11,
+.sp-chart__series-12 {
+  stroke: currentColor;
+  fill: currentColor;
+  stroke-width: var(--border-width-thick);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  fill-opacity: var(--chart-area-opacity);
+}
+/* The twelve positions, each naming its own token. Every series carries the bar opacity its bars paint
+ * at — the --chart-bar-opacity-N step tokens.css owns — stepping down from the first, so two bar
+ * series separate by lightness wherever their hues sit close together. Eleven of them add a stroke
+ * rhythm, and no two of those rhythms repeat; the first is solid. Each rule also publishes the two
+ * custom properties its legend swatch reads, so the swatch repeats the series' own rhythm rather than
+ * a second copy of it written here. */
+.sp-chart__series-1 {
+  color: var(--chart-series-1);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-1);
+}
+.sp-chart__series-2 {
+  color: var(--chart-series-2);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-2);
+  stroke-dasharray: var(--chart-dash-2);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-2-period) 100%;
+}
+.sp-chart__series-3 {
+  color: var(--chart-series-3);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-3);
+  stroke-dasharray: var(--chart-dash-3);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-3-period) 100%;
+}
+.sp-chart__series-4 {
+  color: var(--chart-series-4);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-4);
+  stroke-dasharray: var(--chart-dash-4);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-4-period) 100%;
+}
+.sp-chart__series-5 {
+  color: var(--chart-series-5);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-5);
+  stroke-dasharray: var(--chart-dash-5);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-5-period) 100%;
+}
+.sp-chart__series-6 {
+  color: var(--chart-series-6);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-6);
+  stroke-dasharray: var(--chart-dash-6);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-6-period) 100%;
+}
+.sp-chart__series-7 {
+  color: var(--chart-series-7);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-7);
+  stroke-dasharray: var(--chart-dash-7);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-7-period) 100%;
+}
+.sp-chart__series-8 {
+  color: var(--chart-series-8);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-8);
+  stroke-dasharray: var(--chart-dash-8);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-8-period) 100%;
+}
+.sp-chart__series-9 {
+  color: var(--chart-series-9);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-9);
+  stroke-dasharray: var(--chart-dash-9);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-9-period) 100%;
+}
+.sp-chart__series-10 {
+  color: var(--chart-series-10);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-10);
+  stroke-dasharray: var(--chart-dash-10);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-10-period) 100%;
+}
+.sp-chart__series-11 {
+  color: var(--chart-series-11);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-11);
+  stroke-dasharray: var(--chart-dash-11);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-11-period) 100%;
+}
+.sp-chart__series-12 {
+  color: var(--chart-series-12);
+  --sp-chart-bar-opacity: var(--chart-bar-opacity-12);
+  stroke-dasharray: var(--chart-dash-12);
+  --sp-chart-swatch-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
+  --sp-chart-swatch-size: var(--chart-dash-12-period) 100%;
+}
+/* A swatch samples its series through currentColor, and the rhythm its series published: the image
+ * paints the first 60% of each period and leaves the rest on the surface, and the size repeats that
+ * period across the swatch. Its fallbacks are what keep a solid series solid — no image, and no
+ * period — because the solid series publishes neither property. */
+.sp-chart__legend-swatch {
+  flex: none;
+  inline-size: calc(var(--space-4) + var(--space-1));
+  block-size: var(--space-2);
+  background-color: currentColor;
+  background-image: var(--sp-chart-swatch-image, none);
+  background-size: var(--sp-chart-swatch-size, 100% 100%);
+  border-radius: var(--radius-xs);
+}

@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/catalogSearch.test.ts
- * Purpose: Filtering, cross-filtered facet counts, sort orders, paging and search scoring
- * Lines: 461
+ * Purpose: Filtering, cross-filtered facet counts, sort orders, paging and search scoring.
+ * Lines: 504
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,7 +13,15 @@ import * as search from "@/lib/searchService";
 import * as query from "@/utils/queryParams";
 
 import type { BrandId } from "@/types/common";
-import type { Facet, FacetId, FacetQuery, FilterState, Product, SortKey } from "@/types/catalog";
+import type {
+  Facet,
+  FacetId,
+  FacetQuery,
+  FacetValue,
+  FilterState,
+  Product,
+  SortKey,
+} from "@/types/catalog";
 
 import { FIXED_NOW, makeBrand, makeCategory, makeFilterState, makeProduct } from "../../fixtures";
 
@@ -102,9 +110,15 @@ function productNamed(name: string): Product {
 function withFacets(changes: Partial<FacetQuery>): FacetQuery {
   return { ...UNFILTERED_QUERY, ...changes };
 }
-function facetsFor(filter: FilterState): Facet[] {
+/** The five facets one filter produces: counted over `counted`, with the whole catalogue supplying the term
+ *  facets' values — the two collections the transport hands over once a text match has narrowed the one it
+ *  counts, so the vocabulary stays the catalogue's while every count describes the counted collection. */
+function facetsFor(filter: FilterState, counted: readonly Product[] = CATALOGUE): Facet[] {
   const canonical = catalog.normaliseProductQuery(filter);
-  return catalog.buildFacetResponse(CATALOGUE, canonical, { vocabulary: VOCABULARY });
+  return catalog.buildFacetResponse(counted, canonical, {
+    vocabulary: VOCABULARY,
+    catalogue: CATALOGUE,
+  });
 }
 /** The one facet of a response, or a thrown error when the response omits it. */
 function facetOf(facets: readonly Facet[], id: FacetId): Facet {
@@ -457,5 +471,34 @@ describe("cross-filtered facets", () => {
     });
     expect(listed.map((one) => one.value)).toEqual([CAMERAS.id, LAPTOPS.id, AUDIO.id]);
     expect(listed.map((one) => one.label)).toEqual([CAMERAS.name, LAPTOPS.name, AUDIO.id]);
+  });
+
+  it("keeps the whole term vocabulary when a text match leaves nothing to count", () => {
+    const matched = search.applyTextMatch(CATALOGUE, "zzzzqqq", LOOKUP);
+    expect(matched).toEqual([]);
+    const facets = facetsFor(makeFilterState({ q: "zzzzqqq" }), matched);
+    const offered = (id: FacetId): FacetValue[] => [...facetOf(facets, id).values];
+    // Every value the vocabulary names is still offered, each with a count of zero: the panel's way to widen a
+    // search that matched nothing, which it renders disabled while the value is unselected.
+    expect(offered("category")).toEqual(
+      CATEGORIES.map((one) => ({ value: one.id, label: one.name, count: 0, selected: false })),
+    );
+    expect(offered("brand")).toEqual(
+      BRANDS.map((one) => ({ value: one.id, label: one.name, count: 0, selected: false })),
+    );
+    // The facets whose definition declares its own values keep their rows from that declaration.
+    const declared = taxonomy.FACET_DEFINITIONS.find((one) => one.id === "rating")?.options ?? [];
+    expect(declared.length).toBeGreaterThan(0);
+    expect(offered("rating")).toEqual(
+      declared.map((one) => ({ value: one.value, label: one.label, count: 0, selected: false })),
+    );
+    expect(offered("availability").map((one) => one.count)).toEqual([0]);
+    // A term that does match still counts over the matched collection alone, so the wider vocabulary supplies
+    // the values without widening a single count.
+    const some = search.applyTextMatch(CATALOGUE, "aurelia", LOOKUP);
+    expect(some).toHaveLength(6);
+    expect(
+      countsOfFacet(facetOf(facetsFor(makeFilterState({ q: "aurelia" }), some), "category")),
+    ).toEqual({ [CAMERAS.id]: 1, [LAPTOPS.id]: 2, [AUDIO.id]: 3 });
   });
 });

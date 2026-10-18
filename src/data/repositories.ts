@@ -1,7 +1,7 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 470
+ * Lines: 506
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
@@ -42,8 +42,14 @@ import {
   type DataStore,
 } from "@/data/collectionStore";
 import { PROMO_CODES } from "@/data/orders";
-import { SALES_RECORDS } from "@/data/salesHistory";
-import { computeKpis, computeRevenueSeries, computeTopProducts } from "@/lib/analyticsService";
+// The deferred analytics and report graph — its loader, the shape it resolves to and the refusal a failed
+// fetch answers with — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`.
+import {
+  loadAnalyticsGraph,
+  overAnalyticsGraph,
+  unexpectedFailure,
+  type DeferredAnalytics,
+} from "@/data/analyticsGraph";
 import {
   buildFacetResponse,
   filterProducts,
@@ -63,7 +69,6 @@ import type {
 } from "@/lib/mockServer";
 import { appendStatusHistory, orderNumber, toOrderLines } from "@/lib/orderService";
 import { decidePromo, normalisePromoCode, priceCartLines } from "@/lib/pricingService";
-import { findDefinition, runReportDefinition } from "@/lib/reportService";
 import { applyTextMatch, buildSuggestions } from "@/lib/searchService";
 import type { ReportResult } from "@/types/analytics";
 import type {
@@ -122,12 +127,16 @@ function cataloguePage(store: DataStore, filter: FilterState): PageResult<Produc
 }
 
 /** The five facets for a filter: each counted with its own selection excluded and the collection text-matched
- * when a term is present, so every count describes what choosing a value would leave. */
+ * when a term is present, so every count describes what choosing a value would leave. The term facets' vocabulary
+ * comes from the whole served catalogue — the collection this endpoint lists from — rather than from the matched
+ * one being counted over, so a term that matches nothing still offers every category and brand the catalogue
+ * holds, each at a count of zero, and the shopper keeps a facet way to widen the search. */
 function facetResponse(store: DataStore, query: FacetQuery): Facet[] {
   const canonical = canonicalFilter({ ...DEFAULT_FILTER_STATE, ...query });
   const matched = applyTextMatch(store.products, canonical.q, store.lookup);
   return buildFacetResponse(matched, normaliseProductQuery(canonical), {
     vocabulary: { categories: CATEGORIES, brands: BRANDS },
+    catalogue: store.products,
   });
 }
 
@@ -367,6 +376,12 @@ function listCustomerOrders(store: DataStore, query: CustomerOrderQuery): PageRe
 
 // Analytics and reports -----------------------------------------------------------------------------
 
+// The graph the readings below run over — the seeded daily fact table, the aggregation rules and the report
+// composition, fetched on first use — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`, which holds
+// the loader, the shape it resolves to and the refusal a failed fetch answers with, because this file's own
+// 33-member contract and that concern cannot both be held inside the request's 600-line ceiling. The members
+// below reach it through `overAnalyticsGraph` and, for a report run, `loadAnalyticsGraph`.
+
 /** The refusal a dated range earns, or `null` when it can run: the rules are `src/utils/dates.ts`'s and the
  * wording the copy module's, so the same range is refused with the same sentence and the same field whether it
  * is caught here or by the transport before a request leaves. */
@@ -379,18 +394,23 @@ function rangeRefusal(query: ReportRunQuery): Result<never> | null {
 }
 
 /** One report run: the rows the table shows, the totals it states and the series charted beside it, from the
- * report service's single composition over the collections, so the three can never disagree. */
-function runReportOver(store: DataStore, query: ReportRunQuery): Result<ReportResult> {
+ * report service's single composition over the collections, so the three can never disagree. The definition
+ * lookup is the deferred graph's own, so a kind no definition declares is refused here exactly as it was. */
+function runReportOver(
+  store: DataStore,
+  graph: DeferredAnalytics,
+  query: ReportRunQuery,
+): Result<ReportResult> {
   const refusal = rangeRefusal(query);
   if (refusal !== null) return refusal;
-  const definition = findDefinition(REPORT_DEFINITIONS, query.kind);
+  const definition = graph.findDefinition(REPORT_DEFINITIONS, query.kind);
   if (definition === undefined) {
     return refuse("validation-failed", VALIDATION_MESSAGES.REQUIRED, "kind");
   }
   return accept(
-    runReportDefinition(
+    graph.runReportDefinition(
       query.kind,
-      { orders: store.orders, salesRecords: SALES_RECORDS, customers: store.customers },
+      { orders: store.orders, salesRecords: graph.salesRecords, customers: store.customers },
       query,
       definition,
     ),
@@ -406,7 +426,9 @@ function runReportOver(store: DataStore, query: ReportRunQuery): Result<ReportRe
  *
  * Every member's contract is the one `SalesProDataSource` declares: what it returns, what it refuses with and
  * which read it serves. Nothing here reaches `src/lib/apiClient.ts` or a service's async method, which would
- * close a loop back into the transport; the members call the services' pure rules instead.
+ * close a loop back into the transport; the members call the services' pure rules instead. The four analytics
+ * and report members reach their modules through `src/data/analyticsGraph.ts`'s loader, which fetches them on first use, so the
+ * part of this store's reach that no first route reads is also the part the entry chunk does not carry.
  */
 export function createSalesProDataSource(): SalesProDataSource {
   const store = createStore();
@@ -446,21 +468,35 @@ export function createSalesProDataSource(): SalesProDataSource {
     setDefaultAddress: (id, addressId, request) =>
       setBookDefault(store, id, addressId, request.kind),
     // Analytics and reports: the seeded fact table and the order collection, bucketed and aggregated by the
-    // analytics and report services.
+    // analytics and report services, which the first read of either fetches.
     getKpis: (query) =>
-      computeKpis({
-        records: SALES_RECORDS,
-        orders: store.orders,
-        customers: store.customers,
-        query,
-      }),
-    getRevenueSeries: (query) => computeRevenueSeries({ records: SALES_RECORDS, query }),
+      overAnalyticsGraph((graph) =>
+        graph.computeKpis({
+          records: graph.salesRecords,
+          orders: store.orders,
+          customers: store.customers,
+          query,
+        }),
+      ),
+    getRevenueSeries: (query) =>
+      overAnalyticsGraph((graph) =>
+        graph.computeRevenueSeries({ records: graph.salesRecords, query }),
+      ),
     getTopProducts: (query) =>
-      computeTopProducts({ orders: store.orders, query, categoryIds: store.categoryByProduct }),
+      overAnalyticsGraph((graph) =>
+        graph.computeTopProducts({
+          orders: store.orders,
+          query,
+          categoryIds: store.categoryByProduct,
+        }),
+      ),
     getRecentOrders: (limit) =>
       store.orders.slice(0, clampNumber(Math.floor(limit), 0, store.orders.length)),
     listReportDefinitions: () => REPORT_DEFINITIONS,
-    runReport: (query) => runReportOver(store, query),
+    runReport: async (query) => {
+      const graph = await loadAnalyticsGraph();
+      return graph === null ? unexpectedFailure() : runReportOver(store, graph, query);
+    },
   };
 }
 

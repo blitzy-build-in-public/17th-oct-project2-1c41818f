@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 573
+ * Lines: 546
  */
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -23,20 +23,21 @@ import {
   EMPTY_STATES,
   FEEDBACK_COPY,
   PAGING_NOUNS,
+  clearFacetLabel,
   reviewBodyLengthMessage,
   reviewTitleLengthMessage,
 } from "@/constants/content";
 import { loginPath } from "@/constants/routes";
-import { API_PATHS, fillApiPath, getJson, postJson } from "@/lib/apiClient";
+import { FACET_DEFINITIONS } from "@/constants/taxonomy";
+import { listProductReviews, submitProductReview } from "@/lib/catalogReads";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
 import { useAsync, usePagination } from "@/state/hooks";
-import type { RatingValue, Review, ReviewInput, ReviewQuery } from "@/types/catalog";
+import type { FacetId, RatingValue, Review, ReviewInput } from "@/types/catalog";
 import type {
   FieldErrors,
   PageResult,
   ProductId,
-  Result,
   SelectOption,
   SessionToken,
 } from "@/types/common";
@@ -57,11 +58,11 @@ import {
 import type { ReviewDraft } from "@/utils/validation";
 
 /*
- * Plan gap, recorded so the next reader does not take it for an oversight: §0.6.3 declares `GET` and
- * `POST /api/products/:id/reviews`, but §0.6.1 gives neither to a service — `src/lib/catalogService.ts` holds
- * `listProducts`, `getProduct`, `getRelated`, `buildFacets` and `compareBy` alone. Both endpoints are
- * therefore reached through `src/lib/apiClient.ts`, the plan's one transport seam, using the path vocabulary
- * that module re-exports, so no request path is written twice.
+ * Both review endpoints are reached through `src/lib/catalogReads.ts`, the catalogue's service surface beside
+ * `src/lib/catalogService.ts`: `listProductReviews` reads a page and `submitProductReview` publishes one, so this
+ * file names no request path and holds no second copy of either call. The rules those calls depend on live where
+ * they already did — the review rule in `src/utils/validation.ts`, and the statuses and refusal shapes in
+ * `src/lib/apiClient.ts`, which the service forwards unchanged.
  *
  * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
  * every class is consumed by name. `src/styles/catalog-detail.css`, which `src/styles/catalog.css` loads with
@@ -100,60 +101,31 @@ const RATING_FILTER_OPTIONS: readonly SelectOption[] = [
   ...[5, 4, 3, 2, 1].map((star) => ({ value: String(star), label: String(star) })),
 ];
 
+/** The facet the review filter narrows — the rating — named by the id the vocabulary indexes facets by. */
+const RATING_FACET_ID: FacetId = "rating";
+
+/** The rating facet as the vocabulary declares it, which is the one home for its label ("Customer rating"),
+ *  or `undefined` where that module names no such facet. */
+const RATING_FACET = FACET_DEFINITIONS.find((definition) => definition.id === RATING_FACET_ID);
+
+/**
+ * The wording of the filtered-empty state's one action: the content library's own clearing label for the facet
+ * the review filter narrows ("Clear Customer rating"), so the control says exactly what it clears — the rating
+ * alone, not every filter on the page. The catalogue's "Clear all filters" promised a wider reset than the
+ * handler performs, and that label stands only as the fallback, where the vocabulary names no rating facet, so
+ * the action is never wordless.
+ */
+const CLEAR_RATING_LABEL: string =
+  RATING_FACET === undefined
+    ? EMPTY_STATES.catalogue.actionLabel
+    : clearFacetLabel(RATING_FACET.label);
+
 /** The form as it opens: no star chosen, both fields empty. */
 const EMPTY_REVIEW_DRAFT: ReviewDraft = { rating: undefined, title: "", body: "" };
 
 /** The placeholder rows the loading list stands in with, each carrying its own identity rather than a
  *  position, so no key is an index. */
 const PLACEHOLDER_ROW_KEYS = ["first", "second", "third"] as const;
-
-/**
- * Reads one page of a product's reviews: newest first, optionally narrowed to the single rating the filter
- * holds, as `GET /api/products/:id/reviews` answers it (§0.6.3). It needs no session, and a failure resolves
- * as a value for the caller to render.
- *
- * @param productId - The product whose reviews are wanted.
- * @param query - The page, its size and the rating to narrow to; the product travels in the path, so the
- * query carries the paging and the rating alone.
- * @param signal - The abort signal of the read a newer one supersedes.
- * @returns One page of reviews, or the shaped failure; never a rejection.
- */
-function readReviews(
-  productId: ProductId,
-  query: Omit<ReviewQuery, "productId">,
-  signal: AbortSignal,
-): Promise<Result<PageResult<Review>>> {
-  return getJson<PageResult<Review>>(fillApiPath(API_PATHS.PRODUCT_REVIEWS, { id: productId }), {
-    query: { page: query.page, pageSize: query.pageSize, rating: query.rating },
-    signal,
-  });
-}
-
-/**
- * Publishes a review and answers with the row the data layer stored, which is what the list is refreshed from
- * rather than a row assembled here.
- *
- * `POST /api/products/:id/reviews` (§0.6.3) requires a customer's session — an anonymous request answers
- * `401` — and re-runs the review rule over the body, answering `422` with the offending `field` named. The
- * author, the timestamp, the helpful count and the verified-purchase flag are the data layer's answer, so
- * none of them is sent from here.
- *
- * @param productId - The product being reviewed.
- * @param input - The rating, title and body the customer submitted.
- * @param sessionToken - The token the write authenticates with.
- * @returns The stored review, or the shaped failure; never a rejection.
- */
-function writeReview(
-  productId: ProductId,
-  input: ReviewInput,
-  sessionToken: SessionToken,
-): Promise<Result<Review>> {
-  return postJson<Review, ReviewInput>(
-    fillApiPath(API_PATHS.PRODUCT_REVIEWS, { id: productId }),
-    input,
-    { sessionToken },
-  );
-}
 
 /** The loading state: three decorative rows shaped like the reviews that will replace them, hidden from
  *  assistive technology because the section carries `aria-busy` while the read is in flight. */
@@ -283,7 +255,7 @@ function ReviewForm({
   };
 
   const submitReview = async (input: ReviewInput): Promise<void> => {
-    const result = await writeReview(productId, input, sessionToken);
+    const result = await submitProductReview(productId, input, { sessionToken });
     submittingRef.current = false;
     setIsSubmitting(false);
     if (!result.ok) {
@@ -417,10 +389,10 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
 
   const reviews = useAsync<PageResult<Review>>(
     (signal) =>
-      readReviews(
+      listProductReviews(
         productId,
         { page: paging.page, pageSize: paging.pageSize, rating: ratingFilter ?? undefined },
-        signal,
+        { signal },
       ),
     [productId, paging.page, paging.pageSize, ratingFilter],
   );
@@ -495,22 +467,23 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
       session === null ? (
         <EmptyState
           surface="reviews"
-          headingLevel={3}
+          headingLevel={2}
           actionLabel={COMMON_ACTIONS.SIGN_IN}
           actionHref={signInTo}
         />
       ) : (
-        <EmptyState surface="reviews" headingLevel={3} onAction={focusReviewForm} />
+        <EmptyState surface="reviews" headingLevel={2} onAction={focusReviewForm} />
       );
   } else if (loaded.total === 0) {
     // The product has reviews, but none carries the rating this filter asks for: the wording says what the
-    // filter left rather than what the product lacks, and the one action clears it.
+    // filter left rather than what the product lacks, and the one action clears it — the rating alone, which
+    // is what the action's label names.
     body = (
       <EmptyState
-        headingLevel={3}
+        headingLevel={2}
         title={EMPTY_STATES.reviews.title}
         description={EMPTY_STATES.catalogue.description}
-        actionLabel={EMPTY_STATES.catalogue.actionLabel}
+        actionLabel={CLEAR_RATING_LABEL}
         onAction={showAllRatings}
       />
     );

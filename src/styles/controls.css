@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 584
+ * Lines: 590
  */
 
 /* ==== Buttons ====
@@ -581,4 +581,10 @@
 /* A pressed on switch keeps the accent and deepens it, so the thumb's side and the hue still say "on". */
 .sp-switch[aria-checked="true"]:active:not(:disabled) .sp-switch__track {
   background-color: var(--color-accent-active);
+}
+/* Forced colours paints both boxes of the toggle one colour, so a CanvasText edge on each shows the thumb's side. */
+@media (forced-colors: active) {
+  .sp-switch > :where(.sp-switch__track, .sp-switch__thumb) {
+    border: var(--border-width) solid CanvasText;
+  }
 }

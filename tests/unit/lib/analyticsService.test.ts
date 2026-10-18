@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
  * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines.
- * Lines: 596
+ * Lines: 600
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
@@ -534,22 +534,26 @@ describe("one period, one set of figures: the fact rows against the orders they 
   it.each(SEEDED_TOTALS)("totals %o on the period's own basis", async (range, totals) => {
     const [orders, units, gross, discounts, refunds, net] = totals;
     const standing = statistics.periodOrders(ORDERS, range);
-    const reported = (kind: ReportKind) =>
-      valueOf(salesProDataSource.runReport({ kind, ...range, bucket: "day" })).summary.items;
-    const stated = (kind: ReportKind, key: string) =>
-      reported(kind).find((item) => item.key === key)?.value;
+    // `runReport` answers a promise — the read fetches its modules on first use — so both helpers await.
+    const reported = async (kind: ReportKind) =>
+      valueOf(await salesProDataSource.runReport({ kind, ...range, bucket: "day" })).summary.items;
+    const stated = async (kind: ReportKind, key: string) =>
+      (await reported(kind)).find((item) => item.key === key)?.value;
     // The sales report sums the fact rows' six columns over the range in its own column order, and the
     // identities below are what the reduction those columns came from must satisfy.
-    expect(reported("sales").map((item) => item.value)).toEqual(totals);
+    expect((await reported("sales")).map((item) => item.value)).toEqual(totals);
     expect(gross - discounts - refunds).toBe(net);
     expect([orders, units]).toEqual([standing.length, sumBy(standing, unitsOf)]);
     expect(net).toBe(sumBy(standing, statistics.goodsRevenueMinor));
     // One range, every surface: the dashboard's KPIs and the three reports state the same figures.
     const kpis = valueOf(await analytics.getKpis({ ...range, bucket: "day" }, admin()));
     expect([kpis.orders, kpis.units, kpis.revenueMinor]).toEqual([orders, units, net]);
-    expect([stated("products", "unitsSold"), stated("products", "revenue")]).toEqual([units, net]);
-    expect(stated("customers", "orders")).toBe(orders);
-    expect(stated("customers", "revenue")).toBe(net);
+    expect([await stated("products", "unitsSold"), await stated("products", "revenue")]).toEqual([
+      units,
+      net,
+    ]);
+    expect(await stated("customers", "orders")).toBe(orders);
+    expect(await stated("customers", "revenue")).toBe(net);
   });
 });
 

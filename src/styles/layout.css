@@ -1,6 +1,6 @@
 /* Path: src/styles/layout.css
  * Purpose: Page shell, containers, grid, and the header, footer and sidebar skeletons
- * Lines: 566
+ * Lines: 595
  */
 /* The application frame, the container and page rhythm, three layout primitives, and the skeletons of the
  * five layout components — AppLayout, Header, Footer, AdminSidebar and PageHeader, the fifth of which is
@@ -172,7 +172,8 @@
 .sp-header__inner {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  /* Below the medium stop the row holds five controls and the badge's column, so its own gap narrows. */
+  gap: var(--space-2);
   min-block-size: var(--layout-header-height);
   min-inline-size: 0;
 }
@@ -188,6 +189,8 @@
   gap: var(--space-2);
   min-block-size: var(--control-height-md);
   min-inline-size: 0;
+  /* What makes the wrapper's contract real: the cap holds the link to its wrapper, so it clips rather than spills. */
+  max-inline-size: 100%;
   overflow: hidden;
   white-space: nowrap;
   color: var(--color-text);
@@ -195,9 +198,32 @@
   font-weight: var(--text-heading-3-weight);
   text-decoration-line: none;
 }
-/* A desktop affordance: below --breakpoint-sm it is replaced by `.sp-nav-menu`, so it leaves the layout. */
+/* The medium stop's overrides. The row is the compressed one below this stop — the menu button or the
+ * navigation, the search trigger, the cart and the account share it with the badge's reserved column — so
+ * the band's own gap and the trigger's padding widen back here; and from here the search slot holds the
+ * field that takes a shortfall, so the link is released from its wrapper and the account control stops
+ * shrinking rather than the wordmark's glyphs or the caret paying for the row. */
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  .sp-header__inner {
+    gap: var(--space-4);
+  }
+  .sp-account-menu__trigger {
+    padding-inline: var(--space-3);
+  }
+  .sp-header__logo {
+    max-inline-size: none;
+  }
+  .sp-account-menu {
+    flex: none;
+  }
+}
+/* A desktop affordance: below --breakpoint-sm it is replaced by `.sp-nav-menu`, so it leaves the layout.
+ * Where it is in the row its own width is not negotiable: a shortfall yields the search slot or the
+ * wordmark, never a link's box, which would paint over the control beside it. */
 .sp-header__nav {
   display: none;
+  flex: none;
 }
 /* The actions close the row, whatever the brand, the navigation and the search slot take. */
 .sp-header__actions {
@@ -264,15 +290,22 @@
   font-size: var(--text-body-sm-size);
   font-weight: var(--font-weight-medium);
 }
+/* Below the medium stop the trigger's padding narrows with the row's gap, giving the room to the controls. */
+.sp-account-menu__trigger {
+  padding-inline: var(--space-2);
+}
+/* The badge paints inside this control's own corner, so the button's inline-end padding pays for it:
+ * --space-5 for the pill and --space-1 of clearance the triggers' shared --space-3 does not leave. */
 .sp-cart-button {
   position: relative;
+  padding-inline-end: var(--space-6);
 }
 /* The number is text and is never hidden from assistive technology; only the pill is decoration, and its
- * minimum width keeps a two-digit count from squeezing it. */
+ * minimum width keeps a two-digit count from squeezing it. It is anchored inside the button's own corner. */
 .sp-cart-badge {
   position: absolute;
-  inset-block-start: calc(var(--space-1) * -1);
-  inset-inline-end: calc(var(--space-1) * -1);
+  inset-block-start: 0;
+  inset-inline-end: 0;
   display: grid;
   place-items: center;
   min-inline-size: var(--space-5);
@@ -329,13 +362,9 @@
 @media (min-width: 480px) {
   /* --breakpoint-sm */
   /* Two mutually exclusive ways to reach the primary navigation, swapped at this one stop: the row's own
-   * list takes over and both the panel and the menu button that toggles it leave the layout. The button's
-   * rule is scoped to `.sp-header` so it outranks the button family of `src/styles/controls.css` on
-   * specificity: that sheet reaches the page after this one at the same 0-1-0 weight, so order alone would
-   * leave the control painted, focusable and stateful at every width. */
-  .sp-nav-menu {
-    display: none;
-  }
+   * list takes over and the panel and its toggle leave the layout. The button's selector also carries
+   * `.sp-header`, because `controls.css` reaches the page after this sheet at the same 0-1-0 weight. */
+  .sp-nav-menu,
   .sp-header .sp-header__menu-button {
     display: none;
   }

@@ -1,8 +1,7 @@
 /**
  * Path: src/components/product/ProductCard.tsx
  * Purpose: Catalogue tile with imagery, price, discount, rating and quick add to cart
- * Lines: 394
- * Lines: 385
+ * Lines: 408
  */
 
 import { useId } from "react";
@@ -14,7 +13,13 @@ import { Button } from "@/components/ui/Button";
 import { Badge, Card } from "@/components/ui/Card";
 import { PriceTag, Rating } from "@/components/ui/Rating";
 import { DEFAULT_CURRENCY } from "@/constants/config";
-import { CATALOG_COPY, EMPTY_STATES, lowStockLabel, quickAddLabel } from "@/constants/content";
+import {
+  CATALOG_COPY,
+  EMPTY_STATES,
+  addedToCartMessage,
+  lowStockLabel,
+  quickAddLabel,
+} from "@/constants/content";
 import { productPath } from "@/constants/routes";
 import { BRAND_DEFINITIONS } from "@/constants/taxonomy";
 import { useCartDispatch } from "@/state/CartContext";
@@ -332,8 +337,8 @@ interface QuickAddControlProps {
  * The add is a single call. `src/state/cartReducer.ts` merges a repeated add into the line the product
  * already holds and clamps the quantity to that line's ceiling, so the control dispatches nothing else and
  * keeps no state of its own; a product with nothing on hand builds no line at all, which is why the button
- * reports itself unavailable before it is ever pressed. Nothing is derived here — the item count belongs to
- * the header and every money total to `src/lib/pricingService.ts`.
+ * reports itself unavailable before it is ever pressed and states that availability when it is. Nothing is
+ * derived here — the item count belongs to the header and every money total to `src/lib/pricingService.ts`.
  *
  * @param props - The product, whether it can be bought, and the mark that explains it when it cannot.
  * @returns The action slot holding the quick-add button.
@@ -343,20 +348,29 @@ function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProp
   // method position, and a member separated from the object it belongs to is the shape the linter's
   // `unbound-method` rule exists to catch.
   const cartActions = useCartDispatch();
-  const { error } = useToast();
+  const { error, success } = useToast();
 
   /**
-   * Adds one unit, or reports the ceiling the cart has already reached.
+   * Adds one unit, and states in a toast what happened either way.
    *
-   * The line the cart holds for this product is read here rather than held above, because nothing this
-   * control renders depends on it: the ceiling comparison is made at activation, against the lines as they
-   * stand at that moment. It is compared against the line's own ceiling, which is the bound
-   * `src/state/cartReducer.ts` clamps to, so the notice is raised for the same condition the reducer would
-   * silently absorb. Every other outcome opens the mini-cart, which is where the shopper sees the line
-   * that was added and what the basket now holds.
+   * The ceiling comparison is made at activation, against the line's own bound — the one
+   * `src/state/cartReducer.ts` clamps to — so the notice is raised for the same condition the reducer
+   * would silently absorb.
+   *
+   * Every outcome is reported in the toast register rather than by opening the drawer: an add is one action,
+   * and the drawer is a modal whose background is made inert, so opening it on the shopper's behalf would
+   * cost a dismissal before the next add. The header's cart button keeps the drawer reachable from the badge
+   * on every route, which is what the drawer is for.
+   *
+   * The refusal states the product's availability, in the words the tile's own availability line carries,
+   * because the control stays in the tab order: a control a keyboard user can reach either acts or explains
+   * itself.
    */
   const addToCart = (): void => {
-    if (!canBuy) return;
+    if (!canBuy) {
+      error(CATALOG_COPY.OUT_OF_STOCK_LABEL);
+      return;
+    }
 
     const line = cartActions.readLines().find((candidate) => candidate.productId === product.id);
     if (line !== undefined && line.quantity >= line.maxQuantity) {
@@ -365,7 +379,7 @@ function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProp
     }
 
     cartActions.addItem(product);
-    cartActions.openMiniCart();
+    success(addedToCartMessage(product.name));
   };
 
   return (

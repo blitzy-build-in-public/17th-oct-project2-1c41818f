@@ -1,6 +1,6 @@
 /* Path: src/styles/tabs-accordion.css
  * Purpose: Styles for the tab and disclosure families src/components/ui/Tabs.tsx renders, split out of src/styles/data-display.css, which loads this sheet with @import
- * Lines: 115
+ * Lines: 150
  */
 
 /* The tabs and disclosure families, and the sole definition site of the .sp-tabs* and .sp-accordion* classes
@@ -53,12 +53,47 @@
 .sp-tabs__tab:active:not([disabled]) {
   background-color: var(--color-surface-sunken);
 }
+/* The tab's own words, wrapped so the reserve below sits inside the label: the tab is a flex container, where a
+ * second in-flow box beside the label would take the container's gap as well and widen the tab twice over. */
+.sp-tabs__label {
+  display: inline-block;
+}
+/* The selected tab's semibold label is wider than the medium one every other tab paints, so a selection change
+ * re-metred the whole content-sized strip: 5.16px of sibling shift, measured on the product detail page. The
+ * reserve lays a copy of the same words at the selected weight inside the label, clipped to no height and hidden,
+ * so the label's shrink-to-fit width is the semibold width in both states and each state keeps the weight it
+ * declares. `attr()` reads the words src/components/ui/Tabs.tsx writes into `data-label`, so the reserve is laid
+ * out from the label the tab announces; a label that is not text carries no attribute and reserves nothing. */
+.sp-tabs__label::after {
+  content: attr(data-label);
+  display: block;
+  block-size: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--font-weight-semibold);
+}
 .sp-tabs__panel {
   padding-block-start: var(--space-5);
 }
 @media (hover: hover) {
   .sp-tabs__tab:hover:not([aria-selected="true"]):not([disabled]) {
     background-color: var(--color-surface-sunken);
+  }
+}
+/* In this mode the user agent paints the 2px indicator of every tab with one system colour — the transparent one
+ * an unselected tab carries and the selected tab's accent line alike — so the tab the reader is on was told apart
+ * by its font weight alone. The state moves to the line's shape, in the system colour keywords a sheet may name in
+ * this block because the environment and not the design decides them: an unselected indicator returns to the canvas
+ * its tab stands on, and the selected one keeps the boundary colour the mode paints and takes a dash the mode
+ * preserves, so the current tab carries a run the others cannot. Neither rule touches a width, so the strip's
+ * metrics are the same in both states and the reserve above holds. */
+@media (forced-colors: active) {
+  .sp-tabs__tab {
+    border-block-end-color: Canvas;
+  }
+  .sp-tabs__tab[aria-selected="true"] {
+    border-block-end-color: CanvasText;
+    border-block-end-style: dashed;
   }
 }
 .sp-accordion__item {

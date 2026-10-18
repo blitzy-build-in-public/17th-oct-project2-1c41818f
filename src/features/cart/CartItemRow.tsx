@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartItemRow.tsx
  * Purpose: A single cart line with thumbnail, quantity stepper, removal and an availability warning
- * Lines: 338
+ * Lines: 353
  */
 
 import type { ReactElement } from "react";
@@ -32,9 +32,12 @@ import { formatMoney } from "@/utils/format";
  * `__media` for the square thumbnail, `__body` for the name column, `__name` for the name register, `__sku`
  * for the mono caption, `__meta` for a muted supporting line, `__qty` for the stepper, `__price` for the unit
  * price, `__line-total` for the end-aligned line figure, `__remove` for the ghost removal control and
- * `__warning` for the availability sentence. Those seven are the only classes carrying a `grid-area`, so an
- * eighth direct child of the row would be auto-placed into a cell no area names and would break the layout:
- * the per-line discount therefore sits inside `__body`, which the sheet lays out as its own grid.
+ * `__warning` for the availability sentence, with `__warning--low` and `__warning--out` as the two modifiers
+ * that give that sentence the register its own state owns — the catalogue's warning value for a line at its
+ * ceiling and its danger value for one nothing can be bought of. Those seven are the only classes carrying a
+ * `grid-area`, so an eighth direct child of the row would be auto-placed into a cell no area names and would
+ * break the layout: the per-line discount therefore sits inside `__body`, which the sheet lays out as its own
+ * grid.
  *
  * The drawer's compact form is a second family in the same sheet rather than a modifier of the row:
  * `sp-minicart__item` is a wrapping flex line whose children the sheet selects by element and utility —
@@ -106,6 +109,8 @@ const CLASSES = {
   lineTotal: "sp-cart-row__line-total",
   remove: "sp-cart-row__remove",
   warning: "sp-cart-row__warning",
+  warningLow: "sp-cart-row__warning--low",
+  warningOut: "sp-cart-row__warning--out",
 } as const;
 
 /**
@@ -159,8 +164,10 @@ export interface CartItemRowProps {
  *
  * The sentence is text, never colour alone, and it carries no live-region role: it is a standing property of
  * the line rather than the outcome of the shopper's last action, so announcing it on every render of a cart
- * that holds such a line would be noise. The row's own class paints it in the danger register; the words carry
- * the state.
+ * that holds such a line would be noise. The element carries the row's base warning class and the modifier
+ * its own state owns, so a line at its ceiling reads in the warning register `src/styles/catalog.css` gives
+ * the same state on the catalogue and a line nothing can be bought of keeps the danger register — one state,
+ * one treatment, wherever it appears.
  *
  * @param availability - The line's availability, as `selectAvailability` reads it from the line.
  * @returns The warning element, or `null` when there is nothing to warn about.
@@ -170,9 +177,17 @@ function availabilityWarning(availability: LineAvailability): ReactElement | nul
     case "in-stock":
       return null;
     case "limited":
-      return <span className={CLASSES.warning}>{lowStockLabel(availability.maxQuantity)}</span>;
+      return (
+        <span className={`${CLASSES.warning} ${CLASSES.warningLow}`}>
+          {lowStockLabel(availability.maxQuantity)}
+        </span>
+      );
     case "unavailable":
-      return <span className={CLASSES.warning}>{CART_COPY.AVAILABILITY_WARNING}</span>;
+      return (
+        <span className={`${CLASSES.warning} ${CLASSES.warningOut}`}>
+          {CART_COPY.AVAILABILITY_WARNING}
+        </span>
+      );
   }
 }
 

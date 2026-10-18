@@ -1,6 +1,6 @@
 /* Path: src/styles/admin-reports.css
  * Purpose: Styles for the dashboard, the report tables and the chart frames
- * Lines: 600
+ * Lines: 530
  */
 
 /* The administrator register: denser than the storefront, one question answered in a screenful. This sheet
@@ -10,7 +10,13 @@
  * It loads seventh, after components.css and before account.css, composes the primitives rather than
  * restating them, and publishes the class contract the three chart renderers (phases 19-20) and the
  * administrator and report views (phases 30-32) adopt verbatim. Every series colour is a
- * var(--chart-series-N) reference, so no colour literal is written here and none exists in a TypeScript file. */
+ * var(--chart-series-N) reference, so no colour literal is written here and none exists in a TypeScript file.
+ * The series paint itself — the shared mark treatment, the twelve .sp-chart__series-N rules and the legend
+ * swatch — lives in chart-series.css, which this sheet loads below, because twelve series no longer fit the
+ * request's 600-line ceiling beside everything else here; the rules that reset a mark's dash and
+ * fill-opacity stay in this sheet so they still follow the series rules they override. */
+
+@import "./chart-series.css";
 
 /* ==== Administrator content area ====
  * The sidebar grid and its placement are layout.css's `.sp-app--admin`; this block styles the content column
@@ -148,9 +154,9 @@
 /* ==== Chart frame, axes and series ====
  * The three renderers draw their own SVG inside `.sp-chart__svg`; this block styles the frame, the paint of
  * every mark, the legend, the hover readout, the donut's centre and the paired data table that repeats the
- * same numbers. Series colours are the eight --chart-series-N tokens tokens.css declares, mapped onto the
- * `.sp-chart__series-N` classes chartGeometry.ts emits, so no renderer writes a colour.
- * Hue is never the only separation: the even series carry four distinct stroke patterns, their legend
+ * same numbers. The series paint is chart-series.css's: the twelve --chart-series-N tokens tokens.css declares,
+ * mapped onto the `.sp-chart__series-N` classes chartGeometry.ts emits, so no renderer writes a colour.
+ * Hue is never the only separation: every series but the first carries a distinct stroke pattern, their legend
  * swatches repeat that rhythm as a bar of gaps, and bars step down in fill opacity, while every legend entry
  * pairs its swatch with the series name and value. */
 .sp-chart {
@@ -220,64 +226,12 @@
   fill: var(--chart-label);
   font-size: var(--font-size-xs);
 }
-/* Every series shares the line treatment and the light wash an area lays over its grid:
- * --chart-area-opacity keeps the grid lines visible under the area, and a bar, a slice or a point raises
- * the opacity back below. The paint is currentColor, so a series class declares only its `color` — which
- * also lets an HTML legend swatch paint itself with no colour written in this sheet. */
-.sp-chart__series-1,
-.sp-chart__series-2,
-.sp-chart__series-3,
-.sp-chart__series-4,
-.sp-chart__series-5,
-.sp-chart__series-6,
-.sp-chart__series-7,
-.sp-chart__series-8 {
-  stroke: currentColor;
-  fill: currentColor;
-  stroke-width: var(--border-width-thick);
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  fill-opacity: var(--chart-area-opacity);
-}
-/* The eight positions, each naming its own token. Every series carries the bar opacity its bars paint at
- * — the --chart-bar-opacity-N step tokens.css owns — stepping down from the first, so two bar series
- * separate by lightness wherever their hues sit close together; the four even ones add a stroke pattern,
- * and the rest differ by hue and lightness. */
-.sp-chart__series-1 {
-  color: var(--chart-series-1);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-1);
-}
-.sp-chart__series-2 {
-  color: var(--chart-series-2);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-2);
-  stroke-dasharray: var(--chart-dash-2);
-}
-.sp-chart__series-3 {
-  color: var(--chart-series-3);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-3);
-}
-.sp-chart__series-4 {
-  color: var(--chart-series-4);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-4);
-  stroke-dasharray: var(--chart-dash-4);
-}
-.sp-chart__series-5 {
-  color: var(--chart-series-5);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-5);
-}
-.sp-chart__series-6 {
-  color: var(--chart-series-6);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-6);
-  stroke-dasharray: var(--chart-dash-6);
-}
-.sp-chart__series-7 {
-  color: var(--chart-series-7);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-7);
-}
-.sp-chart__series-8 {
-  color: var(--chart-series-8);
-  --sp-chart-bar-opacity: var(--chart-bar-opacity-8);
-  stroke-dasharray: var(--chart-dash-8);
+/* A wedge too thin to hold its own percentage carries it outside the ring instead, hung off a leader line;
+ * the leader is a hairline of the axis register, kept to one device pixel by the same non-scaling stroke. */
+.sp-chart__leader {
+  stroke: var(--chart-axis);
+  stroke-width: var(--border-width);
+  vector-effect: non-scaling-stroke;
 }
 /* A hovered or active point marker is solid in its series colour behind a solid surface-coloured ring, so it
  * reads as a marker over the line rather than as the line thickening; the dash a series carries is reset
@@ -345,32 +299,8 @@
   align-items: center;
   gap: var(--space-2);
 }
-/* A swatch samples its series through currentColor and a dashed series repeats its stroke rhythm at the
- * period its own --chart-dash-N-period token states, so the legend still matches its mark once hue is
- * gone. The gaps paint the surface. */
-.sp-chart__legend-swatch {
-  flex: none;
-  inline-size: calc(var(--space-4) + var(--space-1));
-  block-size: var(--space-2);
-  background-color: currentColor;
-  border-radius: var(--radius-xs);
-}
-.sp-chart__legend-swatch.sp-chart__series-2 {
-  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
-  background-size: var(--chart-dash-2-period) 100%;
-}
-.sp-chart__legend-swatch.sp-chart__series-4 {
-  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
-  background-size: var(--chart-dash-4-period) 100%;
-}
-.sp-chart__legend-swatch.sp-chart__series-6 {
-  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
-  background-size: var(--chart-dash-6-period) 100%;
-}
-.sp-chart__legend-swatch.sp-chart__series-8 {
-  background-image: linear-gradient(90deg, currentColor 0 60%, var(--color-surface) 60%);
-  background-size: var(--chart-dash-8-period) 100%;
-}
+/* The swatch's own paint — its size, and the rhythm it repeats from its series — lives with the series
+ * rules in chart-series.css, so a swatch and the mark it stands for are stated in one file. */
 .sp-chart__legend-label {
   font-size: var(--text-body-sm-size);
   color: var(--color-text-muted);

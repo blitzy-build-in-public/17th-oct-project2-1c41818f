@@ -1,13 +1,14 @@
 /**
  * Path: tests/unit/lib/catalogSearchFlow.test.ts
  * Purpose: Search scoring, type-ahead suggestions, the debounced input path and the transport-backed reads.
- * Lines: 392
+ * Lines: 436
  */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import * as config from "@/constants/config";
 import * as taxonomy from "@/constants/taxonomy";
+import { BRANDS, CATEGORIES } from "@/data/categories";
 import { salesProDataSource } from "@/data/repositories";
 import * as catalog from "@/lib/catalogService";
 import { failNext, registerDataSource } from "@/lib/mockServer";
@@ -16,7 +17,7 @@ import { debounce } from "@/utils/async";
 import * as query from "@/utils/queryParams";
 
 import type { ApiError, Result } from "@/types/common";
-import type { Brand, Product, SearchSuggestion } from "@/types/catalog";
+import type { Brand, Facet, FacetId, FacetValue, Product, SearchSuggestion } from "@/types/catalog";
 
 import { makeBrand, makeCategory, makeFilterState, makeProduct } from "../../fixtures";
 
@@ -95,6 +96,13 @@ async function readWholeCatalogue(): Promise<Product[]> {
     products.push(...more.items);
   }
   return products;
+}
+
+/** One facet's values, by identifier, or a thrown error when the response omits that facet. */
+function facetValuesOf(facets: readonly Facet[], id: FacetId): readonly FacetValue[] {
+  const found = facets.find((facet) => facet.id === id);
+  if (found === undefined) throw new Error(`The response carries no "${id}" facet.`);
+  return found.values;
 }
 
 describe("search matching", () => {
@@ -364,6 +372,42 @@ describe("the catalogue transport", () => {
         expect(value.count).toBe(narrowed.total);
       }
     }
+  });
+
+  it("still offers every category and brand at count zero when a term matches no product", async () => {
+    const filter = makeFilterState({ q: "zzzzqqq" });
+    expect(valueOf(await catalog.listProducts(filter), "Listing").total).toBe(0);
+    const facets = valueOf(await catalog.buildFacets(filter), "Facets");
+    const held = (ids: readonly string[]): string[] => [...new Set(ids)].sort();
+    expect(
+      facetValuesOf(facets, "category")
+        .map((one) => one.value)
+        .sort(),
+    ).toEqual(held(served.map((one) => one.categoryId)));
+    expect(
+      facetValuesOf(facets, "brand")
+        .map((one) => one.value)
+        .sort(),
+    ).toEqual(held(served.map((one) => one.brandId)));
+    // Each value is named by the vocabulary the endpoint serves categories and brands from, so the group the
+    // term facets render carries the shopper's words rather than an identifier.
+    const named = (records: readonly { id: string; name: string }[]): Map<string, string> =>
+      new Map(records.map((record) => [record.id, record.name]));
+    for (const [id, records] of [
+      ["category", CATEGORIES],
+      ["brand", BRANDS],
+    ] as const)
+      expect(
+        facetValuesOf(facets, id).every((one) => one.label === named(records).get(one.value)),
+      ).toBe(true);
+    // Every facet keeps its rows, and every count is the counted collection's — empty here — so the wider
+    // vocabulary supplies the values without widening a single count.
+    expect(
+      facets.every(
+        (facet) =>
+          facet.values.length > 0 && facet.values.every((one) => one.count === 0 && !one.selected),
+      ),
+    ).toBe(true);
   });
 
   it("answers a suggestion request within the cap, and a blank term without one", async () => {

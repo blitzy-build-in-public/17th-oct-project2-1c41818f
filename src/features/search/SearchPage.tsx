@@ -201,14 +201,14 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
             into the catalogue from there, and a way out of every empty result. */}
         {hasFilters ? (
           <EmptyState
-            headingLevel={3}
+            headingLevel={2}
             title={EMPTY_STATES.searchResults.title}
             description={EMPTY_STATES.searchResults.description}
             actionLabel={EMPTY_STATES.catalogue.actionLabel}
             onAction={() => catalog.clearAll()}
           />
         ) : (
-          <EmptyState surface="searchResults" headingLevel={3} actionHref={ROUTES.CATALOG} />
+          <EmptyState surface="searchResults" headingLevel={2} actionHref={ROUTES.CATALOG} />
         )}
         <ul className="sp-category-chips" role="list">
           {RECOVERY_CATEGORIES.map((category) => (

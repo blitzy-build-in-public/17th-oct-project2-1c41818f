@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/HomePage.tsx
  * Purpose: Landing route composing the hero, featured-products and category-showcase sections
- * Lines: 299
+ * Lines: 309
  */
 
 import type { ReactElement } from "react";
@@ -9,7 +9,7 @@ import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
 import { RELATED_PRODUCTS_LIMIT } from "@/constants/config";
-import { HOME_COPY, PAGE_TITLES, documentTitle } from "@/constants/content";
+import { A11Y_COPY, HOME_COPY, PAGE_TITLES, documentTitle } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { SORT_OPTIONS } from "@/constants/taxonomy";
 import { CategoryShowcase, type CategoryTile } from "@/features/home/CategoryShowcase";
@@ -268,6 +268,7 @@ function PromoBanner(): ReactElement {
  */
 export function HomePage(): ReactElement {
   const homeRead = useAsync(loadHomeContent, []);
+  const isReading = homeRead.status === "idle" || homeRead.status === "loading";
 
   useDocumentTitle(documentTitle(PAGE_TITLES.HOME));
 
@@ -278,6 +279,15 @@ export function HomePage(): ReactElement {
           the route's rhythm from a nested page column: one geometry rule for the width, one gap between blocks. */}
       <div className="sp-container">
         <div className="sp-page">
+          {/* One live region covers the page's whole load. The two bands' placeholders are decorative and
+              announce nothing on purpose, which is the convention `Skeleton` documents, so without this the
+              page would say nothing at all while its reads are in flight; one region states the load once
+              rather than each band announcing its own share of it. */}
+          {isReading ? (
+            <span className="sp-visually-hidden" role="status">
+              {A11Y_COPY.LOADING_ANNOUNCEMENT}
+            </span>
+          ) : null}
           <FeaturedProducts
             status={homeRead.status}
             products={homeRead.data?.featuredProducts ?? NO_PRODUCTS}

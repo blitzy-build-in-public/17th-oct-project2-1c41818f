@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/charts.test.tsx
  * Purpose: Scale mathematics, rendered geometry and the data-table alternative
- * Lines: 437
+ * Lines: 486
  */
 
 import { describe, expect, it } from "vitest";
@@ -410,7 +410,7 @@ describe("the chart renderers", () => {
     ).toHaveTextContent(formatMoney(NET_ONE));
   });
 
-  it("splits the ring, labels the wedges with room and carries every figure in its table", async () => {
+  it("splits the ring, labels every wedge and carries every figure in its table", async () => {
     const user = setupUser();
     const slices = [SLICE_A, SLICE_B, SLICE_C];
     const { container } = renderWithProviders(<DonutChart series={slices} title={CHART_TITLE} />);
@@ -418,11 +418,15 @@ describe("the chart renderers", () => {
 
     expect(await screen.findByRole("img", { name: CHART_TITLE })).toBeInTheDocument();
     expect(svg.querySelectorAll("path")).toHaveLength(slices.length);
-    // The sliver's share is below the slice-label minimum, so only the two roomy wedges are labelled.
+    // Every wedge is labelled: the two roomy ones carry their whole-percent share inside the ring, and the
+    // sliver — whose share is below the slice-label minimum — carries its one-decimal share outside it, on the
+    // one leader line its mark reserved. Nothing is dropped for want of room.
     expect(labelsOf(svg)).toEqual([
       formatShare(100, SLICE_TOTAL, 0),
       formatShare(300, SLICE_TOTAL, 0),
+      formatShare(1, SLICE_TOTAL, 1),
     ]);
+    expect(svg.querySelectorAll("line.sp-chart__leader")).toHaveLength(1);
     expect(screen.getByText(formatMoneyCompact(SLICE_TOTAL))).toBeInTheDocument();
 
     const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });

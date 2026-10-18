@@ -1,7 +1,7 @@
 /**
  * Path: src/types/catalog.ts
  * Purpose: Catalogue shapes: product, image, category, brand, review, inventory, facet and filter types
- * Lines: 401
+ * Lines: 407
  */
 
 import type {
@@ -137,14 +137,20 @@ export interface Category {
 }
 
 /**
- * A category with its children nested beneath it: the tree `GET /api/categories` returns, and the
- * shape the navigation, the category showcase and the category facet walk.
+ * A category with its children nested beneath it and its own product count: the tree
+ * `GET /api/categories` returns, and the shape the navigation, the category showcase, the category
+ * facet and the catalogue route's breadcrumb walk.
  *
  * The recursion terminates at a leaf, which an empty `children` array marks rather than a null, so
  * a consumer can iterate every node's children without a presence check. Each node carries its own
  * `position`, so a level is sorted where it is rendered instead of being re-sorted after a flatten.
+ *
+ * `productCount` belongs to every node rather than to the top level alone — a leaf reports the
+ * products the catalogue holds in it and a parent the rolled-up total beneath it — so the count of a
+ * child reached through `children` is readable from this type, as the payload answers it.
  */
 export interface CategoryNode extends Category {
+  readonly productCount: number;
   readonly children: readonly CategoryNode[];
 }
 

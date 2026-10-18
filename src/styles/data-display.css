@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 551
+ * Lines: 586
  */
 
 @import "./tabs-accordion.css";
@@ -136,6 +136,13 @@
 .sp-badge--danger {
   background-color: var(--color-danger-surface);
   color: var(--color-danger-text);
+}
+/* The brand register: the sixth badge treatment, which a status takes when it means neither a success
+ * nor a failure. Its surface sits beside the info tint, so it is named by the accent tokens the rest of
+ * the product paints its primary action with, and the pair is documented at 10.22:1 in tokens.css. */
+.sp-badge--accent {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
 }
 /* The small badge: the same pill with no vertical padding, for a dense table cell or a chart legend. */
 .sp-badge--sm {
@@ -318,6 +325,34 @@
 @media (hover: hover) {
   .sp-pagination__page:hover:not([aria-current="page"]):not([disabled]) {
     background-color: var(--color-surface-sunken);
+  }
+}
+/* Press, outside the query, because press feedback matters most where there is no pointer: the family's own rule,
+ * where before it the page control carried a press only through the button family's ghost variant. The current
+ * page and a disabled control answer no press, exactly as the hover rule above excludes them. */
+.sp-pagination__page:active:not([aria-current="page"]):not([disabled]) {
+  background-color: var(--color-surface-sunken);
+}
+/* The button family's ghost variant restates a hover and a press fill at a weight the current-page rule above does
+ * not reach, so hovering or pressing the page the reader is on repainted it: the accent fill went, and the white
+ * number sat on the pale surface at 1.1:1. The current page's fill is therefore declared again for those two
+ * states, at the weight that wins — the two guards the variant itself carries — so the family's own intent holds:
+ * the hover and press rules above exclude this page precisely so that the fill saying where the reader is stays
+ * put while the pointer is on it. */
+.sp-pagination__page[aria-current="page"]:hover:not([disabled]):not([aria-disabled="true"]),
+.sp-pagination__page[aria-current="page"]:active:not([disabled]):not([aria-disabled="true"]) {
+  background-color: var(--color-accent);
+}
+/* In this mode the user agent paints the current page's accent fill, its boundary and the transparent boundary of
+ * every other page with the same two system colours, so the page the reader is on was told apart by its font weight
+ * alone. The boundary carries the state instead: the current page's box takes a boundary twice as thick, in the one
+ * colour a sheet may name in this block — the environment and not the design decides it, as components.css states
+ * over its own — so the cue is a shape the mode preserves and not a hue it discards. The control's size does not
+ * move, because the 44px minimum is its border box and the number keeps its line. */
+@media (forced-colors: active) {
+  .sp-pagination__page[aria-current="page"] {
+    border-color: CanvasText;
+    border-width: var(--border-width-thick);
   }
 }
 /* --breakpoint-md, 768px, from tokens.css: a query cannot read a custom property. */

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportsPage.tsx
  * Purpose: The reports route: report selector, range control and the selected report's view
- * Lines: 350
+ * Lines: 366
  */
 
 import { useCallback, useState } from "react";
@@ -32,6 +32,7 @@ import { useAuth } from "@/state/AuthContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { BucketGranularity, ReportDefinition, ReportKind } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
+import { maxReportRange } from "@/utils/dates";
 
 import { CustomerReport } from "./CustomerReport";
 import { DateRangePicker } from "./DateRangePicker";
@@ -92,12 +93,15 @@ const CLASSES = {
   visuallyHidden: "sp-visually-hidden",
 } as const;
 
-/** Everything a report view is handed: the period and the cut, and nothing else. */
+/** Everything a report view is handed: the period, the cut, and the one action its empty state offers. */
 interface ReportViewProps {
   /** The period every figure of the report covers. */
   readonly range: DateRange;
   /** The cut the report's rows are bucketed by. */
   readonly granularity: BucketGranularity;
+  /** The one action a report's no-activity state offers: the period is this page's, so the page is the only
+   *  place that can widen it, and the view rendering that state calls this to have it widened. */
+  readonly onWidenRange: () => void;
 }
 
 /** One report's view, as the selector mounts it: a function component over {@link ReportViewProps}. */
@@ -108,7 +112,7 @@ type ReportView = (props: ReportViewProps) => ReactElement;
  *
  * The record is total over `ReportKind`, so a kind added to that union fails to compile here until it is given
  * a view, and the panel content is a lookup rather than a branch that could fall through to another report's
- * figures. The three views take the same two props, so the lookup's result is used the same way whichever it is.
+ * figures. The three views take the same three props, so the lookup's result is used the same way whichever it is.
  */
 const REPORT_VIEWS: Readonly<Record<ReportKind, ReportView>> = {
   sales: SalesReport,
@@ -248,6 +252,16 @@ export function ReportsPage(): ReactElement {
     if (next !== null) setGranularity(next);
   }, []);
 
+  // The one action a report's no-activity state offers. The period lives here and nowhere else, so the page is
+  // the only place that can widen it, and a mounted view reaches it by asking for it rather than by holding a
+  // control of its own. The value is the widest period the product accepts, which is what makes the action
+  // resolve instead of moving the reader to a second control: the range control above the reports is where a
+  // reader narrows one. A widened range is one the control's own rules accept, so it reports back like any
+  // other and the mounted report re-runs over it.
+  const widenPeriod = useCallback((): void => {
+    setRange(maxReportRange());
+  }, []);
+
   const isLoading = status === "idle" || status === "loading";
   const failure = status === "error" ? error : null;
 
@@ -293,13 +307,15 @@ export function ReportsPage(): ReactElement {
         label: definition.name,
         content: (
           <>
-            {/* The panel's own heading: the outline descends from the route's level-1 heading to the level-3
-                heading a report renders without skipping a level, and the heading names the report the panel
-                holds. It is visually hidden because the selected tab is what names this panel on screen and
-                no sheet declares a heading for the block, so the heading is present to a reader navigating
-                by heading and absent from the page a sighted reader sees. */}
+            {/* The panel's own heading: the outline descends from the route's level-1 heading to this level-2
+                heading, which names the report the panel holds, and from there to the report view's own
+                headings — the empty state's level-2 headline where the range recorded nothing, or the
+                level-3 headings its sections carry where it has figures to show. It is visually hidden
+                because the selected tab is what names this panel on screen and no sheet declares a heading
+                for the block, so the heading is present to a reader navigating by heading and absent from the
+                page a sighted reader sees. */}
             <h2 className={CLASSES.visuallyHidden}>{definition.name}</h2>
-            <Report granularity={granularity} range={range} />
+            <Report granularity={granularity} onWidenRange={widenPeriod} range={range} />
           </>
         ),
       };

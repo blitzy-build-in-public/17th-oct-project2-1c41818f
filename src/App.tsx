@@ -1,17 +1,16 @@
 /**
  * Path: src/App.tsx
  * Purpose: Provider composition in its required order, the error boundary and the layout around the routed content
- * Lines: 234
+ * Lines: 267
  */
 
-import { Component } from "react";
+import { Component, Suspense, lazy } from "react";
 import type { ErrorInfo, ReactElement, ReactNode } from "react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { ToastViewport } from "@/components/ui/Toast";
 import { COMMON_ACTIONS, FEEDBACK_COPY } from "@/constants/content";
-import { MiniCart } from "@/features/cart/MiniCart";
 import { AppRoutes } from "@/Router";
 import { AuthProvider } from "@/state/AuthContext";
 import { CartProvider } from "@/state/CartContext";
@@ -26,7 +25,9 @@ import { ToastProvider } from "@/state/ToastContext";
  * product assumes, the error boundary around the routed content, the application shell around that, and the
  * two surfaces every route has to be able to raise — the toast viewport and the mini-cart drawer — mounted
  * once beside the shell rather than inside the routed region, so a notification and an open cart both survive
- * a route change. The order of the chain is fixed and is not a matter of taste: the toast provider is
+ * a route change. The drawer's code is not part of the shell's own bundle: it is bound below as a lazily loaded
+ * component, and it is mounted at that same site all the same — where the drawer sits and when its code arrives
+ * are two separate decisions. The order of the chain is fixed and is not a matter of taste: the toast provider is
  * outermost because every other provider and every page may raise a notification, and the catalogue, cart and
  * checkout providers sit inside the authentication provider because each of them reads the session it owns.
  *
@@ -55,7 +56,34 @@ import { ToastProvider } from "@/state/ToastContext";
  * it renders arrives composed: the empty state's parts and the alert's register come from
  * `src/components/ui/Feedback.tsx`, and the controls they offer are that component's own, so no button class,
  * no colour, no length, no radius and no breakpoint of this file's own appears below.
+ *
+ * One dependency is bound rather than imported. `MiniCart` is this file's only reach into `src/features/**`,
+ * and it is reached through a `lazy` binding declared below — the same shape `src/Router.tsx` uses for its
+ * route slices — so the cart slice's modules travel in a chunk of their own instead of in the bundle the shell
+ * boots from, and the stylesheet the drawer is painted by still arrives the way every other sheet does, from
+ * `src/main.tsx`.
  */
+
+// The cart drawer, loaded on demand ----------------------------------------------------------------
+
+/**
+ * The cart's mini-cart drawer, bound lazily so the cart slice stays out of the shell's first bundle.
+ *
+ * Declared at module top level rather than inside `App`, for the reason `src/Router.tsx` records for its route
+ * bindings: a `lazy` call made during a render allocates a component type the reconciler has never seen, so the
+ * drawer would unmount and lose its state on every pass. `MiniCart` exports its component by name, and the
+ * loader mirrors that name into the `default` shape `lazy` requires, so the slice keeps exporting `MiniCart`
+ * and this binding still hands React a component to render. The mount site below wraps it in a `Suspense`
+ * boundary, because a lazy component with no boundary above it throws while its chunk is in flight.
+ *
+ * What this buys: the shell's entry bundle carries the composition root, the shell and the first route, and the
+ * drawer's code is fetched as its own file once the shell has rendered — off the critical path rather than
+ * inside it, which is what keeps a whole feature slice out of the payload every visitor pays for before the
+ * first paint.
+ */
+const MiniCart = lazy(async () => ({
+  default: (await import("@/features/cart/MiniCart")).MiniCart,
+}));
 
 /**
  * The home path the failure state's one destination points at.
@@ -194,7 +222,8 @@ class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, RouteErrorBo
  * assumes. Inside them the application shell, so every route renders within one header, one footer and one
  * navigation. Inside the shell's content region the boundary, and inside the boundary the route table — the
  * boundary is inside the shell on purpose, because that is what leaves the navigation usable when a screen
- * fails. Beside the shell, and therefore outside the routed region, the mini-cart drawer and the toast
+ * fails. Beside the shell, and therefore outside the routed region, the mini-cart drawer — this file's one
+ * lazily bound component, wrapped in the `Suspense` boundary its chunk is fetched behind — and the toast
  * viewport: both have to outlive a route change — a notification raised on the catalogue is still there after
  * a move to the cart, and the cart the header's badge opened stays open through one — which is only true of a
  * subtree the router does not unmount.
@@ -222,8 +251,12 @@ export function App(): ReactElement {
                 </RouteErrorBoundary>
               </AppLayout>
               {/* Beside the shell for the reason stated above, and inside every provider that has to serve
-                  them: the drawer reads the cart context and the viewport the toast context. */}
-              <MiniCart />
+                  them: the drawer reads the cart context and the viewport the toast context. The drawer is the
+                  lazily bound one, so its boundary renders nothing while its chunk arrives — the drawer is
+                  shut until the header's badge opens it, which is why no fallback is drawn in its place. */}
+              <Suspense fallback={null}>
+                <MiniCart />
+              </Suspense>
               <ToastViewport />
             </CheckoutProvider>
           </CartProvider>

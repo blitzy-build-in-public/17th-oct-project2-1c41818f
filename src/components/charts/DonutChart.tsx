@@ -1,27 +1,33 @@
 /**
  * Path: src/components/charts/DonutChart.tsx
  * Purpose: Donut with legend, percentage labels and a centre total
- * Lines: 599
+ * Lines: 584
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
-import type { CSSProperties, KeyboardEvent, ReactElement, ReactNode } from "react";
+import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 
 import {
   CHART_VIEWBOX_WIDTH,
   DEFAULT_CHART_HEIGHT,
   DEFAULT_INNER_RADIUS_RATIO,
   DEFAULT_PADDING,
-  MIN_SLICE_LABEL_SHARE,
   buildDonutArcs,
   buildSliceDataTable,
   chartSeriesTotal,
   computePlotArea,
   hasChartData,
+  hasThinSlice,
   polarToCartesian,
   seriesClassName,
 } from "@/components/charts/chartScales";
 import type { ArcDatum, Padding, ValueFormatter } from "@/components/charts/chartScales";
+import {
+  OUTSIDE_LABEL_BAND,
+  readoutPlacement,
+  sliceLabelMarks,
+} from "@/components/charts/donutLabelModel";
+import type { ReadoutStyle } from "@/components/charts/donutLabelModel";
 import { EmptyState } from "@/components/ui/Feedback";
 import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
@@ -29,12 +35,13 @@ import type { MinorUnits } from "@/types/common";
 import { formatMoney, formatMoneyCompact, formatPercent, formatShare } from "@/utils/format";
 
 /*
- * Class contract. `src/styles/admin-reports.css` is the sole definition site of this family — the sheet
- * `src/main.tsx` loads with the other seven — and no file under `src/components/**` may import a stylesheet,
- * so every class below is consumed by name: `sp-chart` for the frame's grid, `sp-chart__header` with its
- * `__title` and `__controls`, `sp-chart__frame` for the plot's box, `sp-chart__svg` for the drawing,
- * `sp-chart__slice` beside one of the eight `sp-chart__series-N` classes for a segment's colour,
- * `sp-chart__label` for the percentage inside a wedge, `sp-chart__readout`, `sp-chart__legend` with its item,
+ * Class contract. `src/styles/admin-reports.css` and the `src/styles/chart-series.css` sheet it imports are the
+ * sole definition site of this family — the sheets `src/main.tsx` loads with the other seven — and no file under
+ * `src/components/**` may import a stylesheet, so every class below is consumed by name: `sp-chart` for the
+ * frame's grid, `sp-chart__header` with its `__title` and `__controls`, `sp-chart__frame` for the plot's box,
+ * `sp-chart__svg` for the drawing, `sp-chart__slice` beside one of the twelve `sp-chart__series-N` classes for a
+ * segment's colour, `sp-chart__label` for a slice's percentage — on the wedge where it has room, outside the ring
+ * beside a `sp-chart__leader` line where it does not — `sp-chart__readout`, `sp-chart__legend` with its item,
  * swatch, label and value, `sp-chart__center` with `sp-chart__center-value` for the hole's total, and
  * `sp-chart__data` with `sp-chart__empty` for a range that sold nothing. The table composes `sp-table`,
  * `sp-table--compact`, `sp-table__caption`, `sp-table__num`, a `th[scope="col"]` header row and a
@@ -73,9 +80,6 @@ const MAX_INNER_RADIUS_RATIO = 0.95;
 /** The digits a legend entry, the readout and the paired table write a share with. */
 const SHARE_DIGITS = 1;
 
-/** The digits a percentage inside a wedge carries: one fewer than the legend, because a label has less room. */
-const SLICE_LABEL_DIGITS = 0;
-
 /**
  * The share formatter the paired table reads, handed a slice's fraction of the ring rather than a value and a
  * total. `formatShare` states the same reading from a value and a total, so a slice's share is written one
@@ -86,24 +90,27 @@ const formatSliceShare: ValueFormatter = (share) => formatPercent(share, SHARE_D
 /** The keys the paired table's column cells render under, in the order the columns are stated. */
 const SLICE_COLUMN_KEYS = ["group", "value", "share"] as const;
 
-/** A style object that also carries the custom properties `src/styles/admin-reports.css` positions by. */
-type DonutChartStyle = CSSProperties & Record<`--${string}`, string>;
-
 /**
- * The ring's own inset, the same on both axes.
+ * The ring's own inset, the same on both axes, with the outside-label band added to its top and bottom.
  *
  * `DEFAULT_PADDING` reserves room for a value axis and its band labels, which a line or a bar chart needs and
  * a ring does not: centred on that frame the ring, and the total drawn in its hole, would sit off the middle
  * of the drawing — and `src/styles/admin-reports.css` anchors `sp-chart__center`, the overlay the total is
  * rendered in, on that middle. Both dimensions therefore take the shared inset's smaller value, which leaves
- * the ring centred on the frame the centre total is centred in.
+ * the ring centred on the frame the centre total is centred in. The outside-label band is spent top and bottom,
+ * the axis the ring is narrowest in, and is `0` when no slice needs one.
+ *
+ * @param labelBand - The band a label outside the ring needs, or `0` when no slice needs one.
+ * @returns The inset the ring's plot area is computed against.
  */
-const DONUT_PADDING: Padding = {
-  top: DEFAULT_PADDING.top,
-  right: DEFAULT_PADDING.right,
-  bottom: DEFAULT_PADDING.top,
-  left: DEFAULT_PADDING.right,
-};
+function donutPadding(labelBand: number): Padding {
+  return {
+    top: DEFAULT_PADDING.top + labelBand,
+    right: DEFAULT_PADDING.right,
+    bottom: DEFAULT_PADDING.top + labelBand,
+    left: DEFAULT_PADDING.right,
+  };
+}
 
 /**
  * Whether a slot holds something React paints, so the heading row is left out rather than rendered as an
@@ -168,44 +175,6 @@ function resolveHoleRatio(ratio: number | undefined): number {
 }
 
 /**
- * The custom properties the readout is placed by, in the frame's own box.
- *
- * The anchor is a point of the drawing, so it is mapped onto the box the drawing occupies rather than onto
- * the frame's padding box: a bare percentage of the frame would place the readout a padding-width away from
- * the slice it describes.
- *
- * The anchor is also the box's own top-left corner, not its centre. `src/styles/admin-reports.css` clamps the
- * readout's inline start between zero and the frame's width less the reserved width, and that clamp bounds a
- * left edge: an offset is what it holds inside the frame, and a box centred on its anchor would be pushed off
- * the slice by a reserve wider than the text and could still hang past the frame. That is why the width is
- * given as the text's own `ch` measure plus its horizontal padding — a reserve, deliberately on the generous
- * side — rather than measured, which would also take state written from an effect.
- *
- * @param anchorX - The anchor's horizontal position in the drawing's own units.
- * @param anchorY - The anchor's vertical position in the drawing's own units.
- * @param width - The drawing's width in those units.
- * @param height - The drawing's height in those units.
- * @param characters - The number of characters the readout's words take.
- * @returns The style object the readout element carries.
- */
-function readoutPlacement(
-  anchorX: number,
-  anchorY: number,
-  width: number,
-  height: number,
-  characters: number,
-): DonutChartStyle {
-  const origin = "var(--space-4)";
-  const span = `(100% - 2 * ${origin})`;
-  const ratio = (value: number): string => Math.min(Math.max(value, 0), 1).toFixed(4);
-  return {
-    "--sp-chart-readout-x": `calc(${origin} + ${span} * ${ratio(anchorX / width)})`,
-    "--sp-chart-readout-y": `calc(${origin} + ${span} * ${ratio(anchorY / height)})`,
-    "--sp-chart-readout-w": `calc(${characters}ch + 2 * var(--space-3))`,
-  };
-}
-
-/**
  * Names a chart the caller has not named: a ring of revenue by category has no name but the categories it
  * splits, so the series labels are its own subject rather than a sentence invented here.
  *
@@ -249,8 +218,9 @@ export interface DonutChartProps {
    */
   readonly innerRadiusRatio?: number;
   /**
-   * Whether each slice with room for one carries its percentage inside the wedge: slices below
-   * {@link MIN_SLICE_LABEL_SHARE} are left unlabelled rather than crowded.
+   * Whether each slice carries its percentage: on the wedge where it has room for one, and outside the ring on a
+   * leader line where it has not, so every segment is annotated. Only the placement is this switch's business:
+   * the drawing reserves the band an outside label needs on its own, and only when a slice needs one.
    */
   readonly showPercentages?: boolean;
   /** Whether the legend under the frame is rendered. The paired table is rendered regardless. */
@@ -279,13 +249,15 @@ export interface DonutChartProps {
 }
 
 /**
- * A donut: one slice per series, a legend, a percentage inside each wedge with room for one, and the ring's
- * total in its hole.
+ * A donut: one slice per series, a legend, a percentage for every slice, and the ring's total in its hole.
  *
  * Each slice takes its paint from a `sp-chart__series-N` class the stylesheet maps onto a token rather than
- * from a colour written here. Hovering or focusing a slice shows a readout stating its label, its value and
- * its share, and the same three readings sit in the legend and in the paired data table under the frame, so
- * no figure is reachable through colour or geometry alone.
+ * from a colour written here. Every slice is annotated: a wedge with room keeps its percentage, and one too
+ * thin to hold a label carries it outside the ring on a leader line, in the digits the legend uses. The band
+ * that needs — {@link OUTSIDE_LABEL_BAND} above and below — is reserved on its own and only when a slice is
+ * thin enough to need one, so the ring is drawn at the same radius either way. Hovering or focusing a slice
+ * shows a readout stating its label, its value and its share, and the same three readings sit in the legend
+ * and the paired data table, so no figure is reachable through colour or geometry alone.
  *
  * The plot is one tab stop rather than one per slice: ArrowLeft and ArrowRight walk the ring in order and
  * wrap at either end, Home and End reach the first and last slice, focus selects the slice the plot was left
@@ -320,14 +292,17 @@ export function DonutChart({
   const baseId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const resolvedHeight = resolveHeight(height);
+  // Reserved for a thin slice's label outside the ring, and only then: a ring with none keeps its height.
+  const labelBand = showPercentages && hasThinSlice(series) ? OUTSIDE_LABEL_BAND : 0;
+  const drawingHeight = resolvedHeight + labelBand * 2;
 
   // The ring's centre and radii, computed from the viewBox the sheet scales: no element is measured, so the
   // geometry is decided by the props alone and every arc can be checked without a layout engine.
   const geometry = useMemo(() => {
     const plotArea = computePlotArea({
       width: CHART_VIEWBOX_WIDTH,
-      height: resolvedHeight,
-      padding: DONUT_PADDING,
+      height: drawingHeight,
+      padding: donutPadding(labelBand),
     });
     const outerRadius = Math.max(1, Math.min(plotArea.width, plotArea.height) / 2);
     return {
@@ -336,7 +311,7 @@ export function DonutChart({
       outerRadius,
       innerRadius: outerRadius * resolveHoleRatio(innerRadiusRatio),
     };
-  }, [resolvedHeight, innerRadiusRatio]);
+  }, [drawingHeight, labelBand, innerRadiusRatio]);
 
   const arcs = useMemo(
     () =>
@@ -355,6 +330,18 @@ export function DonutChart({
   // caller derives the same sum again.
   const total = useMemo<MinorUnits>(() => chartSeriesTotal(series), [series]);
   const isEmpty = !hasChartData(series) || arcs.length === 0;
+
+  // One mark per slice: the percentage on a wedge with room for it, and outside the ring on a leader line for
+  // one without — the marks the band above and below the ring was reserved for.
+  const labelMarks = showPercentages
+    ? sliceLabelMarks({
+        arcs,
+        total,
+        centreX: geometry.centreX,
+        centreY: geometry.centreY,
+        outerRadius: geometry.outerRadius,
+      })
+    : [];
 
   const classNamesBySeriesId = useMemo(() => {
     const bySeriesId = new Map<string, string>();
@@ -408,7 +395,7 @@ export function DonutChart({
       ? null
       : `${activeArc.label} ${activeArc.formattedValue} ${formatShare(activeArc.value, total, SHARE_DIGITS)}`;
 
-  const readoutStyle = useMemo<DonutChartStyle | undefined>(() => {
+  const readoutStyle = useMemo<ReadoutStyle | undefined>(() => {
     if (activeArc === null || readoutText === null) return undefined;
     const anchor = polarToCartesian(
       geometry.centreX,
@@ -420,10 +407,10 @@ export function DonutChart({
       anchor.x,
       anchor.y,
       CHART_VIEWBOX_WIDTH,
-      resolvedHeight,
+      drawingHeight,
       readoutText.length,
     );
-  }, [activeArc, readoutText, geometry, resolvedHeight]);
+  }, [activeArc, readoutText, geometry, drawingHeight]);
 
   const clearActive = useCallback((): void => setActiveIndex(null), []);
   const selectSlice = useCallback((index: number): void => setActiveIndex(index), []);
@@ -509,7 +496,7 @@ export function DonutChart({
       >
         <svg
           className="sp-chart__svg"
-          viewBox={`0 0 ${CHART_VIEWBOX_WIDTH} ${resolvedHeight}`}
+          viewBox={`0 0 ${CHART_VIEWBOX_WIDTH} ${drawingHeight}`}
           role="img"
           aria-label={accessibleName}
           aria-describedby={captionId}
@@ -522,26 +509,24 @@ export function DonutChart({
               onMouseEnter={() => selectSlice(arc.seriesIndex)}
             />
           ))}
-          {/* The wedge's percentage is drawn over its own slice, so it must not swallow the pointer: without
-              this the most natural place to hover a wedge — its middle, where the label sits — would show no
-              readout at all, and the label states what the readout states anyway. */}
-          {showPercentages
-            ? arcs
-                .filter((arc) => arc.share >= MIN_SLICE_LABEL_SHARE)
-                .map((arc) => (
-                  <text
-                    key={arc.id}
-                    className="sp-chart__label"
-                    x={arc.labelX}
-                    y={arc.labelY}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    pointerEvents="none"
-                  >
-                    {formatShare(arc.value, total, SLICE_LABEL_DIGITS)}
-                  </text>
-                ))
-            : null}
+          {/* Inert, so a label cannot swallow the pointer the wedge's readout needs. */}
+          {labelMarks.map((mark) => (
+            <g key={mark.id}>
+              {mark.leader === undefined ? null : (
+                <line className="sp-chart__leader" {...mark.leader} pointerEvents="none" />
+              )}
+              <text
+                className="sp-chart__label"
+                x={mark.x}
+                y={mark.y}
+                textAnchor={mark.textAnchor}
+                dominantBaseline="middle"
+                pointerEvents="none"
+              >
+                {mark.text}
+              </text>
+            </g>
+          ))}
         </svg>
         <div className="sp-chart__center">
           <span className="sp-chart__center-value">{formatTotalValue(total)}</span>

@@ -1,7 +1,7 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections, the indexes built over them once, and the account, session and address writes they carry
- * Lines: 576
+ * Lines: 572
  */
 
 // This is not a path the plan maps on its own: it is the store half of `src/data/repositories.ts`, split out
@@ -120,13 +120,6 @@ export function rejectPromo(reason: PromoRejectionReason): Result<never> {
 
 // The seeded collections ----------------------------------------------------------------------------
 
-/** A category with its count beside its children: what `GET /api/categories` answers with. A leaf reports its
- * own catalogue count and a parent the rolled-up total beneath it, exactly as the seed derived them, because
- * the count record is keyed by category and `Category` carries no count field of its own. */
-export interface CategoryTreeNode extends CategoryNode {
-  readonly productCount: number;
-}
-
 /** The key an email address is looked up and compared by: an address is case-insensitive, so a stored account
  * and a submitted address meet on this key rather than on the spelling either arrived in. */
 function emailKey(email: string): string {
@@ -144,15 +137,18 @@ function sessionTokenFor(customer: Customer): SessionToken {
   return mintSessionToken(`account ${customer.id}`);
 }
 
-/** The tree of the seeded categories, each node carrying its children and its product count in position order. */
-function buildCategoryTree(): readonly CategoryTreeNode[] {
+/** The tree of the seeded categories, each node carrying its children and its product count in position order.
+ * The count is a member of the node type the endpoint declares — `CategoryNode` — so it is derived here and
+ * needs no second type beside it: a leaf reports its own catalogue count and a parent the rolled-up total
+ * beneath it, exactly as the seed derived them, because the count record is keyed by category. */
+function buildCategoryTree(): readonly CategoryNode[] {
   const byParent = groupBy(
     CATEGORIES.filter(
       (category): category is Category & { parentId: CategoryId } => category.parentId !== null,
     ),
     (category) => category.parentId,
   );
-  const node = (category: Category): CategoryTreeNode => ({
+  const node = (category: Category): CategoryNode => ({
     ...category,
     productCount: CATEGORY_PRODUCT_COUNT[category.id] ?? 0,
     children: sortByKey(byParent.get(category.id) ?? [], (child) => child.position).map(node),

@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Tabs.tsx
  * Purpose: Tabs with roving focus, and the accordion used for disclosure sections
- * Lines: 513
+ * Lines: 534
  */
 
 import { useId, useRef, useState } from "react";
@@ -14,7 +14,9 @@ import type { KeyboardEvent, ReactElement, ReactNode } from "react";
  * `src/components/**` may import a stylesheet, because `src/main.tsx` is the only importer of
  * `src/styles/**`. Every class below is therefore consumed by name, and this comment is the list that
  * sheet owes the file: `sp-tabs` for the set, `sp-tabs__list` for the strip that scrolls sideways at a
- * small width, `sp-tabs__tab` for one tab, `sp-tabs__panel` for the region showing the selected tab's
+ * small width, `sp-tabs__tab` for one tab, `sp-tabs__label` for the span holding a tab's own words and
+ * carrying the `data-label` attribute the sheet's width reserve reads through `attr()` — so the reserve is
+ * laid out from the label the tab announces — `sp-tabs__panel` for the region showing the selected tab's
  * content, and `sp-accordion`, `sp-accordion__item`, `sp-accordion__trigger` and `sp-accordion__panel`
  * for the disclosure family. State is carried by the attribute and never by a second class: the sheet
  * paints the selected tab through `[aria-selected="true"]` and the open disclosure through
@@ -147,6 +149,23 @@ function composeClassName(...names: readonly (string | false | undefined)[]): st
 function hasHeadingText(heading: ReactNode): boolean {
   if (typeof heading === "string") return heading.trim().length > 0;
   return typeof heading === "number";
+}
+
+/**
+ * The words a tab's label contributes to the stylesheet's width reserve, when the label is text.
+ *
+ * `src/styles/tabs-accordion.css` lays a hidden copy of the tab's own words at the selected tab's weight inside
+ * the label, so a selection change cannot re-metre the content-sized strip, and a CSS `attr()` reads a text
+ * attribute and nothing else. A label rendered as text therefore hands the same words over through
+ * `data-label`; a label that is composed markup, or anything else a string cannot hold, carries no attribute and
+ * reserves nothing, which is the one case the reserve cannot cover.
+ *
+ * @param label - The tab's label node.
+ * @returns The label's words, or `undefined` when the label is not text.
+ */
+function labelText(label: ReactNode): string | undefined {
+  if (typeof label === "string") return label;
+  return typeof label === "number" ? String(label) : undefined;
 }
 
 /** One tab of a {@link Tabs} set: the control's label, the panel it shows, and its optional decoration. */
@@ -317,7 +336,9 @@ export function Tabs({
                 handleKeyDown(event, index);
               }}
             >
-              {item.label}
+              <span className="sp-tabs__label" data-label={labelText(item.label)}>
+                {item.label}
+              </span>
               {item.badge}
             </button>
           );

@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/catalogService.ts
  * Purpose: Filtering, cross-filtered facet counts, sorting and paging over the catalogue
- * Lines: 582
+ * Lines: 599
  */
 
 import { RELATED_PRODUCTS_LIMIT, type PageSize } from "@/constants/config";
@@ -350,15 +350,19 @@ const BOOLEAN_VALUE_TESTS: Readonly<Partial<Record<FacetId, (product: Product) =
 };
 
 /**
- * What a facet count may be given beside its own arguments: the vocabulary naming the category and brand terms.
- * Omitted, those facets offer the catalogue's own values labelled by the identifier itself.
+ * What a facet count may be given beside its own arguments: the vocabulary naming the category and brand terms,
+ * and the collection that vocabulary is drawn from, which may be wider than the collection the counts are taken
+ * over — the whole served catalogue when a text match has narrowed the one being counted, so a term that matches
+ * nothing still offers every value the catalogue holds, each with a count of zero. Both are omitted by a caller
+ * that wants the counted collection's own values labelled by the identifier itself.
  */
 export interface FacetCountOptions {
   readonly vocabulary?: FacetVocabulary;
+  readonly catalogue?: readonly Product[];
 }
 
-/** What a whole facet response may be given: the vocabulary above, and the definitions to render, which default
- * to `FACET_DEFINITIONS`, the product's only facet vocabulary. */
+/** What a whole facet response may be given: the vocabulary above together with the collection it is drawn from,
+ * and the definitions to render, which default to `FACET_DEFINITIONS`, the product's only facet vocabulary. */
 export interface FacetResponseOptions extends FacetCountOptions {
   readonly definitions?: readonly FacetDefinition[];
 }
@@ -407,9 +411,11 @@ function valueTestFor(
 
 /**
  * The values a term facet offers, each labelled and ordered as the vocabulary lists it, with any value the
- * vocabulary does not name last and ordered by identifier. Only values the collection holds are offered, so the
- * panel never presents a choice that leads nowhere; a selection naming a value the catalogue does not hold is
- * reported among the active filter chips instead.
+ * vocabulary does not name last and ordered by identifier. The collection read here is the vocabulary source
+ * rather than the one the counts are taken over, so both kinds of value survive a count that has emptied out:
+ * one the collection holds and one it does not. Only values the catalogue holds are offered, so the panel never
+ * presents a choice that leads nowhere; a selection naming a value the catalogue does not hold is reported among
+ * the active filter chips instead.
  */
 function catalogueTermOptions(
   facetId: FacetId,
@@ -433,8 +439,9 @@ function catalogueTermOptions(
   return options;
 }
 
-/** The values a facet offers: the ones the vocabulary declares where it declares any, otherwise the terms
- * the catalogue holds. */
+/** The values a facet offers: the ones its definition declares where it declares any, otherwise the terms the
+ * collection handed in holds — that collection being the vocabulary source, which the counted collection may be a
+ * narrower part of. */
 function facetValueSources(
   definition: FacetDefinition,
   products: readonly Product[],
@@ -445,17 +452,22 @@ function facetValueSources(
 
 /**
  * One facet's values, each with the number of results choosing it would leave and whether the current query
- * already holds it. Counts are computed over the catalogue with this facet's own selection removed and every
- * other facet's applied, which keeps the remaining values meaningful while a facet is in use, and every option's
- * test is evaluated against each product in a single pass, so a facet's values cost one traversal. The `selected`
- * flag is read from the query as it stands, through the same accessors the URL is written with, so panel and query
- * cannot disagree; a value the filters empty out keeps its place with a count of zero rather than disappearing.
+ * already holds it. Counts are computed over the counted collection with this facet's own selection removed and
+ * every other facet's applied, which keeps the remaining values meaningful while a facet is in use, and every
+ * option's test is evaluated against each product in a single pass, so a facet's values cost one traversal. The
+ * values offered are drawn from the vocabulary's own collection, which a caller may hand in wider than the one
+ * counted over, so a facet whose values the filters have emptied out keeps them all rather than losing them. The
+ * `selected` flag is read from the query as it stands, through the same accessors the URL is written with, so
+ * panel and query cannot disagree; a value the filters empty out keeps its place with a count of zero rather than
+ * disappearing.
  *
- * @param products - The catalogue to count over — the text-matched collection when a query term is present,
- * since free-text matching is `src/lib/searchService.ts`'s to apply.
+ * @param products - The collection to count over — the text-matched collection when a query term is present,
+ * since free-text matching is `src/lib/searchService.ts`'s to apply. Every count is measured against this
+ * collection and none is widened past it.
  * @param query - The filter as the panel holds it, this facet's own selection included.
  * @param definition - The facet to count, carrying its heading and either declared values or none.
- * @param options - The vocabulary naming an identifier facet's terms.
+ * @param options - The vocabulary naming an identifier facet's terms, and the collection that vocabulary is
+ * drawn from, which defaults to the one counted over.
  * @returns The facet's values, in the order the vocabulary lists them.
  */
 export function countFacetValues(
@@ -466,7 +478,11 @@ export function countFacetValues(
 ): FacetValue[] {
   const matching = filterProducts(products, withoutFacetSelection(query, definition.id));
   const state = asFilterState(query);
-  const entries = facetValueSources(definition, products, options.vocabulary).map((option) => ({
+  const entries = facetValueSources(
+    definition,
+    options.catalogue ?? products,
+    options.vocabulary,
+  ).map((option) => ({
     option,
     test: valueTestFor(definition, option),
     count: 0,
@@ -487,9 +503,10 @@ export function countFacetValues(
 /**
  * All five facets for a filter, in the order the filter panel renders them.
  *
- * @param products - The catalogue to count over, text-matched when a query term is present.
+ * @param products - The collection to count over, text-matched when a query term is present.
  * @param query - The filter as the panel holds it.
- * @param options - The vocabulary naming the identifier facets' terms, and the definitions to render.
+ * @param options - The vocabulary naming the identifier facets' terms and the collection it is drawn from, and
+ * the definitions to render.
  * @returns The facets, each with its values, counts and selections.
  */
 export function buildFacetResponse(

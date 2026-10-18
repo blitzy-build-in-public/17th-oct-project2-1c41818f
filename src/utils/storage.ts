@@ -1,10 +1,12 @@
 /**
  * Path: src/utils/storage.ts
  * Purpose: Typed, versioned, failure-tolerant localStorage access for the cart, the session and the last-used range
- * Lines: 303
+ * Lines: 336
  */
 
 import { STORAGE_KEYS, STORAGE_KEY_PREFIX, STORAGE_VERSION } from "@/constants/config";
+import type { DateRange } from "@/types/common";
+import { validateDateRange } from "@/utils/dates";
 
 /**
  * The keys this module accepts: the three entries of `STORAGE_KEYS` and nothing else, so every key
@@ -300,4 +302,35 @@ export function clearStoredKeys(): boolean {
  */
 export function getStoredVersion(key: StorageKey): number | undefined {
   return readEnvelope(key)?.version;
+}
+
+// The last-used report range ----------------------------------------------------------------------
+
+/**
+ * The last-used report range a stored payload holds, or `fallback` when there is nothing usable to
+ * adopt: the payload's shape and the days it names answered together, so a surface that opens on the
+ * stored range asks one question instead of judging the payload and then judging its days.
+ *
+ * It reads no store of its own — the payload arrives already read, from {@link readStored} or the
+ * `useLocalStorage` hook that calls it — and answers `fallback` for every case that is not a usable
+ * range: an absent entry, one an older build wrote and `readStored` discarded for the caller's
+ * fallback, a value that is not a pair of text ends, and a pair whose days `validateDateRange` in
+ * `src/utils/dates.ts` refuses because they have since become inverted, future-dated, or longer than
+ * the cap `src/constants/config.ts` sets. The range rules are that validator's, so none is stated
+ * here.
+ *
+ * Its two consumers are `src/features/reports/DateRangePicker.tsx` and
+ * `src/features/admin/AdminDashboardPage.tsx`: each opens on the range this returns and writes an
+ * applied range back through `useLocalStorage` in `src/state/hooks.ts`.
+ *
+ * @param stored - The stored payload as it was read, of unknown provenance.
+ * @param fallback - The range to open on when nothing usable is stored: the trailing window both
+ *   consumers compute from `defaultReportRange`. Returned exactly as given.
+ * @returns The stored range while its days satisfy the rules, and `fallback` otherwise.
+ */
+export function storedRangeOr(stored: unknown, fallback: DateRange): DateRange {
+  if (typeof stored !== "object" || stored === null) return fallback;
+  const { from, to } = stored as { readonly from?: unknown; readonly to?: unknown };
+  if (typeof from !== "string" || typeof to !== "string") return fallback;
+  return validateDateRange(from, to).valid ? { from, to } : fallback;
 }

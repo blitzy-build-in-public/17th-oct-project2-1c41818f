@@ -1,13 +1,13 @@
 /**
  * Path: src/components/ui/Card.tsx
  * Purpose: Card with its header, body and footer slots, and the badge every feature surface uses
- * Lines: 394
+ * Lines: 406
  */
 
 import type { ComponentPropsWithoutRef, ElementType, ReactElement, ReactNode } from "react";
 
 import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
-import type { BadgeVariant } from "@/constants/taxonomy";
+import type { BadgeVariant, OrderStatusOption } from "@/constants/taxonomy";
 import type { OrderStatus } from "@/types/commerce";
 
 /**
@@ -366,11 +366,14 @@ export interface OrderStatusBadgeProps {
 /**
  * An order's status as a badge: the one place a status becomes a pill, so the three surfaces that show one
  * — the account's order history with its status filter, the order detail's timeline, and the dashboard's
- * recent-orders table — render the same words in the same variant instead of each mapping statuses to
+ * recent-orders table — render the same words in the same treatment instead of each mapping statuses to
  * badges of its own.
  *
  * The lookup is `ORDER_STATUS_OPTIONS` from `src/constants/taxonomy.ts`, the single vocabulary that names
- * every status, and the label is rendered as the badge's text rather than implied by its colour.
+ * every status; the label is rendered as the badge's text rather than implied by its colour, and the
+ * treatment is the pair that vocabulary declares — the variant, and whether that variant is outlined. The
+ * pair is what keeps two statuses apart where a register alone would repeat, and the outline half is a
+ * border, so the difference between two statuses in one register survives forced-colours mode.
  *
  * @param props - The status to render and the size of the badge.
  * @returns The status badge, or `null` when the vocabulary holds no record for the status.
@@ -380,14 +383,23 @@ export function OrderStatusBadge({
   size,
   className,
 }: OrderStatusBadgeProps): ReactElement | null {
-  const option = ORDER_STATUS_OPTIONS.find((candidate) => candidate.value === status);
+  /* Typed as the vocabulary's own shape, because a member declared without `isOutline` still answers
+   * with the default this component passes on: an absent flag and a false one are the same treatment. */
+  const option: OrderStatusOption | undefined = ORDER_STATUS_OPTIONS.find(
+    (candidate) => candidate.value === status,
+  );
 
   if (!option) {
     return null;
   }
 
   return (
-    <Badge className={className} size={size} variant={option.badgeVariant}>
+    <Badge
+      className={className}
+      isOutline={option.isOutline}
+      size={size}
+      variant={option.badgeVariant}
+    >
       {option.label}
     </Badge>
   );

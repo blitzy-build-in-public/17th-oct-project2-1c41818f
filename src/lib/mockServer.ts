@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 508
+ * Lines: 535
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
@@ -160,8 +160,14 @@ function parseLatencyValue(raw: unknown): number | null {
 
 /** Reports a set-but-unusable `VITE_API_LATENCY_MS` once per distinct value, naming the variable, the
  * value it holds and the default that takes its place: the developer diagnostic for a misconfiguration
- * that would otherwise surface only as a missing response delay. */
+ * that would otherwise surface only as a missing response delay.
+ *
+ * Development-only, and guarded rather than dropped, because the value belongs to the build environment
+ * and the reader who can act on it is the developer who set it: the fallback this reports applies in
+ * every build either way, so a visitor's console stays clean while the developer's names the mistake.
+ * The guard precedes the message, which is what lets a production build drop the branch and its text. */
 function reportUnusableLatencyValue(raw: unknown): void {
+  if (!import.meta.env.DEV) return;
   const shown = typeof raw === "string" ? raw.trim() : String(raw);
   if (shown === reportedLatencyValue) return;
   reportedLatencyValue = shown;
@@ -181,8 +187,8 @@ function reportUnusableLatencyValue(raw: unknown): void {
  * fractional, signed, written in another notation, negative or above the timer's range falls back to
  * the default rather than disabling the delay or producing `NaN`, which is what keeps
  * `VITE_API_LATENCY_MS=0` the one way to run without waiting. A value that is set and cannot be used is
- * reported once on the console, because nothing else in the product can see a misconfigured build
- * environment.
+ * reported once on the console in development, where the developer who set it can act on it and the
+ * visitor cannot; the shipped build reports nothing and falls back to the same default regardless.
  *
  * @returns The configured delay in milliseconds, or {@link DEFAULT_API_LATENCY_MS} when the variable is
  * unset or holds a value this build cannot apply; never `NaN`, never negative.
@@ -459,9 +465,10 @@ export function matchRoute(method: Common.HttpMethod, path: string): RouteMatch 
  *
  * The response delay is not applied here: `src/lib/apiClient.ts` waits the configured simulator
  * latency out once, before it asks this seam for an answer, so this function returns as soon as it has
- * one. The dispatcher runs synchronously now that the wait has moved, and its outcome is published as
- * a promise all the same, so a caller waits the same way and nothing the dispatcher does escapes
- * synchronously.
+ * one. A handler may answer with a promise — the analytics and report reads fetch their modules on
+ * first use, so they resolve those before they answer — and either shape is awaited: a handler that
+ * threw and a promise that rejected are refused here, as the transport's own `500` and
+ * `unexpected-error`, rather than escaping a caller as a rejection.
  *
  * The order the checks run in is the order a server would apply them: the caller's query is parsed
  * from the path, a request that arrives before any data source is bound is refused with `503`, an
@@ -474,12 +481,32 @@ export function handleRequest<TValue>(
 ): Promise<Common.Result<TValue>> {
   // The seam is untyped by design: a caller names the payload type its path answers with, the way a
   // client of a real HTTP API asserts the shape it knows the endpoint returns.
-  return Promise.resolve().then(() => dispatch(path, options) as Common.Result<TValue>);
+  return dispatch(path, options).then(
+    (outcome) => outcome as Common.Result<TValue>,
+    () => unexpectedFailure(),
+  );
+}
+
+/**
+ * The refusal an outcome that never became a `Result` is answered with: the `500` and the code
+ * `unexpected-error` the transport words the same condition with, carrying the sentence the copy module
+ * owns, so a page renders its one generic failure whichever layer is what failed.
+ */
+function unexpectedFailure(): Common.Result<never> {
+  return {
+    ok: false,
+    error: shapeError(500, "unexpected-error", FEEDBACK_COPY.ERROR_STATE_BODY),
+  };
 }
 
 /** Runs one request through the seam and returns the outcome before it is given the caller's payload
- * type. */
-function dispatch(path: string, options: Common.ApiRequestOptions): Common.Result<unknown> {
+ * type. It resolves what the route's handler answers, because a read whose modules are fetched on first
+ * use answers with a promise; a throw or a rejection is refused by {@link handleRequest}, which owns the
+ * seam's no-throw contract for both shapes. */
+async function dispatch(
+  path: string,
+  options: Common.ApiRequestOptions,
+): Promise<Common.Result<unknown>> {
   const { pathname, query } = splitRequest(path, options.query);
   const method = options.method ?? "GET";
   const source = dataSource;

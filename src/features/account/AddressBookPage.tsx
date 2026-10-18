@@ -217,7 +217,7 @@ function AddressCard({
               <Badge variant="info">{ACCOUNT_COPY.DEFAULT_SHIPPING_BADGE}</Badge>
             ) : null}
             {isDefaultBilling ? (
-              <Badge variant="success">{ACCOUNT_COPY.DEFAULT_BILLING_BADGE}</Badge>
+              <Badge variant="info">{ACCOUNT_COPY.DEFAULT_BILLING_BADGE}</Badge>
             ) : null}
           </div>
         ) : null}
@@ -449,7 +449,7 @@ export function AddressBookPage(): ReactElement {
       );
     }
     if (addresses.length === 0) {
-      return <EmptyState headingLevel={3} onAction={openAdd} surface="addresses" />;
+      return <EmptyState headingLevel={2} onAction={openAdd} surface="addresses" />;
     }
     return (
       <ul className="sp-address-grid" role="list">

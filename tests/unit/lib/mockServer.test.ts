@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
  * Purpose: Route matching, error mapping, catalogue filter reading, review scoping, idempotency replay, the unregistered-source failure and seed determinism.
- * Lines: 529
+ * Lines: 597
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,7 +41,7 @@ import {
   type SalesProDataSource,
 } from "@/lib/mockServer";
 import type { Customer, Session } from "@/types/account";
-import type { Category, Product } from "@/types/catalog";
+import type { Category, Product, Review } from "@/types/catalog";
 import type { ApiError, LineId, PageResult, Result } from "@/types/common";
 import type { CartLine, Order, PricedCart } from "@/types/commerce";
 import { createAbortError, isAbortError } from "@/utils/async";
@@ -194,8 +194,10 @@ async function captureSeed() {
     reviews: booted.listProductReviews({ productId: reviewed.id, page: 1, pageSize: PAGE_SIZE }),
     orders: booted.getRecentOrders(ORDER_SAMPLE),
     credential: booted.findSignInCredential(DEMO_ACCOUNTS.CUSTOMER_EMAIL),
-    kpis: booted.getKpis(FIXED_DATE_RANGE),
-    revenue: booted.getRevenueSeries(FIXED_DATE_RANGE),
+    // The two analytics reads answer with a promise of a `Result`, because the modules they aggregate with
+    // are fetched on first use, so a pass unwraps the value the equality below compares.
+    kpis: await valueOf(booted.getKpis(FIXED_DATE_RANGE)),
+    revenue: await valueOf(booted.getRevenueSeries(FIXED_DATE_RANGE)),
     reports: booted.listReportDefinitions(),
   };
 }
@@ -328,6 +330,44 @@ describe("answered reads", () => {
     );
     expect(firstOf(related.items).categoryId).toBe(product.categoryId);
   });
+
+  it("scopes a product's reviews to the path's product and puts a submitted one first", async () => {
+    const served = await valueOf(getJson<PageResult<Product>>("/api/products"));
+    const product = served.items.find((candidate) => candidate.ratingCount > 0);
+    if (product === undefined) throw new Error("The seeded catalogue serves no reviewed product.");
+    const path = `/api/products/${product.id}/reviews`;
+    const page = { page: 1, pageSize: PAGE_SIZE };
+
+    const first = await valueOf(getJson<PageResult<Review>>(path, { query: page }));
+    expect(first.total).toBe(product.ratingCount);
+    expect(first.items.length).toBeGreaterThan(0);
+    for (const review of first.items) expect(review.productId).toBe(product.id);
+    const instants = first.items.map((review) => review.createdAt);
+    expect([...instants].sort().reverse()).toEqual(instants);
+
+    const rating = firstOf(first.items).rating;
+    const narrowed = await valueOf(
+      getJson<PageResult<Review>>(path, { query: { ...page, rating } }),
+    );
+    expect(narrowed.total).toBe(first.items.filter((review) => review.rating === rating).length);
+    for (const review of narrowed.items) expect(review.rating).toBe(rating);
+
+    const session = await signInCustomer();
+    const written = await valueOf(
+      postJson<Review>(
+        path,
+        {
+          rating,
+          title: "Held up all winter",
+          body: "Used it daily for six months and it still reads well.",
+        },
+        { sessionToken: session.token },
+      ),
+    );
+    const after = await valueOf(getJson<PageResult<Review>>(path, { query: page }));
+    expect(after.total).toBe(first.total + 1);
+    expect(firstOf(after.items).id).toBe(written.id);
+  });
 });
 
 // The catalogue's filter reading: a filter member that is present but carries no number is refused by
@@ -406,6 +446,34 @@ describe("the transport", () => {
     expect(getApiLatencyMs()).toBe(DEFAULT_API_LATENCY_MS);
     vi.stubEnv("VITE_API_LATENCY_MS", "0");
   });
+
+  it.each([
+    { development: true, latency: "abc", reports: 1 },
+    { development: false, latency: "12.5", reports: 0 },
+  ])(
+    "reports the unusable value $latency $reports time(s) with the development flag $development",
+    async ({ development, latency, reports }) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      vi.stubEnv("DEV", development);
+      vi.stubEnv("VITE_API_LATENCY_MS", latency);
+      try {
+        // A module and a value of this row's own: the diagnostic reports each distinct value once,
+        // so a shared one would let the earlier row answer this one and the case prove nothing.
+        vi.resetModules();
+        const { getApiLatencyMs: readLatency } = await import("@/lib/mockServer");
+        expect(readLatency()).toBe(DEFAULT_API_LATENCY_MS);
+        const messages = warn.mock.calls.map((call) => String(call[0]));
+        expect(messages).toHaveLength(reports);
+        for (const message of messages) {
+          expect(message).toContain("VITE_API_LATENCY_MS");
+          expect(message).toContain(`"${latency}"`);
+        }
+      } finally {
+        vi.unstubAllEnvs();
+        warn.mockRestore();
+      }
+    },
+  );
 
   it("serialises a query deterministically", () => {
     const query = {

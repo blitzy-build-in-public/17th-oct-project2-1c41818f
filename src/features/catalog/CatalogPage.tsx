@@ -1,12 +1,12 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 582
+ * Lines: 586
  */
 
 import { useId, useState } from "react";
 import type { ChangeEvent, ReactElement, ReactNode } from "react";
-import { Link, Navigate, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { BreadcrumbItem } from "@/components/layout/PageHeader";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,6 +21,7 @@ import {
   CATALOG_COPY,
   COMMON_ACTIONS,
   EMPTY_STATES,
+  FACET_ANY_LABELS,
   NOT_FOUND_COPY,
   PAGE_TITLES,
   SEARCH_COPY,
@@ -35,7 +36,7 @@ import { ROUTE_PARAMS, ROUTES, categoryPath } from "@/constants/routes";
 import { FACET_DEFINITIONS, SORT_OPTIONS } from "@/constants/taxonomy";
 import type { FacetDefinition } from "@/constants/taxonomy";
 import { ProductList } from "@/features/catalog/ProductList";
-import { API_PATHS, getJson } from "@/lib/apiClient";
+import { flattenCategoryTree, listCategories } from "@/lib/catalogReads";
 import type { CatalogFilters } from "@/state/CatalogContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { useAsync, useDocumentTitle, useMediaQuery } from "@/state/hooks";
@@ -45,25 +46,23 @@ import { indexBy } from "@/utils/collections";
 import { formatMoney, formatNumber } from "@/utils/format";
 import {
   activeFilterEntries,
+  clearAllFilters,
+  clearFacet,
   countActiveFilters,
   facetValueMatches,
   filtersToPath,
+  toggleFacetValue,
 } from "@/utils/queryParams";
 import type { ActiveFilterEntry } from "@/utils/queryParams";
 
 /*
  * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class below is consumed by name. `src/styles/layout.css` owns the shell (`sp-container`, `sp-page`,
- * `sp-page__body`); `src/styles/catalog.css` owns `sp-catalog-layout`, `sp-facets` with its `--drawer` reset and
- * its `__panel`, `__group`, `__legend`, `__values`, `__value`, `__label`, `__count`, `__clear` and `__toggle`
- * parts, `sp-result-meta` with `sp-result-count` and `sp-sort`, and the `sp-active-filters` row with its `__chip`
- * and `__clear-all` cells; `src/styles/catalog-landing.css`, which catalog.css loads, owns `sp-category-chips`
- * and `sp-category-chip`, the subcategory row the router's `aria-current` marks; `src/styles/base.css` owns
- * `sp-visually-hidden`. Every primitive below paints itself, so no colour, radius, shadow or media query is here.
+ * every class below is consumed by name from the sheet that owns it: `layout.css` the shell, `catalog.css` and the
+ * `catalog-landing.css` it loads the catalogue's own blocks, and `base.css` the visually-hidden one. Every
+ * primitive below paints itself, so no colour, radius, shadow or media query is here.
  */
 
-/** The classes used more than once, written once so a sheet rename is one edit; a class this file names once is
- *  written where it is used. */
+/** The classes used more than once, written once so a sheet rename is one edit. */
 const CLASSES = {
   column: "sp-facets",
   group: "sp-facets__group",
@@ -80,15 +79,8 @@ const CLASSES = {
  *  inside a media query, which is why the width travels from `src/constants/config.ts`. */
 const COLUMN_QUERY = `(min-width: ${BREAKPOINTS.XLARGE}px)`;
 
-/** The value a single-choice facet carries to mean "no value": the choice that clears the rating filter. */
+/** The value that means "no value": the state choice a single-choice facet's group opens with. */
 const ANY_VALUE = "";
-
-/** Every category of the tree `GET /api/categories` answers with, each parent followed by its own children: the
- *  endpoint returns the two-level tree, so a route carrying a child's slug resolves only after the walk, and no
- *  level is re-sorted because each already arrives in `position` order. */
-function flattenCategories(nodes: readonly CategoryNode[]): readonly CategoryNode[] {
-  return nodes.flatMap((node) => [node, ...node.children]);
-}
 
 /** The identifiers a category's listing filters by: a parent's products are its subcategories' products, the
  *  seeded catalogue assigning every product to a leaf, so a parent scopes by the leaves beneath it and a category
@@ -99,8 +91,7 @@ function categoryScopeIds(category: CategoryNode): readonly CategoryId[] {
   return category.children.map((child) => child.id);
 }
 
-/** One applied filter's chip text: the vocabulary's wording, a term's name as the facet response labels it (the
- *  taxonomy declares none for a category or a brand), or a price range's bounds through `src/utils/format.ts`. */
+/** One chip's text: a vocabulary label, a facet term's name, or a price range's formatted bounds. */
 function chipText(
   entry: ActiveFilterEntry,
   facets: readonly Facet[],
@@ -129,11 +120,10 @@ interface FacetValuesProps {
 }
 
 /**
- * One facet's values as a multi-select list — the terms a category or a brand is chosen by, and the price bands
- * the range facet declares — each with the count `src/lib/catalogService.ts` already computed with this facet's
- * own selection excluded, so choosing one value leaves its siblings' counts meaningful. Nothing is counted,
- * filtered or intersected here. A count is text and part of its control's accessible name, never colour or width
- * alone, and a value the filters have emptied keeps its place and its zero, disabled while it is not selected.
+ * One facet's values as a multi-select list — the terms a category or a brand is chosen by — each with the count
+ * `src/lib/catalogService.ts` computed with this facet's own selection excluded, so choosing one value leaves its
+ * siblings' counts meaningful. Nothing is counted here, and a value the filters have emptied keeps its place and
+ * its zero, disabled while it is not selected; the count is text, part of its control's accessible name.
  */
 function FacetValues({ facet, filters, onToggle }: FacetValuesProps): ReactElement {
   return (
@@ -170,15 +160,14 @@ interface FilterRegionProps {
 
 /**
  * The filter region: the five facet groups of `src/constants/taxonomy.ts` over the catalogue's own facet
- * response, as the sticky first column of `.sp-catalog-layout` from the extra-large stop up and inside the caller's
+ * response, as the sticky first column of `.sp-catalog-layout` from the extra-large stop up and the caller's
  * focus-trapped drawer below it.
  *
- * The region is composed here rather than imported from the search slice's `FilterPanel.tsx`, which one feature
- * may not reach into: it applies no rule of its own — `src/lib/catalogService.ts` counts the facets,
- * `src/constants/taxonomy.ts` declares the vocabulary, and `src/utils/queryParams.ts` owns the query — and writes
- * only through the provider's setters, mirroring nothing into state. A facet that has not arrived renders the
- * placeholder shaped like it; a settled response holding no value at all says what that means; and each facet
- * carries the action that resets it alone while the query applies it.
+ * The region is composed here rather than imported from the search slice's `FilterPanel.tsx`, which one feature may
+ * not reach into, and applies no rule of its own: `src/lib/catalogService.ts` counts the facets,
+ * `src/constants/taxonomy.ts` declares the vocabulary, and the setters it is handed own the query, so nothing is
+ * mirrored into state. A facet that has not arrived renders its placeholder, a settled response holding no value
+ * says what that means, and each facet carries the action that resets it alone while the query applies it.
  */
 function CatalogFilterRegion({
   facets,
@@ -196,13 +185,12 @@ function CatalogFilterRegion({
       </Button>
     );
 
-  // Whether a facet is applied is asked of the query writer's own chip list rather than of a rule restated here,
-  // so this answer and the chips above the results cannot disagree about what is applied.
-  const isApplied = (facetId: FacetDefinition["id"]): boolean =>
-    applied.some((entry) => entry.kind === "facet" && entry.facetId === facetId);
+  // A facet's state and value come from the query writer's chip list, so the panel and the chips agree.
+  const appliedEntryOf = (facetId: FacetDefinition["id"]): ActiveFilterEntry | undefined =>
+    applied.find((entry) => entry.kind === "facet" && entry.facetId === facetId);
 
   const clearFacetAction = (definition: FacetDefinition): ReactNode =>
-    isApplied(definition.id) ? (
+    appliedEntryOf(definition.id) !== undefined ? (
       <Button
         className={CLASSES.clear}
         variant="link"
@@ -242,37 +230,39 @@ function CatalogFilterRegion({
     );
 
     switch (definition.kind) {
-      // The rating facet is the single-choice list of the star floors the vocabulary declares, opened by the
-      // choice that clears it and named by the radio group's own legend, so one legend names the group. The
-      // facets whose terms the catalogue answers with are combined several at a time, as are the price bands a
-      // range declares, so those share one multi-select.
+      // The price bands and the rating floors are chosen one at a time through the single-choice group below, whose
+      // `RadioGroup` legend names it, so no two contradictory bands apply; the bounds stay the query writer's rule
+      // — floored, clamped, swapped on read — while the catalogue's own terms keep the list.
       case "terms":
       case "range": {
-        if (definition.id !== "rating") return group(definition, values);
+        if (definition.options === undefined) return group(definition, values);
         const counts = indexBy(facet.values, (value) => value.value);
+        const anyLabel =
+          definition.id === "price" ? FACET_ANY_LABELS.price : FACET_ANY_LABELS.rating;
         return (
           <div className={CLASSES.group} key={definition.id}>
             <RadioGroup
               name={`${definition.id}-filter`}
               legend={definition.label}
-              value={filters.minRating === null ? ANY_VALUE : String(filters.minRating)}
+              value={appliedEntryOf(definition.id)?.value ?? ANY_VALUE}
               options={[
-                { value: ANY_VALUE, label: clearFacetLabel(definition.label) },
+                { value: ANY_VALUE, label: anyLabel },
                 ...facet.values.map((value) => ({
                   value: value.value,
                   label: value.label,
                   disabled: value.count === 0 && !facetValueMatches(filters, facet.id, value.value),
                 })),
               ]}
-              onChange={(value) => catalog.setRating(value === ANY_VALUE ? null : Number(value))}
+              onChange={(value) =>
+                catalog.setFacetValue(definition.id, value === ANY_VALUE ? null : value)
+              }
               renderOptionLabel={(option) => {
                 const entry = counts.get(option.value);
                 if (entry === undefined) return option.label;
-                // Each count is rendered through the option's own label node, so the number a floor would
-                // leave is part of the control's name rather than a decoration beside it.
+                // The count is rendered inside the option's own label, so it is part of the control's name.
                 return (
                   <>
-                    {option.label} {"· "}
+                    {option.label} {"\u00b7 "}
                     <span className={CLASSES.count}>{formatNumber(entry.count)}</span>
                   </>
                 );
@@ -305,8 +295,7 @@ function CatalogFilterRegion({
 
   const groups = FACET_DEFINITIONS.map(renderFacet);
   const holdsValues = facets.some((facet) => facet.values.length > 0);
-  // A settled response holding no facet value at all is said once rather than shown as five empty headings; the
-  // listing beside it carries the action that helps, so this notice offers none.
+  // No facet value at all is said once, not as five empty headings: the listing carries the action.
   const content: ReactNode =
     !isReading && !holdsValues ? (
       <EmptyState
@@ -333,18 +322,15 @@ function CatalogFilterRegion({
  * names.
  *
  * The URL is the single store of the query, so the route keeps no filter value and issues no request: it reads
- * `useCatalogFilters()` and `useCatalog()`, and it writes only through the provider's setters, each of which
- * navigates. The one state it holds is whether the small-screen drawer is open. A category URL entered without a
- * category selection has the route's own scope written into the query — `Navigate` does that declaratively, so it
- * is not a render-side effect, and a selection already in the address bar is the visitor's own and is left alone —
- * which is what makes the header, the chips, the facet counts and the listing describe one query, and a reloaded
- * URL return the identical result set. A parent scopes by its subcategories, every seeded product sitting in a
- * leaf. The results render in the order a load passes through them: the placeholder grid, the shaped failure with
- * its retry, the empty state offering the one action that helps, then the results with their paging.
+ * `useCatalogFilters()` and `useCatalog()`, and writes only through the setters it is handed, each of which
+ * navigates; the one state it holds is whether the small-screen drawer is open. A category URL entered without a
+ * category selection has the route's own scope written into the query — `Navigate` does that declaratively, and a
+ * selection already in the address bar is the visitor's own — which is what makes the header, the chips, the facet
+ * counts and the listing describe one query and a reloaded URL return the identical result set; a write that would
+ * empty that scope hands off to the catalogue route rather than being undone by the guard.
  *
  * @returns The route: its heading block, the filter region in one of its two placements, and the results.
- * @throws When rendered above every `CatalogProvider`, whose store is the address bar and which must itself be
- *   inside a router.
+ * @throws When rendered above every `CatalogProvider`, which must itself be inside a router.
  */
 export function CatalogPage(): ReactElement {
   const params = useParams();
@@ -352,29 +338,28 @@ export function CatalogPage(): ReactElement {
   const slug = (params[ROUTE_PARAMS.CATEGORY_SLUG] ?? "").trim();
 
   const view = useCatalog();
-  const catalog = useCatalogFilters();
-  const filters = catalog.filters;
+  const writers = useCatalogFilters();
+  const filters = writers.filters;
+  const navigate = useNavigate();
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const isColumn = useMediaQuery(COLUMN_QUERY);
   const panelId = useId();
   const resultsHeadingId = useId();
 
   // The category read feeds the heading, the trail, the subcategory chips and the scope of the listing, so it
-  // runs only on the route that names a category. A failure there is folded into the page's own error state
-  // rather than replacing the catalogue the visitor asked for.
-  const categories = useAsync<CategoryNode[]>(
-    (signal) => getJson<CategoryNode[]>(API_PATHS.CATEGORIES, { signal }),
-    [],
-    { enabled: slug !== "" },
-  );
-  const categoryTree = categories.data === null ? [] : flattenCategories(categories.data);
+  // runs only on the route that names a category. It comes from `src/lib/catalogReads.ts` — the catalogue's own
+  // service surface, so this file names no endpoint — and a failure there is folded into the page's own error
+  // state rather than replacing the catalogue the visitor asked for.
+  const categories = useAsync<CategoryNode[]>((signal) => listCategories({ signal }), [], {
+    enabled: slug !== "",
+  });
+  const categoryTree = categories.data === null ? [] : flattenCategoryTree(categories.data);
   const category = slug === "" ? null : (categoryTree.find((node) => node.slug === slug) ?? null);
   const isResolvingCategory =
     slug !== "" && (categories.status === "idle" || categories.status === "loading");
   const isUnknownCategory = slug !== "" && categories.status === "success" && category === null;
 
-  // The tab names what the page shows, the refusal included when the address names a category the catalogue
-  // does not hold.
+  // The tab names what the page shows, the refusal included for a category the catalogue does not hold.
   const pageTitle = isUnknownCategory
     ? PAGE_TITLES.NOT_FOUND
     : category === null
@@ -386,6 +371,22 @@ export function CatalogPage(): ReactElement {
     const scoped: FilterState = { ...filters, categoryIds: [...categoryScopeIds(category)] };
     return <Navigate replace to={filtersToPath(pathname, scoped)} />;
   }
+
+  // A write that would leave this category route unscoped hands off to the catalogue route: the guard above puts
+  // the scope back into any category-less URL, so a control that cleared the scope would appear to do nothing.
+  // The next state is the query writer's own, so the term, the sort and the page size cross the hand-off with it.
+  const write = (next: FilterState, set: () => void): void =>
+    category !== null && next.categoryIds.length === 0
+      ? void navigate(filtersToPath(ROUTES.CATALOG, next), { replace: true })
+      : set();
+  // Every control writes through this object, whose three scope-emptying setters go through `write`.
+  const catalog: CatalogFilters = {
+    ...writers,
+    toggleFacet: (facetId, value) =>
+      write(toggleFacetValue(filters, facetId, value), () => writers.toggleFacet(facetId, value)),
+    clearFacet: (facetId) => write(clearFacet(filters, facetId), () => writers.clearFacet(facetId)),
+    clearAll: () => write(clearAllFilters(filters), () => writers.clearAll()),
+  };
 
   const failure: ApiError | null = categories.error ?? view.error;
   const isReading = isResolvingCategory || view.isLoading;
@@ -442,7 +443,8 @@ export function CatalogPage(): ReactElement {
                 variant="secondary"
                 size="sm"
                 aria-expanded={isDrawerOpen}
-                aria-controls={panelId}
+                // The reference exists while the panel does: collapsed, no element carries that id.
+                aria-controls={isDrawerOpen ? panelId : undefined}
                 onClick={() => setDrawerOpen(true)}
               >
                 {SEARCH_COPY.OPEN_FILTERS_LABEL}
@@ -518,10 +520,11 @@ export function CatalogPage(): ReactElement {
                             label={removeFilterLabel(text)}
                             icon={<CloseIcon />}
                             onClick={() => {
-                              // The facet clears as a whole — the action `clearFacet` is — so every chip
-                              // removes the facet it names, and the tag it carries when it is a tag.
+                              // Each chip removes the single value its label names, through the writer's own
+                              // accessor for that facet: clearing a whole facet is the facet group's own clear
+                              // action, and clearing everything is "Clear all".
                               if (entry.kind === "tag") catalog.toggleTag(entry.value);
-                              else catalog.clearFacet(entry.facetId);
+                              else catalog.toggleFacet(entry.facetId, entry.value);
                             }}
                           />
                         </li>
@@ -544,8 +547,7 @@ export function CatalogPage(): ReactElement {
                     }}
                     emptyAction={clearAllAction ?? undefined}
                   />
-                  {/* The paging belongs to the answer, so it is held back while a new one is on its way: the
-                      page in hand is the previous query's until this one lands. */}
+                  {/* The paging belongs to the answer, so it is held back until that answer lands. */}
                   {isReading || answer === null || answer.total === 0 ? null : (
                     <Pagination
                       page={answer.page}

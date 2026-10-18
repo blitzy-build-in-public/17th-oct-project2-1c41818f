@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/taxonomy.ts
  * Purpose: The controlled vocabulary: categories, brands, sort keys, order statuses, facet and report definitions
- * Lines: 507
+ * Lines: 535
  */
 
 import { CHECKOUT_COPY } from "@/constants/content";
@@ -22,10 +22,23 @@ import type { MinorUnits, SelectOption } from "@/types/common";
  * The badge variants a component may render, and the union the shared `Badge` in
  * `src/components/ui/Card.tsx` accepts, so a status cannot name a variant that does not exist:
  * `src/types` declares no UI vocabulary, so this union lives here beside the statuses that use it.
+ *
+ * `accent` is the brand register and closes the vocabulary at six, because the seven order statuses
+ * have to read as seven different pills and the five semantic registers alone cannot carry them: the
+ * three statuses still in flight would otherwise share one register, and a status that is merely under
+ * way would have to borrow the success register that means the order arrived or the danger register
+ * that means it did not. Its tint pair is `--color-accent-subtle` and `--color-accent-contrast`.
  */
-export const BADGE_VARIANTS = ["neutral", "info", "success", "warning", "danger"] as const;
+export const BADGE_VARIANTS = [
+  "neutral",
+  "info",
+  "success",
+  "warning",
+  "danger",
+  "accent",
+] as const;
 
-/** One badge variant, from the neutral surface to the negative one. */
+/** One badge variant: the ramp from the neutral surface to the negative one, and the brand's own accent. */
 export type BadgeVariant = (typeof BADGE_VARIANTS)[number];
 
 // Categories --------------------------------------------------------------------------------------
@@ -130,10 +143,18 @@ export const SORT_OPTIONS = [
 
 /**
  * One order status with the words and the badge it renders as: the status from
- * `src/types/commerce.ts`, the label a shopper reads and the variant that colours it.
+ * `src/types/commerce.ts`, the label a shopper reads, the variant that colours it and whether that
+ * variant is drawn as an outline rather than as a tinted pill.
+ *
+ * The pair `(badgeVariant, isOutline)` is the status's whole treatment, and the seven statuses below
+ * hold seven different pairs. Two channels rather than one is what makes that possible and what keeps
+ * the distinction alive where colour is not: the outline pill is a border and the tinted one is not, so
+ * the two differ in forced-colours mode, where every tinted background is overridden.
  */
 export interface OrderStatusOption extends SelectOption<OrderStatus> {
   readonly badgeVariant: BadgeVariant;
+  /** Draws `badgeVariant` as the outline treatment of `src/styles/data-display.css`, false by default. */
+  readonly isOutline?: boolean;
 }
 
 /**
@@ -141,12 +162,19 @@ export interface OrderStatusOption extends SelectOption<OrderStatus> {
  * the order history's status column and filter, the order detail's timeline, the dashboard's
  * recent-orders table and `src/lib/orderService.ts`'s transitions, none of which writes its own
  * switch over statuses. `refunded` is labelled and never reached: no refund workflow is in scope.
+ *
+ * Each status's treatment is chosen here once, so that no two statuses read alike wherever they appear:
+ * `pending` is the neutral pill of an order nothing has been done with, `confirmed` the info pill that
+ * says the order was accepted, `processing` the same register in the outline treatment that says the
+ * work is under way rather than settled, `shipped` the accent pill of an order on its way, `delivered`
+ * the success pill of an order that arrived, `cancelled` the danger pill of one that will not, and
+ * `refunded` the warning pill of one that was undone.
  */
 export const ORDER_STATUS_OPTIONS = [
   { value: "pending", label: "Pending", badgeVariant: "neutral" },
   { value: "confirmed", label: "Confirmed", badgeVariant: "info" },
-  { value: "processing", label: "Processing", badgeVariant: "info" },
-  { value: "shipped", label: "Shipped", badgeVariant: "info" },
+  { value: "processing", label: "Processing", badgeVariant: "info", isOutline: true },
+  { value: "shipped", label: "Shipped", badgeVariant: "accent" },
   { value: "delivered", label: "Delivered", badgeVariant: "success" },
   { value: "cancelled", label: "Cancelled", badgeVariant: "danger" },
   { value: "refunded", label: "Refunded", badgeVariant: "warning" },
@@ -168,7 +196,7 @@ export interface FacetDefinitionOption extends SelectOption {
 /**
  * One facet of the filter panel: its identity, its heading, the kind of control it needs and, where
  * its values are fixed, the values themselves. `category` and `brand` declare none, because
- * `src/lib/catalogService.ts` supplies their terms from the catalogue it filtered, counting each
+ * `src/lib/catalogService.ts` supplies their terms from the catalogue the endpoint serves, counting each
  * facet with that facet's own selection excluded so no selection empties the other values.
  */
 export interface FacetDefinition {

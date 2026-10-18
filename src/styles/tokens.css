@@ -1,6 +1,6 @@
 /* Path: src/styles/tokens.css
  * Purpose: Declares every colour, spacing, typography, radius, shadow and z-index token the stylesheets consume
- * Lines: 298
+ * Lines: 327
  */
 
 /* The single source of every design value in SalesPro: the other seven stylesheets consume these
@@ -77,10 +77,12 @@
   --color-backdrop: rgba(16, 24, 40, 0.5);
   --color-shadow: rgba(16, 24, 40, 0.12); /* the one shadow colour all three levels compose from */
 
-  /* ==== Chart palette — eight series spaced in hue and in lightness, so they stay apart in a
+  /* ==== Chart palette — twelve series spaced in hue and in lightness, so they stay apart in a
    * greyscale rendering and in a colour-blind one. Each clears 3:1 on --color-surface, which a 2px
-   * stroke needs to be readable; admin-reports.css maps the numbered tokens onto its series
-   * classes and src/constants/config.ts hands the same references to ChartSeries.color. ==== */
+   * stroke needs to be readable; chart-series.css maps the numbered tokens onto its series classes
+   * and src/constants/config.ts hands the same references to ChartSeries.color. Twelve is the count
+   * the product's widest split needs — the dashboard's revenue by category — so no two of those
+   * twelve series share a token. ==== */
   --chart-series-1: #4f46e5; /* 6.29:1 */
   --chart-series-2: #b54708; /* 5.43:1 */
   --chart-series-3: #0e9384; /* 3.80:1 */
@@ -89,6 +91,10 @@
   --chart-series-6: #067647; /* 5.69:1 */
   --chart-series-7: #7a5af8; /* 4.52:1 */
   --chart-series-8: #0e7490; /* 5.36:1 */
+  --chart-series-9: #9f1239; /* 8.02:1 */
+  --chart-series-10: #7e6a00; /* 5.32:1 */
+  --chart-series-11: #a21caf; /* 6.32:1 */
+  --chart-series-12: #4d7c0f; /* 4.99:1 */
   --chart-grid: #eaecf0;
   --chart-axis: #d0d5dd;
   --chart-label: #475467; /* 7.69:1 on --color-surface */
@@ -98,26 +104,49 @@
 
   /* Chart separation — what keeps two series apart once hue is gone: the bar opacities step a bar down
    * from solid, so two bars whose hues sit close together still differ in lightness, and the area wash
-   * is light enough to leave the grid visible beneath it. */
+   * is light enough to leave the grid visible beneath it. The ladder has one step per series, ending at
+   * the floor it has always ended at. */
   --chart-bar-opacity-1: 1;
-  --chart-bar-opacity-2: 0.86;
-  --chart-bar-opacity-3: 0.74;
-  --chart-bar-opacity-4: 0.64;
-  --chart-bar-opacity-5: 0.56;
-  --chart-bar-opacity-6: 0.48;
-  --chart-bar-opacity-7: 0.4;
-  --chart-bar-opacity-8: 0.32;
+  --chart-bar-opacity-2: 0.91;
+  --chart-bar-opacity-3: 0.83;
+  --chart-bar-opacity-4: 0.76;
+  --chart-bar-opacity-5: 0.69;
+  --chart-bar-opacity-6: 0.62;
+  --chart-bar-opacity-7: 0.56;
+  --chart-bar-opacity-8: 0.5;
+  --chart-bar-opacity-9: 0.44;
+  --chart-bar-opacity-10: 0.39;
+  --chart-bar-opacity-11: 0.35;
+  --chart-bar-opacity-12: 0.32;
   --chart-area-opacity: 0.18;
-  /* The four even series' stroke rhythms, each paired with the period its legend swatch samples, so a
-   * mark and its swatch are one fact rather than two numbers free to drift apart. */
+  /* One stroke rhythm per series, each paired with the tile width its legend swatch samples, so a mark and
+   * its swatch are one fact rather than two numbers free to drift apart. Series 1 is solid and has no
+   * token here; no two of the other eleven carry the same array, and no two tiles are the same width, so no
+   * two series match once hue is gone and no two swatches read alike in a greyscale legend. A tile is as
+   * wide as the array's own span where the rhythm has one gap, and a sampling width where it has several,
+   * which is the most a 20px swatch can show of a dash-dot. */
   --chart-dash-2: 6 3;
   --chart-dash-2-period: 9px;
-  --chart-dash-4: 1 3;
-  --chart-dash-4-period: 4px;
-  --chart-dash-6: 10 3 2 3;
-  --chart-dash-6-period: 13px;
-  --chart-dash-8: 4 2 1 2;
-  --chart-dash-8-period: 6px;
+  --chart-dash-3: 1 3;
+  --chart-dash-3-period: 4px;
+  --chart-dash-4: 10 3 2 3;
+  --chart-dash-4-period: 13px;
+  --chart-dash-5: 4 2 1 2;
+  --chart-dash-5-period: 6px;
+  --chart-dash-6: 12 4;
+  --chart-dash-6-period: 16px;
+  --chart-dash-7: 3 2;
+  --chart-dash-7-period: 5px;
+  --chart-dash-8: 8 3 2 4;
+  --chart-dash-8-period: 17px;
+  --chart-dash-9: 14 5;
+  --chart-dash-9-period: 19px;
+  --chart-dash-10: 3 3 1 3;
+  --chart-dash-10-period: 10px;
+  --chart-dash-11: 1 2;
+  --chart-dash-11-period: 3px;
+  --chart-dash-12: 6 5;
+  --chart-dash-12-period: 11px;
 
   /* ==== Spacing — a 4px scale in rem, so every step follows the reader's root font size ==== */
   --space-0: 0;

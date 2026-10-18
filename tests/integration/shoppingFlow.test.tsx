@@ -1,9 +1,10 @@
 /**
  * Path: tests/integration/shoppingFlow.test.tsx
  * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states.
- * Lines: 589
+ * Lines: 709
  */
 
+import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -54,7 +55,9 @@ const {
   FEEDBACK_COPY,
   HEADER_COPY,
   HOME_COPY,
+  PAGE_TITLES,
   SEARCH_COPY,
+  addedToCartMessage,
   cartButtonLabel,
   categoryPageHeading,
   productCountAnnouncement,
@@ -478,27 +481,38 @@ describe("the shopper's browse-and-add journey", () => {
     const quickAdd = within(tile.closest("li") ?? tile).getByRole("button", {
       name: quickAddLabel(product.name),
     });
-    const name = { name: CART_COPY.MINI_CART_HEADING };
+    const drawerName = { name: CART_COPY.MINI_CART_HEADING };
     const rowsOf = (scope: HTMLElement): HTMLElement[] =>
       within(scope).getAllByRole("spinbutton", { name: quantityLabel(product.name) });
 
     await user.click(quickAdd);
 
-    expect(await screen.findByRole("button", { name: cartButtonLabel(1) })).toBeInTheDocument();
-    expect(rowsOf(await screen.findByRole("dialog", name))).toHaveLength(1);
+    // The add reports itself where it was performed — the badge moves and the message names the product —
+    // and it leaves the drawer closed: the drawer is a modal whose background is inert, so opening it on
+    // the shopper's behalf would cost a dismissal before the next add.
+    const badge = await screen.findByRole("button", { name: cartButtonLabel(1) });
+    expect(await screen.findByText(addedToCartMessage(product.name))).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", drawerName)).toBeNull();
+
+    // The badge is the way in, and the dialog dismisses on Escape and hands the focus back to it.
+    await user.click(badge);
+
+    expect(rowsOf(await screen.findByRole("dialog", drawerName))).toHaveLength(1);
 
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("dialog", name)).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", drawerName)).toBeNull());
+    expect(badge).toHaveFocus();
 
-    // The second add is the same product again, so it lands in the line the cart already holds.
+    // The second add is the same product again, so it lands in the line the cart already holds and needs
+    // no dismissal first.
     await user.click(quickAdd);
 
-    expect(await screen.findByRole("button", { name: cartButtonLabel(2) })).toBeInTheDocument();
+    const secondBadge = await screen.findByRole("button", { name: cartButtonLabel(2) });
+    expect(screen.queryByRole("dialog", drawerName)).toBeNull();
 
     // The same rule once a badge is drawn: its digit is visible text, so the name has to carry the words
     // "Cart 2" as well as the count it spells out.
-    const filled = buttonNamed(cartButtonLabel(2));
-    expect(filled.getAttribute("aria-label")).toContain(textOf(filled));
+    expect(secondBadge.getAttribute("aria-label")).toContain(textOf(secondBadge));
 
     // And no two navigation landmarks answer to one name: the shell draws the header's row and the mobile
     // panel under two labels, and only the width decides which of them the visitor meets.
@@ -510,10 +524,41 @@ describe("the shopper's browse-and-add journey", () => {
     );
     expect(new Set(landmarkNames).size).toBe(landmarkNames.length);
 
-    await user.click(buttonNamed(cartButtonLabel(2)));
-    const rows = rowsOf(await screen.findByRole("dialog", name));
+    await user.click(secondBadge);
+
+    const rows = rowsOf(await screen.findByRole("dialog", drawerName));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveValue(2);
+  });
+
+  it("states an out-of-stock quick add's refusal without changing the cart", async () => {
+    // The tile to activate is the catalogue's own: a product its tile cannot sell, found among the tiles
+    // the listing renders rather than through a search term, whose matching rules belong to another module.
+    const { user } = renderApp({
+      route: filtersToPath(ROUTES.CATALOG, { ...DEFAULT_FILTER_STATE, pageSize: 48 }),
+    });
+    await settledTiles();
+
+    const heading = tileHeadings().find((entry) =>
+      textOf(entry.closest("li") ?? entry).includes(CATALOG_COPY.OUT_OF_STOCK_LABEL),
+    );
+    if (heading === undefined) {
+      throw new Error("The listing showed no product the storefront cannot sell.");
+    }
+    const quickAdd = within(heading.closest("li") ?? heading).getByRole("button", {
+      name: quickAddLabel(textOf(heading)),
+    });
+    // The state the control reports itself unavailable in, which is the state the refusal explains.
+    expect(quickAdd).toHaveAttribute("aria-disabled", "true");
+
+    await user.click(quickAdd);
+
+    // A control the shopper can reach either acts or explains itself: the refusal is announced, and the
+    // cart holds nothing and no drawer is opened.
+    const announcement = await screen.findByRole("alert");
+    expect(announcement).toHaveTextContent(CATALOG_COPY.OUT_OF_STOCK_LABEL);
+    expect(screen.getByRole("button", { name: cartButtonLabel(0) })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: CART_COPY.MINI_CART_HEADING })).toBeNull();
   });
 
   it("adds the quantity the detail page's stepper holds", async () => {
@@ -536,7 +581,7 @@ describe("the shopper's browse-and-add journey", () => {
     await user.type(await screen.findByLabelText(SEARCH_COPY.FIELD_LABEL), "zzzqqqxyz");
     await user.keyboard("{Enter}");
 
-    expect(await headingNamed(EMPTY_STATES.searchResults.title, 3)).toBeInTheDocument();
+    expect(await headingNamed(EMPTY_STATES.searchResults.title, 2)).toBeInTheDocument();
     expect(screen.getByText(EMPTY_STATES.searchResults.description)).toBeInTheDocument();
     expect(linkNamed(EMPTY_STATES.searchResults.actionLabel)).toHaveAttribute(
       "href",
@@ -585,5 +630,80 @@ describe("the shopper's browse-and-add journey", () => {
     await user.click(buttonNamed(COMMON_ACTIONS.RETRY));
 
     await waitFor(() => expect(tileNames().length).toBeGreaterThan(0));
+  });
+
+  it("removes only the value a chip's removal names, leaving the facet's other values applied", async () => {
+    // Two brands of one facet applied is the state in which clearing the wrong thing shows.
+    const brands = { ...DEFAULT_FILTER_STATE, brandIds: [SELECTED_BRAND.id, OTHER_BRAND.id] };
+    const { user } = renderApp({ route: filtersToPath(ROUTES.CATALOG, brands) });
+    const chips = await screen.findByRole("list", { name: SEARCH_COPY.ACTIVE_FILTERS_HEADING });
+    // The load that carries the chips also carries the facets the panel reads, so the panel is opened after it.
+    await announcedTotal();
+
+    await user.click(
+      within(chips).getByRole("button", { name: removeFilterLabel(OTHER_BRAND.name) }),
+    );
+
+    // The named value alone went: the other brand still chips, and the facet beneath still holds it.
+    expect(within(chips).getByText(SELECTED_BRAND.name)).toBeInTheDocument();
+    expect(within(chips).queryByText(OTHER_BRAND.name)).toBeNull();
+    const panel = await facetDrawer(user);
+    expect(facetTermControl(panel, SELECTED_BRAND.name)).toBeChecked();
+    expect(facetTermControl(panel, OTHER_BRAND.name)).not.toBeChecked();
+    await waitFor(() =>
+      expect(readAnnouncedTotal()).toBe(controlCount(facetTermControl(panel, SELECTED_BRAND.name))),
+    );
+  });
+
+  it("escapes an empty category route through the empty state's own action", async () => {
+    // A parent the taxonomy declares without children holds no product, so its route legitimately lists nothing.
+    const parents = CATEGORY_DEFINITIONS.filter((definition) => definition.parentSlug === null);
+    const empty = parents.find(
+      (parent) => !CATEGORY_DEFINITIONS.some((child) => child.parentSlug === parent.slug),
+    );
+    if (empty === undefined)
+      throw new Error("The taxonomy declares no category that lists nothing.");
+    const picked = { ...DEFAULT_FILTER_STATE, sort: PRICE_ASCENDING_SORT };
+    const { user } = renderApp({ route: filtersToPath(categoryPath(empty.slug), picked) });
+
+    expect(await headingNamed(EMPTY_STATES.catalogue.title, 2)).toBeInTheDocument();
+    // The empty state's one action is inside the results region, not the chip row's own clear-all above it.
+    await user.click(
+      within(resultsRegion()).getByRole("button", { name: COMMON_ACTIONS.CLEAR_ALL }),
+    );
+
+    // It leaves the category route rather than being written back by the route's own scope guard: the whole
+    // catalogue lists, the cleared filter is gone and the sort the visitor chose crosses with the hand-off.
+    await waitFor(() => expect(readAnnouncedTotal()).toBe(PRODUCTS.length));
+    expect(await headingNamed(PAGE_TITLES.CATALOG)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: categoryPageHeading(empty.name) })).toBeNull();
+    expect(screen.queryByRole("list", { name: SEARCH_COPY.ACTIVE_FILTERS_HEADING })).toBeNull();
+    expect(screen.getByLabelText(CATALOG_COPY.SORT_GROUP_LABEL)).toHaveValue(PRICE_ASCENDING_SORT);
+  });
+});
+
+describe("the catalogue's facet control under a burst", () => {
+  /** The category facet value the burst writes, and the label the panel offers it under. */
+  const AUDIO_CATEGORY =
+    CATEGORY_DEFINITIONS.find((definition) => definition.slug === "audio") ??
+    CATEGORY_DEFINITIONS[0];
+
+  beforeEach(() => {
+    resetApiState();
+  });
+
+  it("leaves the facet unselected after ten clicks delivered in one task", async () => {
+    const { user } = renderApp({ route: ROUTES.CATALOG });
+    const total = await announcedTotal();
+    const control = facetTermControl(await facetDrawer(user), AUDIO_CATEGORY.name);
+
+    // Ten clicks are ten toggles, so the facet is left unselected and the listing unfiltered: a click composing
+    // from its render's params instead of from the write before it would leave an odd parity behind.
+    act(() => {
+      for (let click = 0; click < 10; click += 1) control.click();
+    });
+
+    expect(control).not.toBeChecked();
+    await waitFor(() => expect(readAnnouncedTotal()).toBe(total));
   });
 });

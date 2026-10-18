@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Feedback.tsx
  * Purpose: Spinner, skeleton, empty state, alert and progress bar: the four states every data page renders
- * Lines: 598
+ * Lines: 600
  */
 
 import { useId } from "react";
@@ -26,10 +26,10 @@ import { formatPercent } from "@/utils/format";
  * `src/styles/base.css`, which also neutralises the spinner's rotation and the skeleton's shimmer under
  * `prefers-reduced-motion`, so neither state schedules motion of its own.
  *
- * State is carried by attributes: the spinner is a `role="status"` region, an alert an `alert` or `status`
- * region by tone, the progress bar a `progressbar` with its `aria-value*` trio, and the skeleton
- * `aria-hidden`, because the region it stands in for is what carries `aria-busy` while it loads. The
- * geometry the sheets leave to the component arrives through their own hooks — `--spinner-size`,
+ * State is carried by attributes: the spinner a `role="status"` region, an alert an `alert` or `status`
+ * region by tone, the empty state a `status` region, the progress bar a `progressbar` with its `aria-value*`
+ * trio, and the skeleton `aria-hidden`, because the region it stands in for carries `aria-busy` as it loads.
+ * The geometry the sheets leave to the component arrives through their own hooks — `--spinner-size`,
  * `--progress-height`, and `--sp-progress-value`, the ratio the progress fill publishes for components.css to
  * size the fill by — and every value set here is either that ratio or a `var()` reference into
  * `src/styles/tokens.css`, so no colour, radius, shadow, duration or breakpoint is written in this file.
@@ -286,10 +286,7 @@ export type EmptyStateProps = {
   readonly description?: ReactNode;
   /** Decoration above the headline, hidden from assistive technology because the words carry the meaning. */
   readonly icon?: ReactNode;
-  /**
-   * The heading level the headline renders at, so the outline stays in order wherever the state lands: `1`
-   * for a page's principal content, `2` for a page section, `3` and `4` inside a card. Defaults to `2`.
-   */
+  /** The heading level the headline renders at, per the state's own note below; defaults to `2`. */
   readonly headingLevel?: 1 | 2 | 3 | 4;
   /** Extra classes for the surface the state sits on. */
   readonly className?: string;
@@ -327,6 +324,11 @@ export type EmptyStateProps = {
  * what backs it, so a state cannot render copy promising an action it does not offer, and a state promising
  * none renders its heading and its sentence alone — every combination renders as it always did.
  *
+ * The state is announced, because it stands in for data that has just changed: a filter that empties a
+ * list, a range with no activity, an address that matches nothing. Its headline sits one level below the
+ * area it stands in for: level `2` for a page's, a view's, a panel's or a region's content, one level below
+ * the heading of the band, the step, the card or the dialog that holds it, and `1` for a page's own title.
+ *
  * @param props - The surface, the wording overrides, the single action and the heading level.
  * @returns The empty state element.
  */
@@ -356,7 +358,7 @@ export function EmptyState({
   const Heading: ElementType = `h${headingLevel}`;
 
   return (
-    <div className={composeClassName("sp-empty", className)}>
+    <div className={composeClassName("sp-empty", className)} role="status">
       {hasSlot(icon) ? (
         <span className="sp-empty__icon" aria-hidden="true">
           {icon}

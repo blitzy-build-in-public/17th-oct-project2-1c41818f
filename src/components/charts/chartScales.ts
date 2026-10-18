@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartScales.ts
  * Purpose: Linear and band scales, nice domains, tick generation and path helpers shared by the charts
- * Lines: 402
+ * Lines: 405
  */
 
 import {
@@ -35,7 +35,7 @@ import { roundMinorUnits } from "@/utils/format";
  * upward, and the geometry module imports nothing from here.
  *
  * No colour, `stroke`, `fill` or copy appears in either file: `src/styles/tokens.css` owns
- * `--chart-series-N`, `src/styles/admin-reports.css` maps it onto the series classes, and every heading or
+ * `--chart-series-N`, `src/styles/chart-series.css` maps it onto the series classes, and every heading or
  * sentence a chart shows comes from `src/constants/content.ts`.
  */
 
@@ -395,7 +395,10 @@ export {
   defaultLabelFormatter,
   defaultValueFormatter,
   hasChartData,
+  hasThinSlice,
   polarToCartesian,
+  ringShares,
+  roundCoordinate,
   seriesClassName,
   stackValues,
   zeroCoordinate,

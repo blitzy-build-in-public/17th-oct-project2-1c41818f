@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 467
+ * Lines: 475
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -140,6 +140,11 @@ function listRelatedProducts(context: RouteContext): Common.Result<unknown> {
   return ok(response);
 }
 
+/** One page of the reviews of the product the path names, in the endpoint's newest-first order, with the
+ * rating narrowing the query may carry. The identifier travels in the query this handler builds rather than
+ * being left to the data source, which cannot reach the captured segment; an identifier the catalogue holds
+ * nothing under is refused with the endpoint's own `product-not-found`, exactly as the write route on the
+ * same path refuses it, so a read can never report an empty page for a product that does not exist. */
 function listProductReviews(context: RouteContext): Common.Result<unknown> {
   const productId = context.params.id as Common.ProductId;
   if (context.source.getProduct(productId) === undefined) {
@@ -357,26 +362,28 @@ function setDefaultAddress(context: RouteContext): Common.Result<unknown> {
   return context.source.setDefaultAddress(owned.value, address.value, { kind });
 }
 
-function getKpis(context: RouteContext): Common.Result<unknown> {
+async function getKpis(context: RouteContext): Promise<Common.Result<unknown>> {
   const query = readAnalyticsQuery(context.query);
-  return query.ok ? ok(context.source.getKpis(query.value)) : query;
+  if (!query.ok) return query;
+  const kpis = await context.source.getKpis(query.value);
+  return kpis.ok ? ok(kpis.value) : kpis;
 }
 
-function getRevenueSeries(context: RouteContext): Common.Result<unknown> {
+async function getRevenueSeries(context: RouteContext): Promise<Common.Result<unknown>> {
   const query = readRevenueQuery(context.query);
   if (!query.ok) return query;
-  const response: Analytics.ChartSeriesResponse = {
-    series: context.source.getRevenueSeries(query.value),
-  };
+  const series = await context.source.getRevenueSeries(query.value);
+  if (!series.ok) return series;
+  const response: Analytics.ChartSeriesResponse = { series: series.value };
   return ok(response);
 }
 
-function getTopProducts(context: RouteContext): Common.Result<unknown> {
+async function getTopProducts(context: RouteContext): Promise<Common.Result<unknown>> {
   const query = readTopProductsQuery(context.query);
   if (!query.ok) return query;
-  const response: Analytics.TopProductsResponse = {
-    items: context.source.getTopProducts(query.value),
-  };
+  const items = await context.source.getTopProducts(query.value);
+  if (!items.ok) return items;
+  const response: Analytics.TopProductsResponse = { items: items.value };
   return ok(response);
 }
 
@@ -393,12 +400,13 @@ function listReports(context: RouteContext): Common.Result<unknown> {
   return ok(context.source.listReportDefinitions());
 }
 
-function runReport(context: RouteContext): Common.Result<unknown> {
+async function runReport(context: RouteContext): Promise<Common.Result<unknown>> {
   const kind = readReportKind(context.params.kind);
   if (kind === null) return missing(API_ERROR_CODES.ROUTE_NOT_FOUND);
   const query = readReportQuery(context.query);
   if (!query.ok) return query;
-  return context.source.runReport({ ...query.value, kind });
+  const report = await context.source.runReport({ ...query.value, kind });
+  return report.ok ? ok(report.value) : report;
 }
 
 // The route table --------------------------------------------------------------------------------

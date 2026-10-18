@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiContract.ts
  * Purpose: The contract the in-process API is built on: its error vocabulary, the failure it shapes and the data-source interface it asks for
- * Lines: 424
+ * Lines: 447
  */
 
 import type * as Account from "@/types/account";
@@ -283,8 +283,11 @@ export interface RouteContext {
 }
 
 /** What answers one endpoint: it parses what it needs from the context, delegates to the data source
- * and frames the payload. It never throws: a failure is a value. */
-export type RouteHandler = (context: RouteContext) => Common.Result<unknown>;
+ * and frames the payload. It never throws: a failure is a value. A read whose modules are fetched on
+ * first use answers with a promise, so a handler may be either shape and the dispatcher awaits it. */
+export type RouteHandler = (
+  context: RouteContext,
+) => Common.Result<unknown> | Promise<Common.Result<unknown>>;
 
 /** One row of the route table: the route's stable name, what it answers for and who may ask. */
 export interface RouteDefinition<TId extends string = string> {
@@ -308,6 +311,11 @@ export interface RouteDefinition<TId extends string = string> {
  * than by an import. A method that can fail says why through a `Result`, which the seam passes to the
  * surface unchanged.
  *
+ * The four analytics and report members answer with a promise of one: the modules they run over — the
+ * seeded daily sales fact table, the aggregation rules and the report composition — are fetched on
+ * first use rather than shipped with the shell, so each of them resolves its modules before it
+ * answers and refuses with the seam's generic `500` when that fetch fails.
+ *
  * The credential check belongs to the seam and not to the store: `signIn` opens and records a session
  * for credentials the seam has already proved, and deliberately performs no comparison of its own. The
  * digest arithmetic has exactly one home — `verifyCredential` in `src/utils/strings.ts`, which
@@ -322,6 +330,9 @@ export interface SalesProDataSource {
   getProduct(id: Common.ProductId): Catalog.Product | undefined;
   /** Up to `limit` products from the same category, nearest in price first. */
   listRelatedProducts(id: Common.ProductId, limit: number): Catalog.Product[];
+  /** One page of the reviews of the product its query names, newest first, optionally narrowed to a single
+   * rating. The product travels in the query rather than as an argument, because the data source cannot
+   * reach the captured segment the dispatcher resolved. */
   listProductReviews(query: Catalog.ReviewQuery): Common.PageResult<Catalog.Review>;
   insertProductReview(input: NewProductReviewInput): Catalog.Review;
   /** The five facets for `query`, each counted with its own selection excluded. */
@@ -330,8 +341,8 @@ export interface SalesProDataSource {
     readonly q: string;
     readonly limit: number;
   }): Catalog.SearchSuggestion[];
-  /** The category tree, children nested under their parents, with product counts. */
-  listCategories(): readonly Catalog.Category[];
+  /** The category tree, children nested under their parents, with a product count on every node. */
+  listCategories(): readonly Catalog.CategoryNode[];
   listBrands(): readonly Catalog.Brand[];
 
   // Commerce — delivery, pricing, promo eligibility and orders.
@@ -411,14 +422,26 @@ export interface SalesProDataSource {
     request: Account.DefaultAddressRequest,
   ): Common.Result<Account.Address>;
 
-  // Analytics and reports — the scans that live with the collections they read.
-  getKpis(query: Analytics.AnalyticsQuery): Analytics.KpiSummary;
-  getRevenueSeries(query: Analytics.RevenueQuery): Analytics.ChartSeries[];
-  getTopProducts(query: Analytics.TopProductsQuery): Analytics.ProductPerformance[];
-  /** The most recently placed orders, newest first, at most `limit` of them. */
+  // Analytics and reports — the scans that live with the collections they read, reaching the modules
+  // they are written in on first use rather than with the shell.
+  /** The KPI summary for `query`'s period, with the comparison baseline it names: it fetches the
+   * aggregation modules the first time one of these reads is made, and fails with `500` and the code
+   * `unexpected-error` when that fetch fails. */
+  getKpis(query: Analytics.AnalyticsQuery): Promise<Common.Result<Analytics.KpiSummary>>;
+  /** The revenue series for `query`, over the seeded daily fact rows; deferred like
+   * {@link SalesProDataSource.getKpis}. */
+  getRevenueSeries(query: Analytics.RevenueQuery): Promise<Common.Result<Analytics.ChartSeries[]>>;
+  /** The products `query` ranks highest over the seeded orders; deferred like
+   * {@link SalesProDataSource.getKpis}. */
+  getTopProducts(
+    query: Analytics.TopProductsQuery,
+  ): Promise<Common.Result<Analytics.ProductPerformance[]>>;
+  /** The most recently placed orders, newest first, at most `limit` of them. It reads the order
+   * collection the source already holds, so it answers without fetching anything. */
   getRecentOrders(limit: number): Commerce.Order[];
   listReportDefinitions(): readonly Analytics.ReportDefinition[];
   /** Runs the report `query.kind` names over its range; fails with `422` for a range that breaks a
-   * rule. */
-  runReport(query: ReportRunQuery): Common.Result<Analytics.ReportResult>;
+   * rule, `422` naming `kind` for a kind no definition declares, and the `unexpected-error` failure
+   * {@link SalesProDataSource.getKpis} states when the report modules cannot be fetched. */
+  runReport(query: ReportRunQuery): Promise<Common.Result<Analytics.ReportResult>>;
 }

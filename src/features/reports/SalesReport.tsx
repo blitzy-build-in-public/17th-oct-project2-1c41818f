@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/SalesReport.tsx
  * Purpose: The sales report: bucketed table, totals row, summary metrics and paired chart
- * Lines: 271
+ * Lines: 275
  */
 
 import { useCallback } from "react";
@@ -48,12 +48,6 @@ import { ReportTable } from "./ReportTable";
  * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` words no heading for the figures block, so the
  * summary is a definition list of labelled figures with no heading of its own — a labelled figure describes
  * itself, and a sentence invented here would put user-facing copy outside its one home.
- *
- * BLITZY [A11Y]: the empty state reuses the library's `reportRange` sentences, whose own action ("Choose
- * another period") belongs to the range control that `src/features/reports/DateRangePicker.tsx` renders for
- * the page owning the range. This view is handed a range and cannot change it, so the two sentences are
- * rendered without a control: a button promising a period change this view cannot make would resolve nothing.
- * The reader changes the period in the control directly above the report.
  */
 
 /**
@@ -100,10 +94,10 @@ const CHART_PLACEHOLDER_HEIGHT = "calc(var(--space-20) * 3)";
 const TABLE_PLACEHOLDER_LINES = 6;
 
 /**
- * The level the empty state's headline renders at. A report body sits under the page's own heading, so its
- * empty state is a section of that page rather than a page of its own.
+ * The level the empty state's headline renders at: the report body is a section of the page, one level below
+ * its `h1`, so a range that recorded no activity states itself at that section's level rather than deeper.
  */
-const EMPTY_STATE_HEADING_LEVEL = 3;
+const EMPTY_STATE_HEADING_LEVEL = 2;
 
 /**
  * Whether a sentence holds words a reader can see, so a part that is absent leaves no stray separator behind.
@@ -144,6 +138,9 @@ export interface SalesReportProps {
   readonly range: DateRange;
   /** The cut the rows are bucketed by, and the wording the chart's axis, readout and paired table use. */
   readonly granularity: BucketGranularity;
+  /** The one action this report's no-activity state offers, asked of the page that owns the period: it widens
+   *  the range to the widest the product accepts, so a period that recorded nothing has a way out. */
+  readonly onWidenRange: () => void;
 }
 
 /**
@@ -166,10 +163,11 @@ export interface SalesReportProps {
  * `try`/`catch` wraps the call. A range that recorded no activity is not a failure but a legitimate answer
  * with no rows, and it renders as the empty state rather than as an empty table.
  *
- * @param props - The period to report on and the cut to bucket it by; see {@link SalesReportProps}.
+ * @param props - The period to report on, the cut to bucket it by and the action its empty state offers; see
+ * {@link SalesReportProps}.
  * @returns The report body: its period sentence, then the figures, the chart and the table.
  */
-export function SalesReport({ range, granularity }: SalesReportProps): ReactElement {
+export function SalesReport({ range, granularity, onWidenRange }: SalesReportProps): ReactElement {
   const { session } = useAuth();
   // The credential the report endpoints require, read from the session rather than kept here: the state layer
   // owns the session. The seam re-checks the role on every request, so the guard above this view is
@@ -226,12 +224,18 @@ export function SalesReport({ range, granularity }: SalesReportProps): ReactElem
     // run, so this cannot happen. It renders the shape the content arrives in rather than nothing.
     content = <Skeleton variant="block" height={CHART_PLACEHOLDER_HEIGHT} />;
   } else if (report.rows.length === 0) {
+    // A range that recorded no activity is a well-formed answer, not a failure, and the state offers the one
+    // action that resolves it. The action belongs to the page, which owns the period, and all it does is widen
+    // the period to the widest this product accepts — so the label names the widening rather than the choice
+    // "Choose another period" would promise: narrowing a period is the range control's job above the report.
     content = (
       <EmptyState
         className={CLASSES.empty}
         title={EMPTY_STATES.reportRange.title}
         description={EMPTY_STATES.reportRange.description}
         headingLevel={EMPTY_STATE_HEADING_LEVEL}
+        actionLabel={EMPTY_STATES.dashboardRange.actionLabel}
+        onAction={onWidenRange}
       />
     );
   } else {

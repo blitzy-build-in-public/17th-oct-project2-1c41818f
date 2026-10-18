@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartGeometry.ts
  * Purpose: Mark, path and data-table geometry for the charts, with the formatting hooks its scales share
- * Lines: 540
+ * Lines: 599
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -22,7 +22,7 @@ import { formatCompactNumber, formatPercent } from "@/utils/format";
  *
  * The contract every member keeps: pure, `readonly` input it never mutates, a fresh value out, and no read
  * of the document, the clock or the platform. No colour, `stroke`, `fill` or copy lives here either:
- * `src/styles/tokens.css` owns `--chart-series-N`, `src/styles/admin-reports.css` maps it onto the class
+ * `src/styles/tokens.css` owns `--chart-series-N`, `src/styles/chart-series.css` maps it onto the class
  * {@link seriesClassName} names, and every table heading arrives from the renderer.
  */
 
@@ -180,7 +180,7 @@ export interface ArcOptions {
 
 // Constants ---------------------------------------------------------------------------------------
 
-/** Below this share a slice gets no inline percentage label, so labels cannot pile up on a thin wedge. */
+/** Below this share a slice's percentage is drawn outside the ring instead of inside its wedge, so labels cannot pile up on a thin wedge. */
 export const MIN_SLICE_LABEL_SHARE = 0.05;
 
 /** The share of the outer radius a donut's hole takes by default. */
@@ -227,6 +227,19 @@ export const defaultLabelFormatter: LabelFormatter = (key) => {
 };
 
 // Paths -------------------------------------------------------------------------------------------
+
+/**
+ * A coordinate at the precision every drawing in this folder carries.
+ *
+ * This is the one rounding the charts' coordinates go through, so a path and the mark model that places a
+ * label beside it cannot state the same point at two precisions. A coordinate is
+ * {@link COORDINATE_DECIMALS} decimals, and either signed zero is written `0`.
+ *
+ * @param value - The coordinate, in the frame's own coordinate system.
+ * @returns The coordinate, rounded.
+ */
+export const roundCoordinate = (value: number): number =>
+  normalizeZero(Number(value.toFixed(COORDINATE_DECIMALS)));
 
 /**
  * The `d` of a polyline: one `M` and then `L`s, so a single point draws a zero-length move and no points
@@ -326,7 +339,7 @@ export const SERIES_COUNT = CHART_SERIES_TOKEN_REFERENCES.length;
 
 /**
  * The class that colours one series: `sp-chart__series-N`, where `N` is the position of the series' token
- * reference among the eight. A reference that is not one of the eight falls back to `index`, and any result
+ * reference among the twelve. A reference that is not one of the twelve falls back to `index`, and any result
  * outside `1..SERIES_COUNT` is clamped into it. This is the only place the reference-to-class mapping
  * exists; the colour itself lives in the stylesheet, never here.
  */
@@ -402,6 +415,9 @@ export function buildBarRects(options: {
  * with each slice's mid-angle label position. A total that is not a positive finite number yields no slices
  * at all, so a share is never divided by zero, and a series totalling zero or less draws none, having no
  * area. The closing slice ends exactly on the full turn, so a ring has no hairline gap.
+ *
+ * The weights come from {@link ringTotals}, the one home of how a slice is valued, so the arcs, the shares
+ * {@link ringShares} states and the thin-slice predicate cannot disagree about a slice's weight.
  */
 export function buildDonutArcs(options: {
   readonly series: readonly ChartSeries[];
@@ -413,13 +429,7 @@ export function buildDonutArcs(options: {
 }): ArcDatum[] {
   const { series, cx, cy, outerRadius, innerRadius } = options;
   const format = options.formatValue ?? AXIS_NUMBER_FORMAT;
-  const values = series.map((one) =>
-    one.points.reduce(
-      (sum, point) => sum + (Number.isFinite(point.y) && point.y > 0 ? point.y : 0),
-      0,
-    ),
-  );
-  const total = values.reduce((sum, value) => sum + value, 0);
+  const { values, total } = ringTotals(series);
   if (!Number.isFinite(total) || total <= 0) return [];
   const arcs: ArcDatum[] = [];
   let cursor = 0;
@@ -449,6 +459,39 @@ export function buildDonutArcs(options: {
   });
   return arcs;
 }
+
+/**
+ * Each drawn slice's share of the ring's positive total, in the order {@link buildDonutArcs} draws them.
+ *
+ * Read from {@link ringTotals}, so the shares a caller reasons about are the shares the arcs were drawn
+ * with. A series with nothing to draw contributes no entry, so the result holds one share per drawn slice
+ * and is `[]` when nothing is drawn at all.
+ *
+ * @param series - The plotted series, in ring order.
+ * @returns Each drawn slice's share, between 0 and 1.
+ */
+export function ringShares(series: readonly ChartSeries[]): number[] {
+  const { values, total } = ringTotals(series);
+  if (!Number.isFinite(total) || total <= 0) return [];
+  return values.filter((value) => value > 0).map((value) => value / total);
+}
+
+/**
+ * Whether any drawn slice is too thin to carry its percentage inside its own wedge.
+ *
+ * The predicate a donut draws on before it reserves the band a label outside the ring needs, so the band is
+ * spent only when a label needs one. It reads the same shares through the same threshold
+ * {@link MIN_SLICE_LABEL_SHARE} the label model splits at, so "too thin to label inside" is one fact in this
+ * folder rather than two readings of it.
+ *
+ * @param series - The plotted series, in ring order.
+ * @param threshold - The share below which a slice's label is drawn outside the ring.
+ * @returns True when at least one drawn slice's share is below `threshold`.
+ */
+export const hasThinSlice = (
+  series: readonly ChartSeries[],
+  threshold: number = MIN_SLICE_LABEL_SHARE,
+): boolean => ringShares(series).some((share) => share < threshold);
 
 // Data tables -------------------------------------------------------------------------------------
 
@@ -493,9 +536,8 @@ export function buildSliceDataTable(
 /** `0` for either signed zero, so a coordinate never carries a sign it does not mean. */
 const normalizeZero = (value: number): number => (value === 0 ? 0 : value);
 
-/** A coordinate as the short text an SVG path carries: two decimals, with either signed zero written `0`. */
-const coordinate = (value: number): string =>
-  String(normalizeZero(Number(value.toFixed(COORDINATE_DECIMALS))));
+/** A coordinate as the short text an SVG path carries. */
+const coordinate = (value: number): string => String(roundCoordinate(value));
 
 /** A point as the `x,y` pair an SVG command takes. */
 const pointOf = (point: Point2D): string => `${coordinate(point.x)},${coordinate(point.y)}`;
@@ -504,6 +546,23 @@ const pointOf = (point: Point2D): string => `${coordinate(point.x)},${coordinate
 const valueAt = (series: ChartSeries, key: string): number => {
   const point = series.points.find((candidate) => chartPointKey(candidate) === key);
   return point !== undefined && Number.isFinite(point.y) ? point.y : 0;
+};
+
+/**
+ * The ring's weights: what each series contributes to it, in series order, and their sum.
+ *
+ * The one home of how a slice is valued — a series contributes what its positive points earned and nothing
+ * from a point that is not a positive finite number — so the arcs, {@link ringShares} and the thin-slice
+ * predicate cannot disagree about a slice's weight.
+ */
+const ringTotals = (series: readonly ChartSeries[]): { values: number[]; total: number } => {
+  const values = series.map((one) =>
+    one.points.reduce(
+      (sum, point) => sum + (Number.isFinite(point.y) && point.y > 0 ? point.y : 0),
+      0,
+    ),
+  );
+  return { values, total: values.reduce((sum, value) => sum + value, 0) };
 };
 
 /** The display label the series give a band, if any of them gives one at all. */

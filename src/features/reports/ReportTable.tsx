@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 317
+ * Lines: 325
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -18,6 +18,7 @@ import {
   PAGING_NOUNS,
   REPORTS_COPY,
   exportNote,
+  exportRowCountNote,
 } from "@/constants/content";
 import { toCsvMatrix, totalsRowCells } from "@/lib/reportService";
 import { usePagination } from "@/state/hooks";
@@ -46,8 +47,9 @@ import { formatCellValue } from "@/utils/format";
  * `sp-report-table__totals` is the totals row that closes the table, whose raised surface and semibold
  * figures stay the primitive's and whose thicker top rule the sheet adds; and `sp-report-table__num` is the
  * alignment a money or count cell of that row takes, qualified by the block so it also out-specifies the
- * sticky header. `sp-export` is the action group — the CSV control beside its note — and `sp-export__note`
- * the sentence stating what the download holds and whose clock its dates use.
+ * sticky header. `sp-export` is the action group — the CSV control beside its captions — and
+ * `sp-export__note` the captions themselves: the cap the download is bounded by, and, once one has been
+ * prepared for the run on screen, the row count its file held.
  *
  * Everything else the table needs belongs to the primitive. `DataTable` owns the caption, the `aria-sort`
  * header semantics, the sticky header, the tabular-numeric treatment, the single empty row and the composed
@@ -61,10 +63,10 @@ import { formatCellValue } from "@/utils/format";
  * call, so there is no in-flight window for the control to be disabled for, and a second activation simply
  * writes the same file again.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` words the export's row cap, its cell limit and
- * whose clock its dates use in one sentence and words nothing for a report longer than that cap, so a capped
- * export states the cap as the count its download holds rather than being described by a sentence this file
- * would have to invent.
+ * The two captions beside the control state two different facts, and no sentence states both: the cap the
+ * download is bounded by comes from `CSV_MAX_ROWS` and `CSV_MAX_CELL_LENGTH` in `src/constants/config.ts`,
+ * and the count the last file held is stated separately by `exportRowCountNote` from
+ * `src/constants/content.ts`, the module every user-facing sentence lives in.
  */
 
 /** Every class this file puts on the page, each taken by name from the sheet that declares it. */
@@ -277,11 +279,16 @@ export function ReportTable({
     else toast.error(FEEDBACK_COPY.TOAST_EXPORT_FAILED);
   }, [definition, rows, summary, exportFileName, runKey, toast]);
 
-  // What the note beside the control states: the cap the export is bounded by before one is prepared, and the
-  // count the prepared file actually holds afterwards — the number `src/utils/csv.ts` reports, which is the
-  // module that applies the cap and so the only one that can say how many rows survived it.
+  // What the note beside the control states: the cap the export is bounded by, from the two limits
+  // `src/constants/config.ts` owns. A limit and a count are different facts, so the count a prepared file
+  // held is never read into this sentence — it is stated on its own line below.
+  const note = exportNote(CSV_MAX_ROWS, CSV_MAX_CELL_LENGTH);
+
+  // The count the prepared file actually holds — the number `src/utils/csv.ts` reports, which is the module
+  // that applies the cap and so the only one that can say how many rows survived it — stated as its own
+  // caption, and only while it describes the run currently on screen.
   const preparedInForce = prepared !== null && prepared.runKey === runKey ? prepared.result : null;
-  const note = exportNote(preparedInForce?.rowCount ?? CSV_MAX_ROWS, CSV_MAX_CELL_LENGTH);
+  const countNote = preparedInForce === null ? null : exportRowCountNote(preparedInForce.rowCount);
   const caption = captionOf(definition, range);
 
   return (
@@ -299,6 +306,7 @@ export function ReportTable({
         <p className={CLASSES.exportNote} id={noteId}>
           {note}
         </p>
+        {countNote === null ? null : <p className={CLASSES.exportNote}>{countNote}</p>}
       </div>
       <DataTable
         columns={columns}

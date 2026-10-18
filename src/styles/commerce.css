@@ -1,17 +1,20 @@
 /* Path: src/styles/commerce.css
  * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
- * Lines: 657
+ * Lines: 588
  */
 /* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
  * buttons, fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
  * quantity stepper — and restates none of them. It loads sixth; the cart and checkout roots also carry
  * layout.css's `.sp-split`, whose track gives them their two columns.
- * BLITZY [BUDGET]: the sixty-odd names of this contract do not fit the 460-line budget, and the plan fixes the
- * folder's file list and import order, so the concern is not split: the sheet runs 655 lines, 55 past the
- * 600-line ceiling — the cart-presentation checkpoint's rules and their measured-evidence comments carried it
- * there first and the address form's row alignment added to that — so the further sheet a split owes here is
- * recorded in generation-manifest.md's ledger rather than repaired inside this one.
+ * BLITZY [BUDGET]: the sixty-odd names of this contract do not fit the 460-line budget, and the plan raises no
+ * ceiling for one. Its remedy is the split, applied here to the family that could leave whole: the checkout's
+ * step indicator is src/styles/commerce-steps.css, which this sheet loads below and which carries the family's
+ * own medium-stop override, so both sheets are inside the 600-line ceiling again after the cart-presentation
+ * checkpoint's rules and the address form's row alignment had carried this one past it. The rest of the cart and
+ * checkout contract, the step shell included, stays here.
  */
+
+@import "./commerce-steps.css";
 
 /* ==== Cart layout ==== */
 /* Rows stacked with the summary below them; the two-column frame is `.sp-split`'s. */
@@ -175,13 +178,21 @@
 .sp-cart-row__remove:focus-visible {
   color: var(--color-danger);
 }
-/* An availability warning is a sentence, not a coloured dot: the text carries the state. */
+/* An availability warning is a sentence, not a coloured dot: the text carries the state. The base block places
+ * the sentence and sets its register's weight; each modifier below paints the one state that owns it, so the
+ * cart reads a line at its ceiling in the catalogue's own warning value rather than as a failure. */
 .sp-cart-row__warning {
   grid-area: warn;
   display: flex;
   gap: var(--space-2);
-  color: var(--color-danger-text);
   font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+.sp-cart-row__warning--low {
+  color: var(--color-warning-text);
+}
+.sp-cart-row__warning--out {
+  color: var(--color-danger-text);
 }
 .sp-cart-row__warning > svg {
   flex: none;
@@ -342,83 +353,6 @@
   gap: var(--space-6);
   min-inline-size: 0;
   max-inline-size: var(--layout-container-narrow);
-}
-
-/* ==== Step indicator ==== */
-/* Read as a sequence at every width: markers numbered, each step's own name beside its marker, and the row wrapping
- * rather than dropping a name; the state wording is `.sp-steps__status`, hidden by base.css's utility. */
-.sp-steps {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  list-style: none;
-}
-.sp-steps__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-/* The items that carry a connector take the row's free space, so the connector's own `flex: 1` has somewhere to
- * grow: content-sized it computed to 0px and no run painted between two markers (157px with this rule at a 640px
- * row). The last item keeps its content width, so the row ends flush with the final label. */
-.sp-steps__item:not(:last-child) {
-  flex: 1;
-}
-/* The number always sits in the disc, so a step is identifiable by its position and never by hue alone. */
-.sp-steps__marker {
-  display: grid;
-  place-items: center;
-  flex: none;
-  inline-size: var(--control-height-sm);
-  block-size: var(--control-height-sm);
-  color: var(--color-text-muted);
-  border: var(--border-width) solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-caption-size);
-}
-/* Every step's name paints at every width: an unnamed marker would leave a step unidentifiable on a phone. */
-.sp-steps__label {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: var(--text-label-size);
-  font-weight: var(--text-label-weight);
-}
-.sp-steps__item--current .sp-steps__label,
-.sp-steps__item[aria-current="true"] .sp-steps__label {
-  color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
-}
-/* The line between two markers takes the colour of the step it leaves, so only a completed run turns green. */
-.sp-steps__connector {
-  flex: 1;
-  block-size: var(--border-width-thick);
-  background-color: var(--color-border);
-}
-.sp-steps__item--done .sp-steps__connector {
-  background-color: var(--color-success);
-}
-/* The current step: the filled accent marker, the semibold label and the attribute the component sets. */
-.sp-steps__item--current .sp-steps__marker,
-.sp-steps__item[aria-current="true"] .sp-steps__marker {
-  color: var(--color-text-on-accent);
-  background-color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-/* A completed step carries the success disc and the tick glyph, which a greyscale rendering still shows. */
-.sp-steps__item--done .sp-steps__marker {
-  color: var(--color-text-inverse);
-  background-color: var(--color-success);
-  border-color: var(--color-success);
-}
-/* The tick's weight comes from the connector's token, so the sheet weighs the glyph, not the component. */
-.sp-steps__item--done .sp-steps__marker > svg {
-  inline-size: var(--space-3);
-  block-size: var(--space-3);
-  stroke-width: var(--border-width-thick);
-}
-.sp-steps__label.sp-btn {
-  padding-block: var(--space-3); /* the variant zeroes padding, so it reaches --touch-target-min */
 }
 
 /* ==== Step shell ==== */
@@ -625,9 +559,6 @@
   .sp-cart-row__line-total {
     align-self: center;
     text-align: end;
-  }
-  .sp-steps {
-    gap: var(--space-3);
   }
   .sp-step__actions {
     grid-auto-flow: column;

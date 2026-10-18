@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog.css
  * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
- * Lines: 598
+ * Lines: 585
  */
 
 /* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
@@ -269,12 +269,14 @@
 
 /* ==== Catalogue layout and facet panel ====
  * Below --breakpoint-xl the panel is not in the page flow: FilterPanel renders it inside the .sp-drawer that
- * data-display.css owns, opened by .sp-facets__toggle. From --breakpoint-xl it is this sheet's sticky first column
- * and the toggle leaves the layout. The column starts at the extra-large stop and not the medium one because the
- * results column has to hold cards of their own content width — a card body is 198px wide at its narrowest, so
- * three of them and their gaps need 642px — and a 260px facet column beside them leaves 420px at the medium stop,
- * where the grid's three tracks come out 124px and cut every card's text against its own overflow. The panel and
- * the grid therefore share the width only from the stop at which four cards genuinely fit beside the column. */
+ * data-display.css owns, opened by .sp-facets__toggle, and the drawer's body is what scrolls. From --breakpoint-xl
+ * it is this sheet's sticky first column and the toggle leaves the layout. The column starts at the extra-large
+ * stop and not the medium one because the results column has to hold cards of their own content width — a card
+ * body is 198px wide at its narrowest, so three of them and their gaps need 642px — and a 260px facet column
+ * beside them leaves 420px at the medium stop, where the grid's three tracks come out 124px and cut every card's
+ * text against its own overflow. The panel and the grid therefore share the width only from the stop at which
+ * four cards genuinely fit beside the column. At either width every value list lays out in full and the column's
+ * own box is the panel's one scrollport, so no value hides inside a second scroll region. */
 .sp-catalog-layout {
   display: grid;
   gap: var(--space-6);
@@ -295,8 +297,7 @@
   border: var(--border-width) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
-.sp-facets__group,
-.sp-facets__range {
+.sp-facets__group {
   display: grid;
   grid-column: 1 / -1;
   gap: var(--space-2);
@@ -339,38 +340,23 @@
 .sp-facets__value:has(:disabled) {
   color: var(--color-text-subtle);
 }
-/* Two bounds and the dash between them: stacked below --breakpoint-sm, one row above it. */
-.sp-facets__range > :nth-child(2) {
-  align-self: center;
-  color: var(--color-text-subtle);
-  text-align: center;
-}
 .sp-facets__clear {
   justify-self: end;
-}
-@media (min-width: 480px) {
-  /* --breakpoint-sm */
-  .sp-facets__range {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-  }
 }
 @media (min-width: 1280px) {
   /* --breakpoint-xl */
   .sp-catalog-layout {
     grid-template-columns: var(--layout-facet-width) minmax(0, 1fr);
   }
+  /* The sticky column is the panel's one scrollport: it keeps the panel beside the results and scrolls as a whole
+   * instead of pushing the page's height, while every value list lays out in full — a per-list cap would hide most
+   * of a long brand list inside a second scroll region, whose box reads as the end of the group it belongs to. */
   .sp-facets {
     position: sticky;
     inset-block-start: calc(var(--layout-header-height) + var(--space-4));
     display: block;
     max-block-size: calc(100vh - var(--layout-header-height) - var(--space-8));
     max-block-size: calc(100dvh - var(--layout-header-height) - var(--space-8));
-    overflow-y: auto;
-  }
-  /* A long brand list scrolls inside the column instead of pushing the page's height. */
-  .sp-facets__values {
-    max-block-size: calc(var(--space-20) * 3);
     overflow-y: auto;
   }
   .sp-facets__toggle {
@@ -587,12 +573,13 @@
 }
 
 /* ==== Responsive summary ====
- * At --breakpoint-sm: two product columns, the facet range's two bounds side by side, a list row's media fixed at
- * one token's width. At --breakpoint-md: three product columns with the featured strip several to a row, the facet
- * panel still the drawer with its trigger beside the results, the sort closed to the end of the result row and the
- * result meta on a single line. At --breakpoint-lg: four product columns, with the tile's name clamped to four lanes
- * instead of two because a track at this stop holds fewer words, and the availability sentence on a lane of the price
- * block's own so the block holds the same lanes on a discounted tile as on a plain one. At --breakpoint-xl: the panel
- * leaves the drawer for the sticky first column and the trigger leaves the layout — the first stop at which the 260px
- * column and a row of the grid share the width with every card at its own content width.
+ * At --breakpoint-sm: two product columns, a list row's media fixed at one token's width. At --breakpoint-md:
+ * three product columns with the featured strip several to a row, the facet panel still the drawer with its
+ * trigger beside the results, the sort closed to the end of the result row and the result meta on a single line.
+ * At --breakpoint-lg: four product columns, with the tile's name clamped to four lanes instead of two because a
+ * track at this stop holds fewer words, and the availability sentence on a lane of the price block's own so the
+ * block holds the same lanes on a discounted tile as on a plain one. At --breakpoint-xl: the panel leaves the
+ * drawer for the sticky first column, every value list laying out in full inside that one scrollport and the
+ * trigger leaving the layout — the first stop at which the 260px column and a row of the grid share the width
+ * with every card at its own content width.
  */

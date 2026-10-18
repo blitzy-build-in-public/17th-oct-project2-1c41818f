@@ -48,7 +48,7 @@ import type { ChartSeries } from "@/types/analytics";
  * Every coordinate comes from `@/components/charts/chartScales` over the caller's own data, and nothing
  * here reads an element's size, the document or the clock, so the geometry is a pure function of its
  * arguments and is testable without mounting anything. No colour, `stroke`, `fill` or copy is written
- * here either: `src/styles/tokens.css` owns `--chart-series-N`, `src/styles/admin-reports.css` maps it
+ * here either: `src/styles/tokens.css` owns `--chart-series-N`, `src/styles/chart-series.css` maps it
  * onto the class {@link seriesClassName} names, and the only string that leaves this file is the table's
  * leading column heading, which comes from `src/constants/content.ts`.
  */
