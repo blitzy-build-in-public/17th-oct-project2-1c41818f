@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 300
+ * Lines: 314
  */
 
 import type { ReactElement } from "react";
@@ -30,6 +30,7 @@ import { getOrder } from "@/lib/orderService";
 // tell a visitor whose session has not survived why it has nothing to show. `src/state/AuthContext.tsx`
 // is the product's single home for it, and the account area's sibling views read it the same way.
 import { useAuth } from "@/state/AuthContext";
+import { useFocusHandoff, handOffThen } from "@/state/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Order, OrderStatus, PaymentSummary, PricedCartLine } from "@/types/commerce";
 import type { CurrencyCode, OrderId, Result } from "@/types/common";
@@ -151,16 +152,23 @@ function OrderDetail({
     status,
   } = useAsync<Order>(loadOrder, [orderId, sessionToken]);
 
+  /*
+   * The detail view's region: its three states have three different roots, so the wrapper they all render
+   * inside is the one survivor the failure's retry hands the focus to instead of the document body.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
+  const retry = handOffThen(handOffFocus, reload);
+
   if (status === "error" && error !== null) {
     const isSessionProblem = isSessionFailure(error);
     const canRetry = !isSessionProblem && !isNotFoundFailure(error);
 
     return (
-      <div className="sp-stack">
+      <div className="sp-stack" ref={regionRef} tabIndex={-1}>
         <Alert
           actionLabel={canRetry ? COMMON_ACTIONS.RETRY : undefined}
           error={error}
-          onAction={canRetry ? reload : undefined}
+          onAction={canRetry ? retry : undefined}
           tone="danger"
         />
         <p className="sp-summary__note">
@@ -173,13 +181,19 @@ function OrderDetail({
       </div>
     );
   }
-  if (order === null) return <OrderHistoryPlaceholder />;
+  if (order === null) {
+    return (
+      <div className="sp-stack" ref={regionRef} tabIndex={-1}>
+        <OrderHistoryPlaceholder />
+      </div>
+    );
+  }
 
   const { currency, discountTotalMinor, grandTotalMinor, shippingMinor, subtotalMinor, taxMinor } =
     order.pricedCart;
 
   return (
-    <article className="sp-order-detail">
+    <article className="sp-order-detail" ref={regionRef} tabIndex={-1}>
       <div className="sp-order-detail__header">
         <h2 className="sp-order-detail__number">{order.orderNumber}</h2>
         <span className="sp-order-detail__status">

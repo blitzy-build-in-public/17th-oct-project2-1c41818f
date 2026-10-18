@@ -1,11 +1,11 @@
 /**
  * Path: src/components/ui/Tabs.tsx
  * Purpose: Tabs with roving focus, and the accordion used for disclosure sections
- * Lines: 534
+ * Lines: 590
  */
 
 import { useId, useRef, useState } from "react";
-import type { KeyboardEvent, ReactElement, ReactNode } from "react";
+import type { FocusEvent, KeyboardEvent, ReactElement, ReactNode } from "react";
 
 /*
  * Class contract. `src/styles/tabs-accordion.css` is the sole definition site of this family — it is the
@@ -29,7 +29,7 @@ import type { KeyboardEvent, ReactElement, ReactNode } from "react";
  * plain `<button>` those rules own, and the button family's own base rule, which is written for a
  * standalone control, would compete with the rule that owns the element.
  *
- * Three decisions a later reader must not undo:
+ * Four decisions a later reader must not undo:
  *   - Roving tabindex. The selected tab is the set's single tabbable element (`tabIndex={0}`) and every
  *     other tab leaves the tab order (`tabIndex={-1}`), which is what makes a tab set one stop in the
  *     page's tab order instead of one stop per tab, and what the arrow keys then move within.
@@ -41,6 +41,14 @@ import type { KeyboardEvent, ReactElement, ReactNode } from "react";
  *     moves focus and activates in the same keystroke, because a tab of this product is cheap to show; in
  *     manual mode it moves focus only and Enter or Space activates, for a set whose panels are costly to
  *     mount. Both modes are supplied because the difference is a property of the panel, not of the tab.
+ *   - Panel focus. A panel takes no tab stop of its own. It is not a scroll container, so a stop on it
+ *     would move nothing and reveal nothing; a panel of this family that carries functionality carries
+ *     its own focusable controls, because the report panels hold their sortable headers, their export
+ *     control and a pager and the reviews panel holds a filter and a pager; and the tab that selects a
+ *     panel already names and announces its region. The measured case settles it: a panel taller than
+ *     the viewport is a focus target whose indicator cannot be shown whole, because the browser aligns
+ *     the box's block-end to the scrollport and paints the ring a screenful above it, and no scroll
+ *     padding and no scroll margin reaches that alignment.
  *
  * No string reaches the page from this file: every label, heading and badge arrives from its caller, from
  * `src/constants/content.ts` or `src/constants/taxonomy.ts`.
@@ -133,6 +141,42 @@ function findEnabledIndex<T extends DisableableItem>(
  */
 function composeClassName(...names: readonly (string | false | undefined)[]): string {
   return names.filter((name): name is string => typeof name === "string" && name !== "").join(" ");
+}
+
+/**
+ * Brings a tab the strip has only partly on screen fully inside it.
+ *
+ * The strip scrolls sideways at a small width, and the tab that ends past its right edge is painted only up
+ * to that edge — a measured "Customer reviews" tab 149.31 px wide reached 48.84 px past the list's box at a
+ * 375 px viewport, so a keyboard user read "Customer revie". The browser's own focus scroll does not carry
+ * the tab in: Chrome scrolls nothing at all inside this strip, measured with and without a scroll margin, in
+ * both directions, through a programmatic focus and through a real Tab with two ArrowRight presses, because
+ * the tab's visible part already intersects the strip's box and a partly visible element is taken as visible.
+ * The move is therefore made here.
+ *
+ * Only the strip's own box decides, so a tab already wholly inside asks for nothing, which is every tab at a
+ * width where the three of them fit. The scroll takes the nearest edge on both axes, so the strip moves the
+ * few pixels the tab needs and the page itself moves only when the strip is off screen. A scroll region with
+ * no scroll range is left alone, which is also what keeps the handler off the layout-free DOM a test renders
+ * in, where both widths are 0.
+ *
+ * @param event - The focus the strip catches from one of its own tabs.
+ */
+function scrollFocusedTabIntoView(event: FocusEvent<HTMLDivElement>): void {
+  const list = event.currentTarget;
+  const tab = event.target;
+
+  // The tabs are the strip's own children and are the only thing inside it: anything else that could take
+  // the focus there is not this handler's business.
+  if (!(tab instanceof HTMLElement) || tab.parentElement !== list) return;
+  if (list.scrollWidth <= list.clientWidth) return;
+
+  const listBox = list.getBoundingClientRect();
+  const tabBox = tab.getBoundingClientRect();
+
+  if (tabBox.left >= listBox.left && tabBox.right <= listBox.right) return;
+
+  tab.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 /**
@@ -234,15 +278,21 @@ export interface TabsProps {
  * The set is the `tablist`; each tab is a `role="tab"` button that carries `aria-selected` and an id; the
  * selected tab also carries `aria-controls` naming the panel it shows, and the tabs that are not selected
  * carry it not at all, because only the selected tab's panel is in the document and a reference to a panel
- * that is not mounted is an ARIA authoring error. Each panel is a `role="tabpanel"` labelled by its tab
- * and focusable, so a keyboard user can reach the content it reveals, and the selection is derived during
- * render from `value` or from the set's own state — never mirrored into state and never synchronised by an
- * effect.
+ * that is not mounted is an ARIA authoring error. Each panel is a `role="tabpanel"` labelled by its tab and
+ * takes no tab stop of its own, for the fourth decision the file header states, so a keyboard user reaches
+ * the content a panel reveals through the controls that panel holds and page scroll is never asked of a
+ * focus target whose box is taller than the viewport. The selection is derived during render from `value`
+ * or from the set's own state — never mirrored into state and never synchronised by an effect.
  *
  * The keyboard model is the one WAI-ARIA describes for tabs: Tab enters the set at the selected tab (its
  * roving `tabIndex` is `0`), ArrowRight and ArrowLeft move along the set and wrap at either end, Home and
  * End reach the first and last enabled tab, and the arrow keys skip a disabled tab rather than landing on
- * one that cannot be activated. Tab then leaves the set and reaches the panel.
+ * one that cannot be activated. Tab then leaves the set for the next stop in the document, which is the
+ * panel's own first control where the panel holds one.
+ *
+ * The strip scrolls sideways at a small width, and a tab it has only partly on screen is scrolled the rest of
+ * the way inside it when the tab takes the focus — by Tab, by a pointer, or by one of those key moves, since
+ * all three arrive as one focus on the tab; {@link scrollFocusedTabIntoView} states the measure behind it.
  *
  * @param props - The items, the optional controlled value, the change handler, the set's accessible name,
  *   the activation mode and the two class hooks.
@@ -309,7 +359,12 @@ export function Tabs({
 
   return (
     <div className={composeClassName("sp-tabs", className)}>
-      <div className="sp-tabs__list" role="tablist" aria-label={label}>
+      <div
+        className="sp-tabs__list"
+        role="tablist"
+        aria-label={label}
+        onFocus={scrollFocusedTabIntoView}
+      >
         {items.map((item, index) => {
           const isSelected = index === selectedIndex;
           const tabId = itemElementId(baseId, "tab", item.id);
@@ -347,11 +402,12 @@ export function Tabs({
       {selectedItem === undefined ||
       selectedPanelId === undefined ||
       selectedTabId === undefined ? null : (
+        /* No `tabIndex`: the file header's fourth decision states why a panel of this family takes no tab
+           stop of its own — the controls a panel holds are its keyboard stops. */
         <div
           id={selectedPanelId}
           role="tabpanel"
           aria-labelledby={selectedTabId}
-          tabIndex={0}
           className={composeClassName(
             "sp-tabs__panel",
             panelClassName,

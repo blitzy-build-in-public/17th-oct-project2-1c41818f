@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/ProfilePage.tsx
  * Purpose: Profile view and edit with validation and a success confirmation
- * Lines: 346
+ * Lines: 359
  */
 
 import { useId, useState } from "react";
@@ -28,6 +28,7 @@ import {
 } from "@/lib/customerService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Customer, ProfileUpdateInput } from "@/types/account";
 import type { FieldErrors, Result } from "@/types/common";
@@ -103,6 +104,15 @@ export function ProfilePage(): ReactElement {
   const { refresh } = useAuthDispatch();
   const toasts = useToast();
   const headingId = useId();
+
+  /*
+   * The region the actions this page raises hand the focus off to: the section this page renders, which
+   * survives both of them and is named by the profile heading, so the move is announced rather than dropped on
+   * the document body. Two controls need it — the submit control, which is disabled while the request is in
+   * flight and so gives its focus up, and the retry the failed read offers, which leaves with the failure it
+   * reports.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff();
 
   // The session is the only source of the id these endpoints are scoped by and of the token that carries it,
   // so nothing here assembles either. With no session the read is suppressed and the section says why.
@@ -183,7 +193,9 @@ export function ProfilePage(): ReactElement {
    * The body is judged before it is sent by the rule the seam applies to the same body, so a mistyped field is
    * refused with the control it belongs to rather than after a round trip. A second submission is blocked by
    * the in-flight flag as well as by the disabled control, because the submit event can also arrive from a
-   * keypress. A refusal leaves the typed values exactly as they are.
+   * keypress. A refusal leaves the typed values exactly as they are. A submission that goes in flight disables
+   * the control that raised it, so the focus is handed to the section above before that write: the region
+   * survives the save, and it is where the confirmation is announced.
    */
   const saveProfile = async (): Promise<void> => {
     if (customerId === null || values === null || isSaving) return;
@@ -193,6 +205,7 @@ export function ProfilePage(): ReactElement {
       setIsSaved(false);
       return;
     }
+    handOffFocus();
     setIsSaving(true);
     const result = await updateProfile(customerId, values, { sessionToken });
     setIsSaving(false);
@@ -238,7 +251,7 @@ export function ProfilePage(): ReactElement {
         <Alert
           actionLabel={COMMON_ACTIONS.RETRY}
           error={error}
-          onAction={reloadProfile}
+          onAction={handOffThen(handOffFocus, reloadProfile)}
           tone="danger"
         />
       );
@@ -326,7 +339,7 @@ export function ProfilePage(): ReactElement {
   };
 
   return (
-    <section aria-labelledby={headingId} className="sp-profile">
+    <section aria-labelledby={headingId} className="sp-profile" ref={regionRef} tabIndex={-1}>
       <div className="sp-profile__header">
         {/* The account area's single <h1> belongs to AccountLayout, so this section opens at the level below
             it and no second first-level heading reaches the account tree. */}

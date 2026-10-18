@@ -1,0 +1,127 @@
+/* Path: src/styles/sidebar.css
+ * Purpose: The administrator sidebar's skeleton, split out of src/styles/layout.css, which loads this sheet with @import
+ * Lines: 127
+ */
+/* The column every administrator screen is navigated from, and the sole definition site of the `.sp-sidebar*` classes
+ * `src/components/layout/AdminSidebar.tsx` renders. The frame that places it — the administrator grid and its two stops —
+ * stays in `src/styles/layout.css`; everything the column itself paints is here. Split out to hold the 600-line ceiling
+ * the request sets, which the frame's rules and the sidebar's together had crossed: the rules below are the ones that
+ * crossed it, moved verbatim rather than trimmed, and this sheet is loaded at layout.css's import position so the cascade
+ * order the two sheets shared is unchanged. It consumes tokens.css properties and declares no colour, length, radius,
+ * shadow, z-index or duration of its own. */
+
+/* ==== Administrator sidebar ==== The column the administrator grid reserves: a sticky rail of icons at every
+ * width below --breakpoint-lg, which widens into the labelled sidebar at --breakpoint-lg. */
+.sp-sidebar {
+  position: sticky;
+  inset-block-start: var(--layout-header-height);
+  max-block-size: calc(100vh - var(--layout-header-height));
+  max-block-size: calc(100dvh - var(--layout-header-height));
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-2);
+  border-inline-end: var(--border-width) solid var(--color-border-subtle);
+  background-color: var(--color-surface-raised);
+}
+.sp-sidebar__title {
+  margin-block-end: var(--space-3);
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+.sp-sidebar__list {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+}
+.sp-sidebar__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--touch-target-min);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+  text-decoration-line: none;
+}
+@media (hover: hover) {
+  .sp-sidebar__link:hover {
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text);
+  }
+}
+/* The current section is marked from the attribute NavLink applies, and by two things rather than one: the
+ * accent row and a leading bar, so the state survives a greyscale rendering and a colour-blind one. */
+.sp-sidebar__link[aria-current="page"] {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-contrast);
+  font-weight: var(--font-weight-semibold);
+}
+.sp-sidebar__link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: 0;
+  inline-size: var(--border-width-thick);
+  background-color: var(--color-accent);
+}
+/* Pressed: the row sinks and the accent deepens. Written after the current-section rule, which it ties on
+ * specificity, so a pressed current link still shows the press rather than keeping its accent-subtle fill. */
+.sp-sidebar__link:active {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-accent-active);
+}
+/* The glyph takes the link's own colour through currentColor, and the fixed square keeps the rail even. */
+.sp-sidebar__icon {
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+/* The way back to the storefront, separated from the section's destinations by a rule rather than colour. */
+.sp-sidebar__return {
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+/* The rail, which is the sidebar's treatment at every width below --breakpoint-lg: the section title and each link's label are hidden visually and kept for assistive technology — the landmark and the <nav> are named by the
+ * title and each link by its label, so display: none would leave all three nameless — and the glyph stands centred in the column on its own. The block at --breakpoint-lg reveals these same elements in place. */
+.sp-sidebar__title,
+.sp-sidebar__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.sp-sidebar__link {
+  justify-content: center;
+  padding-inline: 0;
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg */
+  /* The rail becomes the labelled sidebar again: the same elements, revealed in place. */
+  .sp-sidebar__title,
+  .sp-sidebar__label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+  .sp-sidebar__link {
+    justify-content: start;
+    padding-inline: var(--space-2);
+  }
+}
+
+/* ==== Responsive ==== Below --breakpoint-lg the column is a rail: the section title and each link's label are hidden
+ * visually and kept for assistive technology, the glyph stands centred, and the way back to the storefront keeps its rule.
+ * From --breakpoint-lg those same elements are revealed in place and the column becomes the labelled sidebar. The frame's
+ * own responsive summary, which covers the grid that reserves this column, is at the end of src/styles/layout.css. */

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 318
+ * Lines: 337
  */
 
 import { useId } from "react";
@@ -34,6 +34,7 @@ import { highlightSegments, isBlankQuery, tokenise } from "@/lib/searchService";
 import type { SearchSegment } from "@/lib/searchService";
 import { useQuickAdd } from "@/state/CartContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import { useDocumentTitle } from "@/state/hooks";
 import { hasActiveFilters } from "@/utils/queryParams";
 
@@ -158,6 +159,18 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
   const onAddToCart = useQuickAdd();
   const resultsHeadingId = useId();
 
+  /*
+   * The region every action below hands the focus off to, and the handoff itself.
+   *
+   * A chip removal takes the chip's own remove control with it, a page change destroys the pager and swaps the
+   * grid for skeletons, the failure's retry leaves with the failure it reports, and the empty state's own action
+   * leaves with the filters it clears — so in every case the control that was activated is unmounted and the
+   * browser would drop the focus onto `document.body`. This section is rendered in every one of those states,
+   * and the heading above it names it, so the focus that is handed off here lands in a region a screen reader
+   * announces rather than at the top of the document.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff();
+
   useDocumentTitle(documentTitle(PAGE_TITLES.SEARCH));
 
   const query = catalog.filters.q;
@@ -198,7 +211,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
         tone="danger"
         error={view.error}
         actionLabel={COMMON_ACTIONS.RETRY}
-        onAction={() => view.reload()}
+        onAction={handOffThen(handOffFocus, () => view.reload())}
       />
     );
   } else if (view.isEmpty) {
@@ -215,7 +228,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
             title={EMPTY_STATES.searchResults.title}
             description={EMPTY_STATES.searchResults.description}
             actionLabel={EMPTY_STATES.catalogue.actionLabel}
-            onAction={() => catalog.clearAll()}
+            onAction={handOffThen(handOffFocus, () => catalog.clearAll())}
           />
         ) : (
           <EmptyState surface="searchResults" headingLevel={2} actionHref={ROUTES.CATALOG} />
@@ -250,8 +263,8 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
           hasNext={answer.hasNext}
           hasPrevious={answer.hasPrevious}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
-          onPageChange={(page) => catalog.setPage(page)}
-          onPageSizeChange={(pageSize) => catalog.setPageSize(pageSize)}
+          onPageChange={handOffThen(handOffFocus, (page) => catalog.setPage(page))}
+          onPageSizeChange={handOffThen(handOffFocus, (pageSize) => catalog.setPageSize(pageSize))}
           // The count region above is this page's, so the pager announces the page alone.
           isCountAnnouncedByCaller
         />
@@ -269,8 +282,9 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
         <PageHeader title={PAGE_TITLES.SEARCH} breadcrumbs={BREADCRUMBS} actions={<SearchBar />} />
         <div className="sp-catalog-layout">
           {/* The panel renders itself once: the sticky column from the extra-large stop up, and its own
-              focus-trapped drawer with its own trigger below it. */}
-          <FilterPanel />
+              focus-trapped drawer with its own trigger below it. The results region goes in with it, so the
+              panel's own clear actions hand the focus back to the results rather than to the document body. */}
+          <FilterPanel focusTargetRef={regionRef} />
           <div className="sp-page__body">
             {/* A term the search could not use states that above the count, in the polite register the count
                 itself speaks in, so the catalogue below is not read as an answer to the term. It stands over
@@ -303,8 +317,13 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
               </p>
               <SortControl isCompact />
             </div>
-            <ActiveFilters />
-            <section aria-labelledby={resultsHeadingId} aria-busy={view.isLoading}>
+            <ActiveFilters focusTargetRef={regionRef} />
+            <section
+              aria-labelledby={resultsHeadingId}
+              aria-busy={view.isLoading}
+              ref={regionRef}
+              tabIndex={-1}
+            >
               <h2 className="sp-visually-hidden" id={resultsHeadingId}>
                 {CATALOG_COPY.RESULTS_REGION_LABEL}
               </h2>

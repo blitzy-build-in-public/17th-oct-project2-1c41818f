@@ -1,6 +1,6 @@
 /* Path: src/styles/base.css
  * Purpose: Reset, document typography and the visible focus treatment every element inherits
- * Lines: 370
+ * Lines: 383
  */
 
 /* The reset and the document baseline: this sheet loads second, after tokens.css and before the six
@@ -339,11 +339,24 @@ a:not([class]) {
 }
 
 /* ==== In-page targets ====
- * Every element the application gives an id to — the skip link's #main, an anchor on a checkout step
- * — is scrolled to with the sticky header cleared, so the heading a visitor jumped to is not hidden
- * underneath it. */
-:where([id]) {
-  scroll-margin-top: calc(var(--layout-header-height) + var(--space-4));
+ * The clearance the sticky header needs is declared once, on the scroll container itself: the
+ * document scroller's scrollport then begins below the header, so every scroll-into-view — the
+ * browser's own focus scroll, the skip link's fragment jump, any programmatic scroll — lands its
+ * target clear of the header, whether the target carries an id or not, and a target that already
+ * sits inside the header's band is moved out of it because the band is no longer part of the
+ * scrollport. A scroll-margin on the target would add to this offset instead of replacing it, and an
+ * element carrying an id would land twice the header's height down the viewport. */
+:root {
+  scroll-padding-block-start: calc(var(--layout-header-height) + var(--space-4));
+}
+
+/* A control inside the sticky header travels with the header and can never leave the band, so the
+ * clearance is withdrawn while one of them holds focus: the browser then finds the target already
+ * inside the scrollport and leaves the reader's place on the page alone, instead of scrolling the
+ * document up to the padded band's centre to show a control that never moved. Every other focus
+ * target keeps the clearance. */
+:root:has(.sp-app__header :focus, .sp-header :focus) {
+  scroll-padding-block-start: var(--space-0);
 }
 
 /* ==== Motion ====

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/LoginPage.tsx
  * Purpose: Sign-in form with inline validation and return-path preservation
- * Lines: 387
+ * Lines: 404
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -25,6 +25,7 @@ import { RETURN_TO_QUERY_KEY, ROUTES, canReachPath, registerPath } from "@/const
 import { authErrorMessage, roleHomePath, toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
 import type { Credentials } from "@/types/account";
@@ -235,6 +236,18 @@ export function LoginPage(): ReactElement {
     };
 
   /**
+   * The region a submission hands the focus off to: the form itself, which holds the control that starts the
+   * request and stays on screen for as long as a refusal is shown. The form's own `formRef` is that region, so
+   * one element carries both moves — the handoff and the refusal focus below — rather than two refs on one form.
+   *
+   * The submit control is disabled for as long as the request runs and a disabled control cannot hold the focus,
+   * so the commit that starts the request drops it onto the document body — before the refusal has been rendered
+   * at all. The form takes it instead, which keeps the reader in the panel they are working in. A sign-in that
+   * succeeds unmounts the form, so nothing is moved on that path: the route change moves the focus.
+   */
+  const { handOffFocus } = useFocusHandoff<HTMLFormElement>(formRef);
+
+  /**
    * Submits the credentials as typed: judged against the form's own rule first, so an empty pair is
    * reported on its controls without a request being made, and then by the store, which is the only party
    * that can say whether the pair matches an account.
@@ -247,6 +260,9 @@ export function LoginPage(): ReactElement {
       setFailure(null);
       return;
     }
+    // Armed before the request: the control is disabled for its duration, and the focus it gives up belongs
+    // inside the form rather than on the document body.
+    handOffFocus();
     setIsSubmitting(true);
     const answer = await signIn(credentials);
     setIsSubmitting(false);
@@ -281,6 +297,7 @@ export function LoginPage(): ReactElement {
           event.preventDefault();
           void submit();
         }}
+        tabIndex={-1}
       >
         {failure === null || formMessage === undefined ? null : (
           <div className="sp-auth__alert" ref={alertRef} tabIndex={-1}>

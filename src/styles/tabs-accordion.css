@@ -1,6 +1,6 @@
 /* Path: src/styles/tabs-accordion.css
  * Purpose: Styles for the tab and disclosure families src/components/ui/Tabs.tsx renders, split out of src/styles/data-display.css, which loads this sheet with @import
- * Lines: 150
+ * Lines: 169
  */
 
 /* The tabs and disclosure families, and the sole definition site of the .sp-tabs* and .sp-accordion* classes
@@ -28,11 +28,20 @@
   overflow-x: auto;
   border-block-end: var(--border-width) solid var(--color-border);
 }
+/* The tab's own padding is the phone's: its block step carries the touch target, and its inline step, which
+ * only separates a label from the tab's edge, is the one that answers the width. At 375 the strip's box
+ * offers 343 px while the product's three labels measure 287.84 px of ink at the label role's size, so at
+ * 16 px a side the content came to 391.84 px — 48.84 px past that box — and the strip's own overflow cut the
+ * third label to "Customer revie" at rest. At 4 px a side the same content measures 319.84 px at rest and
+ * 322.45 px with the third tab selected, so every tab of the strip sits wholly inside its box in both states
+ * and the strip scrolls sideways at no phone width at all. The type role, the colours, the selected treatment
+ * and the block step are untouched. */
 .sp-tabs__tab {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+  padding-block: var(--space-3);
+  padding-inline: var(--space-1);
   border-block-end: var(--border-width-thick) solid transparent;
   color: var(--color-text-muted);
   font-size: var(--text-label-size);
@@ -74,6 +83,16 @@
 }
 .sp-tabs__panel {
   padding-block-start: var(--space-5);
+}
+/* The phone stop is the only width at which the strip's three labels crowd its box, so from here the tab
+ * opens back up to the inline step the family shares: at 480 the strip's box offers 448 px and the same
+ * three tabs come to 391.84 px at rest, or 394.45 px with the widest one selected, leaving better than
+ * 50 px of slack at the stop and more above it. */
+@media (min-width: 480px) {
+  /* --breakpoint-sm */
+  .sp-tabs__tab {
+    padding-inline: var(--space-4);
+  }
 }
 @media (hover: hover) {
   .sp-tabs__tab:hover:not([aria-selected="true"]):not([disabled]) {

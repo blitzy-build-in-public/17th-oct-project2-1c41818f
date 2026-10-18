@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutPage.tsx
  * Purpose: The checkout route: step indicator, the current step's view and the order summary panel
- * Lines: 382
+ * Lines: 395
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -24,13 +24,13 @@ import { useCart } from "@/state/CartContext";
 import { useCheckout } from "@/state/CheckoutContext";
 import { CHECKOUT_FORM_STEPS } from "@/state/checkoutReducer";
 import type { CheckoutStep } from "@/state/checkoutReducer";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import { useDocumentTitle } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
- * of `src/styles/**` — so every class below is consumed by name, and this list is what the sheets owe the
- * file.
+ * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
+ * `src/styles/**` — so every class below is consumed by name, and this list is what the sheets owe the file.
  *
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in, `sp-page`
  * the column of blocks at one rhythm, `sp-page__body` the region the route's own content lands in, `sp-split`
@@ -75,9 +75,8 @@ const FIELD_QUALIFIER_SEPARATOR = ".";
 // Reading the step ------------------------------------------------------------------------------
 
 /**
- * Whether a step is one of the three that own a form, read from the list the reducer declares rather than
- * restated here. The confirmation is not one of them: it is where a placed order lands, not a step a shopper
- * works through.
+ * Whether a step is one of the three that own a form, read from the reducer's own list, not restated
+ * here. The confirmation is not one: it holds a placed order and is no step a shopper works through.
  *
  * @param step - The step the flow is standing on.
  * @returns True for a step that owns a form, narrowing the step to it.
@@ -129,9 +128,8 @@ function stepView(step: CheckoutFormStep): ReactElement {
 // The step region's states ----------------------------------------------------------------------
 
 /**
- * What the step region stands in with at the confirmation, where the order is placed and the route is handing
- * over to the confirmation view: the shapes a step's content takes, announcing nothing, because the region
- * holding it is what carries `aria-busy`.
+ * What the step region stands in with at the confirmation, where the order is placed: the shapes a step's content
+ * takes, announcing nothing, because the region holding it is what carries `aria-busy`.
  */
 function StepPlaceholder(): ReactElement {
   return (
@@ -151,24 +149,21 @@ function StepPlaceholder(): ReactElement {
  * The route composes and it decides nothing. The step machine, the entered values, the price of the basket and
  * the order itself belong to `src/state/CheckoutContext.tsx`, which prices the basket as it changes, places the
  * order from the priced snapshot taken before completion and hands the cart its own clear; the order of the
- * steps belongs to `src/state/checkoutReducer.ts`; each step's fields, rules and actions belong to that step's
- * own file; and every figure arrives already computed, so nothing here is added up. What this file owns is the
- * composition — the page's heading, the indicator, the step shell with its heading, its count and its summary
- * of what is wrong, the current step's view, the order summary panel — and the one navigation a completed
- * checkout takes.
+ * steps belongs to `src/state/checkoutReducer.ts`; each step's fields and rules belong to that step's own file;
+ * and every figure arrives already computed. What this file owns is the composition — the page's heading, the
+ * indicator, the step shell with its heading, its count and its summary of what is wrong, the current step's
+ * view, the order summary panel — and the one navigation a completed checkout takes.
  *
  * Each state is rendered where its own subject is. A basket with no lines cannot be checked out, so the route
  * offers the empty state with the one action that helps rather than a flow that could never complete — asked
  * before an order is placed, because completion empties the cart. The price request's placeholder and its
  * failure belong to the figures, so the order summary panel states them and its retry asks the flow again,
- * which leaves the step in hand mounted and usable while a newer quote is on its way: the basket's figures are
- * not what the shopper is typing into.
+ * which leaves the step in hand mounted and usable while a newer quote is on its way.
  *
  * A placed order is handed to its own route rather than rendered here: the reducer moves the flow to its
  * confirmation and this page navigates to `orderConfirmationPath`, replacing the entry so the browser's back
  * button cannot re-enter a checkout that is already finished. For the instant that takes, the frame keeps its
- * indicator and the step region keeps its placeholder, because a step whose order is placed has no form left to
- * show and no submission left to offer.
+ * indicator and the step region its placeholder.
  *
  * @returns The checkout route.
  */
@@ -188,8 +183,7 @@ export function CheckoutPage(): ReactElement {
   const navigate = useNavigate();
 
   /**
-   * The region the current step renders in, so a message in the summary above can put the keyboard on the
-   * control it belongs to.
+   * The region the current step renders in, so a summary message above can focus the control it names.
    */
   const stepBodyRef = useRef<HTMLDivElement>(null);
 
@@ -202,9 +196,30 @@ export function CheckoutPage(): ReactElement {
   /** Names the step's position in the flow, so focusing its heading reports where in the flow it stands. */
   const stepCountId = useId();
 
+  /*
+   * The step region is the one this route hands the focus off to: the order summary panel's price failure
+   * carries a retry, and that control leaves with the failure it reports, so the retry below arms the move.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
   /** The checkout cannot proceed without lines, and the cart is emptied the moment an order is placed — so an
    *  empty basket here is one the shopper arrived with, never the aftermath of their own order. */
   const isCartEmpty = lines.length === 0 && order === null;
+  /** The step the previous commit stood on: a fact about that commit, not a reason to render. */
+  const previousStepRef = useRef(step);
+  /*
+   * The step-boundary focus move. A changed step means the flow moved, which replaced the whole form the press was
+   * in, so the focus the browser would drop onto the document body is claimed by the step region instead — without
+   * the browser's own scroll, which would leave the indicator above the region behind the sticky header, and with
+   * the page brought to the top, where the indicator and the new step's heading are both clear of it. A refused
+   * submission does not change the step, and a focus the step indicator has already handed to its marker stands.
+   */
+  useEffect(() => {
+    if (previousStepRef.current === step) return;
+    previousStepRef.current = step;
+    if (document.activeElement !== document.body) return;
+    regionRef.current?.focus({ preventScroll: true });
+    window.scrollTo({ behavior: "instant", top: 0 });
+  }, [regionRef, step]);
 
   /** The step in hand, with the words and the position that name it, or `null` at the confirmation, which is
    *  not a step that owns a form and has no heading of its own to state. */
@@ -266,6 +281,7 @@ export function CheckoutPage(): ReactElement {
 
   /** Asks the flow for the basket's figures again, for the retry a failed price request offers. */
   const retryPricing = (): void => {
+    handOffFocus();
     actions.retryPricing();
   };
 
@@ -292,13 +308,10 @@ export function CheckoutPage(): ReactElement {
 
   /**
    * Whether the step region is working rather than settled: a submission in flight, or the confirmation's
-   * hand-over. The region states it so the sheet can dim what it holds and assistive technology can announce
-   * the update.
-   *
-   * A price request does not make the region busy: the basket's figures are the summary panel's, and the step
-   * in hand stays mounted and usable while a newer quote is on its way — replacing a form the shopper is
-   * typing in, or has just chosen a delivery method in, with a placeholder would take the control they were
-   * using off the screen beneath them.
+   * hand-over. The region states it so the sheet can dim what it holds and assistive technology can announce the
+   * update. A price request does not make the region busy — the basket's figures are the summary panel's, and
+   * replacing a form the shopper is typing in, or has just chosen a delivery method in, with a placeholder would
+   * take the control they were using off the screen beneath them.
    */
   const isStepRegionBusy = isSubmitting || form === null;
 
@@ -328,7 +341,7 @@ export function CheckoutPage(): ReactElement {
     <div className={CLASSES.frame}>
       <div className={CLASSES.main}>
         <CheckoutSteps currentStep={step} onStepSelect={selectStep} />
-        <div aria-busy={isStepRegionBusy} className={CLASSES.step}>
+        <div aria-busy={isStepRegionBusy} className={CLASSES.step} ref={regionRef} tabIndex={-1}>
           {form === null ? null : (
             <div className={CLASSES.stepHeader}>
               <h2

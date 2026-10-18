@@ -1,17 +1,18 @@
 /**
  * Path: src/features/search/ActiveFilters.tsx
  * Purpose: A removable chip per applied filter, with a clear-all action
- * Lines: 234
+ * Lines: 250
  */
 
 import { useState } from "react";
-import type { ReactElement } from "react";
+import type { ReactElement, RefObject } from "react";
 
 import { Button, IconButton } from "@/components/ui/Button";
 import { CloseIcon } from "@/components/ui/icons";
 import { COMMON_ACTIONS, SEARCH_COPY, removeFilterLabel } from "@/constants/content";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import type { CatalogFilters } from "@/state/CatalogContext";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import type { Facet, FacetId, FilterState } from "@/types/catalog";
 import { formatMoney } from "@/utils/format";
 import { activeFilterEntries } from "@/utils/queryParams";
@@ -50,6 +51,13 @@ export interface ActiveFiltersProps {
   readonly maxVisible?: number;
   /** Extra classes for the row itself, so a caller can place it in its own layout. */
   readonly className?: string;
+  /**
+   * The region the row hands the focus off to when a removal or the clear-all action takes the control that
+   * raised it away — the results section the chips filter, which survives the removal and is named by its own
+   * heading, so the move is announced rather than dropped on the document body. Omitted, the row moves
+   * nothing: a caller that renders no region of its own keeps the browser's own behaviour.
+   */
+  readonly focusTargetRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -153,9 +161,13 @@ function ChipRow({ text, onRemove }: ChipRowProps): ReactElement {
  * ever present beside at least one chip; the removal is announced by this row's own polite region while the
  * result count belongs to the page. `maxVisible` reveals the remaining chips in one direction —
  * `src/constants/content.ts` holds no wording for the reverse — and a hidden chip is never the only way to
- * remove a filter, the panel beside the results clearing each facet on its own.
+ * remove a filter, the panel beside the results clearing each facet on its own. A removal takes the chip's own
+ * remove control with it, and the last removal takes the whole row, so when `focusTargetRef` is given the focus
+ * is handed to that region with the state write that removes the control; without it the row arms nothing and
+ * moves nothing.
  *
- * @param props - The descriptors, the removal and clearing overrides, the visible cap and the row classes.
+ * @param props - The descriptors, the removal and clearing overrides, the visible cap, the row classes and,
+ *   for the focus handoff, the region the row's chips filter.
  * @returns The chip row with its announcement region, or `null` when no filter is applied.
  */
 export function ActiveFilters({
@@ -164,9 +176,11 @@ export function ActiveFilters({
   onClearAll,
   maxVisible,
   className,
+  focusTargetRef,
 }: ActiveFiltersProps): ReactElement | null {
   const filters = useCatalogFilters();
   const { facets, isLoading } = useCatalog();
+  const { handOffFocus } = useFocusHandoff(focusTargetRef);
   // The row remembers only the last removal and whether every chip was asked for; chips derive below.
   const [announcement, setAnnouncement] = useState("");
   const [isRevealed, setIsRevealed] = useState(false);
@@ -180,6 +194,7 @@ export function ActiveFilters({
   const visible = isCapped && !isRevealed ? applied.slice(0, maxVisible) : applied;
 
   const handleRemove = (entry: ActiveFilterEntry, text: string): void => {
+    handOffFocus();
     setAnnouncement(removeFilterLabel(text));
     if (onRemove !== undefined) {
       onRemove(entry);
@@ -189,6 +204,7 @@ export function ActiveFilters({
   };
 
   const handleClearAll = (): void => {
+    handOffFocus();
     setAnnouncement(COMMON_ACTIONS.CLEAR_ALL);
     if (onClearAll !== undefined) {
       onClearAll();

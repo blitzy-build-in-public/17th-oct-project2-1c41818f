@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/SalesChart.tsx
  * Purpose: The dashboard's revenue chart with a bucket control and a series toggle for category or channel
- * Lines: 470
+ * Lines: 489
  */
 
 import { useCallback, useId, useMemo } from "react";
@@ -18,6 +18,7 @@ import { COMMON_ACTIONS, PAGING_NOUNS } from "@/constants/content";
 import { ADMIN_COPY, CHANNEL_LABELS as SALES_CHANNELS } from "@/constants/content-reports";
 import { CATEGORY_DEFINITIONS, GRANULARITY_OPTIONS } from "@/constants/taxonomy";
 import { bucketLabel } from "@/lib/analyticsService";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import type { BucketGranularity, ChartSeries, RevenueGroupBy } from "@/types/analytics";
 import type { ApiError, DateRange } from "@/types/common";
 import { bucketCount, formatDateRange } from "@/utils/dates";
@@ -354,10 +355,12 @@ export interface SalesChartProps {
  *
  * It is presentational and holds no state. The series, the range, the bucket and the split all arrive as props
  * and every change goes back through a callback, because the query belongs to the page and to the URL behind
- * it; nothing is fetched, recomputed or reformatted here. Bucket wording — on the axis, in the readout and in
- * the paired data table — is `bucketLabel`'s, so a key is never re-derived from a date string in this file,
- * and the series keep the token-referenced colours the service assigned them, which is what carries the
- * legend's swatch and the dash patterns that separate the lines without relying on hue.
+ * it; nothing is fetched, recomputed or reformatted here. A changed bucket or split re-reads the period, and
+ * that read swaps the frame's skeleton for the chart with both controls inside it, so each change is handed to
+ * the page already composed with the handoff that puts the focus on the section below. Bucket wording — on the
+ * axis, in the readout and in the paired data table — is `bucketLabel`'s, so a key is never re-derived from a
+ * date string in this file, and the series keep the token-referenced colours the service assigned them, which
+ * is what carries the legend's swatch and the dash patterns that separate the lines without relying on hue.
  *
  * A period with no revenue is the chart's own empty state, in its own fixed-height frame, and the paired data
  * table beneath the plot is what keeps every figure readable without colour or geometry. While the page is
@@ -401,6 +404,17 @@ export function SalesChart({
     [from, to],
   );
 
+  /*
+   * The region the two controls hand the focus off to, and the handoff itself.
+   *
+   * Changing the bucket or the split re-reads the period, and while that read is in flight the frame holds a
+   * skeleton with the controls rendered into its header — so the control the reader just used is unmounted by
+   * the commit that starts the read, and the browser would drop the focus onto `document.body`. This section
+   * wraps both of the frame's states, which is what makes it the region to hand the focus to, and its heading
+   * names it.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff();
+
   // The axis, the readout and the paired table read a band key through one formatter, so the bucket's human
   // wording has one home in `src/lib/analyticsService.ts`, told which period it is wording over; an
   // already-worded key is printed as it stands.
@@ -412,9 +426,9 @@ export function SalesChart({
   const controls = (
     <ChartControls
       bucket={bucket}
-      onBucketChange={onBucketChange}
+      onBucketChange={handOffThen(handOffFocus, onBucketChange)}
       groupBy={groupBy}
-      onGroupByChange={onGroupByChange}
+      onGroupByChange={handOffThen(handOffFocus, onGroupByChange)}
     />
   );
 
@@ -424,7 +438,12 @@ export function SalesChart({
   const bandCount = hasCopy(from) && hasCopy(to) ? bucketCount({ from, to }, bucket) : 0;
 
   return (
-    <section className={CLASSES.section} aria-labelledby={hasTitle ? headingId : undefined}>
+    <section
+      className={CLASSES.section}
+      aria-labelledby={hasTitle ? headingId : undefined}
+      ref={regionRef}
+      tabIndex={-1}
+    >
       {hasTitle ? (
         <Heading id={headingId} className={CLASSES.title}>
           {title}

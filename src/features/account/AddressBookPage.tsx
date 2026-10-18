@@ -1,10 +1,10 @@
 /**
  * Path: src/features/account/AddressBookPage.tsx
  * Purpose: Address cards with add, edit, remove and set-default actions, and a confirm dialog on removal
- * Lines: 554
+ * Lines: 563
  */
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactElement, RefObject } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -36,6 +36,7 @@ import {
 } from "@/lib/customerService";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Address, AddressInput, AddressKind } from "@/types/account";
@@ -294,12 +295,20 @@ export function AddressBookPage(): ReactElement {
   const toasts = useToast();
 
   const headingId = useId();
-  const headingRef = useRef<HTMLHeadingElement | null>(null);
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
   const alertRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
-  /** The address whose removal was applied, so the focus effect below can tell that change from a re-read. */
-  const removedIdRef = useRef<AddressId | null>(null);
+
+  /**
+   * The region this page hands the focus off to, and the arming call each changing action makes.
+   *
+   * Every action that changes the book takes the control that raised it away — a removal unmounts the card, a
+   * save unmounts the dialog and, with the re-read after it, the card an edited control belonged to, and a
+   * nomination disables the toggle in hand — so none of them can hand the focus back to the control that raised
+   * it. The section's own heading takes it instead, which keeps a keyboard user inside the region they were
+   * working in rather than at the top of the document.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLHeadingElement>();
 
   const [draft, setDraft] = useState<AddressInput | null>(null);
   const [editing, setEditing] = useState<Address | null>(null);
@@ -330,15 +339,6 @@ export function AddressBookPage(): ReactElement {
 
   // A refused save lands the keyboard on the dialog's own alert, or on the first control the failure named.
   useRefusalFocus(hasErrors(fieldErrors), alertRef, formRef);
-  // Removing an address takes that card's own controls with it, so the confirmation cannot hand the focus
-  // back to the control that opened it: once the applied book no longer holds the removed address, the
-  // section's heading takes it, which keeps a keyboard user inside the region they were working in.
-  useEffect(() => {
-    const removedId = removedIdRef.current;
-    if (removedId === null || (data ?? []).some((address) => address.id === removedId)) return;
-    removedIdRef.current = null;
-    headingRef.current?.focus();
-  }, [data]);
   // Once the book is known to be empty the empty state is the one control that offers the add action, so the
   // section offers it only while the book is loading, failed or holding addresses.
   const offersAddAction = status !== "success" || addresses.length > 0;
@@ -394,6 +394,9 @@ export function AddressBookPage(): ReactElement {
       if (FORM_ERROR_KEY in mapped) toasts.error(result.error.message);
       return;
     }
+    // Armed before the dialog closes: the re-read below stands skeletons where the cards were, so neither the
+    // control that opened the dialog nor the one that saved survives to hold the focus — the heading does.
+    handOffFocus();
     closeForm();
     toasts.success(FEEDBACK_COPY.TOAST_ADDRESS_SAVED);
     reloadAddresses();
@@ -401,6 +404,9 @@ export function AddressBookPage(): ReactElement {
 
   const nominateDefault = async (address: Address, kind: AddressKind): Promise<void> => {
     if (customerId === null) return;
+    // Armed before the toggle is disabled: a control the browser disables gives the focus up, so the heading
+    // has to claim it on the very commit that disables the one the customer just activated.
+    handOffFocus();
     setNamingId(address.id);
     const result = await setDefaultAddress(customerId, address.id, kind, { sessionToken });
     setNamingId(null);
@@ -421,7 +427,10 @@ export function AddressBookPage(): ReactElement {
       toasts.error(result.error.message);
       return;
     }
-    removedIdRef.current = pendingRemoval.id;
+    // Armed before the dialog closes: the removal unmounts the control that confirmed it and, with the re-read
+    // below, the card it belonged to, so the heading the handoff names takes the focus the browser would
+    // otherwise drop onto the document body.
+    handOffFocus();
     setPendingRemoval(null);
     toasts.success(FEEDBACK_COPY.TOAST_ADDRESS_REMOVED);
     // The default a removed address held falls to the most recently added address that remains — the
@@ -476,7 +485,7 @@ export function AddressBookPage(): ReactElement {
 
   return (
     <section aria-labelledby={headingId} className="sp-stack">
-      <h2 id={headingId} ref={headingRef} tabIndex={-1}>
+      <h2 id={headingId} ref={regionRef} tabIndex={-1}>
         {ACCOUNT_COPY.ADDRESS_BOOK_HEADING}
       </h2>
       {customerId === null ? (

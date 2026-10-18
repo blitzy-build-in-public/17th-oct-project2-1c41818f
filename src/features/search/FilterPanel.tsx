@@ -1,11 +1,11 @@
 /**
  * Path: src/features/search/FilterPanel.tsx
  * Purpose: The facet panel for category, brand, price, rating and availability, with counts and clear actions
- * Lines: 458
+ * Lines: 488
  */
 
-import { useCallback, useId, useState } from "react";
-import type { ReactElement, ReactNode } from "react";
+import { useCallback, useId, useRef, useState } from "react";
+import type { ReactElement, ReactNode, RefObject } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Feedback";
@@ -23,6 +23,7 @@ import {
 import { FACET_DEFINITIONS } from "@/constants/taxonomy";
 import type { FacetDefinition } from "@/constants/taxonomy";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import type { Facet, FacetValue, FilterState } from "@/types/catalog";
 import { indexBy } from "@/utils/collections";
 import { formatNumber } from "@/utils/format";
@@ -240,6 +241,14 @@ export interface FilterPanelProps {
    *  open — the state the panel exists in. */
   readonly panelId?: string;
   readonly className?: string;
+  /**
+   * The region the panel's own clear actions hand the focus off to when the control that raised one leaves with
+   * the change it made — the results section the facets filter, which survives both of them and is named by its
+   * own heading, so the move lands in a region a screen reader announces rather than on the document body.
+   * Omitted, the panel moves nothing: a caller that renders no region of its own keeps the browser's own
+   * behaviour.
+   */
+  readonly focusTargetRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -260,13 +269,16 @@ export interface FilterPanelProps {
  * nothing: this surface's counts are the response's, and a count from a query that was never answered is not a
  * current count, while a second alert beside the page's would announce one failure twice. Counts are only ever
  * the ones the response carries, so the surface holds no rule of the catalogue's own: no predicate, no comparator
- * and no second count.
+ * and no second count. Each of its own actions takes the control that raised it away, so it is armed with the
+ * handoff of the region `focusTargetRef` names — the page's results — and of the container this panel renders
+ * itself, which takes that focus instead while the open drawer has made the page inert.
  *
- * @param props - The facets and filter state to render, the change observer, the panel's id and extra classes.
+ * @param props - The facets and filter state to render, the change observer, the panel's id, extra classes and
+ *   the region its own actions hand the focus off to.
  * @returns The column from the extra-large stop up, or the trigger with its drawer below it — or nothing at all
  *   while the read that fills the panel stands failed, because neither placement then has anything to offer.
  *
- * BLITZY [BUDGET]: 458 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was
+ * BLITZY [BUDGET]: 488 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was
  * added to reach a number and none was cut to leave one. The five data-driven groups, the three controls they
  * dispatch to, the class contract and the four data states are what the surface needs, and the plan's own
  * remedy — a second file — would break the path this slice's page imports.
@@ -277,11 +289,18 @@ export function FilterPanel({
   onChange,
   panelId,
   className,
+  focusTargetRef,
 }: FilterPanelProps): ReactElement | null {
   const view = useCatalog();
   const catalog = useCatalogFilters();
   const filters = filtersProp ?? catalog.filters;
   const facets = facetsProp ?? view.facets;
+  // The panel's own actions take the control that raised them with them — a cleared facet drops its Clear
+  // action and a cleared query drops the clear-all action — so each is armed with the region the caller hands
+  // in, which survives both. That region lives inside the application root, which an open overlay makes inert,
+  // so the panel's own container stands in for it then.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const { handOffFocus } = useFocusHandoff(focusTargetRef, panelRef);
 
   // The only state this file holds: whether the drawer is open. Nothing about the selection is kept here.
   const [isDrawerOpen, setDrawerOpen] = useState(false);
@@ -299,7 +318,10 @@ export function FilterPanel({
     [onChange],
   );
   const closeDrawer = useCallback((): void => setDrawerOpen(false), []);
-  const clearAll = (): void => write(() => catalog.clearAll());
+  const clearAll = (): void => {
+    handOffFocus();
+    write(() => catalog.clearAll());
+  };
   // One write serves both single-choice facets: the provider's setter replaces the facet's whole selection, so a
   // band or a floor replaces the one already applied, and the "any" choice clears it.
   const selectValue = (facetId: FacetDefinition["id"], value: string): void =>
@@ -330,7 +352,10 @@ export function FilterPanel({
     const group = {
       definition,
       isApplied,
-      onClear: (): void => write(() => catalog.clearFacet(definition.id)),
+      onClear: (): void => {
+        handOffFocus();
+        write(() => catalog.clearFacet(definition.id));
+      },
     };
 
     // The one element a single-choice facet's group is rendered as, so the rating floors below and the price
@@ -415,7 +440,12 @@ export function FilterPanel({
     ) : null;
   const columnClass = className === undefined ? CLASSES.column : `${CLASSES.column} ${className}`;
   const panel = (
-    <div className={isColumn ? columnClass : `${CLASSES.column} ${CLASSES.drawer}`} id={id}>
+    <div
+      className={isColumn ? columnClass : `${CLASSES.column} ${CLASSES.drawer}`}
+      id={id}
+      ref={panelRef}
+      tabIndex={-1}
+    >
       <div className={CLASSES.panel}>
         {isColumn ? <h2 className={CLASSES.legend}>{SEARCH_COPY.FILTER_PANEL_HEADING}</h2> : null}
         {isColumn ? clearAllAction : null}

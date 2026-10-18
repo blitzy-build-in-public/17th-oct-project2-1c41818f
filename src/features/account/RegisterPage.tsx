@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/RegisterPage.tsx
  * Purpose: Registration form with field validation and duplicate-email handling
- * Lines: 385
+ * Lines: 408
  */
 
 import { useId, useRef, useState } from "react";
@@ -29,6 +29,7 @@ import { RETURN_TO_QUERY_KEY, ROUTES, loginPath } from "@/constants/routes";
 import { toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
 import type { RegistrationInput } from "@/types/account";
@@ -215,6 +216,19 @@ export function RegisterPage(): ReactElement {
   useRefusalFocus(hasErrors(errors), alertRef, formRef);
 
   /**
+   * The region a submission hands the focus off to: the form itself, which holds the control that starts the
+   * request and every control a refusal is reported on. The form's own `formRef` is that region, so one element
+   * carries both moves — the handoff and the refusal focus above — rather than two refs on one form.
+   *
+   * The submit control is disabled for as long as the request runs and each field with it, so a disabled control
+   * cannot hold the focus and the commit that starts the request drops it onto the document body — before the
+   * refusal has been rendered at all. The form takes it instead, so a reader whose submission was refused stays
+   * in the panel with its fields and its messages. A registration that succeeds opens the session and navigates,
+   * which unmounts the form: nothing is moved on that path, because the route change moves the focus.
+   */
+  const { handOffFocus } = useFocusHandoff<HTMLFormElement>(formRef);
+
+  /**
    * Writes one control's value into the draft and clears that control's message, so a corrected field stops
    * reporting the moment it is edited rather than standing until the next submission. The message above the
    * fields belongs to the request rather than to one control, so it stays until the form is sent again.
@@ -264,6 +278,9 @@ export function RegisterPage(): ReactElement {
       return;
     }
     setErrors({});
+    // Armed before the request: the submit control and every field are disabled for its duration, and the
+    // focus they give up belongs inside the form rather than on the document body.
+    handOffFocus();
     setIsSubmitting(true);
     void submit(input);
   }
@@ -335,7 +352,13 @@ export function RegisterPage(): ReactElement {
 
           {/* `noValidate` leaves the judging to `src/utils/validation.ts` rather than to the browser, so a
               refusal is worded once and the field keeps the `required` markup assistive technology reads. */}
-          <form className="sp-auth__form" onSubmit={handleSubmit} noValidate ref={formRef}>
+          <form
+            className="sp-auth__form"
+            onSubmit={handleSubmit}
+            noValidate
+            ref={formRef}
+            tabIndex={-1}
+          >
             {formError === undefined ? null : (
               <div className="sp-auth__alert" ref={alertRef} tabIndex={-1}>
                 <Alert tone="danger" title={FEEDBACK_COPY.ERROR_STATE_TITLE}>

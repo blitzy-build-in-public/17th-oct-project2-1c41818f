@@ -1,10 +1,10 @@
 /**
  * Path: src/features/home/FeaturedProducts.tsx
  * Purpose: The featured-products strip drawn from the seeded catalogue, with a link into the catalogue
- * Lines: 274
+ * Lines: 335
  */
 
-import type { ReactElement } from "react";
+import type { FocusEvent, ReactElement } from "react";
 
 import { Link } from "react-router-dom";
 
@@ -125,6 +125,64 @@ interface FeaturedTilesProps {
 }
 
 /**
+ * Brings a tile that has just taken focus wholly inside the strip.
+ *
+ * The browser's own focus scroll cannot manage this alone, and the measurement at 375x800 says why: an engine
+ * scrolls a focused element into view only once it lies entirely outside the scrollport. A control inside a tile
+ * that is still partly on screen therefore draws no scroll at all, and the strip's `proximity` snapping does not
+ * then pull the tile to the `start` position its `scroll-snap-align` declares — so a Tab walk reaches the second
+ * tile's link with 35.61px of its 194.77px box showing and its quick add with 14.8% of its 240.39px box showing,
+ * and the fourth tile's pair with a sliver of about 36px each. No `scroll-margin-inline` on the tiles or on the
+ * controls inside them, and no `scroll-padding-inline` on the strip, changes that: the scroll such a margin would
+ * correct is never issued. Scrolling the tile is what brings the whole card in, because the tile — not the control
+ * inside it — is the box the strip clips.
+ *
+ * `inline: "start"` is the alignment that leaves the snap nothing to correct: the tile's own
+ * `scroll-snap-align: start`, from the sheet, already makes its start edge the offset the strip rests at, so the
+ * position asked for here coincides with the one the strip would choose for itself. `block: "nearest"` leaves the
+ * vertical axis to the browser, which handles it and which this band does not change.
+ *
+ * The handler acts only where the strip scrolls sideways. From --breakpoint-md it is a grid with
+ * `overflow-x: visible`, and the related strip on a product's page never wears this modifier; the test for that is
+ * the strip's own overflow rather than a breakpoint read here, which is also what keeps the handler off the
+ * layout-free DOM a test runs in, where `scrollWidth` and `clientWidth` are both 0 and no scrolling exists.
+ *
+ * The strip stays off the tab order, as it is now: its tiles' links and quick adds are the band's focus stops
+ * already, and making the scroll region a stop of its own would put one more press in front of every tile without
+ * adding anything a reader can activate. Nothing here changes what is focusable, only where the strip sits when
+ * something inside it is.
+ *
+ * @param event - The focus the strip catches from a tile's own link or quick-add button.
+ */
+function scrollTileIntoView(event: FocusEvent<HTMLUListElement>): void {
+  const strip = event.currentTarget;
+  const control = event.target;
+
+  if (!(control instanceof HTMLElement) || strip.scrollWidth <= strip.clientWidth) {
+    return;
+  }
+
+  // The tile is the strip's direct child: `ProductCard` renders itself as the `<li>` precisely so the sheet's
+  // `.sp-product-grid--strip > *` can size it, which leaves a `li` of some other box not this band's business.
+  const tile = control.closest("li");
+
+  if (tile === null || tile.parentElement !== strip) {
+    return;
+  }
+
+  const stripBox = strip.getBoundingClientRect();
+  const tileBox = tile.getBoundingClientRect();
+
+  // A tile already wholly inside asks for nothing, and that is every tile from --breakpoint-md up as well as the
+  // tile a reader is already looking at: moving it would be motion with no work to do.
+  if (tileBox.left >= stripBox.left && tileBox.right <= stripBox.right) {
+    return;
+  }
+
+  tile.scrollIntoView({ block: "nearest", inline: "start" });
+}
+
+/**
  * The loaded band: one tile per product, each a link to its own page and, through `ProductCard`'s quick add,
  * one activation away from the cart.
  *
@@ -141,6 +199,9 @@ interface FeaturedTilesProps {
  * rather than in the section that renders it, so a change to the cart re-renders the strip and not the band's
  * own heading and view-all row.
  *
+ * The list catches focus so that a tile the strip has only partly on screen is brought fully into it, which is
+ * the one thing the browser's own focus scroll leaves undone at this width; the handler above states why.
+ *
  * @param props - The products to feature, in the order to render them.
  * @returns The strip's list of tiles.
  */
@@ -148,7 +209,7 @@ function FeaturedTiles({ products }: FeaturedTilesProps): ReactElement {
   const onAddToCart = useQuickAdd();
 
   return (
-    <ul className="sp-product-grid sp-product-grid--strip" role="list">
+    <ul className="sp-product-grid sp-product-grid--strip" role="list" onFocus={scrollTileIntoView}>
       {products.map((product, index) => (
         <ProductCard
           key={product.id}

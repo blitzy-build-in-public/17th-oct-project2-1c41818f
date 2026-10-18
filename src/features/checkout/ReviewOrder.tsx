@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ReviewOrder.tsx
  * Purpose: The review step: items, addresses, shipping, totals and payment restated before submission
- * Lines: 474
+ * Lines: 516
  */
 
 import { useId, useRef } from "react";
@@ -23,6 +23,7 @@ import { ROUTES } from "@/constants/routes";
 import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { useCheckout } from "@/state/CheckoutContext";
 import type { CheckoutActions, CheckoutView } from "@/state/CheckoutContext";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import type { AddressInput } from "@/types/account";
 import type { ApiError, CurrencyCode } from "@/types/common";
@@ -32,7 +33,9 @@ import { formatFreeShippingRemaining, formatMoney, formatQuantity } from "@/util
 /*
  * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
  * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step: `sp-review`
- * for the grid the sections sit in, `sp-review__section` for one section (a heading, the edit control returning
+ * for the grid each state of the step sits in — the step's own root, and the grid the sections sit in inside
+ * it —
+ * `sp-review__section` for one section (a heading, the edit control returning
  * to the step it came from, and the content beneath them) with `sp-review__edit` placing that control, and
  * `sp-review__list` with `sp-review__totals` for the compact lines' list and the totals block. The compact line
  * itself is `sp-review__item`, and the register the amounts read in is the order summary's — `sp-summary__title`,
@@ -261,6 +264,9 @@ interface ReviewSummaryProps {
   readonly snapshot: PricedCart;
   /** The identifier the submission notice carries, so the submit control can describe itself with it. */
   readonly noticeId: string;
+  /** The arming call this step's root hands the submission: the submit control disables itself while the request
+   *  is in flight, so the focus it gives up is claimed by the region that survives the submission. */
+  readonly handOffFocus: () => void;
 }
 
 /**
@@ -273,7 +279,12 @@ interface ReviewSummaryProps {
  * @param props - The flow, the priced cart it produced and the notice's identifier.
  * @returns The review's sections and its single action band.
  */
-function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactElement {
+function ReviewSummary({
+  flow,
+  snapshot,
+  noticeId,
+  handOffFocus,
+}: ReviewSummaryProps): ReactElement {
   const { actions, canSubmit, error, isSubmitting, values } = flow;
   const { appliedPromos, currency, freeShippingRemainingMinor, shippingMethodId, shippingMinor } =
     snapshot;
@@ -303,8 +314,11 @@ function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactE
         : CART_COPY.FREE_DELIVERY_EARNED_LABEL;
 
   /** The single submission path. `submit` resolves rather than rejecting — the flow reports the outcome through
-   *  its view — so its promise is deliberately not awaited, while the control is disabled as it runs. */
+   *  its view — so its promise is deliberately not awaited, while the control is disabled as it runs. The handoff
+   *  is armed first, because that disabled control is what gives the focus up, in the commit that starts the
+   *  request, and both a placed order and a refused one leave the reader inside this step's own root. */
   const submitOrder = (): void => {
+    handOffFocus();
     void actions.submit();
   };
 
@@ -442,20 +456,30 @@ function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactE
  *
  * @param flow - The flow, as the provider publishes it.
  * @param noticeId - The identifier the submission notice carries.
+ * @param handOffFocus - The arming call the retry makes, because that control leaves with the alert it sits in.
  * @returns The element the step renders.
  */
-function reviewBody(flow: ReviewFlow, noticeId: string): ReactElement {
+function reviewBody(flow: ReviewFlow, noticeId: string, handOffFocus: () => void): ReactElement {
   if (flow.pricingStatus === "loading") return <ReviewSkeleton />;
   if (flow.pricingError !== null) {
-    const retryPricing = (): void => {
+    // Armed before the flow is asked again: the newer quote replaces this failure, and the alert carrying the
+    // control the reader just pressed with it, so the focus it gives up lands on the root that outlives both.
+    const retryPricing = handOffThen(handOffFocus, (): void => {
       flow.actions.retryPricing();
-    };
+    });
     return <PricingFailure error={flow.pricingError} onRetry={retryPricing} />;
   }
   if (flow.snapshot === null) {
     return <EmptyState surface="cart" actionHref={ROUTES.CATALOG} headingLevel={3} />;
   }
-  return <ReviewSummary flow={flow} snapshot={flow.snapshot} noticeId={noticeId} />;
+  return (
+    <ReviewSummary
+      flow={flow}
+      snapshot={flow.snapshot}
+      noticeId={noticeId}
+      handOffFocus={handOffFocus}
+    />
+  );
 }
 
 /**
@@ -465,10 +489,28 @@ function reviewBody(flow: ReviewFlow, noticeId: string): ReactElement {
  * no order and mints no key, because the flow's `submit` takes the snapshot, sends it under the key the flow
  * minted for this attempt, and hands the cart its own clear once the order is placed.
  *
- * @returns The step's content, or the placeholder, the empty state or the failure the flow is in.
+ * @returns The root of the step's content: the placeholder, the empty state, the failure or the review itself.
  */
 export function ReviewOrder(): ReactElement {
   const flow = useCheckout();
   const noticeId = useId();
-  return reviewBody(flow, noticeId);
+
+  /*
+   * The region this step's own actions hand the focus off to, and the call that arms the move.
+   *
+   * Two controls in this step take the focus down with them: the submit disables itself for as long as the
+   * request runs, so the commit that starts the attempt gives the focus the browser held on it back to the
+   * document, and the price failure's retry leaves with the alert it sits in the moment a newer quote puts this
+   * step back on its placeholder. Both outcomes land in this step, whose states render a root each, so the one
+   * element that survives all of them is the root below: it is the step's whole body, it takes the focus without
+   * joining the tab order, and the shell's own step heading names the place the reader lands in. A placed order
+   * unmounts the step and leaves the route change to move the focus, which is what the shell does for it.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
+
+  return (
+    <div className="sp-review" ref={regionRef} tabIndex={-1}>
+      {reviewBody(flow, noticeId, handOffFocus)}
+    </div>
+  );
 }

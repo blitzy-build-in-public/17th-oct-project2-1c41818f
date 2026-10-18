@@ -1,10 +1,10 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 393
+ * Lines: 373
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
@@ -31,6 +31,7 @@ import {
 import { priceCart, promoRejectionMessage } from "@/lib/pricingService";
 import { useCart, useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { LineId } from "@/types/common";
 import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
@@ -204,38 +205,17 @@ export function CartPage(): ReactElement {
   }, [cart, error, promoCode, toasts]);
 
   /**
-   * The region the page's body lands in, so focus can be moved to it when an action of this page removes the
-   * control that held it. It carries `tabindex="-1"` for that reason alone: the region is not in the tab
-   * order, it is only somewhere focus may be put.
-   */
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  /**
-   * Whether an action of this page is waiting for the state its control's removal depends on. Set by the
-   * clear control and by the retry the failure state offers, and read once by the effect below, so focus is
-   * moved only after the shopper's own action and never after a cart that was already empty on arrival or a
-   * first price that simply arrived.
-   */
-  const isFocusRestorePending = useRef(false);
-
-  /*
-   * Focus is moved to the page's body when an action of this page takes away the control that held it.
+   * The region the page's body lands in, and the arming call its own actions make, so the focus can be moved to
+   * it when an action of this page removes the control that held it.
    *
-   * Two controls do that. The clear control is rendered only while lines are held, so pressing it removes
-   * the focused element from the document. The retry the failure state offers sits in the alert that leaves
-   * with the failure, so a price that arrives unmounts it in the same way. In both cases the browser would
-   * otherwise drop focus onto the document body and return a keyboard user to the top of the page with
-   * nothing said, and in both the move waits for the state the action asked for — an empty cart, or a price
-   * that settled — so it can never land while the control it replaces is still on screen. The flag makes it
-   * a one-shot: a page that arrives empty, or that is simply rendering its first price, moves nothing, and a
-   * retry that fails again reports a new alert whose control the browser keeps focused.
+   * Two controls do that: the clear control is rendered only while lines are held, so pressing it removes the
+   * focused element from the document, and the retry the failure state offers sits in the alert that leaves with
+   * the failure, so a price that arrives unmounts it in the same way. In both cases the browser would otherwise
+   * drop the focus onto the document body and return a keyboard user to the top of the page with nothing said.
+   * The page body is the survivor the handoff lands on because it is rendered in every one of this page's states,
+   * empty included, so it is always there to take the focus.
    */
-  useEffect(() => {
-    if (!isFocusRestorePending.current) return;
-    if (!isEmpty && status !== "success") return;
-    isFocusRestorePending.current = false;
-    bodyRef.current?.focus();
-  }, [isEmpty, status]);
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
 
   /**
    * The priced lines keyed by their own id, so each row reads the figures for the line it renders.
@@ -254,7 +234,7 @@ export function CartPage(): ReactElement {
    * empty state that follows is this page's own statement that no line is left.
    */
   const clearCart = (): void => {
-    isFocusRestorePending.current = true;
+    handOffFocus();
     cart.clearCart();
     toasts.success(FEEDBACK_COPY.TOAST_CART_CLEARED);
   };
@@ -265,7 +245,7 @@ export function CartPage(): ReactElement {
    * without the arm a keyboard user would be dropped onto the document body the moment the figures arrive.
    */
   const retryPricing = (): void => {
-    isFocusRestorePending.current = true;
+    handOffFocus();
     reload();
   };
 
@@ -295,7 +275,7 @@ export function CartPage(): ReactElement {
           description={isEmpty ? undefined : cartItemCountLabel(itemCount)}
           title={CART_COPY.PAGE_HEADING}
         />
-        <div className={CLASSES.pageBody} ref={bodyRef} tabIndex={-1}>
+        <div className={CLASSES.pageBody} ref={regionRef} tabIndex={-1}>
           {body}
         </div>
       </div>

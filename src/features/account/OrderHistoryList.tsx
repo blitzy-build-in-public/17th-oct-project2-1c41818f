@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryList.tsx
  * Purpose: The customer's order history: the status and date filters, the paged table they resolve to and the loading placeholder
- * Lines: 366
+ * Lines: 386
  */
 
 import { useCallback, useId, useState } from "react";
@@ -29,6 +29,7 @@ import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
 // repeat of the read could answer differently is a fact about the refusal, and `src/lib/apiContract.ts` owns it.
 import { isSessionFailure } from "@/lib/apiClient";
 import { listOrders } from "@/lib/orderService";
+import { useFocusHandoff } from "@/state/focusHandoff";
 import { useAsync } from "@/state/hooks";
 import type { Order, OrderHistoryQuery } from "@/types/commerce";
 import type { PageResult, Result } from "@/types/common";
@@ -207,6 +208,15 @@ export function OrderHistoryList({
   const { pathname } = useLocation();
   const headingId = useId();
   const [statusValue, setStatusValue] = useState("");
+
+  /*
+   * The region the two actions hand the focus off to, and the handoff itself: the section below is rendered
+   * around the filters, the table and every state they resolve to, so it is what outlives an action that takes
+   * its own control away — the empty state's clear-all and the error state's retry both leave with the state
+   * they report — where the browser would otherwise drop the focus onto `document.body`. `aria-labelledby`
+   * names the region, so the heading it points at is what a screen reader announces when the focus lands.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff();
   const [fromText, setFromText] = useState("");
   const [toText, setToText] = useState("");
   const [page, setPage] = useState(1);
@@ -271,10 +281,20 @@ export function OrderHistoryList({
     };
 
   const clearFilters = (): void => {
+    // Armed before the write: clearing the filters takes the empty state's own control, or the message's,
+    // off the screen with them.
+    handOffFocus();
     setStatusValue("");
     setFromText("");
     setToText("");
     setPage(1);
+  };
+
+  /** Asks for the page again, for the error state's retry: that control leaves with the failure it reports, so
+   *  the history around it takes the focus the retry would otherwise lose. */
+  const retry = (): void => {
+    handOffFocus();
+    reload();
   };
 
   const renderResults = (): ReactElement => {
@@ -290,7 +310,7 @@ export function OrderHistoryList({
           </p>
         </div>
       ) : (
-        <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={reload} tone="danger" />
+        <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={retry} tone="danger" />
       );
     }
     if (loadStatus !== "success") return <OrderHistoryPlaceholder />;
@@ -325,7 +345,7 @@ export function OrderHistoryList({
   };
 
   return (
-    <section aria-labelledby={headingId} className="sp-order-history">
+    <section aria-labelledby={headingId} className="sp-order-history" ref={regionRef} tabIndex={-1}>
       <h2 id={headingId}>{ACCOUNT_COPY.ORDERS_HEADING}</h2>
       <div className="sp-order-history__filters">
         <Select

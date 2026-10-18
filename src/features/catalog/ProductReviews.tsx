@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 536
+ * Lines: 570
  */
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -33,6 +33,7 @@ import { FACET_DEFINITIONS } from "@/constants/taxonomy";
 import { listProductReviews, submitProductReview } from "@/lib/catalogReads";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import { useAsync } from "@/state/hooks";
 import type { FacetId, RatingValue, Review, ReviewInput } from "@/types/catalog";
 import type {
@@ -219,6 +220,9 @@ function ReviewForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   /** Set before the request is issued, so a second submission arriving in the same tick is refused. */
   const submittingRef = useRef(false);
+  /** The region the submission hands the focus off to: the form itself, which holds the control that starts the
+   *  write and survives every outcome of it, and whose own heading names it wherever the focus lands. */
+  const { handOffFocus } = useFocusHandoff(formRef);
 
   const clearField = (field: string): void => {
     setFieldErrors((current) => clearFieldError(current, field));
@@ -273,6 +277,9 @@ function ReviewForm({
     // keeps the submitted body total rather than making the rating optional downstream.
     if (!isRatingValue(rating)) return;
     submittingRef.current = true;
+    // Armed before the write: the submit control and every field are disabled for its duration, so the focus
+    // they give up is claimed by the form rather than dropped onto the document body.
+    handOffFocus();
     setIsSubmitting(true);
     void submitReview({ rating, title: draft.title.trim(), body: draft.body.trim() });
   };
@@ -353,7 +360,9 @@ export interface ProductReviewsProps {
  * page buttons cannot disagree with the payload the endpoint answered, and the caption beside them counts
  * reviews rather than the catalogue's products. The read itself is issued with the page the reader asked for
  * rather than with the clamped one: while a page is in flight the previous total is not in hand, and clamping
- * against an absent total would re-issue the first page instead of the chosen one.
+ * against an absent total would re-issue the first page instead of the chosen one. A paged change takes the pager
+ * off the screen, so `applyPaging` also hands the focus to the section below, which survives the read and is named
+ * by its own heading.
  *
  * All four states are derived during render — the placeholder rows while the read is in flight, the alert
  * carrying the failure's own message with its retry, the empty state when the product has no reviews at all or
@@ -371,6 +380,18 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
   const headingId = useId();
   const formRef = useRef<HTMLFormElement | null>(null);
 
+  /*
+   * The region every action below hands the focus off to, and the handoff they arm.
+   *
+   * A paged change destroys the pager and swaps the list for placeholder rows, the failure's retry leaves with
+   * the failure it reports, and the empty state's own action leaves with the filter it clears — so in each case
+   * the control the reader activated is unmounted and the browser would drop the focus onto `document.body`.
+   * This section is rendered in every one of the read's states, and the heading it opens with names it, so the
+   * handed-off focus lands in a region a screen reader announces. The rating filter needs no handoff: it is the
+   * summary block's and keeps its place across the read.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff();
+
   const [ratingFilter, setRatingFilter] = useState<RatingValue | null>(null);
   const [paging, setPaging] = useState<{ readonly page: number; readonly pageSize: number }>({
     page: 1,
@@ -387,9 +408,14 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
     [productId, paging.page, paging.pageSize, ratingFilter],
   );
 
-  const applyPaging = useCallback((page: number, pageSize: number): void => {
-    setPaging({ page, pageSize });
-  }, []);
+  const applyPaging = useCallback(
+    (page: number, pageSize: number): void => {
+      // Armed before the write, so the focus moves with the commit that removes the pager.
+      handOffFocus();
+      setPaging({ page, pageSize });
+    },
+    [handOffFocus],
+  );
 
   /** The paging the control renders, derived from the page asked for and the total of the page in hand. */
   const pager = usePagination({
@@ -414,9 +440,11 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
   );
 
   const showAllRatings = useCallback((): void => {
+    // Armed before the write: the empty state's own control leaves with the filter it clears.
+    handOffFocus();
     setRatingFilter(null);
     goToFirstPage();
-  }, [goToFirstPage]);
+  }, [goToFirstPage, handOffFocus]);
 
   const focusReviewForm = useCallback((): void => {
     formRef.current?.focus();
@@ -443,7 +471,7 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
         tone="danger"
         error={reviews.error}
         actionLabel={COMMON_ACTIONS.RETRY}
-        onAction={reviews.reload}
+        onAction={handOffThen(handOffFocus, reviews.reload)}
       />
     );
   } else if (loaded === null) {
@@ -507,7 +535,13 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
   }
 
   return (
-    <section className={sectionClass} aria-labelledby={headingId} aria-busy={isReading}>
+    <section
+      className={sectionClass}
+      aria-labelledby={headingId}
+      aria-busy={isReading}
+      ref={regionRef}
+      tabIndex={-1}
+    >
       <h2 id={headingId}>{CATALOG_COPY.REVIEWS_HEADING}</h2>
       <div className="sp-reviews__summary">
         <p className="sp-reviews__date" role="status">

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderConfirmation.tsx
  * Purpose: Confirmation route showing the order number, itemised lines, delivery estimate and address
- * Lines: 543
+ * Lines: 558
  */
 
 import type { ReactElement } from "react";
@@ -33,6 +33,7 @@ import { isNotFoundFailure, isSessionFailure } from "@/lib/apiClient";
 import { getOrder } from "@/lib/orderService";
 import type { OrderServiceOptions } from "@/lib/orderService";
 import { useAuth } from "@/state/AuthContext";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import { useAsync, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import type { AsyncQueryState } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";
@@ -435,6 +436,8 @@ function ConfirmationDetails({
  * @param orderId - The identifier the route named, `""` when it named none.
  * @param query - The read's state and its actions, from `useAsync`.
  * @param session - The session in force, or `null` for a visitor who is not signed in.
+ * @param retryRead - The failed read's retry, already composed with the focus handoff, because the control
+ *   that raises it leaves with the failure it reports.
  * @param returnPath - The path the visitor is on, which a failed read's sign-in link carries back.
  * @returns The element the page renders below its header.
  */
@@ -442,9 +445,10 @@ function confirmationBody(
   orderId: string,
   query: AsyncQueryState<Order>,
   session: Session | null,
+  retryRead: () => void,
   returnPath: string,
 ): ReactElement {
-  const { data, error, reload } = query;
+  const { data, error } = query;
 
   if (orderId === "") {
     return (
@@ -457,7 +461,7 @@ function confirmationBody(
     );
   }
   if (error !== null) {
-    return <ConfirmationFailure error={error} onRetry={reload} returnPath={returnPath} />;
+    return <ConfirmationFailure error={error} onRetry={retryRead} returnPath={returnPath} />;
   }
   if (data === null) {
     return (
@@ -519,6 +523,15 @@ export function OrderConfirmation(): ReactElement {
       ? PAGE_TITLES.ORDER_CONFIRMATION
       : orderConfirmationHeading(order.data.orderNumber);
 
+  /*
+   * The region this route hands the focus off to: the page body, which holds whichever of the four states the
+   * read is in and therefore survives the failed read's retry, whose control leaves with the failure it
+   * reports. Without the handoff the browser would drop the focus onto `document.body` when the retry is
+   * pressed, leaving a keyboard user at the top of the document.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
+  const retryRead = handOffThen(handOffFocus, order.reload);
+
   useDocumentTitle(documentTitle(PAGE_TITLES.ORDER_CONFIRMATION));
 
   /*
@@ -536,7 +549,9 @@ export function OrderConfirmation(): ReactElement {
           title={heading}
           description={order.data === null ? undefined : CHECKOUT_COPY.CONFIRMATION_THANK_YOU}
         />
-        <div className="sp-page__body">{confirmationBody(orderId, order, session, pathname)}</div>
+        <div className="sp-page__body" ref={regionRef} tabIndex={-1}>
+          {confirmationBody(orderId, order, session, retryRead, pathname)}
+        </div>
       </div>
     </div>
   );
