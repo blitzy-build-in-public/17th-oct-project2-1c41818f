@@ -1,17 +1,18 @@
 /**
  * Path: src/features/reports/SalesReport.tsx
  * Purpose: The sales report: bucketed table, totals row, summary metrics and paired chart
- * Lines: 280
+ * Lines: 309
  */
 
 import { useCallback } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import { LineChart } from "@/components/charts/LineChart";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { COMMON_ACTIONS, EMPTY_STATES, PAGING_NOUNS } from "@/constants/content";
 import { DATE_RANGE_COPY, REPORTS_COPY } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
+import { ReportBodyPlaceholder } from "@/features/reports/ReportPlaceholder";
 import { findDefinition, runReport, summarisePeriodLabel } from "@/lib/reportService";
 import { useAuth } from "@/state/AuthContext";
 import { useAsync } from "@/state/hooks";
@@ -23,7 +24,7 @@ import type {
   ReportResult,
 } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
-import { formatBucketLabel } from "@/utils/dates";
+import { bucketCount, formatBucketLabel } from "@/utils/dates";
 import { formatCellValue } from "@/utils/format";
 
 import { ReportTable } from "./ReportTable";
@@ -42,7 +43,8 @@ import { ReportTable } from "./ReportTable";
  * action and its note, the sortable table, its caption, its paging and the totals row closing it, so no table
  * is configured and no export control is written here; `LineChart` owns the plot, the axis ticks, the readout,
  * the legend, the paired `.sp-chart__data` table every figure is also readable in and the fixed-height no-data
- * state of a period with nothing to plot; and the loading, empty and error states are the primitives of
+ * state of a period with nothing to plot; the loading state is `ReportPlaceholder`'s, which shapes the figures,
+ * the chart and the table at this report's own counts; and the empty and error states are the primitives of
  * `src/components/ui/Feedback.tsx`, each carrying its own class. No colour, radius or shadow literal, and no
  * pixel media query, is written here.
  *
@@ -85,14 +87,18 @@ const CLASSES = {
 const PERIOD_SEPARATOR = " · ";
 
 /**
- * The height the chart-shaped placeholder stands in at, in the frame's own block-size expression: the token
- * arithmetic `src/styles/admin-reports.css` gives the plot frame (the space-20 token three times over), so the
- * placeholder occupies the space the chart will and nothing shifts when the series arrive.
+ * The figures a sales run states above its table, which is what the loading summary stands in with: one entry
+ * per figure `src/lib/reportService.ts` totals for this kind — its orders, units, gross revenue, discounts,
+ * refunds and net revenue — so the grid reserves the two rows of four it fills with six entries.
  */
-const CHART_PLACEHOLDER_HEIGHT = "calc(var(--space-20) * 3)";
+const SUMMARY_FIGURE_COUNT = 6;
 
-/** How many text lines the table-shaped placeholder stacks: enough rows to read as a table rather than as one. */
-const TABLE_PLACEHOLDER_LINES = 6;
+/**
+ * The series the sales chart draws: one line — the range's net revenue per period — which is the single series
+ * `src/lib/reportService.ts` builds for this kind, and so the number of legend entries the placeholder stands
+ * in with.
+ */
+const CHART_SERIES_COUNT = 1;
 
 /**
  * The level the empty state's headline renders at: the report body is a section of the page, one level below
@@ -156,9 +162,12 @@ export interface SalesReportProps {
  * The read is owned here rather than by the page, because the period and the cut are exactly what it depends
  * on: `useAsync` is keyed on them, so a changed range or bucket re-runs it and cancels the request it
  * supersedes through the abort signal, rather than letting an answer for the previous period land under the
- * new one. The session token travels with the request, because the report endpoints admit an administrator
- * alone and the seam answers `401` to one that carries no credential — a failure this view renders as its
- * error state with a retry, never hides.
+ * new one. It keeps the result it last answered with, so a moved period or a changed cut moves the figures
+ * in place — the same summary block, chart and table, reporting the wait through the region's busy state —
+ * instead of emptying the report and re-creating those containers around the reader. The session token
+ * travels with the request, because the report endpoints admit an administrator alone and the seam answers
+ * `401` to one that carries no credential — a failure this view renders as its error state with a retry,
+ * never hides.
  *
  * Failures arrive as values: they come back as a failed `Result` and are rendered by the alert, so no
  * `try`/`catch` wraps the call. A range that recorded no activity is not a failure but a legitimate answer
@@ -187,6 +196,12 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
         { sessionToken, signal },
       ),
     [query.from, query.to, query.bucket, sessionToken],
+    // A moved period or a changed cut re-runs this view over the rows it is already showing, so the run
+    // keeps the last answered result in hand: the report table and the chart keep their rows and their
+    // figure block, and the region's `aria-busy` reports the wait until the new run's figures land. A view
+    // the selector has just mounted has no earlier run behind it, so its own first load still renders the
+    // placeholders.
+    { keepPreviousData: true },
   );
 
   // Derived from the props alone during render, so the period is stated in every state: while the rows are in
@@ -205,26 +220,36 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
 
   const isLoading = status === "idle" || status === "loading";
   const failure = status === "error" ? error : null;
+
+  // The run on screen: the payload while the read holds one, and — because this view asks the read to keep
+  // the payload it last answered with — the figures of the previous run for as long as the run that
+  // supersedes it takes. `null` therefore means the view has no run behind it yet, which is the one case
+  // that renders the placeholders.
   const report = data;
 
   let content: ReactNode;
-  if (isLoading) {
-    // Shaped like what is arriving: a plot-height block where the chart will stand, and the text lines of a
-    // table-shaped run beneath it.
-    content = (
-      <>
-        <Skeleton variant="block" height={CHART_PLACEHOLDER_HEIGHT} />
-        <Skeleton variant="text" lines={TABLE_PLACEHOLDER_LINES} />
-      </>
-    );
-  } else if (failure !== null) {
+  if (failure !== null) {
+    // The failure takes the region whatever the previous run left there: a period whose figures could not
+    // be read is not a period to keep showing earlier ones for, and the retry is the way on from it.
     content = (
       <Alert tone="danger" error={failure} actionLabel={COMMON_ACTIONS.RETRY} onAction={reload} />
     );
   } else if (report === null) {
-    // Neither loading nor failed and still holding no result: `useAsync` sets a payload only by a successful
-    // run, so this cannot happen. It renders the shape the content arrives in rather than nothing.
-    content = <Skeleton variant="block" height={CHART_PLACEHOLDER_HEIGHT} />;
+    // Nothing has arrived and nothing failed: the first run of this view is in flight, or this is the
+    // render before the hook has started it. Shaped like what is arriving — the figures the run will state,
+    // then the plot, the legend and the paired table at the buckets this period and cut resolve to, then a
+    // page of the table with its totals row.
+    content = (
+      <ReportBodyPlaceholder
+        chart={{
+          title: REPORTS_COPY.SALES_CHART_HEADING,
+          rows: bucketCount({ from: query.from, to: query.to }, granularity),
+          series: CHART_SERIES_COUNT,
+        }}
+        definition={DEFINITION}
+        figures={SUMMARY_FIGURE_COUNT}
+      />
+    );
   } else if (report.rows.length === 0) {
     // A range that recorded no activity is a well-formed answer, not a failure, and the state offers the one
     // action that resolves it. The action belongs to the page, which owns the period, and all it does is widen
@@ -260,6 +285,7 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
           countNoun={PAGING_NOUNS.PERIODS}
         />
         <ReportTable
+          isBusy={isLoading}
           kind={DEFINITION.kind}
           definition={DEFINITION}
           rows={report.rows}
@@ -272,7 +298,10 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
   }
 
   return (
-    <div className={CLASSES.body}>
+    // The region carries the busy state while the run is in flight: the placeholders inside it are written
+    // against it, and so are the figures of a run a newer one supersedes — the table and the chart stay as
+    // they were, the table marking its own rows busy, until the new figures land.
+    <div className={CLASSES.body} {...(isLoading ? { "aria-busy": true } : {})}>
       {hasCopy(periodSentence) ? <p className={CLASSES.period}>{periodSentence}</p> : null}
       {content}
     </div>

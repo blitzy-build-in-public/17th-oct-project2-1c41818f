@@ -1,18 +1,25 @@
 /* Path: src/styles/account.css
  * Purpose: Styles for the account screens: profile form, order history and address cards
- * Lines: 496
+ * Lines: 517
  */
 
 /* The account layer: the sign-in and registration screens, the account shell with its section navigation and
  * the three views behind it — profile, order history and the address book. It composes the primitives declared
  * in controls.css, data-display.css and components.css and restates none of them, and it is the sole definition
  * site of the .sp-auth*, .sp-account*, .sp-profile*, .sp-order-history*, .sp-order-detail* and .sp-address-*
- * blocks, which the account feature files adopt. It loads eighth and last, so nothing may depend on it. Two
- * markup hooks carry what the fixed class list cannot: data-span="full" on the profile field that crosses the
- * form grid, and aria-current on the order-detail timeline step the order has reached. It declares no
- * transition, so prefers-reduced-motion has nothing to neutralise here, and it defines no .sp-auth__aside,
- * because LoginPage and RegisterPage are single-panel forms and the block would have no consumer.
+ * blocks, which the account feature files adopt. It loads eighth and last and loads one further sheet of its
+ * own: `placeholders.css`, the shape every data-page placeholder takes — the KPI card, the chart block, the
+ * report body, the figure a table-shaped placeholder puts in a cell and the taller block the one column whose
+ * text wraps stands in with — one home for the geometry that three areas render, and loaded from here because
+ * a `@import` is inlined where it sits and this is the only
+ * position after every sheet that sizes a skeleton itself. Two markup hooks carry what the fixed class list
+ * cannot: data-span="full" on the profile field that crosses the form grid, and aria-current on the order-detail
+ * timeline step the order has reached. It declares no transition, so prefers-reduced-motion has nothing to
+ * neutralise here, and it defines no .sp-auth__aside, because LoginPage and RegisterPage are single-panel forms
+ * and the block would have no consumer.
  */
+
+@import "./placeholders.css";
 
 /* ==== Sign-in and registration ====
  * One centred panel. Both screens render the same shell with a different title, lede, fields and submit, and
@@ -256,6 +263,19 @@
  * need, the primitive's own scroll container travels sideways rather than squeezing a money column below
  * legibility, and the order number stays on one line, because the row's identifier split over two lines —
  * "SP-" above "261016-0007" — is the compression that scroll is here to avoid. */
+/* The frame the loading state's table sits in, standing where the loaded table's `.sp-table-wrap` stands on its
+ * own. The placeholder keeps that scroll container inside two wrappers of its own — one carrying the busy
+ * region and one hidden from assistive technology — so while the rows are missing it is no longer the section's
+ * own grid item, and a box that is neither a scroll container nor floored to zero passes the table's min-content
+ * width up through the section's column, widening the region and the document instead of scrolling inside the
+ * column. The floor and the sideways scroll are the loaded container's own treatment, so the placeholder table
+ * travels sideways within its column exactly as the loaded one does and the region is already the width it
+ * settles at. */
+.sp-order-history__placeholder {
+  min-inline-size: 0;
+  overflow-x: auto;
+}
+/* The order number is the row's link, and the one figure that has to line up from row to row. */
 .sp-order-history__table a {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -293,9 +313,10 @@
 /* ==== Order detail ====
  * One order read top to bottom: the number with its date and status, the itemised lines, the totals, the two
  * addresses and the status history. The number is monospaced and explicitly selectable, because a customer reads
- * it out or pastes it into a support conversation. The `.sp-summary` register belongs to
- * `src/styles/summary-panel.css`, which `commerce.css` loads, so the totals block is declared here rather than
- * composed from a class this sheet's own file does not define.
+ * it out or pastes it into a support conversation. The `.sp-summary` register belongs to the cart's own sheets —
+ * `src/styles/cart.css` declares it and `src/styles/summary-panel.css` carries the register `commerce.css` loads
+ * beside it — so the totals block is declared here rather than composed from a class this sheet's own file does
+ * not define.
  */
 .sp-order-detail {
   display: grid;

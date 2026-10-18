@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutPage.tsx
  * Purpose: The checkout route: step indicator, the current step's view and the order summary panel
- * Lines: 379
+ * Lines: 382
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -33,10 +33,12 @@ import { useScrollToTop } from "@/state/scrollHooks";
  * file.
  *
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in, `sp-page`
- * the column of blocks at one rhythm, `sp-page__body` the region the route's own content lands in, and
- * `sp-split` the frame whose aside track is `--layout-aside-width` from the large stop. `src/styles/commerce.css`
- * owns the checkout's register: `sp-checkout` widens that frame's row gap, `sp-checkout__main` narrows the step
- * column and `sp-checkout__aside` is the summary column, sticky below the header from the large stop.
+ * the column of blocks at one rhythm, `sp-page__body` the region the route's own content lands in, `sp-split`
+ * the frame whose aside track is `--layout-aside-width` from the large stop, and `sp-stack` the rhythm the
+ * summary's figures sit in. `src/styles/commerce.css` owns the checkout's register: `sp-checkout` widens that
+ * frame's row gap and `sp-checkout__main` narrows the step column, while `sp-checkout__aside` — the summary
+ * column, sticky below the header from the large stop — is declared in `src/styles/cart.css` beside the summary
+ * panel it holds, whose register `src/styles/summary-panel.css` owns.
  *
  * The step shell is `sp-step` for the region, with `sp-step__header`, `sp-step__title` and `sp-step__count`
  * for the heading block, and `sp-step__body` for the region the current step renders in — the class the
@@ -46,8 +48,9 @@ import { useScrollToTop } from "@/state/scrollHooks";
  * `sp-step__actions`, rendered by that step's own file, and the indicator is `CheckoutSteps`' family.
  *
  * The order summary panel the aside renders is `OrderSummaryPanel.tsx`'s, and that file's own comment holds its
- * class contract. Of that register this file carries one class: `sp-summary__note`, the caption the step's
- * supporting line is painted in, which is why the table below keeps `note`.
+ * class contract: the register the cart's own summary also draws, declared in `src/styles/cart.css`. Of that
+ * register this file carries one class: `sp-summary__note`, the caption the step's supporting line is painted
+ * in, which is why the table below keeps `note`.
  */
 
 /** The classes this route puts on the page, written once so a rename is one edit. */

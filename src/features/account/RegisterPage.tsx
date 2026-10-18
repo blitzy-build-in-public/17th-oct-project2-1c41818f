@@ -129,7 +129,7 @@ const REGISTRATION_FIELDS: readonly RegistrationFieldSpec[] = [
 const PLACEHOLDER_LINE_COUNT = REGISTRATION_FIELDS.length;
 
 /** The width of the placeholder heading, in a relative unit so it follows the reader's text size. */
-const PLACEHOLDER_HEADING_WIDTH = "14rem";
+const PLACEHOLDER_HEADING_WIDTH = "18ch";
 
 /**
  * The path a preserved return value names, when it is one this application may navigate to.

@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/accountFlow.test.tsx
  * Purpose: Sign-in, profile edit, order history and the address book, plus the unauthenticated redirect.
- * Lines: 547
+ * Lines: 579
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +22,7 @@ import {
 } from "@/constants/content";
 import { DATE_RANGE_COPY, REPORTS_COPY } from "@/constants/content-reports";
 import { ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
-import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
+import { ORDER_STATUS_OPTIONS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { CUSTOMERS } from "@/data/customers";
 import { ORDERS } from "@/data/orders";
 import { API_PATHS } from "@/lib/mockServer";
@@ -367,18 +367,25 @@ describe("the customer accounts flow", () => {
     await user.click(link);
     expect(await screen.findByRole("heading", { name: number })).toBeVisible();
 
-    // Every line the order was placed with, at the price it was placed at: the snapshot, not the catalogue.
+    // Every line the order was placed with, at the price it was placed at: the priced cart the order keeps,
+    // whose own line subtotal is the goods value each row prints, and whose name, sku, quantity and unit price
+    // are the ones the row reads.
     const items = sectionFor(ACCOUNT_COPY.ORDER_DETAIL_ITEMS_HEADING);
     const lines = within(items).getAllByRole("listitem");
-    expect(lines).toHaveLength(order.lines.length);
-    order.lines.forEach((line, index) => {
-      expect(within(lines[index]).getByText(line.productName)).toBeVisible();
-      const lineTotal = formatMoney(line.lineTotalMinor, order.pricedCart.currency);
-      expect(within(lines[index]).getByText(lineTotal)).toBeVisible();
+    const priced = order.pricedCart.lines;
+    expect(lines).toHaveLength(priced.length);
+    const printedAmounts: MinorUnits[] = priced.map((line, index) => {
+      expect(within(lines[index]).getByText(line.name)).toBeVisible();
+      const goods = formatMoney(line.lineSubtotalMinor, order.pricedCart.currency);
+      expect(within(lines[index]).getByText(goods)).toBeVisible();
+      const amountCell = lines[index].lastElementChild;
+      if (amountCell === null) throw new Error("An itemised row prints no amount.");
+      return parseMoneyToMinor(amountCell.textContent);
     });
 
-    // What the screen shows reconciles with itself as well as with the record behind it. The discount is
-    // rendered signed and the parser reads its magnitude, which is why it is subtracted here.
+    // What the screen shows reconciles with itself as well as with the record behind it: the rows' goods values
+    // sum to the Subtotal row, so the promotion is applied once, in the discount row beneath them. The discount
+    // is rendered signed and the parser reads its magnitude, which is why it is subtracted here.
     const subtotal = displayedAmount(items, CART_COPY.SUMMARY_SUBTOTAL_LABEL);
     const shipping = displayedAmount(items, CART_COPY.SUMMARY_SHIPPING_LABEL);
     const tax = displayedAmount(items, CART_COPY.SUMMARY_TAX_LABEL);
@@ -388,7 +395,32 @@ describe("the customer accounts flow", () => {
       : 0;
     expect(subtotal).toBe(order.pricedCart.subtotalMinor);
     expect(total).toBe(order.pricedCart.grandTotalMinor);
+    expect(printedAmounts).toEqual(priced.map((line) => line.lineSubtotalMinor));
+    expect(printedAmounts.reduce((sum, amount) => sum + amount, 0)).toBe(subtotal);
     expect(subtotal - discount + shipping + tax).toBe(total);
+
+    // Both addresses the order was placed with read the country's name, never the code the address stores, which
+    // is how the review step and the address book read theirs.
+    const addresses = sectionFor(ACCOUNT_COPY.ORDER_DETAIL_ADDRESS_HEADING).parentElement;
+    if (addresses === null)
+      throw new Error("The order detail's address blocks have no shared frame.");
+    const placedWith = [order.shippingAddress, order.billingAddress];
+    const blocks = within(addresses).getAllByRole("heading", { level: 3 });
+    expect(blocks).toHaveLength(placedWith.length);
+    placedWith.forEach((address, index) => {
+      const country = SUPPORTED_COUNTRIES.find((entry) => entry.code === address.country);
+      if (country === undefined) {
+        throw new Error(
+          `The order names a country the configured list does not hold: ${address.country}`,
+        );
+      }
+      // The claim can fail: the name the product declares for the code is not the code the address stores.
+      expect(country.label).not.toBe(country.code);
+      const block = blocks[index].parentElement;
+      if (block === null) throw new Error("An address block has no frame.");
+      expect(within(block).getByText(country.label)).toBeVisible();
+      expect(within(block).queryByText(country.code)).toBeNull();
+    });
 
     // The status the order now stands at is the one the timeline marks, and it reads in words as well.
     const timeline = sectionFor(ACCOUNT_COPY.ORDER_DETAIL_HISTORY_HEADING);

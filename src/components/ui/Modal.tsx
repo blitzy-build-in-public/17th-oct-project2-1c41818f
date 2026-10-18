@@ -1,10 +1,10 @@
 /**
  * Path: src/components/ui/Modal.tsx
  * Purpose: Modal, drawer and confirm dialog with dialog semantics, focus trap and an inert background
- * Lines: 427
+ * Lines: 497
  */
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { KeyboardEventHandler, ReactElement, ReactNode, RefObject } from "react";
 
@@ -56,6 +56,12 @@ const BACKDROP_MODAL = "sp-backdrop sp-backdrop--modal";
 const BACKDROP_DRAWER = "sp-backdrop sp-backdrop--drawer";
 const OPEN_CLASS = "is-open";
 const CLOSE_CLASS = "sp-modal__close";
+
+/** Whether the environment schedules an animation frame, which is the one thing the drawer's entrance
+ * waits on: `document` is absent on a server render, where no frame runs and no transition paints. */
+function canScheduleAnimationFrame(): boolean {
+  return typeof requestAnimationFrame === "function";
+}
 
 /** Joins the classes a member of this family carries, dropping a falsy entry rather than a blank space. */
 function composeClassName(...values: readonly (string | false | undefined)[]): string {
@@ -279,19 +285,14 @@ export function Drawer(props: DrawerProps): ReactElement | null {
   const hasHeading = title !== undefined && title.length > 0;
 
   return createPortal(
-    <OverlayFrame
-      backdropClassName={BACKDROP_DRAWER}
+    <DrawerPanel
+      className={className}
       describedBy={describedBy}
       label={hasHeading ? undefined : props.label}
       labelledBy={hasHeading ? headingId : undefined}
       onKeyDown={handleKeyDown}
-      panelClassName={composeClassName(
-        "sp-drawer",
-        DRAWER_SIDE_CLASSES[side],
-        OPEN_CLASS,
-        className,
-      )}
       panelRef={panelRef}
+      side={side}
     >
       {hasHeading ? (
         <header className="sp-drawer__header">
@@ -313,8 +314,77 @@ export function Drawer(props: DrawerProps): ReactElement | null {
       {footer === undefined || footer === null ? null : (
         <footer className="sp-drawer__footer">{footer}</footer>
       )}
-    </OverlayFrame>,
+    </DrawerPanel>,
     document.body,
+  );
+}
+
+/** Everything {@link DrawerPanel} accepts: the frame's own props, plus the side its resting offset is. */
+interface DrawerPanelProps {
+  readonly side: DrawerSide;
+  readonly panelRef: RefObject<HTMLDivElement | null>;
+  /** The heading that names the panel; `label` names it instead when it renders none. */
+  readonly labelledBy?: string;
+  /** The accessible name for a panel whose content supplies its own heading. */
+  readonly label?: string;
+  readonly describedBy?: string;
+  readonly onKeyDown: KeyboardEventHandler<HTMLDivElement>;
+  /** Extra classes for a layout the panel's own frame does not cover. */
+  readonly className?: string;
+  readonly children: ReactNode;
+}
+
+/**
+ * The drawer's panel, which exists only while the drawer is open — the lifetime its entrance belongs to.
+ *
+ * `src/styles/data-display.css` declares that entrance as a transition on `.sp-drawer` from the resting
+ * offset the side class sets to the `translateX(0)` that `.is-open` resolves, so the travel needs one frame
+ * in which the resting transform is the panel's computed style: a panel whose very first style is already
+ * the settled one has nothing to start from and pops into place, which is what the review measured. The
+ * class therefore arrives on the frame after the mount, and it is deliberately not state the drawer carries
+ * across cycles — a panel mounted once per open holds the flag itself, so closing and reopening travels
+ * again without a second write. The write happens in the frame callback and not in the effect body, because
+ * an effect that writes state synchronously is the `set-state-in-effect` failure mode this codebase's lint
+ * rejects; where no frame can be scheduled the panel starts settled and is simply present, exactly as it is
+ * under the reduced-motion rule that removes the transition.
+ */
+function DrawerPanel({
+  side,
+  panelRef,
+  labelledBy,
+  label,
+  describedBy,
+  onKeyDown,
+  className,
+  children,
+}: DrawerPanelProps): ReactElement {
+  const [hasEntered, setHasEntered] = useState((): boolean => !canScheduleAnimationFrame());
+
+  useEffect(() => {
+    if (!canScheduleAnimationFrame()) return undefined;
+    const frame = requestAnimationFrame((): void => setHasEntered(true));
+    // StrictMode runs this effect's setup twice in development, so the first frame is cancelled rather
+    // than left to fire beside the second.
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <OverlayFrame
+      backdropClassName={BACKDROP_DRAWER}
+      describedBy={describedBy}
+      label={label}
+      labelledBy={labelledBy}
+      onKeyDown={onKeyDown}
+      panelClassName={composeClassName(
+        "sp-drawer",
+        DRAWER_SIDE_CLASSES[side],
+        hasEntered && OPEN_CLASS,
+        className,
+      )}
+      panelRef={panelRef}
+    >
+      {children}
+    </OverlayFrame>
   );
 }
 

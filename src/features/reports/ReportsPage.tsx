@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportsPage.tsx
  * Purpose: The reports route: report selector, range control and the selected report's view
- * Lines: 361
+ * Lines: 407
  */
 
 import { useCallback, useState } from "react";
@@ -27,11 +27,12 @@ import { useAuth } from "@/state/AuthContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { BucketGranularity, ReportDefinition, ReportKind } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
-import { maxReportRange } from "@/utils/dates";
+import { bucketCount, maxReportRange } from "@/utils/dates";
 
 import { CustomerReport } from "./CustomerReport";
 import { DateRangePicker } from "./DateRangePicker";
 import { ProductPerformanceReport } from "./ProductPerformanceReport";
+import { ReportBodyPlaceholder } from "./ReportPlaceholder";
 import { SalesReport } from "./SalesReport";
 
 /*
@@ -41,7 +42,9 @@ import { SalesReport } from "./SalesReport";
  * file: `sp-admin__main` is the content column beside the sidebar, which the dashboard is written in too;
  * `sp-report` is the shell's grid at one gap; `sp-report__header` carries the period control and the cut
  * control at their own rhythm, and `sp-report__toolbar` the row they take from --breakpoint-md; and
- * `sp-report__selector` is the container the selector's own sideways scroll is given. That last class is
+ * `sp-report__selector` is the container the selector's own sideways scroll is given, and `sp-report__body` the
+ * block a report stacks its figures, its chart and its table in, which the shell reserves while the catalogue is
+ * in flight for the same reason the loaded shell gives it one. The selector class is
  * passed to `Tabs` — which composes a caller's class with its own `sp-tabs` — rather than written on a wrapper
  * of this file's, because a wrapper holding the tab list but not the panel would leave the selected report
  * outside the region its tab names. `sp-visually-hidden` is `src/styles/base.css`'s utility — the same one the
@@ -60,7 +63,9 @@ import { SalesReport } from "./SalesReport";
  * the product's single CSV export; `DateRangePicker` owns the presets, the two date fields, the range rules
  * and the stored last-used range, and reports only ranges those rules accept; `Select` is the field family
  * over the vocabulary module's own cut choices; and `Alert`, `EmptyState` and `Skeleton` are the shared states.
- * No colour, radius or shadow literal and no pixel media query is written here.
+ * The body the pending shell reserves is `ReportPlaceholder`'s, which shapes the figures, the chart and the
+ * table for itself, so no skeleton of the report's own is written here. No colour, radius or shadow literal and
+ * no pixel media query is written here.
  *
  * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content-reports.ts` words no label for the cut control, so the control
  * goes by its choices' own words, joined — exactly how the dashboard's bucket control names itself in
@@ -84,6 +89,7 @@ const CLASSES = {
   header: "sp-report__header",
   toolbar: "sp-report__toolbar",
   selector: "sp-report__selector",
+  body: "sp-report__body",
   crossLink: "sp-btn sp-btn--secondary",
   visuallyHidden: "sp-visually-hidden",
 } as const;
@@ -132,6 +138,18 @@ const CUT_CONTROL_LABEL = GRANULARITY_OPTIONS.map((option) => option.label).join
  *  when the report names arrive in its place. */
 const SELECTOR_PLACEHOLDER_HEIGHT = "var(--control-height-lg)";
 
+/**
+ * The figures the pending shell's summary block stands in with, and the series its pending chart stands in
+ * with: the counts of the run the page opens on, which is the report the shell shows once the catalogue lands.
+ * They are `src/lib/reportService.ts`'s — its `summarise` totals six figures for the sales report and its
+ * `buildReportSeries` draws that report one series — and `src/features/reports/SalesReport.tsx` states the same
+ * two counts as the summary and the chart it reserves for its own loading state. Reserving them here is what
+ * keeps the body the catalogue read precedes the height of the body that replaces it; the block's other parts
+ * — the plot ratio, the legend, the paired table and the report table — are sized by the components it composes.
+ */
+const PENDING_SUMMARY_FIGURE_COUNT = 6;
+const PENDING_CHART_SERIES_COUNT = 1;
+
 /** The level every heading this page renders below the route's own opens at: `PageHeader` owns the level-1
  *  heading, so a region this file describes — the definitions state, a report panel — heads itself at level 2
  *  and the level-3 headings the report views render descend from it without a level being skipped. */
@@ -174,7 +192,9 @@ function toBucketGranularity(value: string): BucketGranularity | null {
  * search query state, and this route reads and writes no query parameter.
  *
  * The catalogue read is the page's only request, and its four states render in the order they can occur: the
- * selector-shaped placeholder while it is in flight or while the session it needs is still being restored, the
+ * shell's own shape while it is in flight or while the session it needs is still being restored — the two
+ * controls, at their own heights and working as they do once the catalogue lands, the strip of report names at
+ * its control height, and a report body at the figures, the buckets and the table a report renders — the
  * alert carrying the seam's own message with the retry that runs it again, the state a catalogue that came back
  * empty earns, and then the shell — the period control beside the cut control, the selector, and the selected
  * report, whose own figures, chart, table and export states belong to the view that owns the request producing
@@ -262,11 +282,37 @@ export function ReportsPage(): ReactElement {
 
   let region: ReactElement;
   if (isLoading) {
-    // Shaped like what is arriving — the strip of report names, at the height its own controls take — and the
-    // block around it is what tells assistive technology the region is filling, since `Skeleton` is decorative.
+    // Shaped like the shell that arrives: the period control and the cut control at their own heights, the strip
+    // of report names at its own control height, and under them the body a report renders — its figures, its
+    // chart at the buckets this period and cut resolve to, and a page of its table. The two controls are the
+    // real ones and work while the catalogue is read, because the period and the cut are this page's state and
+    // neither waits on that read; the strip stands in for the names, which is the one part the read supplies.
     region = (
       <div aria-busy="true" className={CLASSES.report}>
-        <Skeleton height={SELECTOR_PLACEHOLDER_HEIGHT} />
+        <div className={CLASSES.header}>
+          <div className={CLASSES.toolbar}>
+            <DateRangePicker onChange={setRange} value={range} />
+            <Select
+              label={CUT_CONTROL_LABEL}
+              onChange={handleCutSelect}
+              options={GRANULARITY_OPTIONS}
+              value={granularity}
+            />
+          </div>
+        </div>
+        <div className={CLASSES.selector}>
+          <Skeleton height={SELECTOR_PLACEHOLDER_HEIGHT} />
+        </div>
+        <div className={CLASSES.body}>
+          <ReportBodyPlaceholder
+            chart={{
+              title: REPORTS_COPY.SALES_CHART_HEADING,
+              rows: bucketCount({ from: range.from, to: range.to }, granularity),
+              series: PENDING_CHART_SERIES_COUNT,
+            }}
+            figures={PENDING_SUMMARY_FIGURE_COUNT}
+          />
+        </div>
       </div>
     );
   } else if (failure !== null) {

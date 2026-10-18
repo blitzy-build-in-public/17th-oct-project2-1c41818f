@@ -1,24 +1,26 @@
 /**
  * Path: src/features/admin/SalesChart.tsx
  * Purpose: The dashboard's revenue chart with a bucket control and a series toggle for category or channel
- * Lines: 398
+ * Lines: 470
  */
 
 import { useCallback, useId, useMemo } from "react";
 import type { ChangeEvent, ElementType, ReactElement } from "react";
 
+import { ChartPlaceholder } from "@/components/charts/ChartPlaceholder";
 import { LineChart } from "@/components/charts/LineChart";
 import type { LabelFormatter } from "@/components/charts/chartScales";
-import { Button, ButtonGroup } from "@/components/ui/Button";
-import { Alert, Skeleton } from "@/components/ui/Feedback";
+import { Button, ButtonGroup, IconButton } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Feedback";
 import { Select } from "@/components/ui/Select";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { COMMON_ACTIONS, PAGING_NOUNS } from "@/constants/content";
-import { ADMIN_COPY } from "@/constants/content-reports";
-import { GRANULARITY_OPTIONS } from "@/constants/taxonomy";
+import { ADMIN_COPY, CHANNEL_LABELS as SALES_CHANNELS } from "@/constants/content-reports";
+import { CATEGORY_DEFINITIONS, GRANULARITY_OPTIONS } from "@/constants/taxonomy";
 import { bucketLabel } from "@/lib/analyticsService";
 import type { BucketGranularity, ChartSeries, RevenueGroupBy } from "@/types/analytics";
 import type { ApiError, DateRange } from "@/types/common";
-import { formatDateRange } from "@/utils/dates";
+import { bucketCount, formatDateRange } from "@/utils/dates";
 
 /*
  * Class contract. `src/styles/admin-reports.css` is the sole definition site of the chart and dashboard
@@ -27,18 +29,27 @@ import { formatDateRange } from "@/utils/dates";
  * the file: `sp-dashboard__section` is the block a dashboard stacks and spaces its heading and its chart
  * with; `sp-chart__title` is the chart family's heading type, `sp-chart__header` the wrapping row that pairs
  * a sentence with the controls, `sp-chart__controls` the row those controls sit in, and `sp-chart__frame` the
- * bordered, token-height plot area a pending series stands in for. The frame this file renders while loading
- * carries `aria-busy`, which is the state the sheet's skeleton family is written against. `sp-skeleton` is
- * the placeholder primitive's own class and `sp-select`, `sp-btn` and `sp-btn-group` are the controls', all
- * declared by the sheets those components answer to. The failure the page hands in takes that same frame
- * through the alert primitive, whose `sp-alert` family `src/styles/components.css` declares with the other
- * primitives, and no class is restated here for it.
+ * bordered, token-height plot area the chart draws in and the failure is stated in. The block this file
+ * renders while the series are in flight is `ChartPlaceholder`'s, which renders that same header and the
+ * pending plot and adopts the rest of the chart family — `sp-chart`, `sp-chart__legend`, `sp-chart__data` and
+ * the paired table's own primitive — while the four names above stay here for the frame the failure takes.
+ * That frame holds the alert primitive, whose `sp-alert` family `src/styles/components.css` declares with the
+ * other primitives, and no class is restated here for it. `sp-select`, `sp-btn` and `sp-btn-group` are the
+ * controls', declared by the sheets those components answer to.
  *
  * The line chart itself is not drawn here. `src/components/charts/LineChart.tsx` owns the frame, the grid,
  * the axis ticks, the point marks, the pointer and keyboard readout, the text-and-swatch legend, the paired
  * `.sp-chart__data` table and the fixed-height no-data state, and the geometry behind them belongs to
- * `chartScales.ts`; this file mounts two controls into that chart's `actions` slot and states the period the
- * series covers. No colour, radius or shadow literal, and no pixel media query, is written here.
+ * `chartScales.ts`; this file mounts three controls into that chart's `actions` slot and states the period
+ * the series covers. No colour, radius or shadow literal, and no pixel media query, is written here.
+ *
+ * The hint control wears the supplementary-surface family's classes — `sp-tooltip-anchor` on the wrapper the
+ * primitive renders, and `sp-tooltip` with the `sp-tooltip--start` placement and its `is-open` state on the
+ * bubble — because that family is the primitive's own sheet and not this area's. For its own place in the row
+ * it takes `sp-card__action` from `src/styles/data-display.css`, the design system's one class for the control
+ * that closes a header row, and the auto margin that class declares is what holds the hint at the row's end
+ * when the row wraps: a bubble placed on its trigger's inline-start side would otherwise open past the page's
+ * own start edge on a narrow screen, where the document clips rather than scrolls it.
  *
  * The heading is rendered here rather than passed to the chart because the level is the page's to choose:
  * `LineChart` fixes its own heading at `h3`, while a dashboard nests this chart under a section and a report
@@ -59,6 +70,7 @@ const CLASSES = {
   chart: "sp-chart",
   header: "sp-chart__header",
   controls: "sp-chart__controls",
+  hint: "sp-card__action",
   frame: "sp-chart__frame",
 } as const;
 
@@ -75,12 +87,20 @@ const HEADING_ELEMENTS: Readonly<Record<2 | 3 | 4, ElementType>> = { 2: "h2", 3:
 const DEFAULT_HEADING_LEVEL = 3;
 
 /**
- * The height a pending series stands in at, in the frame's own block-size expression: the token arithmetic
- * `src/styles/components.css` declares for a chart-shaped skeleton, passed here because the skeleton
- * primitive's variant union carries no chart member and its `height` field is documented for exactly this
- * frame. The frame keeps its own minimum height either way, so no layout shifts when the series arrives.
+ * The number of series the chart draws for one split: one per category the catalogue sells in — the leaves of
+ * the vocabulary's tree, which is the level `src/data/products.ts` assigns every product to — and one per
+ * channel `src/constants/content-reports.ts` names. It is exported because the dashboard's breakdown block draws the
+ * same series, so the two blocks stand in with the same number of legend entries rather than each counting
+ * them its own way.
+ *
+ * @param groupBy - How the revenue is currently split.
+ * @returns The number of series that split draws.
  */
-const CHART_SKELETON_HEIGHT = "calc(var(--space-20) * 2)";
+export function seriesCountFor(groupBy: RevenueGroupBy): number {
+  return groupBy === "channel"
+    ? Object.keys(SALES_CHANNELS).length
+    : CATEGORY_DEFINITIONS.filter((definition) => definition.parentSlug !== null).length;
+}
 
 /**
  * What joins the period and the comparison in the sentence under the heading. Neither side is worded here —
@@ -158,6 +178,30 @@ function describePeriod(
   return parts.length === 0 ? undefined : parts.join(DESCRIPTION_SEPARATOR);
 }
 
+/**
+ * The hint control's glyph: an information mark drawn from the text's own colour, so no colour is written
+ * here. It is hidden from assistive technology because the control carrying it is named by its label, which
+ * is what a reader hears, and the mark is only the sighted reader's cue that the control carries a
+ * supplementary note.
+ *
+ * @returns The information mark.
+ */
+function InfoGlyph(): ReactElement {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth={2} />
+      <path
+        d="M12 10.6V17"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth={2}
+      />
+      <circle cx="12" cy="7.4" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** Everything {@link ChartControls} renders with: the two values and the two ways they are reported up. */
 interface ChartControlsProps {
   /** The cut the page is currently bucketing by; the control shows it as its selection. */
@@ -171,7 +215,7 @@ interface ChartControlsProps {
 }
 
 /**
- * The chart's two controls, mounted together into the chart frame's header row.
+ * The chart's three controls, mounted together into the chart frame's header row.
  *
  * The bucket control is the field family's `Select` over `GRANULARITY_OPTIONS`, so the choices and their
  * wording come from the vocabulary module and no granularity name is written here. The split is a two-value
@@ -180,8 +224,17 @@ interface ChartControlsProps {
  * also takes the primary variant so the current split is not signalled by the attribute alone. Each value has
  * exactly one control in the product — the page owns both and passes them down.
  *
+ * The hint stands last, after the two controls it explains: an `IconButton` carrying an information mark,
+ * wrapped in the `Tooltip` primitive, which reveals the copy module's sentence through `aria-describedby` on
+ * pointer-over and on focus, dismisses it on Escape and leaves focus on the trigger. That is the
+ * supplementary-surface contract and not the modal one — nothing about a hint interrupts the page, so the
+ * background is never made inert and focus is never taken, which is the family `src/components/ui/Modal.tsx`
+ * owns. The bubble is placed at the trigger's inline-start because this row ends at the content edge, where a
+ * bubble centred on the control would reach past the page; its wording is the copy module's and is worded
+ * nowhere here.
+ *
  * @param props - The current bucket and split, and the callbacks that report a change.
- * @returns The two controls as one fragment, for the chart's `actions` slot.
+ * @returns The three controls as one fragment, for the chart's `actions` slot.
  */
 function ChartControls({
   bucket,
@@ -223,6 +276,14 @@ function ChartControls({
           );
         })}
       </ButtonGroup>
+      <Tooltip className={CLASSES.hint} content={ADMIN_COPY.CHART_SERIES_HINT} placement="start">
+        <IconButton
+          variant="ghost"
+          size="sm"
+          label={ADMIN_COPY.CHART_SERIES_HINT_LABEL}
+          icon={<InfoGlyph />}
+        />
+      </Tooltip>
     </>
   );
 }
@@ -288,8 +349,8 @@ export interface SalesChartProps {
 
 /**
  * The dashboard's revenue over time: the line chart the page's series are drawn in, the bucket control and the
- * category-or-channel toggle that change what is plotted, and the sentence naming the period and the
- * comparison the figures belong to.
+ * category-or-channel toggle that change what is plotted, the hint control that explains what the split
+ * reports, and the sentence naming the period and the comparison the figures belong to.
  *
  * It is presentational and holds no state. The series, the range, the bucket and the split all arrive as props
  * and every change goes back through a callback, because the query belongs to the page and to the URL behind
@@ -300,10 +361,13 @@ export interface SalesChartProps {
  *
  * A period with no revenue is the chart's own empty state, in its own fixed-height frame, and the paired data
  * table beneath the plot is what keeps every figure readable without colour or geometry. While the page is
- * still reading, the frame holds a skeleton instead: the heading and both controls are already rendered, so a
- * reader can change the bucket or the split while the request is in flight. A read the page could not answer
- * takes that same frame, with the same heading row and the same live controls above it, and states the failure
- * with its retry, so the chart is one surface of the dashboard failing rather than the dashboard.
+ * still reading, the block stands in as the shape it will take — the same header, the plot at the drawing's own
+ * ratio, a legend entry per series and a paired table row per bucket — so the region it occupies is the region
+ * the series fill. The heading and every control are already rendered while that happens, so a reader can
+ * change the bucket or the split, or read the hint beside them, without leaving the page while the request is
+ * in flight. A read the page could not answer takes that same frame, with the same heading row and the same
+ * live controls above it, and states the failure with its retry, so the chart is one surface of the dashboard
+ * failing rather than the dashboard.
  *
  * @param props - The series, the two query values with their callbacks, the period and comparison wording,
  *   the heading and its level, the loading flag, and the failure with its retry.
@@ -354,6 +418,11 @@ export function SalesChart({
     />
   );
 
+  // The bands the arriving series cover are the buckets the period and the cut resolve to, counted by the same
+  // rule `src/lib/analyticsService.ts` buckets by, so the placeholder's paired table is exactly as long as the
+  // table that replaces it. A period with an end missing counts none, which is the only reading available.
+  const bandCount = hasCopy(from) && hasCopy(to) ? bucketCount({ from, to }, bucket) : 0;
+
   return (
     <section className={CLASSES.section} aria-labelledby={hasTitle ? headingId : undefined}>
       {hasTitle ? (
@@ -362,25 +431,28 @@ export function SalesChart({
         </Heading>
       ) : null}
 
-      {isLoading || failure !== null ? (
+      {failure !== null ? (
         <div className={CLASSES.chart}>
           <div className={CLASSES.header}>
             {description === undefined ? null : <p>{description}</p>}
             <div className={CLASSES.controls}>{controls}</div>
           </div>
-          <div className={CLASSES.frame} aria-busy={failure === null ? "true" : undefined}>
-            {failure === null ? (
-              <Skeleton variant="block" height={CHART_SKELETON_HEIGHT} />
-            ) : (
-              <Alert
-                actionLabel={COMMON_ACTIONS.RETRY}
-                error={failure}
-                onAction={onRetry}
-                tone="danger"
-              />
-            )}
+          <div className={CLASSES.frame}>
+            <Alert
+              actionLabel={COMMON_ACTIONS.RETRY}
+              error={failure}
+              onAction={onRetry}
+              tone="danger"
+            />
           </div>
         </div>
+      ) : isLoading ? (
+        <ChartPlaceholder
+          actions={controls}
+          description={description}
+          rows={bandCount}
+          series={seriesCountFor(groupBy)}
+        />
       ) : (
         /* The paired table's rows are the buckets the series are cut into — reporting periods and never
          * products — so the pager beneath it counts periods, which is what the chart is over. */

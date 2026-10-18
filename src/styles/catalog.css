@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog.css
  * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
- * Lines: 590
+ * Lines: 596
  */
 
 /* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
@@ -29,6 +29,12 @@
  * components, landing, detail, catalogue; the eight-sheet load contract is unchanged, because the entry point
  * imports the same eight mapped paths it always did and no other file imports either new sheet. Both additions and
  * this split are recorded in generation-manifest.md.
+ *
+ * The tile's loading geometry followed the same remedy later, for the same reason: this sheet stood at 658 lines
+ * when `ProductCardPlaceholder`'s blocks had to be reconciled with the loaded tile's own sizes, so they moved
+ * whole into `src/styles/placeholders.css` — the one home of every data page's placeholder shape, loaded last of
+ * the eight — and left this sheet at 590. Every rule moved selects the placeholder's own classes, so no rule here
+ * depends on which of the two sheets loads first.
  */
 
 @import "./catalog-landing.css";

@@ -1,24 +1,25 @@
 /**
  * Path: src/features/admin/AdminDashboardPage.tsx
  * Purpose: The administrator dashboard: dated range, KPI cards, revenue chart, breakdown and tables
- * Lines: 348
+ * Lines: 369
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
 
+import { ChartPlaceholder } from "@/components/charts/ChartPlaceholder";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DateRangeControl } from "@/components/ui/DateRangeControl";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { STORAGE_KEYS } from "@/constants/config";
 import { COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
 import { ADMIN_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
-import { KpiCard, type KpiKind } from "@/features/admin/KpiCard";
+import { KpiCard, KpiCardPlaceholder, type KpiKind } from "@/features/admin/KpiCard";
 import { RecentOrdersTable } from "@/features/admin/RecentOrdersTable";
-import { SalesChart } from "@/features/admin/SalesChart";
+import { SalesChart, seriesCountFor } from "@/features/admin/SalesChart";
 import { TopProductsTable } from "@/features/admin/TopProductsTable";
 import {
   DEFAULT_BASELINE_KIND,
@@ -71,6 +72,12 @@ const KPI_ORDER = [
   "units",
   "average-order-value",
 ] as const satisfies readonly KpiKind[];
+
+/**
+ * The columns a breakdown's paired data table holds: the slice's own name and the two figures the renderer puts
+ * beside it, which is the shape the donut's table keeps however many slices the split draws.
+ */
+const BREAKDOWN_TABLE_COLUMNS = 3;
 
 /**
  * The rows the recent-orders table shows: how many placements this window holds is the dashboard's own
@@ -126,7 +133,7 @@ function KpiGrid({ summary, error, onRetry }: KpiGridProps): ReactElement {
     <div className="sp-kpi-grid">
       {KPI_ORDER.map((kind) =>
         summary === null ? (
-          <Skeleton key={kind} variant="card" />
+          <KpiCardPlaceholder key={kind} />
         ) : (
           <KpiCard
             key={kind}
@@ -152,8 +159,10 @@ function KpiGrid({ summary, error, onRetry }: KpiGridProps): ReactElement {
  */
 function RevenueBreakdown({
   series,
+  groupBy,
 }: {
   readonly series: readonly ChartSeries[] | null;
+  readonly groupBy: RevenueGroupBy;
 }): ReactElement {
   const headingId = useId();
   // Every wedge carries its percentage at every width: the figures stand on the surface beside the ring, so
@@ -165,9 +174,17 @@ function RevenueBreakdown({
         {ADMIN_COPY.BREAKDOWN_HEADING}
       </h2>
       {series === null ? (
-        <div className="sp-chart__frame" aria-busy="true">
-          <Skeleton variant="card" />
-        </div>
+        // The ring stands in as a block of the same shape: the plot at the drawing's own ratio, then the legend
+        // and paired table the donut renders beneath it. The table names its bands in their own rows rather
+        // than in a heading row, and holds one row per slice, which is one per series the split draws — the
+        // same count the revenue chart above is standing in with.
+        <ChartPlaceholder
+          columns={BREAKDOWN_TABLE_COLUMNS}
+          hasHead={false}
+          legend
+          rows={seriesCountFor(groupBy)}
+          series={seriesCountFor(groupBy)}
+        />
       ) : (
         <DonutChart ariaLabel={ADMIN_COPY.BREAKDOWN_HEADING} series={series} />
       )}
@@ -294,12 +311,15 @@ export function AdminDashboardPage(): ReactElement {
         error={revenue.error}
         onRetry={revenue.reload}
       />
-      {revenue.error === null ? <RevenueBreakdown series={revenue.data} /> : null}
+      {revenue.error === null ? (
+        <RevenueBreakdown series={revenue.status === "success" ? series : null} groupBy={groupBy} />
+      ) : null}
       <div className="sp-dashboard__row">
         <RecentOrdersTable
           orders={recentOrders.data ?? []}
           headingLevel={2}
           isLoading={recentOrders.status !== "success"}
+          placeholderRowCount={RECENT_ORDERS_LIMIT}
           error={recentOrders.error}
           onRetry={recentOrders.reload}
         />
@@ -309,6 +329,7 @@ export function AdminDashboardPage(): ReactElement {
           onMetricChange={setMetric}
           headingLevel={2}
           isLoading={topProducts.status !== "success"}
+          placeholderRowCount={DEFAULT_TOP_PRODUCTS_LIMIT}
           error={topProducts.error}
           onRetry={topProducts.reload}
         />

@@ -1,17 +1,18 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 304
+ * Lines: 337
  */
 
 import { useCallback } from "react";
 import type { ReactElement } from "react";
 
 import { BarChart } from "@/components/charts/BarChart";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { COMMON_ACTIONS, EMPTY_STATES, FEEDBACK_COPY, PAGING_NOUNS } from "@/constants/content";
 import { DATE_RANGE_COPY, REPORTS_COPY } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
+import { ReportBodyPlaceholder } from "@/features/reports/ReportPlaceholder";
 import { ReportTable } from "@/features/reports/ReportTable";
 import { findDefinition, runReport, summarisePeriodLabel } from "@/lib/reportService";
 // The reports endpoints are administrator-only, so the token is this view's own to carry: `src/lib/apiRoutes.ts`
@@ -22,7 +23,7 @@ import { useAuth } from "@/state/AuthContext";
 import { useAsync } from "@/state/hooks";
 import type { BucketGranularity, ReportKind, ReportResult } from "@/types/analytics";
 import type { DateRange, IsoDateString } from "@/types/common";
-import { formatBucketLabel } from "@/utils/dates";
+import { bucketCount, formatBucketLabel } from "@/utils/dates";
 import { formatCellValue, formatCompactNumber, formatInteger } from "@/utils/format";
 
 /*
@@ -31,17 +32,16 @@ import { formatCellValue, formatCompactNumber, formatInteger } from "@/utils/for
  * `src/styles/**` — so every class below is adopted by name, and this comment is the list the sheet owes the
  * file: `sp-report__body` is the block a report stacks its figures, its chart and its table in;
  * `sp-report__summary` with `__summary-item`, `__summary-label` and `__summary-value` is the summary-metrics
- * block; `sp-report__empty` is the block a range that recorded no activity composes `.sp-empty` inside;
- * `sp-range-note` is the caption-sized line stating the period the figures cover; and `sp-chart__frame` is the
- * bordered, token-height plot area a series in flight stands in for, which is the frame the sheet's skeleton
- * family is written against.
+ * block; `sp-report__empty` is the block a range that recorded no activity composes `.sp-empty` inside; and
+ * `sp-range-note` is the caption-sized line stating the period the figures cover.
  *
  * Everything else belongs to the components this file composes. `ReportTable` owns the definition's columns,
  * the `aria-sort` semantics, the caption, the paging, the totals row and the product's single CSV export, so no
  * column list, comparator, total or export control is written here. `BarChart` owns the frame, the grid, the
  * axis and its ticks, the bars, the text-and-swatch legend, the readout and the paired `.sp-chart__data` table
  * that repeats every figure it draws — so no second data alternative and no legend is built here — and the
- * fixed-height no-data state a period with nothing to plot renders.
+ * fixed-height no-data state a period with nothing to plot renders. The loading state is `ReportPlaceholder`'s,
+ * which shapes the figures, the chart and the table at this report's own counts, so no skeleton is written here.
  *
  * The chart is a bar chart and not a ring, and the reason is what the customer report's rows are. They are one
  * per period, and the two series `reportService.buildReportSeries` draws are that period's new and returning
@@ -70,7 +70,6 @@ const CLASSES = {
   summaryValue: "sp-report__summary-value",
   empty: "sp-report__empty",
   rangeNote: "sp-range-note",
-  chartFrame: "sp-chart__frame",
 } as const;
 
 /**
@@ -87,10 +86,20 @@ const REPORT_KIND: ReportKind = "customers";
 const SENTENCE_SEPARATOR = ". ";
 
 /**
- * The height the chart-shaped placeholder stands in at, taken from the token arithmetic the sheet already uses
- * for a chart frame so a series in flight shifts nothing when it lands.
+ * The figures a customer run states above its table, which is what the loading summary stands in with: one
+ * entry per figure `src/lib/reportService.ts` totals for this kind — the new and returning customers, the
+ * orders they placed and the revenue and average order value those orders carried — so the grid reserves the
+ * row of four it fills with four entries.
  */
-const CHART_SKELETON_HEIGHT = "calc(var(--space-20) * 2)";
+const SUMMARY_FIGURE_COUNT = 4;
+
+/**
+/**
+ * The series the customer report's chart draws: new against returning customers per period, the two series
+ * `src/lib/reportService.ts` builds for this kind, and so the number of legend entries and paired-table figures
+ * the placeholder stands in with.
+ */
+const CHART_SERIES_COUNT = 2;
 
 /**
  * The chart's legend totals, keyed by series id. Only one of the report's two charted counts adds up: the
@@ -103,9 +112,6 @@ const CHART_SKELETON_HEIGHT = "calc(var(--space-20) * 2)";
  * paired table's reading of it agree.
  */
 const LEGEND_TOTALS: Readonly<Record<string, boolean>> = { returningCustomers: false };
-
-/** How many table rows the loading placeholder stands in for: enough to hold a report's shape while it runs. */
-const PLACEHOLDER_ROWS = 4;
 
 /**
  * The line under the chart: the period the figures cover, then the caveat that a period boundary is a whole day
@@ -156,9 +162,11 @@ export interface CustomerReportProps {
  * — summed over periods it would count one customer twice.
  *
  * Every state this view can be in renders in the order it can occur: the failure the seam answered with,
- * carrying the retry that runs the range again; the placeholders a pending run shows; the empty state of a
+ * carrying the retry that runs the range again; the placeholders a first run shows; the empty state of a
  * period that gained no account and took no order; and then the report itself — its figures, its chart and its
- * table, because a reader wants the headline before the detail.
+ * table, because a reader wants the headline before the detail. A run that supersedes a report already on
+ * screen keeps the previous run's figures there, under the region's busy state, so a moved range or a changed
+ * cut moves the figures in place rather than emptying the report and re-creating its chart and its table.
  *
  * @param props - The page's range and its bucket, and the action its no-activity state offers; see
  * {@link CustomerReportProps}.
@@ -185,7 +193,11 @@ export function CustomerReport({
     (signal) =>
       runReport({ kind: REPORT_KIND, from, to, bucket: granularity }, { sessionToken, signal }),
     [from, to, granularity, sessionToken],
-    { enabled: session !== null },
+    // A moved range or a changed cut re-runs this view over the figures it is already showing, so the run
+    // keeps the result it last answered with: the summary, the chart and the table stay as they were and the
+    // region's busy state reports the wait until the new run's figures land. A view the selector has just
+    // mounted has no earlier run behind it, and its own first load still renders the placeholders.
+    { enabled: session !== null, keepPreviousData: true },
   );
 
   // A band key read as axis wording. The key is the period's own wording — `src/lib/reportSeries.ts` keys and
@@ -217,6 +229,8 @@ export function CustomerReport({
   }
 
   if (request.status === "error" && request.error !== null) {
+    // The failure takes the region whatever the previous run left there: a period whose figures could not be
+    // read is not a period to keep showing earlier ones for, and the retry is the way on from it.
     return (
       <div className={CLASSES.body}>
         <Alert
@@ -229,18 +243,31 @@ export function CustomerReport({
     );
   }
 
-  if (request.data === null) {
+  // The run on screen: the payload while the read holds one, and — because this view asks the read to keep
+  // the payload it last answered with — the figures of the previous run for as long as the run that
+  // supersedes it takes. `null` therefore means the view has no run behind it yet, which is the one case that
+  // renders the placeholders.
+  const result = request.data;
+
+  if (result === null) {
     return (
       <div className={CLASSES.body} aria-busy="true">
-        <div className={CLASSES.chartFrame}>
-          <Skeleton variant="block" height={CHART_SKELETON_HEIGHT} />
-        </div>
-        <Skeleton variant="row" lines={PLACEHOLDER_ROWS} />
+        {/* Shaped like what is arriving: the figures the run will state, then the plot, the legend, the paired
+            table at the buckets this period and cut resolve to, and a page of the table with its export row. */}
+        <ReportBodyPlaceholder
+          chart={{
+            title: REPORTS_COPY.CUSTOMER_CHART_HEADING,
+            description: definition.description,
+            footer: <p className={CLASSES.rangeNote}>{periodNote(from, to)}</p>,
+            rows: bucketCount({ from, to }, granularity),
+            series: CHART_SERIES_COUNT,
+          }}
+          definition={definition}
+          figures={SUMMARY_FIGURE_COUNT}
+        />
       </div>
     );
   }
-
-  const result = request.data;
 
   // A period that gained no account and took no order: the run succeeded and holds no rows, so the state says
   // so and offers the one action that resolves it. The period is the page's, so the action is the page's too,
@@ -263,8 +290,13 @@ export function CustomerReport({
     );
   }
 
+  const isBusy = request.status === "loading";
+
   return (
-    <div className={CLASSES.body}>
+    // The region carries the busy state while the run is in flight: the placeholders inside it are written
+    // against it, and so are the figures of a run a newer one supersedes — the summary, the chart and the
+    // table stay as they were, the table marking its own rows busy, until the new figures land.
+    <div className={CLASSES.body} {...(isBusy ? { "aria-busy": true } : {})}>
       {/* One labelled figure per summary item, each rendered from its column's own format, so a money figure
           here reads as the same figure the table states below it. */}
       <dl className={CLASSES.summary}>
@@ -292,6 +324,7 @@ export function CustomerReport({
         emptyMessage={EMPTY_STATES.reportRange.title}
       />
       <ReportTable
+        isBusy={isBusy}
         kind={REPORT_KIND}
         definition={definition}
         rows={result.rows}

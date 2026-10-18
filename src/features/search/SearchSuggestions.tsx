@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchSuggestions.tsx
  * Purpose: The type-ahead suggestion list grouping product, brand and category matches
- * Lines: 309
+ * Lines: 317
  */
 
 import type { ReactElement } from "react";
@@ -221,10 +221,11 @@ function SuggestionRow({ suggestion, index, context }: SuggestionRowProps): Reac
  * It renders what it is given and owns no state: `SearchBar.tsx` holds the field, the debounce, the abort
  * controller and the current position, and this component reports a choice through `onSelect` and a hovered
  * or focused row through `onPreview`. The request as it stands decides what is shown, in this precedence: a
- * superseded request renders nothing; one in flight renders the loading ring with the panel still anchored
- * to the field; a failure renders the shaped message with the retry action; and otherwise the grouped rows,
- * or — when a completed request matched nothing — the message saying so. A request that has not been made
- * renders nothing at all.
+ * superseded request renders nothing; one in flight renders the rows already on screen under the panel's busy
+ * state, and the loading ring with the panel still anchored to the field when there are no rows to keep; a
+ * failure renders the shaped message with the retry action; and otherwise the grouped rows, or — when a
+ * completed request matched nothing — the message saying so. A request that has not been made renders nothing
+ * at all.
  *
  * @param props - The suggestions, the request's state, the listbox id and the callbacks.
  * @returns The panel, or nothing when there is nothing to show.
@@ -245,7 +246,13 @@ export function SearchSuggestions({
 }: SearchSuggestionsProps): ReactElement | null {
   if (error !== undefined && isSuperseded(error)) return null;
   const panelClass = className ? `${CLASSES.panel} ${className}` : CLASSES.panel;
-  if (status === "loading") {
+  // The rows a superseded request left on screen outlive the request that replaces them: the popup keeps them
+  // and reports the wait with `aria-busy`, rather than emptying itself and filling again a moment later. The
+  // loading ring stands only where there is nothing to keep — the first term of a session, or a term typed
+  // after one that matched nothing.
+  const groups = numberSuggestions(groupSuggestionsByKind(suggestions));
+  const isBusy = status === "loading";
+  if (isBusy && groups.length === 0) {
     return (
       <div className={panelClass}>
         <Spinner className={CLASSES.empty} size="sm" />
@@ -259,7 +266,6 @@ export function SearchSuggestions({
       </div>
     );
   }
-  const groups = numberSuggestions(groupSuggestionsByKind(suggestions));
   if (groups.length === 0) {
     if (status !== "success") return null;
     return (
@@ -281,7 +287,9 @@ export function SearchSuggestions({
   };
 
   return (
-    <div className={panelClass}>
+    // The panel carries the busy state while a newer term is being answered, which is what the rows left from
+    // the previous answer are read against; the listbox and its options keep the wiring the field points at.
+    <div className={panelClass} {...(isBusy ? { "aria-busy": true } : {})}>
       <div id={listId} role="listbox" aria-label={LIST_LABEL}>
         {groups.map((group) => (
           <div

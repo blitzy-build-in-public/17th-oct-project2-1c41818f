@@ -1,17 +1,18 @@
 /**
  * Path: src/features/reports/ProductPerformanceReport.tsx
  * Purpose: The product-performance report: units, revenue and share by product
- * Lines: 306
+ * Lines: 325
  */
 
 import { useCallback, useMemo } from "react";
 import type { ReactElement } from "react";
 
 import { BarChart } from "@/components/charts/BarChart";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { COMMON_ACTIONS, EMPTY_STATES } from "@/constants/content";
 import { DATE_RANGE_COPY, REPORTS_COPY, productChartBoundNote } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
+import { ReportBodyPlaceholder } from "@/features/reports/ReportPlaceholder";
 import { ReportTable } from "@/features/reports/ReportTable";
 import { findDefinition, runReport } from "@/lib/reportService";
 import { useAuth } from "@/state/AuthContext";
@@ -33,9 +34,10 @@ import { formatCellValue } from "@/utils/format";
  * shell this view fills — `sp-report__body`, the block that stacks the summary figures, the paired chart and
  * the table; `sp-report__summary` with its `__summary-item`, `__summary-label` and `__summary-value` regions,
  * the register a report states its figures in; and `sp-report__empty`, the block a period with no activity
- * composes its empty state in. `sp-chart__frame` is that sheet's bordered plot area, which a pending series
- * stands in for. The chart's own `.sp-chart` family and the table's `.sp-report-table` family travel with the
- * components that render them. No colour, radius, shadow or pixel media query is written here.
+ * composes its empty state in. The chart's own `.sp-chart` family and the table's `.sp-report-table` family
+ * travel with the components that render them, and the loading state is `ReportPlaceholder`'s, which shapes the
+ * figures, the chart and the table at this report's own counts. No colour, radius, shadow or pixel media query
+ * is written here.
  *
  * The view renders no heading of its own: the report selector mounts it as its selected panel, which
  * `src/components/ui/Tabs.tsx` labels with the report's own name, so the region already carries an accessible
@@ -67,7 +69,6 @@ const CLASSES = {
   summaryLabel: "sp-report__summary-label",
   summaryValue: "sp-report__summary-value",
   empty: "sp-report__empty",
-  chartFrame: "sp-chart__frame",
 } as const;
 
 /**
@@ -79,15 +80,18 @@ const CLASSES = {
 const CHART_PRODUCT_LIMIT = 8;
 
 /**
- * The block size a pending series stands in at, in the frame's own expression: the token arithmetic
- * `src/styles/components.css` declares for a chart-shaped placeholder, which is the shape `Skeleton`'s
- * `height` is documented for. The frame keeps its own minimum either way, so nothing shifts on arrival.
+ * The figures a product-performance run states above its table, which is what the loading summary stands in
+ * with: one entry per figure `src/lib/reportService.ts` totals for this kind — the products that sold, the
+ * units they moved and the revenue they brought — so the grid reserves the row of three it fills.
  */
-const CHART_SKELETON_HEIGHT = "calc(var(--space-20) * 2)";
+const SUMMARY_FIGURE_COUNT = 3;
 
-/** The placeholders a pending run stands in with: one block per summary figure, and the table's own rows. */
-const PLACEHOLDER_FIGURE_COUNT = 3;
-const PLACEHOLDER_ROW_COUNT = 6;
+/**
+ * The series the product chart draws: the range's revenue per product, the single series
+ * `src/lib/reportService.ts` builds for this kind, and so the number of legend entries and paired-table figures
+ * the placeholder stands in with — the bounds above decide how many bands it plots.
+ */
+const CHART_SERIES_COUNT = 1;
 
 /**
  * The level the empty state's headline renders at: the report body is a section of the page, one level below
@@ -175,8 +179,11 @@ export interface ProductPerformanceReportProps {
  * `src/lib/reportService.ts`, every figure is rendered by `src/utils/format.ts`, and sorting, paging and the
  * export control belong to `ReportTable`.
  *
- * Four states are rendered in the order they can occur: the placeholders while the run is in flight, the
- * alert with its retry when it failed, the empty state when the period recorded no activity, and the report.
+ * Four states are rendered in the order they can occur: the alert with its retry when the run failed, the
+ * placeholders while this view's own first run is in flight, the empty state when the period recorded no
+ * activity, and the report. A run that supersedes a report already on screen keeps the previous run's figures
+ * there, under the region's busy state, so a moved range or a changed cut moves the figures in place rather
+ * than emptying the report and re-creating its chart and its table.
  *
  * @param props - The period to run over, the cut to run it by and the action its empty state offers; see
  * {@link ProductPerformanceReportProps}.
@@ -201,19 +208,24 @@ export function ProductPerformanceReport({
       ),
     [granularity, range.from, range.to, sessionToken],
   );
-  const { data, error, reload } = useAsync<ReportResult>(load, [
-    range.from,
-    range.to,
-    granularity,
-    sessionToken,
-  ]);
+  const { data, status, error, reload } = useAsync<ReportResult>(
+    load,
+    [range.from, range.to, granularity, sessionToken],
+    // A moved range or a changed cut re-runs this view over the figures it is already showing, so the run
+    // keeps the result it last answered with: the summary, the chart and the table stay as they were and the
+    // region's busy state reports the wait until the new run's figures land. A view the selector has just
+    // mounted has no earlier run behind it, and its own first load still renders the placeholders.
+    { keepPreviousData: true },
+  );
 
   // The chart's series, bounded once per run. The chart memoises its own geometry on this array, so the slice
   // is taken here rather than rebuilt on every render of the view.
   const series = useMemo(() => boundSeries(data?.series ?? [], CHART_PRODUCT_LIMIT), [data]);
 
   if (error !== null) {
-    // The run failed: the message the seam shaped, and the retry that runs the same query again.
+    // The run failed: the message the seam shaped, and the retry that runs the same query again. The failure
+    // takes the region whatever the previous run left there, because a period whose figures could not be read
+    // is not a period to keep showing earlier ones for.
     return (
       <div className={CLASSES.body}>
         <Alert tone="danger" error={error} actionLabel={COMMON_ACTIONS.RETRY} onAction={reload} />
@@ -222,23 +234,24 @@ export function ProductPerformanceReport({
   }
 
   if (data === null) {
-    // Nothing has arrived and nothing failed, so the run is in flight — or this is the first render, before
-    // the hook has started it. The placeholders take the shape of the figures, the chart and the table, and
-    // the block around them is what reports that the region is filling: `Skeleton` is decorative.
+    // Nothing has arrived and nothing failed, so this view's first run is in flight — or this is the first
+    // render, before the hook has started it. The block takes the shape of what is arriving: the figures the run
+    // will state, then the plot, the legend and the paired table at the products the chart is bounded to, then a
+    // page of the table with its export row. The block around them is what reports that the region is filling:
+    // every piece inside it is decorative and announces nothing of its own.
     return (
       <div className={CLASSES.body} aria-busy="true">
-        <div className={CLASSES.summary}>
-          {Array.from({ length: PLACEHOLDER_FIGURE_COUNT }, (_figure, index) => (
-            <div className={CLASSES.summaryItem} key={`figure-placeholder-${String(index)}`}>
-              <Skeleton variant="heading" />
-              <Skeleton variant="text" />
-            </div>
-          ))}
-        </div>
-        <div className={CLASSES.chartFrame}>
-          <Skeleton variant="block" height={CHART_SKELETON_HEIGHT} />
-        </div>
-        <Skeleton variant="row" lines={PLACEHOLDER_ROW_COUNT} />
+        <ReportBodyPlaceholder
+          chart={{
+            title: REPORTS_COPY.PRODUCT_CHART_HEADING,
+            description: describePeriod(range.from, range.to),
+            footer: productChartBoundNote(CHART_PRODUCT_LIMIT),
+            rows: CHART_PRODUCT_LIMIT,
+            series: CHART_SERIES_COUNT,
+          }}
+          definition={DEFINITION}
+          figures={SUMMARY_FIGURE_COUNT}
+        />
       </div>
     );
   }
@@ -264,8 +277,13 @@ export function ProductPerformanceReport({
     );
   }
 
+  const isBusy = status === "loading";
+
   return (
-    <div className={CLASSES.body}>
+    // The region carries the busy state while the run is in flight: the placeholders inside it are written
+    // against it, and so are the figures of a run a newer one supersedes — the summary, the chart and the
+    // table stay as they were, the table marking its own rows busy, until the new figures land.
+    <div className={CLASSES.body} {...(isBusy ? { "aria-busy": true } : {})}>
       {/* One figure per metric the run stated, each labelled and formatted from the column it belongs to, so
           the figures above the table and the totals row inside it name and render the same things one way. */}
       <dl className={CLASSES.summary}>
@@ -294,6 +312,7 @@ export function ProductPerformanceReport({
       {/* The table and its export, built from the run the chart was built from: the same definition, the same
           rows and the same summary, so the download cannot state a figure the screen does not. */}
       <ReportTable
+        isBusy={isBusy}
         kind={REPORT_KIND}
         definition={DEFINITION}
         rows={data.rows}

@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 446
+ * Lines: 466
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -364,6 +364,26 @@ export const COMMON_ACTIONS = {
   VIEW_DETAILS: "View details",
   VIEW_ALL: "View all",
 } as const;
+
+// Feedback, empty states and the error boundary -------------------------------------------------
+// The outcome messages, `EMPTY_STATES` and `NOT_FOUND_COPY` are written in
+// `src/constants/feedbackCopy.ts` and re-exported below, because that concern carried this file past
+// the request's 600-line ceiling, which is never raised. Every consumer's path stays this one. The
+// same concern also lives in `src/constants/content-feedback.ts`, star-exported at the foot of this
+// file; `FEEDBACK_COPY` itself is taken from there, because that copy is the one carrying the
+// review-submitted toast, so a sentence a consumer reads through this path always resolves.
+
+export {
+  EMPTY_STATES,
+  NOT_FOUND_COPY,
+  addedToCartMessage,
+  orderPlacedMessage,
+  registeredMessage,
+  signedInMessage,
+  type EmptyStateCopy,
+  type EmptyStateKey,
+} from "@/constants/feedbackCopy";
+export { FEEDBACK_COPY } from "@/constants/content-feedback";
 
 // Accessibility, validation and promo-code messages ---------------------------------------------
 /** Words assistive technology reads and sighted visitors do not. Consumers: the landmark owners. */

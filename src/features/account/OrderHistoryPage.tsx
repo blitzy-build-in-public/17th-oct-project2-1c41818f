@@ -1,76 +1,60 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 568
+ * Lines: 300
  */
 
-import { useCallback, useId, useState } from "react";
-import type { ChangeEvent, ReactElement } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import type { ReactElement } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { OrderStatusBadge } from "@/components/ui/Card";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { usePagination } from "@/components/ui/hooks";
-import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
-import { DataTable } from "@/components/ui/Table";
-import type { DataTableColumn, DataTablePaging } from "@/components/ui/Table";
+import { Alert } from "@/components/ui/Feedback";
 import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
-import { DEFAULT_PAGE_SIZE, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
 import {
   ACCOUNT_COPY,
   CART_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   PAGE_TITLES,
-  PAGING_NOUNS,
   PAYMENT_METHOD_LABELS,
-  VALIDATION_MESSAGES,
   documentTitle,
 } from "@/constants/content";
-import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
-import { ROUTE_PARAMS, ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
-import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
+import { ROUTE_PARAMS, ROUTES, loginPath } from "@/constants/routes";
+import { ORDER_STATUS_OPTIONS, countryLabel } from "@/constants/taxonomy";
+import { OrderHistoryList, OrderHistoryPlaceholder } from "@/features/account/OrderHistoryList";
 // The seam's own reading of a failure, so neither mode decides what a status or a sentence means: whether a
 // repeat of the read could answer differently is a fact about the refusal, and `src/lib/apiContract.ts` owns it.
 import { isNotFoundFailure, isSessionFailure } from "@/lib/apiClient";
-import { getOrder, listOrders } from "@/lib/orderService";
+import { getOrder } from "@/lib/orderService";
 // The session is this page's only source of the token its reads are scoped by, and the only way it can
 // tell a visitor whose session has not survived why it has nothing to show. `src/state/AuthContext.tsx`
 // is the product's single home for it, and the account area's sibling views read it the same way.
 import { useAuth } from "@/state/AuthContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
-import type {
-  Order,
-  OrderHistoryQuery,
-  OrderLine,
-  OrderStatus,
-  PaymentSummary,
-} from "@/types/commerce";
-import type { CurrencyCode, OrderId, PageResult, Result } from "@/types/common";
-import { sumQuantities } from "@/utils/collections";
-import type { DateRangeErrorCode, DateRangeErrorField } from "@/utils/dates";
-import {
-  formatDate,
-  formatDateRange,
-  formatDateTime,
-  fromDateInputValue,
-  toFieldErrors,
-  validateDateRange,
-} from "@/utils/dates";
+import type { Order, OrderStatus, PaymentSummary, PricedCartLine } from "@/types/commerce";
+import type { CurrencyCode, OrderId, Result } from "@/types/common";
+import { formatDate, formatDateTime } from "@/utils/dates";
 import { formatMoney, formatQuantity } from "@/utils/format";
 
 /*
  * Class contract, consumed by name: no file under `src/features/**` imports a stylesheet, because
  * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/account.css` owns both modes —
- * `sp-order-history` with its `__filters`, `__table` and `__empty`, and `sp-order-detail` with its
- * `__header`, `__number`, `__status`, `__lines`, `__totals`, `__addresses` and `__timeline` — and earlier sheets
- * supply the rest: the table primitive, `sp-alert`, `sp-empty`, `sp-stack`; from `src/styles/summary-panel.css`
- * the `sp-summary__row` register with its `--discount`/`--total` modifiers and `sp-summary__note`; and from
- * `src/styles/commerce.css` the compact itemised row `sp-review__item` the order confirmation reuses.
+ * `sp-order-history` with its `__filters`, `__table`, `__placeholder` and `__empty`, and `sp-order-detail`
+ * with its `__header`, `__number`, `__status`, `__lines`, `__totals`, `__addresses` and `__timeline` — and
+ * earlier sheets supply the rest: the table primitive, `sp-alert`, `sp-empty`, `sp-stack`; from
+ * `src/styles/summary-panel.css`, which `commerce.css` loads, the `sp-summary__row` register with its
+ * `--discount`/`--total` modifiers and `sp-summary__note`; and from `src/styles/commerce.css` the compact
+ * itemised row `sp-review__item` the order confirmation reuses. The history's own block — `sp-order-history`
+ * and its parts — is rendered by `src/features/account/OrderHistoryList.tsx`, which this file mounts.
  *
  * Both account order routes render here, because the slice spends three view files on four routes: the
- * history and one order, branched once on the order segment, sharing this module's helpers and formatting.
+ * history lives in `OrderHistoryList.tsx` and this file branches once on the order segment, so one view file
+ * serves the history and one order, and the two share this module's helpers and formatting.
+ *
+ * The three words this screen's copy gap once held are the account vocabulary's now: `ACCOUNT_COPY` declares
+ * the billing address's heading (`ORDER_DETAIL_BILLING_ADDRESS_HEADING`) and the last-updated label
+ * (`ORDER_DETAIL_UPDATED_LABEL`), and the word each payment method reads as is `PAYMENT_METHOD_LABELS`,
+ * re-exported from `src/constants/content.ts`. This file therefore states no wording of its own.
  */
 
 // The screen's own vocabulary
@@ -79,25 +63,6 @@ import { formatMoney, formatQuantity } from "@/utils/format";
 const CARD_TAIL_MASK = "•••• ";
 const QUANTITY_PRICE_SEPARATOR = " × ";
 const STAMP_SEPARATOR = " · ";
-
-/** The field keys the range rule reports under, which are also the `name` each date control carries, so one
- * error map lands on the control that owns it. No field renders the third, so the alert reads it. */
-const FROM_FIELD: DateRangeErrorField = "from";
-const TO_FIELD: DateRangeErrorField = "to";
-const RANGE_FIELD: DateRangeErrorField = "range";
-
-/** The wording of every rule `validateDateRange` can break, keyed by the code it returns. The rule — both
- * ends real, `from` not after `to`, neither in the future, at most the configured span — lives in
- * `src/utils/dates.ts`; this module only says what a broken rule reads as. */
-const RANGE_MESSAGES: Readonly<Record<DateRangeErrorCode, string>> = {
-  "date-invalid": VALIDATION_MESSAGES.REQUIRED,
-  "range-inverted": DATE_RANGE_COPY.RANGE_INVERTED_MESSAGE,
-  "range-in-future": DATE_RANGE_COPY.RANGE_IN_FUTURE_MESSAGE,
-  "range-too-long": rangeTooLongMessage(MAX_REPORT_RANGE_DAYS),
-};
-
-/** The rows the loading placeholder stands in for, one per row a first page typically holds. */
-const PLACEHOLDER_ROWS = 6;
 
 // Reading a route and an order
 
@@ -115,7 +80,7 @@ function statusLabel(status: OrderStatus): string {
 
 /** A line's quantity and the unit price it was bought at, both snapshotted, so nothing is looked up in the
  * catalogue again and nothing is multiplied here. */
-function lineFigures(line: OrderLine, currency: CurrencyCode): string {
+function lineFigures(line: PricedCartLine, currency: CurrencyCode): string {
   const quantity = formatQuantity(line.quantity);
   const unitPrice = formatMoney(line.unitPriceMinor, currency);
   return `${quantity}${QUANTITY_PRICE_SEPARATOR}${unitPrice}`;
@@ -142,7 +107,7 @@ function AddressBlock({ address }: { readonly address: Order["shippingAddress"] 
         address.line1,
         address.line2,
         `${address.city}, ${address.region} ${address.postalCode}`,
-        address.country,
+        countryLabel(address.country),
         address.phone,
       ]
         .filter((line) => line.trim() !== "")
@@ -150,240 +115,6 @@ function AddressBlock({ address }: { readonly address: Order["shippingAddress"] 
           <p key={`${String(index)}-${line}`}>{line}</p>
         ))}
     </div>
-  );
-}
-
-/** The loading state both modes render: decorative rows inside a region marked busy, with no live region of
- * its own because the region is what reports the load. */
-function LoadPlaceholder(): ReactElement {
-  return (
-    <div aria-busy="true">
-      <Skeleton lines={PLACEHOLDER_ROWS} variant="row" />
-    </div>
-  );
-}
-
-/**
- * The history's columns: a link to the order, when it was placed, its status, its unit count and what it
- * came to. The unit count is the shared reading of an order's lines — `sumQuantities` in
- * `src/utils/collections.ts` — so the dashboard's own column states the same figure for the same order. The
- * total is the figure the order's kept priced cart already holds, never a sum taken here, and the
- * order number is a real link inside its cell rather than a clickable row, because a row that answers a
- * pointer and not a keyboard is an accessibility defect the shared table deliberately refuses to offer.
- *
- * No column is sortable and the table is handed no default order, because `GET /api/orders` accepts only
- * `page`, `pageSize`, `status`, `from` and `to`: this is one page of a history the endpoint orders itself,
- * and no request this screen can make would change that order. A sortable header could therefore only
- * reorder the rows in hand while announcing, through `aria-sort`, an ordering of the whole history the
- * request never produced. The rows render in the order the read returned them — newest first.
- */
-const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
-  {
-    id: "order",
-    header: ACCOUNT_COPY.ORDERS_COLUMN_ORDER,
-    value: (order) => order.orderNumber,
-    cell: (order) => <Link to={accountOrderPath(order.id)}>{order.orderNumber}</Link>,
-  },
-  {
-    id: "placed",
-    header: ACCOUNT_COPY.ORDERS_COLUMN_PLACED,
-    value: (order) => order.placedAt,
-    format: "date",
-  },
-  {
-    id: "status",
-    header: ACCOUNT_COPY.ORDERS_COLUMN_STATUS,
-    cell: (order) => <OrderStatusBadge size="sm" status={order.status} />,
-  },
-  {
-    id: "items",
-    header: ACCOUNT_COPY.ORDERS_COLUMN_ITEMS,
-    isNumeric: true,
-    value: (order) => sumQuantities(order.lines),
-    format: "integer",
-  },
-  {
-    id: "total",
-    header: ACCOUNT_COPY.ORDERS_COLUMN_TOTAL,
-    isNumeric: true,
-    value: (order) => order.pricedCart.grandTotalMinor,
-    format: "money",
-  },
-];
-
-/**
- * The history: the status and date filters, the page of orders they resolve to, and the paging beneath it.
- *
- * The filters are this page's own state rather than the URL's, unlike the catalogue's and the search's: the
- * URL stores query state for those two screens, and the history reaches `src/utils/queryParams.ts` through
- * neither. A filter change returns to the first page — the lower bound of `clampPage` — and every page the
- * control reports is already confined by `usePagination` through `clampPage` and `pageCountFor`. Neither
- * endpoint is given a customer id, because neither takes one: the seam scopes the history to the customer its
- * session token authenticates. A range that is half given, inverted or past its cap is never sent at all.
- *
- * @param props - The session token every read is scoped by.
- * @returns The order history section.
- */
-function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): ReactElement {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const headingId = useId();
-  const [statusValue, setStatusValue] = useState("");
-  const [fromText, setFromText] = useState("");
-  const [toText, setToText] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
-
-  // A date control hands over the text it holds, and only a complete calendar day is a bound: a half-typed
-  // value is no bound at all rather than a malformed one, so it never reaches a request.
-  const from = fromDateInputValue(fromText);
-  const to = fromDateInputValue(toText);
-  const hasRangeEnd = from !== "" || to !== "";
-  const rangeValidation = hasRangeEnd ? validateDateRange(from, to) : null;
-  const rangeErrors =
-    rangeValidation === null ? {} : toFieldErrors(rangeValidation, RANGE_MESSAGES);
-  const rangeIsUsable = rangeValidation === null || rangeValidation.valid;
-  const range = rangeIsUsable && hasRangeEnd ? { from, to } : null;
-  const status = ORDER_STATUS_OPTIONS.find((option) => option.value === statusValue)?.value;
-
-  const query: OrderHistoryQuery = {
-    page,
-    pageSize,
-    ...(status === undefined ? {} : { status }),
-    ...(range === null ? {} : range),
-  };
-
-  const loadOrders = (signal: AbortSignal): Promise<Result<PageResult<Order>>> =>
-    listOrders(query, { sessionToken, signal });
-
-  const {
-    data,
-    error,
-    reload,
-    status: loadStatus,
-  } = useAsync<PageResult<Order>>(
-    loadOrders,
-    [page, pageSize, statusValue, from, to, sessionToken],
-    {
-      enabled: rangeIsUsable,
-    },
-  );
-
-  const orders = data?.items ?? [];
-  const changePage = useCallback((nextPage: number, nextPageSize: number): void => {
-    setPage(nextPage);
-    setPageSize(nextPageSize);
-  }, []);
-  const pager = usePagination({ page, pageSize, total: data?.total ?? 0, onChange: changePage });
-  const paging: DataTablePaging = {
-    ...pager,
-    // The rows are orders, so the pager's caption counts orders rather than the catalogue's products.
-    countNoun: PAGING_NOUNS.ORDERS,
-    onPageChange: pager.goTo,
-    onPageSizeChange: pager.setPageSize,
-  };
-
-  /** Every filter control reports the same way: the value it now holds is written and the list returns to
-   * the first page, so a narrower result set is never looked at from a page that no longer exists. */
-  const changeFilter =
-    (write: (value: string) => void) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
-      write(event.target.value);
-      setPage(1);
-    };
-
-  const clearFilters = (): void => {
-    setStatusValue("");
-    setFromText("");
-    setToText("");
-    setPage(1);
-  };
-
-  const renderResults = (): ReactElement => {
-    if (loadStatus === "error" && error !== null) {
-      // Every read here carries the session's token, so a refusal for want of one is resolved by the sign-in
-      // that ends in a session rather than by asking again; every other failure keeps the retry that can
-      // answer it.
-      return isSessionFailure(error) ? (
-        <div className="sp-stack">
-          <Alert error={error} tone="danger" />
-          <p className="sp-summary__note">
-            <Link to={loginPath(pathname)}>{COMMON_ACTIONS.SIGN_IN}</Link>
-          </p>
-        </div>
-      ) : (
-        <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={reload} tone="danger" />
-      );
-    }
-    if (loadStatus !== "success") return <LoadPlaceholder />;
-    if (orders.length === 0) {
-      return range !== null || statusValue !== "" ? (
-        <EmptyState
-          actionLabel={COMMON_ACTIONS.CLEAR_ALL}
-          description={ACCOUNT_COPY.ORDERS_NO_MATCH_DESCRIPTION}
-          onAction={clearFilters}
-          title={ACCOUNT_COPY.ORDERS_NO_MATCH_TITLE}
-        />
-      ) : (
-        <EmptyState
-          className="sp-order-history__empty"
-          onAction={(): void => {
-            void navigate(ROUTES.CATALOG);
-          }}
-          surface="orders"
-        />
-      );
-    }
-    return (
-      <DataTable
-        caption={ACCOUNT_COPY.ORDERS_HEADING}
-        columns={HISTORY_COLUMNS}
-        paging={paging}
-        rowKey={(order) => order.id}
-        rows={orders}
-        tableClassName="sp-order-history__table"
-      />
-    );
-  };
-
-  return (
-    <section aria-labelledby={headingId} className="sp-order-history">
-      <h2 id={headingId}>{ACCOUNT_COPY.ORDERS_HEADING}</h2>
-      <div className="sp-order-history__filters">
-        <Select
-          label={ACCOUNT_COPY.ORDERS_STATUS_FILTER_LABEL}
-          onChange={changeFilter(setStatusValue)}
-          options={ORDER_STATUS_OPTIONS}
-          placeholder={ACCOUNT_COPY.ORDERS_STATUS_ANY_LABEL}
-          value={statusValue}
-        />
-        <Input
-          errors={rangeErrors}
-          label={DATE_RANGE_COPY.FROM_LABEL}
-          name={FROM_FIELD}
-          onChange={changeFilter(setFromText)}
-          type="date"
-          value={fromText}
-        />
-        <Input
-          errors={rangeErrors}
-          label={DATE_RANGE_COPY.TO_LABEL}
-          name={TO_FIELD}
-          onChange={changeFilter(setToText)}
-          type="date"
-          value={toText}
-        />
-        {rangeErrors[RANGE_FIELD] === undefined ? null : (
-          <Alert actionLabel={COMMON_ACTIONS.CLEAR} onAction={clearFilters} tone="warning">
-            {rangeErrors[RANGE_FIELD]}
-          </Alert>
-        )}
-        {range === null ? null : (
-          <p className="sp-summary__note">{formatDateRange(range.from, range.to)}</p>
-        )}
-      </div>
-      {renderResults()}
-    </section>
   );
 }
 
@@ -442,7 +173,7 @@ function OrderDetail({
       </div>
     );
   }
-  if (order === null) return <LoadPlaceholder />;
+  if (order === null) return <OrderHistoryPlaceholder />;
 
   const { currency, discountTotalMinor, grandTotalMinor, shippingMinor, subtotalMinor, taxMinor } =
     order.pricedCart;
@@ -465,12 +196,12 @@ function OrderDetail({
       <section className="sp-stack">
         <h3>{ACCOUNT_COPY.ORDER_DETAIL_ITEMS_HEADING}</h3>
         <ul className="sp-order-detail__lines" role="list">
-          {order.lines.map((line) => (
+          {order.pricedCart.lines.map((line) => (
             <li className="sp-review__item" key={line.id}>
-              <span>{line.productName}</span>
+              <span>{line.name}</span>
               <span>{line.sku}</span>
               <span>{lineFigures(line, currency)}</span>
-              <span>{formatMoney(line.lineTotalMinor, currency)}</span>
+              <span>{formatMoney(line.lineSubtotalMinor, currency)}</span>
             </li>
           ))}
         </ul>
@@ -537,13 +268,14 @@ function OrderDetail({
 }
 
 /**
- * The account's orders: the customer's own history, or the one order the route names.
+ * The account's orders route: the customer's own history, or the one order the route names.
  *
- * Which is rendered is decided once, by whether the route carries an order segment — this slice spends one
- * view file on both routes — and the whole screen sits behind the session, because the seam scopes both
- * endpoints to the customer the token authenticates: a visitor whose session has not survived is told to
- * sign in rather than shown an empty table. The view renders the account area's `<h2>` below the shell's
- * `<h1>`, and sets the document title for its own route.
+ * Which is rendered is decided once, by whether the route carries an order segment, and the whole screen sits
+ * behind the session, because the seam scopes both endpoints to the customer the token authenticates: a
+ * visitor whose session has not survived is told to sign in rather than shown an empty table. The history
+ * itself — its filters, columns, paging and placeholder — is `src/features/account/OrderHistoryList.tsx`; this
+ * file owns the route, the session gate and one order. The view renders the account area's `<h2>` below the
+ * shell's `<h1>`, and sets the document title for its own route.
  *
  * @returns The order history, or the order the route names.
  */

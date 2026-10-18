@@ -1,11 +1,12 @@
 /* Path: src/styles/page-header.css
  * Purpose: Styles for the page header and its breadcrumb trail that src/components/layout/PageHeader.tsx renders, split out of src/styles/layout.css, which loads this sheet with @import
- * Lines: 83
+ * Lines: 134
  */
 
 /* The page-header family, and the sole definition site of the .sp-page-header* classes
- * src/components/layout/PageHeader.tsx renders: the header frame, the crumb trail, the page's one <h1>, the
- * optional description and the page's primary control. Split out of src/styles/layout.css, which loads this
+ * src/components/layout/PageHeader.tsx renders: the header frame with the loading modifier that holds the block
+ * size a settled header takes, the crumb trail and the crumb slot that stands in for it, the page's one <h1>, the
+ * optional description and the slot that reserves its rows, and the page's primary control. Split out of src/styles/layout.css, which loads this
  * sheet with @import above its first rule, because that sheet stood at 598 lines against the request's
  * 600-line ceiling before the crumb hover rule the breadcrumb contract requires; the plan's remedy for a
  * concern that cannot fit is the split, never the ceiling. A CSS @import is inlined where it sits, so these
@@ -71,6 +72,47 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* ==== The loading header ====
+ * The header of a page whose trail, heading and supporting line are named by a read — the product route, the only
+ * one — carries `sp-page-header--loading` while that read is in flight, and `breadcrumbSlots` tells it how many
+ * crumbs the settled trail holds. Each rule below holds the block size one of those parts takes, so the header is
+ * as tall while it is loading as it is when the names land: without them the trail is one row shorter, the
+ * heading one lane shorter and the supporting line absent, and the whole page below the header is pushed down by
+ * the difference when it arrives. Every value is a var() from tokens.css; the four crumb measures are the one
+ * exception and say why. */
+/* A crumb's slot is as tall as the line the crumb's text takes, and as wide as the words it stands in for: a text
+ * measure in ch, because a fixed proportion of the row would close the trail over its second row at a different
+ * width than the real crumbs close over theirs. The four measures follow the trail this header stands in for —
+ * the home crumb, the category and its parent, and the page's own name. */
+.sp-page-header--loading .sp-page-header__crumb-slot {
+  block-size: calc(var(--text-body-size) * var(--line-height-normal));
+}
+.sp-page-header--loading .sp-page-header__breadcrumb-item:nth-child(1) .sp-page-header__crumb-slot {
+  inline-size: 5ch;
+}
+.sp-page-header--loading .sp-page-header__breadcrumb-item:nth-child(2) .sp-page-header__crumb-slot {
+  inline-size: 6ch;
+}
+.sp-page-header--loading .sp-page-header__breadcrumb-item:nth-child(3) .sp-page-header__crumb-slot {
+  inline-size: 13ch;
+}
+.sp-page-header--loading .sp-page-header__breadcrumb-item:nth-child(4) .sp-page-header__crumb-slot {
+  inline-size: 31ch;
+}
+/* The heading's box, held at the two lanes a page's own name wraps to below the medium stop. The name is on the
+ * `h1` already — the route's own words, which are what it can say before the read answers — so this reserves the
+ * lanes the longer name takes rather than replacing the heading with a placeholder. */
+.sp-page-header--loading .sp-page-header__title {
+  min-block-size: calc(var(--text-heading-1-size) * var(--text-heading-1-line-height) * 2);
+}
+/* The supporting line's slot: the box the settled paragraph occupies, at the two line boxes that paragraph takes
+ * at this width, with the shared primitive's own two lines inside it. */
+.sp-page-header--loading .sp-page-header__description-slot {
+  block-size: calc(var(--text-body-size) * var(--line-height-normal) * 2);
+  overflow: hidden;
+}
+
 @media (min-width: 768px) {
   /* --breakpoint-md */
   .sp-page-header {
@@ -79,5 +121,14 @@
   }
   .sp-page-header__actions {
     justify-content: end;
+  }
+  /* At this stop the whole settled header changes shape and the loading one changes with it: the trail's four
+   * crumbs share one row, the name fits the heading's one lane, and the supporting line is one line — so the
+   * title's reservation drops to the lane it needs and the supporting line's slot to that one line box. */
+  .sp-page-header--loading .sp-page-header__title {
+    min-block-size: calc(var(--text-heading-1-size) * var(--text-heading-1-line-height));
+  }
+  .sp-page-header--loading .sp-page-header__description-slot {
+    block-size: calc(var(--text-body-size) * var(--line-height-normal));
   }
 }

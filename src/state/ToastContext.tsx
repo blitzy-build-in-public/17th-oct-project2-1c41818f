@@ -1,7 +1,7 @@
 /**
  * Path: src/state/ToastContext.tsx
  * Purpose: The toast queue with success, error and info helpers
- * Lines: 208
+ * Lines: 298
  */
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
@@ -50,6 +50,11 @@ type ToastHelperOptions = Omit<ToastInput, "kind" | "message">;
  * value carrying them is memoised, so a consumer re-renders when the queue
  * changes and not when its provider happens to render.
  *
+ * Only the enqueue paths can leave the queue unchanged, and they do it for one
+ * reason: a notification identical to a message already standing collapses into
+ * that message instead of joining it, and hands the caller the standing id. A
+ * dismissal or a clear of something the queue does not hold changes nothing.
+ *
  * The six functions are declared as function-valued properties rather than as
  * methods, because the provider builds them as function-valued properties
  * either way: an object literal holding the `useCallback` results, where the
@@ -61,15 +66,33 @@ type ToastHelperOptions = Omit<ToastInput, "kind" | "message">;
  * an error.
  */
 export interface ToastApi {
-  /** The queued notifications, oldest first, never more than `TOAST_MAX_VISIBLE`. */
+  /** The queued notifications, oldest first, never more than `TOAST_MAX_VISIBLE` and never two of them alike. */
   readonly toasts: readonly ToastMessage[];
-  /** Queues a notification of any kind, and returns the new message's id. */
+  /**
+   * Queues a notification of any kind, and returns the id the caller holds.
+   *
+   * A notification is never queued twice: when the queue already holds a message with the same kind, the same
+   * heading and the same words, nothing is queued and that standing message's id is what comes back, so a burst
+   * of identical raises — five lines removed from the cart in a row — collapses into the one message already
+   * standing rather than stacking copies of it over the page. Two messages that differ in any of those three
+   * parts are not alike: the same words raised as a failure and as a confirmation are two distinguishable
+   * registers, and both stand.
+   */
   readonly notify: (input: ToastInput) => number;
-  /** Queues a success notification, and returns its id. */
+  /**
+   * Queues a success notification, collapsing into the success message already standing when it carries the
+   * same heading and the same words; returns the id to hold, on the terms {@link ToastApi.notify} states.
+   */
   readonly success: (message: string, options?: ToastHelperOptions) => number;
-  /** Queues an error notification, and returns its id. */
+  /**
+   * Queues an error notification, collapsing into the error message already standing when it carries the same
+   * heading and the same words; returns the id to hold, on the terms {@link ToastApi.notify} states.
+   */
   readonly error: (message: string, options?: ToastHelperOptions) => number;
-  /** Queues an informational notification, and returns its id. */
+  /**
+   * Queues an informational notification, collapsing into the info message already standing when it carries the
+   * same heading and the same words; returns the id to hold, on the terms {@link ToastApi.notify} states.
+   */
   readonly info: (message: string, options?: ToastHelperOptions) => number;
   /** Removes the message with this id, and does nothing when no message has it. */
   readonly dismiss: (id: number) => void;
@@ -115,18 +138,23 @@ function buildInput(kind: ToastKind, message: string, options?: ToastHelperOptio
 /**
  * Holds the toast queue, and provides it with its helpers to everything below.
  *
- * The provider owns the queue and the enqueue, dismiss, cap and duration policy,
- * and deliberately owns nothing else. The rendered item, the live region and the
+ * The provider owns the queue and the enqueue, collapse, dismissal, cap and
+ * duration policy, and deliberately owns nothing else. The rendered item, the live region and the
  * auto-dismiss timer — pausing it while the pointer or the focus rests on an item
  * — live in the viewport, `src/components/ui/Toast.tsx`, which reads `toasts`,
  * honours each message's `durationMs` and calls `dismiss(id)` when that time is
  * up. That split is why this module holds no timer, no markup and no words, and
  * why no toast survives a reload: nothing here is persisted.
  *
- * The queue lives in `useState` with functional updates, because a burst of
- * notifications raised within one tick must all be accounted for, and ids come
- * from a ref-held counter rather than a random source or a clock, so a test can
- * name the message it means.
+ * The queue is written once and read from two places: `queueRef` holds the array
+ * every mutation reads and rewrites, and the state beside it is that same array
+ * handed to the render that paints it. The ref is what lets a burst of
+ * notifications raised within one tick all be accounted for — each one reads what
+ * the one before it wrote, rather than a state value React has not rendered yet —
+ * and it is what lets `notify` answer with the id of a message already standing,
+ * since a `useState` updater runs later and cannot report a value to its caller.
+ * Ids come from a ref-held counter rather than a random source or a clock, so a
+ * test can name the message it means.
  *
  * One context carries both the queue and its helpers, so every consumer
  * re-renders when the queue changes — that is what lets a viewport repaint. The
@@ -139,48 +167,110 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactEleme
   const [toasts, setToasts] = useState<readonly ToastMessage[]>(EMPTY_QUEUE);
   const lastIdRef = useRef(0);
 
-  const notify = useCallback((input: ToastInput): number => {
-    const id = lastIdRef.current + 1;
-    lastIdRef.current = id;
-    const message: ToastMessage = {
-      id,
-      kind: input.kind,
-      message: input.message,
-      title: input.title,
-      durationMs: input.durationMs ?? TOAST_DURATION_MS[input.kind],
-    };
-    setToasts((queue) => appendWithinLimit(queue, message));
-    return id;
+  /*
+   * The queue as a mutation reads it. The state above is what a render paints; this
+   * ref is the same array, written before the state is, so that a notification
+   * raised in the middle of a burst reads what the notification before it wrote —
+   * state React has not re-rendered yet is state no enqueue may compare against, or
+   * two identical raises in one tick would both join the queue.
+   */
+  const queueRef = useRef<readonly ToastMessage[]>(EMPTY_QUEUE);
+
+  /**
+   * Publishes the queue's next value, through the one route every mutation takes.
+   *
+   * The ref first, so the read that follows in the same tick sees the change, then
+   * the state carrying the same array to the next render. Nothing else writes
+   * either of them, so the two cannot come to disagree.
+   *
+   * @param next - The queue as it is to stand from this moment on.
+   */
+  const publish = useCallback((next: readonly ToastMessage[]): void => {
+    queueRef.current = next;
+    setToasts(next);
   }, []);
 
+  /**
+   * Queues one notification, unless an identical message is already standing.
+   *
+   * Identical means all three parts a reader can tell apart: the kind, the heading
+   * and the words. The heading is compared as the queue holds it — `undefined` when
+   * the caller supplied none — so a message with no heading is alike another with no
+   * heading and unlike one whose heading is the empty string, the two being a
+   * caller's different choices rather than the same choice written twice. A duration
+   * override is deliberately not part of the comparison: it decides how long a
+   * message is read for and never what it says, and a repeat of a message already
+   * standing is the same feedback however long it was asked to stand.
+   *
+   * @param input - The kind, the words, and the optional heading and duration.
+   * @returns The id to hold: the id of the identical message already standing, when
+   *   there is one and nothing is queued, and otherwise the id given to the message
+   *   this raises. `dismiss` accepts either.
+   */
+  const notify = useCallback(
+    (input: ToastInput): number => {
+      const queue = queueRef.current;
+      const standing = queue.find(
+        (toast) =>
+          toast.kind === input.kind &&
+          toast.title === input.title &&
+          toast.message === input.message,
+      );
+      if (standing !== undefined) {
+        return standing.id;
+      }
+      const id = lastIdRef.current + 1;
+      lastIdRef.current = id;
+      const message: ToastMessage = {
+        id,
+        kind: input.kind,
+        message: input.message,
+        title: input.title,
+        durationMs: input.durationMs ?? TOAST_DURATION_MS[input.kind],
+      };
+      publish(appendWithinLimit(queue, message));
+      return id;
+    },
+    [publish],
+  );
+
+  /** Queues a success notification; an identical success message already standing absorbs it. */
   const success = useCallback(
     (message: string, options?: ToastHelperOptions): number =>
       notify(buildInput("success", message, options)),
     [notify],
   );
 
+  /** Queues an error notification; an identical failure message already standing absorbs it. */
   const error = useCallback(
     (message: string, options?: ToastHelperOptions): number =>
       notify(buildInput("error", message, options)),
     [notify],
   );
 
+  /** Queues an informational notification; an identical note already standing absorbs it. */
   const info = useCallback(
     (message: string, options?: ToastHelperOptions): number =>
       notify(buildInput("info", message, options)),
     [notify],
   );
 
-  const dismiss = useCallback((id: number): void => {
-    setToasts((queue) => {
+  const dismiss = useCallback(
+    (id: number): void => {
+      const queue = queueRef.current;
       const remaining = queue.filter((toast) => toast.id !== id);
-      return remaining.length === queue.length ? queue : remaining;
-    });
-  }, []);
+      if (remaining.length !== queue.length) {
+        publish(remaining);
+      }
+    },
+    [publish],
+  );
 
   const clear = useCallback((): void => {
-    setToasts((queue) => (queue.length === 0 ? queue : EMPTY_QUEUE));
-  }, []);
+    if (queueRef.current.length > 0) {
+      publish(EMPTY_QUEUE);
+    }
+  }, [publish]);
 
   const value = useMemo<ToastApi>(
     () => ({ toasts, notify, success, error, info, dismiss, clear }),

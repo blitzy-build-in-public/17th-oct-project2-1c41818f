@@ -1,13 +1,14 @@
 /**
  * Path: src/features/admin/KpiCard.tsx
  * Purpose: One KPI with its value, named comparison baseline and change indicator
- * Lines: 251
+ * Lines: 285
  */
 
 import { useId } from "react";
 import type { ElementType, ReactElement } from "react";
 
 import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Feedback";
 import { FEEDBACK_COPY } from "@/constants/content";
 import { ADMIN_COPY, KPI_CHANGE_WORDS } from "@/constants/content-reports";
 import { describeBaseline } from "@/lib/analyticsService";
@@ -26,6 +27,10 @@ import { changeDirection } from "@/utils/statistics";
  * is the frame and the grid the card's four parts sit in, `sp-kpi-card__label` names the figure,
  * `sp-kpi-card__value` states it, `sp-kpi-card__delta` carries the change with its `--up`/`--down` colour
  * reinforcement, and `sp-kpi-card__baseline` words the comparison the change is measured against.
+ *
+ * The placeholder this file also renders needs no modifier of the frame's own: it takes `sp-kpi-card` for
+ * its box, and names its four parts `sp-kpi-placeholder__label`, `__value`, `__delta` and `__baseline`,
+ * which `src/styles/placeholders.css` sizes.
  *
  * `sp-visually-hidden` comes from `src/styles/base.css`, which owns that utility, and it hides the word the
  * delta states the direction in while leaving it in the accessibility tree: the arrow is aria-hidden, so the
@@ -110,6 +115,10 @@ const CLASSES = {
   deltaUp: "sp-kpi-card__delta--up",
   deltaDown: "sp-kpi-card__delta--down",
   baseline: "sp-kpi-card__baseline",
+  placeholderLabel: "sp-kpi-placeholder__label",
+  placeholderValue: "sp-kpi-placeholder__value",
+  placeholderDelta: "sp-kpi-placeholder__delta",
+  placeholderBaseline: "sp-kpi-placeholder__baseline",
   changeWord: "sp-visually-hidden",
 } as const;
 
@@ -246,6 +255,31 @@ export function KpiCard({
           <p className={CLASSES.baseline}>{describeBaseline(baseline.kind, baseline)}</p>
         </>
       )}
+    </Card>
+  );
+}
+
+/**
+ * One KPI's worth of placeholder: the space a KPI card occupies while the range's summary is on its way.
+ *
+ * It is the card's own box — the same class the loaded card wears, so the padding, the gap and its four grid
+ * rows are the sheet's own — holding the four parts the loaded card stacks in it, each at the height of the
+ * part it stands in for. `src/styles/placeholders.css` declares those four sizes from the tokens
+ * the loaded parts read, which is what makes the box as tall as the card it replaces rather than as tall as a
+ * convenient bar.
+ *
+ * It is decorative: the card is hidden from assistive technology and carries no label of its own, because the
+ * grid a summary has not answered for states nothing about a figure nobody has read yet.
+ *
+ * @returns The decorative KPI card.
+ */
+export function KpiCardPlaceholder(): ReactElement {
+  return (
+    <Card className={CLASSES.card} aria-hidden="true">
+      <Skeleton className={CLASSES.placeholderLabel} variant="text" />
+      <Skeleton className={CLASSES.placeholderValue} variant="text" />
+      <Skeleton className={CLASSES.placeholderDelta} variant="text" />
+      <Skeleton className={CLASSES.placeholderBaseline} variant="text" />
     </Card>
   );
 }

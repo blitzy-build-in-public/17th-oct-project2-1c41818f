@@ -1,7 +1,7 @@
 /**
  * Path: src/components/product/ProductCard.tsx
  * Purpose: Catalogue tile with imagery, price, discount, rating and quick add to cart
- * Lines: 413
+ * Lines: 500
  */
 
 import { memo, useId } from "react";
@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Badge, Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Feedback";
 import { PriceTag, Rating } from "@/components/ui/Rating";
 import { DEFAULT_CURRENCY } from "@/constants/config";
 import { CATALOG_COPY, EMPTY_STATES, quickAddLabel } from "@/constants/content";
@@ -50,11 +51,20 @@ import { brandId } from "@/utils/strings";
  * identically whether or not the shopper has a cart and a change to it re-renders no card. One implementation
  * therefore serves the catalogue, the search results, the landing band and the related strip without any of them
  * teaching it about the cart.
+ *
+ * The loading tile wears the same three classes the loaded one does — `sp-product-card` with its
+ * `sp-product-card--placeholder` modifier, `sp-product-card__media`, `sp-product-card__body` and
+ * `sp-product-card__actions` — so the placeholder occupies the tile's own box, and each block inside it
+ * wears `sp-product-placeholder__brand`, `__name`, `__rating`, `__price`, `__compare`, `__discount`,
+ * `__stock` or `__action` from `src/styles/placeholders.css`, which is where the space each of them stands
+ * in for is declared. The block inside the media box is the exception: it carries no class of its own, and
+ * that sheet sizes it as `.sp-product-card__media > .sp-skeleton`.
  */
 
 /** The class names of this block, named once so a render body repeats no string. */
 const CLASSES = {
   root: "sp-product-card",
+  placeholder: "sp-product-card--placeholder",
   media: "sp-product-card__media",
   flag: "sp-product-card__flag",
   body: "sp-product-card__body",
@@ -62,8 +72,17 @@ const CLASSES = {
   name: "sp-product-card__name",
   rating: "sp-product-card__rating",
   price: "sp-product-card__price",
+  pricePrimitive: "sp-price",
   stock: "sp-product-card__stock",
   actions: "sp-product-card__actions",
+  placeholderBrand: "sp-product-placeholder__brand",
+  placeholderName: "sp-product-placeholder__name",
+  placeholderRating: "sp-product-placeholder__rating",
+  placeholderPrice: "sp-product-placeholder__price",
+  placeholderCompare: "sp-product-placeholder__compare",
+  placeholderDiscount: "sp-product-placeholder__discount",
+  placeholderStock: "sp-product-placeholder__stock",
+  placeholderAction: "sp-product-placeholder__action",
 } as const;
 
 /**
@@ -409,5 +428,73 @@ function QuickAddControl({
         {CATALOG_COPY.QUICK_ADD_LABEL}
       </Button>
     </div>
+  );
+}
+
+/**
+ * Everything {@link ProductCardPlaceholder} accepts.
+ *
+ * It takes the placement and nothing else, because a placeholder carries no figures: every block inside it
+ * stands in for a part of the tile at that part's own size, and which of those parts exist is the one thing
+ * the two placements differ in.
+ */
+export interface ProductCardPlaceholderProps {
+  /** The placement the tile it stands in for is laid out in. Defaults to `"grid"`. */
+  readonly variant?: ProductCardVariant;
+}
+
+/**
+ * One tile's worth of placeholder: the space a product tile occupies while the page of results is on its way.
+ *
+ * It is the tile's own shape rather than a bar of a convenient size. It wears `sp-product-card` and the same
+ * three regions the loaded tile wears, so the grid reserves exactly what the loaded tile takes: the media box
+ * is the tile's own 4:3 one, the body stacks the four parts the loaded body stacks — the brand line, the two
+ * clamped lines of the name, the rating row and the wrapping price line with its four parts — and the action
+ * bar is the slot the quick add occupies. `src/styles/catalog.css` declares the size each of those blocks
+ * stands in for, from the token the part it replaces renders at; each block therefore takes the variant whose
+ * own modifier carries no size of its own — the line shape for a line and the card shape for a box — so that
+ * the sheet is the only place the geometry is decided.
+ *
+ * It is decorative: the whole list item is hidden from assistive technology, and each block inside it is too,
+ * because the region the placeholders sit in is what states the wait with `aria-busy`. It holds no state,
+ * fetches nothing and reveals none of the parts the loaded tile withholds from a pointer until hover.
+ *
+ * @param props - The placement; see {@link ProductCardPlaceholderProps}.
+ * @returns The decorative loading tile, ready to sit directly inside a product grid.
+ */
+export function ProductCardPlaceholder({
+  variant = "grid",
+}: ProductCardPlaceholderProps): ReactElement {
+  const actions = (
+    <div className={CLASSES.actions}>
+      <Skeleton variant="card" className={CLASSES.placeholderAction} />
+    </div>
+  );
+
+  return (
+    <Card
+      as="li"
+      className={composeClassName(CLASSES.root, CLASSES.placeholder)}
+      aria-hidden="true"
+    >
+      <div className={CLASSES.media}>
+        <Skeleton variant="card" />
+      </div>
+      <div className={CLASSES.body}>
+        <Skeleton variant="text" className={CLASSES.placeholderBrand} />
+        <Skeleton variant="text" className={CLASSES.placeholderName} />
+        <Skeleton variant="text" className={CLASSES.placeholderRating} />
+        {/* The price line wears the primitive's own class through the same join `PriceTag` composes it with,
+            so the four blocks wrap into the rows the four parts of a real price line wrap into at that width. */}
+        <div className={composeClassName(CLASSES.pricePrimitive, CLASSES.price)}>
+          <Skeleton variant="text" className={CLASSES.placeholderPrice} />
+          <Skeleton variant="text" className={CLASSES.placeholderCompare} />
+          <Skeleton variant="card" className={CLASSES.placeholderDiscount} />
+          <Skeleton variant="text" className={CLASSES.placeholderStock} />
+        </div>
+        {variant === "list" ? actions : null}
+      </div>
+      {variant === "grid" ? actions : null}
+    </Card>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/TopProductsTable.tsx
  * Purpose: The dashboard's best-performing-products table by revenue or units
- * Lines: 281
+ * Lines: 379
  */
 
 import { useMemo, type ReactElement } from "react";
@@ -9,7 +9,7 @@ import { Link } from "react-router-dom";
 
 import { Button, ButtonGroup } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
-import { Alert } from "@/components/ui/Feedback";
+import { Alert, Skeleton } from "@/components/ui/Feedback";
 import { DataTable, type DataTableColumn } from "@/components/ui/Table";
 import { COMMON_ACTIONS, EMPTY_STATES } from "@/constants/content";
 import { ADMIN_COPY } from "@/constants/content-reports";
@@ -29,7 +29,10 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
  * and the table brings `sp-table-wrap` (the scroll container, so a narrow viewport scrolls these five columns
  * rather than squeezing them), `sp-table`, `sp-table--compact` for the back office's dense row,
  * `sp-table__caption`, `sp-table__num` for the three columns of figures and `sp-table__empty` for the one row
- * a period with no sales shows. `sp-visually-hidden` comes from `src/styles/base.css`.
+ * a period with no sales shows. `sp-visually-hidden` comes from `src/styles/base.css`, and the loading state's
+ * two bars — `sp-placeholder-cell` for a figure and `sp-placeholder-name` for the product column's wrapped
+ * text — come from `src/styles/placeholders.css`, the single home for placeholder geometry, loaded by
+ * `src/styles/account.css`.
  *
  * BLITZY [DESIGN_SYSTEM_GAP]: `src/styles/admin-reports.css` declares no top-products block — `.sp-dashboard`
  * and `.sp-dashboard__section` belong to the page that stacks the dashboard's blocks, and
@@ -57,6 +60,43 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
 /** The heading level the card's title renders at when the page names none: the level a block inside a
  *  dashboard section sits at. The card's title is the heading-3 type at every level. */
 const DEFAULT_HEADING_LEVEL: 2 | 3 | 4 = 3;
+
+/**
+ * The key the product column is rendered and looked up by: the one column of this table whose cell holds a
+ * name long enough to wrap, which is why the placeholder sizes its bar apart from the figures beside it.
+ */
+const PRODUCT_COLUMN_ID = "product";
+
+/**
+ * The classes `src/styles/placeholders.css` sizes a placeholder cell with: `sp-placeholder-cell` is one bar at
+ * the height of the body-sm line the cell's own text renders in, and `sp-placeholder-name` is that same bar at
+ * the height the product names take in this table's narrow product column. The sheet is the product's single
+ * home for placeholder geometry and is loaded by `src/styles/account.css`, the last of the eight.
+ */
+const PLACEHOLDER_CELL_CLASS = "sp-placeholder-cell";
+const PLACEHOLDER_NAME_CLASS = "sp-placeholder-cell sp-placeholder-name";
+
+/** One placeholder figure, for a column whose cell holds a number, a share or a rank. */
+function placeholderCell(): ReactElement {
+  return <Skeleton className={PLACEHOLDER_CELL_CLASS} variant="text" />;
+}
+
+/** One placeholder name, for the column whose cell holds the product's own text. */
+function placeholderNameCell(): ReactElement {
+  return <Skeleton className={PLACEHOLDER_NAME_CLASS} variant="text" />;
+}
+
+/**
+ * The rows a placeholder table is built from: the keys React renders them by. They carry no data — every cell
+ * of them is a bar — so their identity is their position, which is what the count the page states resolves to.
+ *
+ * @param count - How many rows the read being waited on asked for.
+ * @returns One key per row, in order.
+ */
+function placeholderRowKeys(count: number): readonly number[] {
+  const rows = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+  return Array.from({ length: rows }, (_row, index) => index);
+}
 
 /**
  * The two ways the ranking is ordered, in the order the toggle shows them: the closed set `Metric` declares,
@@ -143,8 +183,17 @@ export interface TopProductsTableProps {
   readonly onMetricChange: (metric: Metric) => void;
   /** Whether the page is still reading the ranking. While it is, the table states itself busy and keeps the
    *  rows it already holds, so a change of metric leaves the previous ranking in place until the new one
-   *  arrives. Defaults to false. */
+   *  arrives; where it holds none, it renders the placeholder {@link placeholderRowCount} describes. Defaults
+   *  to false. */
   readonly isLoading?: boolean;
+  /**
+   * How many rows the read that feeds this table asked for — the page's own limit — so the card reserves the
+   * space those rows will take while the read is in flight: the placeholder is the height of a page of this
+   * table's rows, including the several lines a product name takes in this column, so the block the reader is
+   * looking at does not move when the ranking lands. Left out, no placeholder is rendered and the card shows
+   * its header alone, which is what a caller that does not know the count wants.
+   */
+  readonly placeholderRowCount?: number;
   /**
    * The failure the page's own ranking read reported, or `null` when it answered. While a failure is handed
    * in the card keeps its frame, its title and the metric control — a change of metric re-runs the read and is
@@ -180,11 +229,15 @@ export interface TopProductsTableProps {
  * The only control is the metric toggle, and it is the page's: this component neither fetches nor holds the
  * ranking, so pressing it reports the choice upward and renders whatever comes back. A period with no sales
  * legitimately has no products, and the table then shows its empty row with the dashboard's own sentence rather
- * than a blank body. A read the page could not answer is the card's own body too: the title and the toggle stay
- * live, so the ranking can be re-asked for while the failure is on screen, and the alert carries the one retry.
+ * than a blank body. While the ranking is read and none is held, it shows the placeholder instead: the same
+ * five columns and headings, one bar per figure and a taller block in the product column, at the count the
+ * page's own read asked for, so the card is the height of the ranking that replaces it and the block below it
+ * does not move when the ranking lands. A read the page could not answer is the card's own body too: the title
+ * and the toggle stay live, so the ranking can be re-asked for while the failure is on screen, and the alert
+ * carries the one retry.
  *
- * @param props - The ranked products, the metric in force with its callback, the loading flag, the failure
- *   with its retry, the heading and its level; see {@link TopProductsTableProps}.
+ * @param props - The ranked products, the metric in force with its callback, the loading flag and the row
+ *   count it reserves, the failure with its retry, the heading and its level; see {@link TopProductsTableProps}.
  * @returns The card holding the ranking control and the ranked table.
  */
 export function TopProductsTable({
@@ -192,6 +245,7 @@ export function TopProductsTable({
   metric,
   onMetricChange,
   isLoading = false,
+  placeholderRowCount = 0,
   error,
   onRetry,
   title,
@@ -208,13 +262,15 @@ export function TopProductsTable({
     () => [
       {
         id: "rank",
+        // The heading is the product's own word for the position — `ProductPerformance.rank`, the value
+        // `formatOrdinal` renders — declared once in the dashboard vocabulary rather than repeated here.
         header: ADMIN_COPY.TOP_PRODUCTS_RANK_COLUMN_LABEL,
         // The ranking's own position as the read reported it, never this file's index over the rows on show:
         // an index would be a second ranking, and it would shift with any later slice of the same list.
         cell: (row) => formatOrdinal(row.rank),
       },
       {
-        id: "product",
+        id: PRODUCT_COLUMN_ID,
         header: PRODUCT_COLUMN_LABELS.product,
         cell: (row) => <Link to={productPath(row.productId)}>{row.productName}</Link>,
       },
@@ -247,6 +303,29 @@ export function TopProductsTable({
     [metric],
   );
 
+  // The same five columns as the placeholder renders them: the same ids, headings, numeric alignment and rank,
+  // with a bar where every cell's figure goes — and the wider, taller bar for the product column, whose names
+  // are the one cell of this table that wraps. The headings are the vocabulary module's own words, so the table
+  // the reader sees while the ranking is read is headed exactly as the ranking it becomes. No column is
+  // sortable in either set: the ranking is the service's order, so no heading here carries a sort control.
+  const placeholderColumns = useMemo<readonly DataTableColumn<number>[]>(
+    () =>
+      columns.map((column) => ({
+        id: column.id,
+        header: column.header,
+        align: column.align,
+        isNumeric: column.isNumeric,
+        cell: column.id === PRODUCT_COLUMN_ID ? placeholderNameCell : placeholderCell,
+      })),
+    [columns],
+  );
+
+  // Nothing has arrived and nothing is held: the table is about to be filled, so a page of its own rows is
+  // reserved rather than an empty body shown. A table that already holds rows keeps them instead, because the
+  // read under way is a re-ranking of the one the reader is looking at.
+  const placeholderRows = placeholderRowKeys(placeholderRowCount);
+  const isPlaceholderShown = isLoading && products.length === 0 && placeholderRows.length > 0;
+
   return (
     <Card>
       <CardHeader
@@ -258,15 +337,34 @@ export function TopProductsTable({
           with no padding of its own, while the alert brings the padding the card's other bodies carry. */}
       <CardBody isFlush={failure === null}>
         {failure === null ? (
-          <DataTable<ProductPerformance>
-            columns={columns}
-            rows={products}
-            rowKey={(row) => row.productId}
-            caption={heading}
-            emptyState={<p>{EMPTY_STATES.dashboardRange.title}</p>}
-            isLoading={isLoading}
-            density="compact"
-          />
+          isPlaceholderShown ? (
+            // The ranking the reader is waiting for, in the shape it arrives in: the same columns and headings, a
+            // bar where every figure goes, a wrapped-name block in the product column, and the page's own row
+            // count. The frame reports the wait; the table inside is hidden from assistive technology, because a
+            // table of empty cells read out as content is not a state anyone asked for.
+            <div aria-busy="true">
+              <div aria-hidden="true">
+                <DataTable
+                  columns={placeholderColumns}
+                  rows={placeholderRows}
+                  rowKey={(row) => String(row)}
+                  caption={heading}
+                  isLoading
+                  density="compact"
+                />
+              </div>
+            </div>
+          ) : (
+            <DataTable<ProductPerformance>
+              columns={columns}
+              rows={products}
+              rowKey={(row) => row.productId}
+              caption={heading}
+              emptyState={<p>{EMPTY_STATES.dashboardRange.title}</p>}
+              isLoading={isLoading}
+              density="compact"
+            />
+          )
         ) : (
           <Alert
             actionLabel={COMMON_ACTIONS.RETRY}

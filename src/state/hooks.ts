@@ -1,14 +1,12 @@
 /**
  * Path: src/state/hooks.ts
- * Purpose: State-facing hooks: storage-backed state, debounced value, abortable async reads and the document title
- * Lines: 351
+ * Purpose: State-facing hooks: storage-backed state, debounced value, the async read re-exported from `src/state/asyncQuery.ts`, and the document title
+ * Lines: 168
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { FEEDBACK_COPY } from "@/constants/content";
-import type { ApiError, AsyncStatus, Result } from "@/types/common";
-import { debounce, isAbortError } from "@/utils/async";
+import { debounce } from "@/utils/async";
 import { readStored, removeStored, writeStored, type StorageKey } from "@/utils/storage";
 
 /**
@@ -19,39 +17,22 @@ import { readStored, removeStored, writeStored, type StorageKey } from "@/utils/
  * of it. Nothing here imports a context, a service or a component, which is what lets the contexts
  * themselves consume it without an import cycle.
  *
- * The hooks shared presentation reads — `usePagination`, `useMediaQuery`, `useBreakpoint` and
- * `useOnClickOutside` — live beside the primitives that read them in `src/components/ui/hooks.ts`, because
- * shared presentation is a layer below this one and may not import upward. Neither file holds a copy of the
- * other's hooks: the split is by who reads a hook, and every hook has exactly one home.
+ * Two members of the set could not stay here, and each has exactly one home elsewhere. The hooks shared
+ * presentation reads — `usePagination`, `useMediaQuery`, `useBreakpoint` and `useOnClickOutside` — live
+ * beside the primitives that read them in `src/components/ui/hooks.ts`, because shared presentation is a
+ * layer below this one and may not import upward. The async-data hook — `useAsync`, the options it takes
+ * and the lifecycle it reports — is written in `src/state/asyncQuery.ts` and re-exported below, because it
+ * is the concern that carried this file past the request's 600-line ceiling. The split is by who reads a
+ * hook, so neither file holds a copy of what is in another.
  */
 
-// Shared helpers ---------------------------------------------------------------------------------
+// The public surface ------------------------------------------------------------------------------
+// The async-data concern of this module's set — `useAsync`, its options and the lifecycle it reports —
+// lives in `src/state/asyncQuery.ts`, because that concern carried this file past the request's 600-line
+// ceiling, which is never raised. Every name a consumer imports stays at this path, as
+// `src/utils/dates.ts` repeats the names of `src/utils/isoInstants.ts`.
 
-/** Compares two dependency lists element by element, the same way `Object.is` compares their inputs. */
-function sameDeps(previous: readonly unknown[], next: readonly unknown[]): boolean {
-  if (previous.length !== next.length) return false;
-  return previous.every((value, index) => Object.is(value, next[index]));
-}
-
-/** Reports whether a caught rejection already carries the `ApiError` fields. */
-function isApiErrorShape(value: unknown): value is ApiError {
-  if (typeof value !== "object" || value === null) return false;
-  const { status, code, message } = value as Partial<ApiError>;
-  return typeof status === "number" && typeof code === "string" && typeof message === "string";
-}
-
-/**
- * Shapes a rejection into the failure a page can render. Requests resolve a failed `Result` instead of
- * throwing, so this only ever sees a caller's `run` that threw anyway.
- */
-function failureFrom(error: unknown): ApiError {
-  if (isApiErrorShape(error)) return error;
-  const message =
-    error instanceof Error && error.message.length > 0
-      ? error.message
-      : FEEDBACK_COPY.ERROR_STATE_BODY;
-  return { status: 500, code: "unexpected-error", message };
-}
+export { useAsync, type AsyncQueryState, type UseAsyncOptions } from "@/state/asyncQuery";
 
 /**
  * Narrows a hook's key to the product-key union `src/utils/storage.ts` accepts. {@link useLocalStorage}
@@ -166,172 +147,8 @@ export function useDebouncedValue<TValue>(value: TValue, delayMs: number): TValu
 }
 
 // Async data -------------------------------------------------------------------------------------
-
-/** Options for {@link useAsync}. */
-export interface UseAsyncOptions {
-  /** Run when `deps` change. `false` suppresses every run and cancels one in flight. Defaults to `true`. */
-  readonly enabled?: boolean;
-  /**
-   * Run on mount. `false` waits for the first `reload()`, which is how a screen that fetches only on
-   * demand — a detail panel opened by an action — avoids an empty first call. Defaults to `true`.
-   */
-  readonly immediate?: boolean;
-}
-
-/**
- * The lifecycle of one request with its payload and failure, plus the actions a caller drives.
- * Structurally this is `AsyncState` from `src/types/common.ts` carrying its actions, so a value of this
- * shape passes to anything that renders the four async states: `data` is set only by a successful run
- * and `error` only by a failed one.
- */
-export interface AsyncQueryState<TValue> {
-  readonly status: AsyncStatus;
-  readonly data: TValue | null;
-  readonly error: ApiError | null;
-  /** Run again, keeping the current `deps`. */
-  readonly reload: () => void;
-  /** Abort anything in flight and return to `idle`, discarding the payload and the failure. */
-  readonly reset: () => void;
-  /** Abort anything in flight and keep the current status: a cancelled run reports no failure. */
-  readonly cancel: () => void;
-}
-
-/** The `idle` state every instance starts from, shared rather than allocated per render. */
-const IDLE_ASYNC_SNAPSHOT = { status: "idle", data: null, error: null } as const;
-
-/** The state held between runs: the lifecycle fields of {@link AsyncQueryState} alone. */
-type AsyncSnapshot<TValue> = Pick<AsyncQueryState<TValue>, "status" | "data" | "error">;
-
-/** What a run was triggered by, so a new run is recognised by comparison rather than by an array. */
-interface AsyncTrigger {
-  readonly deps: readonly unknown[];
-  readonly runToken: number;
-  readonly enabled: boolean;
-}
-
-/**
- * Runs an abortable request whenever the caller's `deps` change, reporting the four lifecycle states.
- *
- * `run` is read through a ref and is deliberately not what triggers a load: an inline fetcher is a new
- * function on every render, so depending on its identity would reload on every render — the endless
- * request loop this hook is shaped to make impossible. The trigger is the `deps` list the caller passed,
- * compared element by element, which is also why the effect carries no dependency array: the caller's
- * list is rebuilt each render and cannot be spread into one. Pass the inputs the request actually reads
- * — a query, a page, an id — and nothing that is rebuilt each render.
- *
- * Each run owns one `AbortController`: a newer run aborts the one before it, and unmounting or disabling
- * the hook aborts whatever is in flight. A superseded run ignores its own settled promise, so a slow
- * response cannot overwrite the state of a newer request; the `signal` is the one to forward into
- * `src/lib/apiClient.ts`, which is what lets a superseded request stop rather than merely be ignored. A
- * run cancelled on purpose keeps the status it had, because a cancellation is not a failure to show.
- *
- * @param run - Starts the request, given the signal that cancels it.
- * @param deps - The inputs that decide when to run; compared with `Object.is`, element by element.
- * @param options - Whether to run automatically, and whether to run on mount; see {@link UseAsyncOptions}.
- * @returns The status, payload and failure of the request, with `reload`, `reset` and `cancel`.
- */
-export function useAsync<TValue>(
-  run: (signal: AbortSignal) => Promise<Result<TValue>>,
-  deps: readonly unknown[],
-  options: UseAsyncOptions = {},
-): AsyncQueryState<TValue> {
-  const enabled = options.enabled ?? true;
-  const immediate = options.immediate ?? true;
-
-  const [snapshot, setSnapshot] = useState<AsyncSnapshot<TValue>>(IDLE_ASYNC_SNAPSHOT);
-  const [runToken, setRunToken] = useState(0);
-
-  const runRef = useRef(run);
-  const controllerRef = useRef<AbortController | null>(null);
-  const triggerRef = useRef<AsyncTrigger | null>(null);
-
-  useEffect(() => {
-    runRef.current = run;
-  }, [run]);
-
-  // Abort in flight when the component goes away, and re-arm the trigger so that a remount starts its
-  // run: React's StrictMode invokes mount, cleanup and mount again, and a remount that found its own
-  // deps unchanged would otherwise skip the request the cleanup just cancelled.
-  useEffect(
-    () => () => {
-      triggerRef.current = null;
-      const controller = controllerRef.current;
-      controllerRef.current = null;
-      controller?.abort();
-    },
-    [],
-  );
-
-  const settle = useCallback(async (controller: AbortController): Promise<void> => {
-    let result: Result<TValue>;
-    try {
-      result = await runRef.current(controller.signal);
-    } catch (error: unknown) {
-      // A cancelled run reports nothing: the run that cancelled it owns the state from here on.
-      if (isAbortError(error) || controller.signal.aborted) return;
-      setSnapshot({ status: "error", data: null, error: failureFrom(error) });
-      return;
-    }
-    if (controller.signal.aborted) return;
-    setSnapshot(
-      result.ok
-        ? { status: "success", data: result.value, error: null }
-        : { status: "error", data: null, error: result.error },
-    );
-  }, []);
-
-  const reload = useCallback((): void => {
-    setRunToken((token) => token + 1);
-  }, []);
-  const cancel = useCallback((): void => {
-    const controller = controllerRef.current;
-    controllerRef.current = null;
-    controller?.abort();
-  }, []);
-  const reset = useCallback((): void => {
-    const controller = controllerRef.current;
-    controllerRef.current = null;
-    controller?.abort();
-    setSnapshot(IDLE_ASYNC_SNAPSHOT);
-  }, []);
-
-  useEffect(() => {
-    const previous = triggerRef.current;
-    triggerRef.current = { deps, runToken, enabled };
-    if (!enabled) return cancel();
-    if (!immediate && runToken === 0) return;
-    const triggered =
-      previous === null ||
-      previous.runToken !== runToken ||
-      previous.enabled !== enabled ||
-      !sameDeps(previous.deps, deps);
-    if (!triggered) return;
-
-    const controller = new AbortController();
-    const superseded = controllerRef.current;
-    controllerRef.current = controller;
-    superseded?.abort();
-    // The run starts from a microtask rather than in the effect's synchronous phase, so the loading
-    // snapshot lands in its own render instead of cascading out of the effect that triggered it.
-    queueMicrotask(() => {
-      if (controller.signal.aborted) return;
-      setSnapshot({ status: "loading", data: null, error: null });
-      void settle(controller);
-    });
-  });
-
-  return useMemo(
-    () => ({
-      status: snapshot.status,
-      data: snapshot.data,
-      error: snapshot.error,
-      reload,
-      reset,
-      cancel,
-    }),
-    [cancel, reload, reset, snapshot.data, snapshot.error, snapshot.status],
-  );
-}
+// `useAsync`, `UseAsyncOptions` and `AsyncQueryState` are re-exported at the top of this file from
+// `src/state/asyncQuery.ts`, the second file this module's own concern is split into.
 
 // Document title ---------------------------------------------------------------------------------
 

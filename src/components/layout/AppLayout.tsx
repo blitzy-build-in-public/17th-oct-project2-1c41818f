@@ -1,7 +1,7 @@
 /**
  * Path: src/components/layout/AppLayout.tsx
  * Purpose: The page shell: skip link, header, routed content region, footer and the administrator sidebar branch
- * Lines: 126
+ * Lines: 140
  */
 
 import type { ReactElement, ReactNode } from "react";
@@ -17,18 +17,19 @@ import { Header, type HeaderProps } from "./Header";
 /*
  * Class contract. Every class rendered below is defined in `src/styles/` and none of it is defined here.
  * `src/styles/layout.css` owns the application frame (`sp-app`) and its administrator variant
- * (`sp-app--admin`, a three-row grid whose middle row is the sidebar beside the content at every width,
- * as a rail of icons below the large stop and the labelled column from there), the three region hooks
- * this file gives its children (`sp-app__header`, `sp-app__main` and `sp-app__footer`) and the skip
- * link's own hook (`sp-app__skip-link`, which takes no rule of its own); `src/styles/base.css` owns the
- * `sp-skip-link` technique that hook decorates — hidden until it takes the focus and then lifted over
- * the sticky header. The region hooks are not decoration: the administrator grid places them as direct
- * children of the frame, and `sp-app__main` is the element carrying the page region's opening padding —
- * so a page that cancels it, the landing hero's `sp-page--flush`, cancels this file's padding rather
- * than a second copy of it — and, in the administrator variant, the measure and inline gutter that every
- * other route takes from `.sp-container`. No stylesheet is imported here, because `src/main.tsx` is the
- * only importer of `src/styles/**`, and no colour, length, radius, shadow or breakpoint of this file's
- * own appears below.
+ * (`sp-app--admin`, a three-row grid whose middle row is the sidebar beside the content at every width, as a
+ * rail of icons below the large stop and the labelled column from there — the variant is chosen from the
+ * location alone, which is what makes the grid and its reserved first column present from the first paint
+ * while the sidebar that fills that column waits on the session), the three region hooks this file gives its
+ * children (`sp-app__header`, `sp-app__main` and `sp-app__footer`) and the skip link's own hook
+ * (`sp-app__skip-link`, which takes no rule of its own); `src/styles/base.css` owns the `sp-skip-link`
+ * technique that hook decorates — hidden until it takes the focus and then lifted over the sticky header. The
+ * region hooks are not decoration: the administrator grid places them as direct children of the frame, and
+ * `sp-app__main` is the element carrying the page region's opening padding — so a page that cancels it, the
+ * landing hero's `sp-page--flush`, cancels this file's padding rather than a second copy of it — and, in the
+ * administrator variant, the measure and inline gutter that every other route takes from `.sp-container`. No
+ * stylesheet is imported here, because `src/main.tsx` is the only importer of `src/styles/**`, and no colour,
+ * length, radius, shadow or breakpoint of this file's own appears below.
  */
 
 /**
@@ -59,20 +60,26 @@ export interface AppLayoutProps extends HeaderProps {
  *
  * What it renders, and what that makes of the page. One skip link as the first focusable element, the
  * `Header` landmark, exactly one `<main>` holding the routed content, the `Footer` landmark, and the
- * `AdminSidebar` complement when the branch below holds. Nothing else: the shell owns no page title, so
+ * `AdminSidebar` complement on an administrator's own screens. Nothing else: the shell owns no page title, so
  * the route's heading and the single `<h1>` belong to the page's own `PageHeader`; it is not a provider,
  * an error boundary, a router or the toast viewport, because `src/App.tsx` composes those around it; and
  * it does not render the mini-cart drawer, which the cart slice owns. That restraint is what lets the
  * shell render inside `MemoryRouter` in the integration tests with no provider this file supplies.
  *
- * The administrator branch is derived during render from the two facts it reads — the role on the session,
- * which arrives as a prop, and the current location, which it reads itself — so the shell holds no state, runs
- * no effect and memoises nothing, and a sign-out or a navigation re-derives it. The session facts reach it
- * because the composition root in `src/App.tsx` composes this shell inside every provider and reads them
- * there; the shell itself stays below the state layer and imports nothing from it. It is presentational: the
- * route guard in `src/Router.tsx` admits an administrator to the section and refuses everybody else, and
- * `src/lib/mockServer.ts` answers a non-administrator's analytics request with `403`. A redirect or a second
- * role check here would be a guard that hiding markup could defeat.
+ * The administrator frame and the administrator sidebar are decided by different facts, and each is read from
+ * the source that knows it. The frame is derived from the current location alone, because the location is known
+ * at the first render while the session is restored asynchronously: a frame that waited for the role would lay
+ * the routed content out full width and then move it into the grid's second column when the restore resolved,
+ * shifting the content the visitor is already reading. The sidebar is derived from the role as well as the
+ * location, because everything it lists is the session's and it belongs to the section: a visitor the guard has
+ * not yet turned away gets the reserved column with nothing inside it, and an administrator browsing the
+ * storefront keeps the storefront's single-column shell. Both facts reach the shell as props — the composition
+ * root in `src/App.tsx` composes it inside every provider and reads the session there, so the shell itself
+ * stays below the state layer and imports nothing from it — and both are derived during render, since the shell
+ * holds no state, runs no effect and memoises nothing, and a sign-out or a navigation re-derives them. It is
+ * presentational: the route guard in `src/Router.tsx` admits an administrator to the section and refuses
+ * everybody else, and `src/lib/mockServer.ts` answers a non-administrator's analytics request with `403`. A
+ * redirect or a second role check here would be a guard that hiding markup could defeat.
  *
  * @param props - The header's own props, passed straight through to it, and the routed content; see
  *   {@link AppLayoutProps}.
@@ -82,8 +89,13 @@ export function AppLayout({ children, ...headerProps }: AppLayoutProps): ReactEl
   const { pathname } = useLocation();
 
   // Prefix matching, not equality, so the reports screen inside `/admin` keeps the administrator shell.
-  const isAdminSection =
-    headerProps.account.isAdministrator && isActivePath(pathname, ROUTE_PREFIXES.ADMIN);
+  const isAdminSection = isActivePath(pathname, ROUTE_PREFIXES.ADMIN);
+  // The sidebar needs both facts and the frame only the first: it is the session's navigation, so it waits
+  // for the role, while the grid it sits in is reserved by the route before the session has resolved. The role
+  // reaches it as the account prop the header above is given, which is how the shell reads a session fact
+  // without importing the state layer.
+  const { isAdministrator } = headerProps.account;
+  const showsAdminSidebar = isAdministrator && isAdminSection;
 
   return (
     <div className={isAdminSection ? "sp-app sp-app--admin" : "sp-app"}>
@@ -102,13 +114,15 @@ export function AppLayout({ children, ...headerProps }: AppLayoutProps): ReactEl
 
       {/*
         The sidebar is the frame's own child, which is the placement `src/styles/layout.css` reserves for
-        it and what the administrator grid positions. It is the only copy of the administrator navigation
-        the shell renders, and it is on the page at every width: the stylesheet collapses it to a rail of
-        icons below the large stop and widens it into the labelled column from there. A second copy inside
-        a drawer would need the overlay component from `src/components/ui`, which is outside this file's
-        dependency set, and no drawer is rendered here.
+        it and what the administrator grid positions, and it is gated on the session as well as the route:
+        every entry it shows is an administrator's, while the column it fills is reserved by the location
+        alone, so a visitor the guard has not turned away yet gets the column and nothing in it. It is the
+        only copy of the administrator navigation the shell renders, and it is on the page at every width: the
+        stylesheet collapses it to a rail of icons below the large stop and widens it into the labelled column
+        from there. A second copy inside a drawer would need the overlay component from `src/components/ui`,
+        which is outside this file's dependency set, and no drawer is rendered here.
       */}
-      {isAdminSection ? <AdminSidebar /> : null}
+      {showsAdminSidebar ? <AdminSidebar /> : null}
 
       {/* The one main landmark of the document, and the region the skip link and every page's own padding
           hang off. `tabIndex={-1}` makes it a programmatic focus target without adding a tab stop. */}

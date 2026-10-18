@@ -26,7 +26,7 @@ import { formatMoney } from "@/utils/format";
  * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
  * of `src/styles/**` — so every class below is consumed by name and this list is what the sheets owe the file.
  *
- * `src/styles/commerce.css` owns the row: `sp-cart-row` is a named-area grid of exactly seven children —
+ * `src/styles/cart.css` owns the row: `sp-cart-row` is a named-area grid of exactly seven children —
  * `media body remove / media qty total / media price price / warn warn warn`, widened at the medium stop to
  * `media body qty total remove / . price price price price / . warn warn warn warn` — and the parts are
  * `__media` for the square thumbnail, `__body` for the name column, `__name` for the name register, `__sku`

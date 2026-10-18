@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartSummary.tsx
  * Purpose: Totals panel with promo-code entry, discount lines and free-shipping progress
- * Lines: 426
+ * Lines: 435
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -42,13 +42,14 @@ import {
  * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/summary-panel.css` owns this
  * panel's register, split out of `src/styles/commerce.css`, which loads it with `@import`: `sp-summary`
  * with its padding and rhythm, `sp-summary__title`, `sp-summary__promo` (the field, its apply control,
- * the reason, the applied code's row and the notice, each placed as a row of the band),
- * `sp-summary__applied` for the applied code with the control that withdraws it, `sp-summary__row` with
- * its `--discount` and `--total` modifiers, and `sp-summary__progress` for the free-delivery band.
- * `src/styles/layout.css` contributes `sp-stack`, the rhythm the figures sit in on the definition list that
- * holds the amount rows, so the live region wrapped around them costs the rows none of the panel's spacing,
- * and `src/styles/base.css` contributes `sp-visually-hidden`, which keeps the announcement out of sight
- * while leaving it in the accessibility tree.
+ * the reason, the applied code's row and the notice, each placed as a row of the band — the label and the
+ * control of the field and the apply control on the band's own two columns, and the reason, the applied row
+ * and the notice spanning both), `sp-summary__applied` for the applied code with the control that withdraws
+ * it, `sp-summary__row` with its `--discount` and `--total` modifiers, and `sp-summary__progress` for the
+ * free-delivery band. `src/styles/layout.css` contributes `sp-stack`, the rhythm the figures sit in on the
+ * definition list that holds the amount rows, so the region wrapped around them costs the rows none of the
+ * panel's spacing, and `src/styles/base.css` contributes `sp-visually-hidden`, which keeps the announcement
+ * out of sight while leaving it in the accessibility tree.
  */
 
 /** The control a promo rule and a promo failure both key their message to, as the seam names it. */
@@ -86,8 +87,9 @@ export interface CartSummaryProps {
 }
 
 /**
- * The placeholder the figures region stands in with while a price is in flight: the shared skeleton rather
- * than zeroes, because a total that has not been quoted is not `$0.00`. The skeleton is silent, so the
+ * The placeholder the figures region stands in with while the basket holds no price at all: the shared
+ * skeleton rather than zeroes, because a total that has not been quoted is not `$0.00`. It is the first
+ * load's state alone — a re-price keeps the figures it is replacing — and the skeleton is silent, so the
  * figures region holding it is what carries `aria-busy` for as long as the price is in flight.
  *
  * @returns The stacked placeholder lines.
@@ -232,11 +234,13 @@ function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): React
  *
  * The panel keeps rendering while its figures do not: the title and the promo entry stand whatever the
  * pricing request is doing, so a shopper can correct a rejected code at any moment. The figures follow the
- * states every data-backed surface renders — a placeholder while a price is in flight, the failure with its
- * retry, a placeholder rather than zeroes when no price exists yet, and the amounts once one does — in a
- * plain figures region, with the panel's own polite status node beside it. A re-price is announced once, by
- * that node and as the basket's new total on its own, so the announcement states what changed instead of
- * reading every row out again and never moves the focus the shopper is using.
+ * states every data-backed surface renders, in this precedence — the failure with its retry takes the
+ * region whatever else is in hand, the amounts the price last answered with stand through the re-price a
+ * shopper's own edit asked for, a placeholder rather than zeroes stands while no price exists yet, and the
+ * amounts of a settled price are the loaded state — in a plain figures region that carries the busy state,
+ * with the panel's own polite status node beside it. A re-price is announced once, by that node and as the
+ * basket's new total on its own, so the announcement states what changed instead of reading every row out
+ * again, and never moves the focus the shopper is using.
  *
  * The amounts are a definition list: each row states its label as the term and its formatted figure as the
  * definition, so the two are one pair to a reader who cannot see the column's alignment rather than two loose
@@ -367,14 +371,19 @@ export function CartSummary({
   };
 
   const renderFigures = (): ReactElement => {
-    if (isLoading) return <SummaryPlaceholder />;
+    // The failure is stated before any figures, stale ones included: a basket whose price could not be
+    // quoted is not a basket to show an earlier price for, and the alert's retry is the way on from it.
     if (error !== null) {
       return (
         <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={onRetry} tone="danger" />
       );
     }
-    if (pricedCart === null) return <SummaryPlaceholder />;
-    return <SummaryRows pricedCart={pricedCart} />;
+    // The amounts stand for as long as a price does, including through the re-price a shopper's own edit
+    // asks for: the region reports that wait with `aria-busy`, so the panel they were reading is never
+    // emptied and refilled around them. Only a basket no price exists for yet has nothing to keep, and
+    // that first load is the one state the placeholder is for.
+    if (pricedCart !== null) return <SummaryRows pricedCart={pricedCart} />;
+    return <SummaryPlaceholder />;
   };
 
   return (

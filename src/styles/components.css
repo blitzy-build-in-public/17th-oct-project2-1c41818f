@@ -372,7 +372,7 @@ button.sp-rating__star {
   border-radius: var(--radius-md);
 }
 .sp-skeleton__line {
-  inline-size: var(--w, 100%);
+  inline-size: 100%;
   block-size: var(--space-4);
 }
 /* A container of lines spaces them itself and keeps its own shimmer off, so only the lines shine. */
@@ -386,7 +386,7 @@ button.sp-rating__star {
   content: none;
 }
 .sp-skeleton__line:last-child {
-  inline-size: var(--w-end, 60%);
+  inline-size: 60%;
 }
 .sp-empty {
   display: grid;

@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/controls.test.tsx
- * Purpose: Button, field, select and overlay behaviour, including keyboard and focus handling
- * Lines: 382
+ * Purpose: Button, field and select behaviour, including keyboard and focus handling; the overlay, tooltip and toast half of the suite is in tests/components/overlays.test.tsx
+ * Lines: 276
  */
 
 import { useState } from "react";
@@ -18,34 +18,30 @@ import {
 } from "@/components/ui/Button";
 import { Input, TextArea } from "@/components/ui/Input";
 import { Checkbox, RadioGroup, Select, Switch } from "@/components/ui/Select";
-import { ToastViewport } from "@/components/ui/Toast";
-import { Tooltip } from "@/components/ui/Tooltip";
-import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE } from "@/constants/config";
 import {
-  A11Y_COPY,
   CATALOG_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   VALIDATION_MESSAGES,
 } from "@/constants/content";
-import { useToast } from "@/state/ToastContext";
 
 import { makeFieldErrors } from "../fixtures";
-import { renderWithProviders, screen, waitFor, within } from "../testUtils";
+import { renderWithProviders, screen, within } from "../testUtils";
 
 /*
- * The shared controls seen from the outside — the button family, the field family, the selection controls, the
- * tooltip and the toast viewport — through roles, accessible names, ARIA state, rendered text and where the
- * keyboard focus is. The overlay family, whose panels portal onto `document.body`, is in
- * `tests/components/overlays.test.tsx`, the §0.5.5 split of this file: the five families together were over the
- * 600-line ceiling, and the overlays are a family in their own right. No assertion touches a class name or a
- * computed style, so none needs a stylesheet, and every subject is mounted through `renderWithProviders`.
+ * The shared controls seen from the outside — the button family, the field family and the selection controls —
+ * through roles, accessible names, ARIA state, rendered text and where the keyboard focus is. No assertion
+ * touches a class name or a computed style, so none needs a stylesheet, and every subject is mounted through
+ * `renderWithProviders`. The three overlays, the tooltip and the toast viewport are the other half of this
+ * suite and live in `tests/components/overlays.test.tsx`, which declares the document root, the media-query
+ * shim and the harnesses its own subjects need; all five families together were over the request's 600-line
+ * ceiling, which is why the two files are the §0.5.5 split of the one suite.
  *
  * Each case reads its first post-render expectation through an awaited query, and moves a fake clock inside an
- * awaited query rather than between two of them, because the providers issue requests when they mount and a
- * toast countdown dismisses through a queue update: an update raised outside the testing library's `act` window
- * is what React reports as an act warning. The rule, and why the awaited query is what keeps such a settle
- * inside that window, is stated in `tests/testUtils.tsx`; no case needs an `act` call of its own.
+ * awaited query rather than between two of them, because the providers issue requests when they mount: an
+ * update raised outside the testing library's `act` window is what React reports as an act warning. The rule,
+ * and why the awaited query is what keeps such a settle inside that window, is stated in
+ * `tests/testUtils.tsx`; no case needs an `act` call of its own.
  */
 
 // Test data --------------------------------------------------------------------------------------
@@ -60,9 +56,6 @@ const SORT_LABEL = "Sort order";
 const STOCK_LABEL = "In stock only";
 const ALERTS_LABEL = "Availability alerts";
 const NOTIFY_LABEL = "Notify me";
-const RAISE_SUCCESS = "Report a success";
-const RAISE_ERROR = "Report a failure";
-const TOOLTIP_TEXT = "Excludes cancelled orders.";
 
 // Harness components, mounted inside the real providers ------------------------------------------
 
@@ -77,23 +70,6 @@ function ClearableErrorField(): ReactElement {
         label={EMAIL_LABEL}
         name="email"
       />
-    </div>
-  );
-}
-
-/**
- * Raises notifications through the real queue, beside the viewport. The viewport takes the queue and its
- * dismiss handle as props — `src/App.tsx` mounts it that way — so the harness passes what it reads.
- */
-function ToastHarness(): ReactElement {
-  const toast = useToast();
-  return (
-    <div>
-      <Button onClick={() => toast.success(FEEDBACK_COPY.TOAST_ADDRESS_SAVED)}>
-        {RAISE_SUCCESS}
-      </Button>
-      <Button onClick={() => toast.error(FEEDBACK_COPY.TOAST_EXPORT_FAILED)}>{RAISE_ERROR}</Button>
-      <ToastViewport toasts={toast.toasts} onDismiss={toast.dismiss} />
     </div>
   );
 }
@@ -296,87 +272,5 @@ describe("the selection controls", () => {
     expect(anyRating).toBeChecked();
     expect(fourStars).not.toBeChecked();
     expect(screen.getAllByRole("radio", { checked: true })).toHaveLength(1);
-  });
-});
-
-// Supplementary surfaces ------------------------------------------------------------------------
-
-describe("supplementary surfaces", () => {
-  it("describes its trigger only while the tooltip is open, on hover and on focus", async () => {
-    const { user } = renderWithProviders(
-      <Tooltip content={TOOLTIP_TEXT}>
-        <Button onClick={() => undefined}>{COMMON_ACTIONS.APPLY}</Button>
-      </Tooltip>,
-    );
-    const trigger = screen.getByRole("button", { name: COMMON_ACTIONS.APPLY });
-    expect(trigger).not.toHaveAttribute("aria-describedby");
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    await user.hover(trigger);
-    expect(trigger.getAttribute("aria-describedby")).toBe(screen.getByRole("tooltip").id);
-    expect(screen.getByRole("tooltip")).toHaveTextContent(TOOLTIP_TEXT);
-    await user.unhover(trigger);
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    await user.tab();
-    expect(trigger).toHaveFocus();
-    expect(screen.getByRole("tooltip")).toHaveTextContent(TOOLTIP_TEXT);
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    expect(trigger).not.toHaveAttribute("aria-describedby");
-  });
-
-  it("announces each kind in its own register, dismisses by control and caps what it shows", async () => {
-    const { user } = renderWithProviders(<ToastHarness />);
-    await user.click(screen.getByRole("button", { name: RAISE_ERROR }));
-    const failure = await screen.findByRole("alert");
-    expect(failure).toHaveTextContent(FEEDBACK_COPY.TOAST_EXPORT_FAILED);
-    const viewport = screen.getByRole("region", { name: A11Y_COPY.TOAST_REGION_LABEL });
-    expect(viewport).not.toHaveAttribute("aria-live");
-    await user.click(within(failure).getByRole("button", { name: COMMON_ACTIONS.CLOSE }));
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-    expect(screen.queryByRole("region", { name: A11Y_COPY.TOAST_REGION_LABEL })).toBeNull();
-    const raise = screen.getByRole("button", { name: RAISE_SUCCESS });
-    await user.click(raise);
-    expect(await screen.findByRole("status")).toHaveTextContent(FEEDBACK_COPY.TOAST_ADDRESS_SAVED);
-    for (let count = 0; count < TOAST_MAX_VISIBLE + 1; count += 1) {
-      await user.click(raise);
-    }
-    expect(screen.getAllByRole("status")).toHaveLength(TOAST_MAX_VISIBLE);
-  });
-
-  it("clears a message when its duration elapses and holds it while it is attended to", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { user } = renderWithProviders(<ToastHarness />);
-    const raise = screen.getByRole("button", { name: RAISE_SUCCESS });
-    await user.click(raise);
-    await screen.findByRole("status");
-    // The clock is moved inside an awaited query, so the dismissal the countdown raises lands in the window
-    // that query holds open rather than between two of them: an update raised outside that window is what React
-    // reports as an act warning. The budget is raised past the move, because the query's own timeout would
-    // otherwise fire inside it and end the query before the dismissal does.
-    await waitFor(
-      async () => {
-        await vi.advanceTimersByTimeAsync(TOAST_DURATION_MS.success);
-      },
-      { timeout: TOAST_DURATION_MS.success * 2 },
-    );
-    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
-    await user.click(raise);
-    const message = await screen.findByRole("status");
-    await user.hover(message);
-    vi.advanceTimersByTime(TOAST_DURATION_MS.success * 3);
-    expect(screen.getByRole("status")).toBeInTheDocument();
-    const dismiss = screen.getByRole("button", { name: COMMON_ACTIONS.CLOSE });
-    dismiss.focus();
-    vi.advanceTimersByTime(TOAST_DURATION_MS.success);
-    expect(screen.getByRole("status")).toBeInTheDocument();
-    await user.unhover(message);
-    dismiss.blur();
-    await waitFor(
-      async () => {
-        await vi.advanceTimersByTimeAsync(TOAST_DURATION_MS.success + 100);
-      },
-      { timeout: TOAST_DURATION_MS.success * 2 },
-    );
-    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   });
 });

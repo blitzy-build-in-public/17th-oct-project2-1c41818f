@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
  * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart
- * Lines: 587
+ * Lines: 598
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -571,6 +571,17 @@ describe("placing the order", () => {
     });
     const orderId = (history.getAttribute("href") ?? "").slice(accountOrderPath("").length);
     expect(await summaryFigures(document.body)).toEqual(reviewed);
+
+    // The delivery block reads the country's name the shipping step's selection resolves to, not the code the
+    // address stores, so the confirmation's address reads as the review step's and the address book's do.
+    const country = SUPPORTED_COUNTRIES[0];
+    expect(country.label).not.toBe(country.code);
+    const delivery = screen
+      .getByRole("heading", { name: CHECKOUT_COPY.CONFIRMATION_ADDRESS_HEADING })
+      .closest("section");
+    if (delivery === null) throw new Error("The confirmation's delivery block has no frame.");
+    expect(within(delivery).getByText(country.label)).toBeInTheDocument();
+    expect(within(delivery).queryByText(country.code)).toBeNull();
 
     // The confirmation stands on the route alone: a reload reads the order by its identifier.
     unmount();

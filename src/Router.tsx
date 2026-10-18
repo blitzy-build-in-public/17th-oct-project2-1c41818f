@@ -1,7 +1,7 @@
 /**
  * Path: src/Router.tsx
  * Purpose: The route table with lazy slices, role guards, the suspension boundary and the not-found view
- * Lines: 435
+ * Lines: 473
  */
 
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
@@ -52,10 +52,10 @@ import type { ApiError } from "@/types/common";
  *
  * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
  * so every class rendered below is consumed by name. `src/styles/layout.css` owns the page geometry the route
- * placeholder wears (`sp-container`, `sp-page`), and `.sp-visually-hidden` is the global utility of
- * `src/styles/base.css`, which is where the placeholder's announcement lives. The not-found view renders its
- * own classes inside `src/components/ui/NotFoundView.tsx`, which states that contract; no colour, length,
- * radius, shadow or breakpoint of this file's own appears below.
+ * placeholder wears — `sp-container`, `sp-page` and the `sp-grid` its band of tiles takes — and
+ * `.sp-visually-hidden` is the global utility of `src/styles/base.css`, which is where the placeholder's
+ * announcement lives. The not-found view renders its own classes inside `src/components/ui/NotFoundView.tsx`,
+ * which states that contract; no colour, length, radius, shadow or breakpoint of this file's own appears below.
  */
 
 // Route-level code splitting ----------------------------------------------------------------------
@@ -273,9 +273,11 @@ function RequireRole({ allow }: RequireRoleProps): ReactElement {
   }
 
   // Nothing is in force yet, and that is not yet an answer: the session may be about to arrive from the
-  // stored token, so the screen's own placeholder is shown instead of a sign-in form that would flash.
+  // stored token, so the screen's own placeholder is shown instead of a sign-in form that would flash. It is
+  // shown silently: the suspension boundary above has already announced this route's load and this wait
+  // belongs to the same route change, so a live region here would read the sentence out a second time.
   if (status === "loading" || !isSessionSettled) {
-    return <RouteFallback />;
+    return <RouteFallback announce={false} />;
   }
 
   // The session could not be read while the visitor still holds the token, so the answer is the standard
@@ -323,28 +325,64 @@ function SessionFailure({ error, onRetry }: SessionFailureProps): ReactElement {
 // Placeholder and not-found -----------------------------------------------------------------------
 
 /**
+ * The counts the route placeholder stands a page's two content bands in with: one row of tiles for a band of
+ * cards, and a short table's worth of rows beneath them.
+ */
+const ROUTE_FALLBACK_TILE_COUNT = 4;
+const ROUTE_FALLBACK_ROW_COUNT = 3;
+
+/** Everything {@link RouteFallback} accepts. */
+interface RouteFallbackProps {
+  /**
+   * Whether the placeholder speaks the load through its own live region. Defaults to `true`, which is what
+   * the suspension boundary wants, because that boundary owns the single announcement a route change makes.
+   */
+  readonly announce?: boolean;
+}
+
+/**
  * The placeholder a suspending route renders behind, and the one the guard shows while it waits for the
  * session's first answer.
  *
- * It is shaped like a page — the container and rhythm every route uses, a heading line and a block beneath
- * it — so the screen that replaces it does not move the content around it, and it is wrapped in the same
- * page geometry the destination will use. The skeleton is decorative and announces nothing, so the region
- * carries `aria-busy` and one visually hidden live region speaks the load once, which is the contract
- * `Skeleton` documents: no second announcement, and no spinner turning beside a placeholder that already
- * stands for the content.
+ * It is shaped like a page rather than like one line of one — the container and rhythm every route uses, the
+ * heading and description line a `PageHeader` opens with, a band of tiles and a stack of table rows beneath
+ * them — and every part of it is a shape `Skeleton` already provides, so it is the primitive the pages' own
+ * loading states are built from and not a second placeholder of this file's own. It stands inside the
+ * block-size floor `src/styles/layout.css` gives the routed region, so the page already occupies the height
+ * the destination will need and the shell's footer stays below the fold while the route and its first read
+ * resolve.
  *
+ * The skeleton is decorative and announces nothing, so this placeholder renders at most one visually hidden
+ * live region, and `announce` decides whether it does: the suspension boundary leaves the default in place,
+ * and the guard passes `false`, because its wait follows that boundary's announcement within one route
+ * change, where a second region would repeat the sentence. The container carries `aria-busy` either way,
+ * which is the state the placeholder stands for.
+ *
+ * @param props - Whether this placeholder speaks the load itself; see {@link RouteFallbackProps}.
  * @returns The route-level loading placeholder.
  */
-function RouteFallback(): ReactElement {
+function RouteFallback({ announce = true }: RouteFallbackProps): ReactElement {
   return (
     <div className="sp-container" aria-busy="true">
       <div className="sp-page">
         <Skeleton variant="heading" width="18ch" />
-        <Skeleton />
+        <Skeleton variant="text" lines={2} />
+        {/* The two bands a data-backed page settles into. The keys are positional on purpose: every
+            placeholder inside a band is the same decorative box, with no identity for a key to preserve. */}
+        <div className="sp-grid">
+          {Array.from({ length: ROUTE_FALLBACK_TILE_COUNT }, (_tile, index) => (
+            <Skeleton key={`route-placeholder-tile-${String(index)}`} variant="card" />
+          ))}
+        </div>
+        {Array.from({ length: ROUTE_FALLBACK_ROW_COUNT }, (_row, index) => (
+          <Skeleton key={`route-placeholder-row-${String(index)}`} variant="row" />
+        ))}
       </div>
-      <span className="sp-visually-hidden" role="status">
-        {A11Y_COPY.LOADING_ANNOUNCEMENT}
-      </span>
+      {announce ? (
+        <span className="sp-visually-hidden" role="status">
+          {A11Y_COPY.LOADING_ANNOUNCEMENT}
+        </span>
+      ) : null}
     </div>
   );
 }

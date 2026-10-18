@@ -1,13 +1,14 @@
 /**
  * Path: src/features/catalog/ProductList.tsx
  * Purpose: The result grid with its loading, empty and error states
- * Lines: 280
+ * Lines: 295
  */
 
 import type { ReactElement, ReactNode } from "react";
 
-import { ProductCard } from "@/components/product/ProductCard";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { ProductCard, ProductCardPlaceholder } from "@/components/product/ProductCard";
+import { Alert, EmptyState } from "@/components/ui/Feedback";
+import { DEFAULT_PAGE_SIZE } from "@/constants/config";
 import { CATALOG_COPY, COMMON_ACTIONS, EMPTY_STATES, FEEDBACK_COPY } from "@/constants/content";
 import { useQuickAdd } from "@/state/CartContext";
 import type { Product } from "@/types/catalog";
@@ -21,8 +22,9 @@ import type { ApiError, AsyncStatus } from "@/types/common";
  * fixed media column with the body beside it from --breakpoint-sm; and `sp-no-results`, the recovery block
  * that composes `sp-empty` and adds the way out of an empty result set. `src/styles/components.css` owns the
  * feedback states the other three branches render: `sp-empty` with its `__title`, `__body` and `__action`
- * regions, `sp-alert` with the `--danger` tone a failure is painted in, and `sp-skeleton` with its `--card`
- * shape.
+ * regions, and `sp-alert` with the `--danger` tone a failure is painted in. The loading branch renders no
+ * class of its own: the placeholder tile is `ProductCardPlaceholder`'s, which wears the tile's own regions
+ * and the `sp-product-placeholder__*` blocks `src/styles/catalog.css` sizes them with.
  *
  * The tile is the list item rather than this file. `ProductCard` renders `Card as="li"`, and the grid and
  * list selectors above each reach their own direct child, so the container is a real `<ul>` and every card
@@ -59,14 +61,14 @@ function composeClassName(...names: readonly (string | false | undefined)[]): st
 }
 
 /**
- * How many placeholder tiles the loading state stands in with.
+ * How many placeholder tiles the loading state stands in with when the caller names no other count.
  *
- * Eight is two rows of the widest grid the sheet declares — four columns from --breakpoint-lg — and enough
- * of a band at every narrower width to show that the results are arriving rather than that the page has
- * nothing to list. The figure is not the page size: this file is handed a page of products and never the
- * paging configuration, because paging belongs to the page that reads the URL.
+ * It is the page size the catalogue opens on, from `src/constants/config.ts`, because the count decides the
+ * height of the region as much as the shape of a tile does: a page of twelve products is three rows of the
+ * widest grid the sheet declares, and a region holding two rows would jump by a row when the answer lands.
+ * A caller paging by another size passes its own through {@link ProductListProps.placeholderCount}.
  */
-const PLACEHOLDER_TILE_COUNT = 8;
+const DEFAULT_PLACEHOLDER_TILE_COUNT = DEFAULT_PAGE_SIZE;
 
 /**
  * The heading level the empty state's headline renders at.
@@ -150,6 +152,16 @@ export interface ProductListProps {
    * results share a screen with something else.
    */
   readonly layout?: ProductListLayout;
+  /**
+   * How many placeholder tiles the loading state stands in with. Defaults to the catalogue's own page size.
+   *
+   * It is the page size the caller paged the query by, which is what makes the loading region the height of
+   * the region it stands in for: a page of twelve products fills three rows of four and a page of
+   * forty-eight fills twelve, and a placeholder count that disagreed with the page size would grow the page
+   * under everything below it the moment the answer landed. A caller that pages by something else passes the
+   * size it used, so the two cannot drift.
+   */
+  readonly placeholderCount?: number;
   /** Extra classes for the results area, placed after the block's own so the caller's layout wins. */
   readonly className?: string;
 }
@@ -158,13 +170,15 @@ export interface ProductListProps {
  * One page of products as a grid or a list, in whichever of the four states its read is in.
  *
  * The component is presentational and holds nothing: it receives the products, the status of the read that
- * produced them and the failure if there was one, and it renders one of four things — a skeleton shaped like
- * the grid while the read is in flight, the recovery block when a successful read matched nothing, an alert
- * carrying the shaped `ApiError` when the read failed, and the tiles themselves when there is something to
- * show. It fetches nothing, runs no effect and keeps no state, so a page can drive it from a context, from a
- * hook or from a test without this file knowing which. Its one read is the cart's add, taken through
- * `useQuickAdd` in `src/state/CartContext.tsx` and handed to each tile, because a tile is shared presentation
- * and may not read the cart itself.
+ * produced them and the failure if there was one, and it renders one of four things — the placeholder tiles
+ * while the read is in flight, the recovery block when a successful read matched nothing, an alert carrying
+ * the shaped `ApiError` when the read failed, and the tiles themselves when there is something to show. Each
+ * placeholder is a tile shaped like the tile it stands in for, and there are as many of them as the page size
+ * the caller paged by, so the region the answer fills is the region the placeholder occupied. It fetches
+ * nothing, runs no effect and keeps no state, so a page can drive it from a context, from a hook or from a
+ * test without this file knowing which. Its one read is the cart's add, taken through `useQuickAdd` in
+ * `src/state/CartContext.tsx` and handed to each tile, because a tile is shared presentation and may not read
+ * the cart itself.
  *
  * Every figure a tile shows comes from the tile, which resolves its own brand, rating, both prices, its
  * discount and its availability, so no price is formatted and no total is computed here. The tiles are keyed
@@ -181,7 +195,7 @@ export interface ProductListProps {
  * either the caller's own focusable control or the button the shared empty state builds.
  *
  * @param props - The page of products, the status of the read, the failure if any, the retry, the empty
- *   state's action, the placement and the caller's extra classes.
+ *   state's action, the placement, the placeholder count and the caller's extra classes.
  * @returns The results area in the state the read is in.
  */
 export function ProductList({
@@ -191,6 +205,7 @@ export function ProductList({
   onRetry,
   emptyAction,
   layout = "grid",
+  placeholderCount = DEFAULT_PLACEHOLDER_TILE_COUNT,
   className,
 }: ProductListProps): ReactElement {
   const onAddToCart = useQuickAdd();
@@ -200,6 +215,9 @@ export function ProductList({
   // them when the tiles arrive: `aria-busy` is what states that it is filling, and the placeholders inside
   // stay hidden so the busy region is not also counted out as eight empty rows.
   const containerClass = layout === "list" ? CLASSES.list : CLASSES.grid;
+  const placeholderTiles = Number.isFinite(placeholderCount)
+    ? Math.max(0, Math.trunc(placeholderCount))
+    : DEFAULT_PLACEHOLDER_TILE_COUNT;
 
   if (status === "idle" || status === "loading") {
     return (
@@ -209,14 +227,11 @@ export function ProductList({
         aria-label={CATALOG_COPY.RESULTS_REGION_LABEL}
         aria-busy="true"
       >
-        {/* The placeholders are interchangeable decorative boxes with no identity for a key to preserve,
-            which is the same reason the shared skeleton keys its own lines by position, and they are hidden
-            from assistive technology so the region reports that it is filling rather than counting eight
-            empty rows. */}
-        {Array.from({ length: PLACEHOLDER_TILE_COUNT }, (_slot, index) => (
-          <li key={`result-placeholder-${String(index)}`} aria-hidden="true">
-            <Skeleton variant="card" />
-          </li>
+        {/* The placeholders are the tile's own shape at the page's own count, so the region the grid reserves
+            is the region the tiles will fill, and each of them is hidden from assistive technology by the
+            tile that renders it so the region reports that it is filling rather than counting the rows out. */}
+        {Array.from({ length: placeholderTiles }, (_slot, index) => (
+          <ProductCardPlaceholder key={`result-placeholder-${String(index)}`} variant={layout} />
         ))}
       </ul>
     );

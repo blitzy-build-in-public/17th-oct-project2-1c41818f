@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/overlays.test.tsx
- * Purpose: The overlay family's behaviour — dialog semantics, the inert background, focus moved in and restored, Escape, the Tab-edge wrap, the busy confirmation and the drawer presentation
- * Lines: 273
+ * Purpose: The overlay family and the supplementary surfaces beside it — dialog semantics, the inert background, focus moved in and restored, Escape, the Tab-edge wrap, the busy confirmation, the drawer presentation, the tooltip and the toast — including keyboard and focus handling
+ * Lines: 462
  */
 
 import { useRef, useState } from "react";
@@ -11,27 +11,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog, Drawer, Modal } from "@/components/ui/Modal";
-import { A11Y_COPY, CATALOG_COPY, COMMON_ACTIONS, SEARCH_COPY } from "@/constants/content";
 import { useBreakpoint } from "@/components/ui/hooks";
+import { ToastViewport } from "@/components/ui/Toast";
+import { Tooltip } from "@/components/ui/Tooltip";
+import {
+  A11Y_COPY,
+  CATALOG_COPY,
+  COMMON_ACTIONS,
+  FEEDBACK_COPY,
+  SEARCH_COPY,
+} from "@/constants/content";
+import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE } from "@/constants/config";
+import { useToast } from "@/state/ToastContext";
 
-import { renderWithProviders, screen, waitFor } from "../testUtils";
+import { renderWithProviders, screen, waitFor, within } from "../testUtils";
 
 /*
- * The overlay family seen from the outside — the modal, the drawer and the confirmation — through roles,
- * accessible names, ARIA state, rendered text and where the keyboard focus is. No assertion touches a class
- * name or a computed style, so none needs a stylesheet; every subject is mounted through
- * `renderWithProviders`, and the panels portal onto `document.body`, so queries come from `screen`.
+ * The overlays and the surfaces beside them seen from the outside — the modal, the drawer, the destructive
+ * confirmation, the tooltip and the toast viewport — through roles, accessible names, ARIA state, rendered
+ * text and where the keyboard focus is. No assertion touches a class name or a computed style, so none needs a
+ * stylesheet; every subject is mounted through `renderWithProviders`, and the overlay panels portal onto
+ * `document.body`, so queries come from `screen`.
  *
- * This file is the §0.5.5 split of `tests/components/controls.test.tsx`: the three overlays are a family in
- * their own right, and the shared-controls suite that held them alongside four other families was over the
- * 600-line ceiling, so the ceiling's remedy applies and the split is recorded in the manifest. Nothing else
- * changed — every case below is the case the single suite ran, and the other four families stay in the file
- * this one came from.
+ * A §0.5.5 split of `tests/components/controls.test.tsx`, which had reached the request's 600-line ceiling
+ * with these two describes inside it: the overlays are a family in their own right, the button, field and
+ * selection families stay there and the overlay and supplementary half is here. No case was edited and none
+ * was dropped — the moved ranges were taken as they stood — and each file declares the helpers its own
+ * subjects read, so the suite's total is unchanged. The later pass that rewrote the toast's cases is folded in
+ * here, where the toast and the tooltip are read: its distinct-message control, its viewport-portal case and
+ * its collapse case are declared in this file and in no other.
  *
- * Each case reads its first post-render expectation through an awaited query rather than a synchronous one,
- * because the providers issue requests when they mount: an update raised outside the testing library's `act`
- * window is what React reports as an act warning. The rule, and why the awaited query is what keeps such a
- * settle inside that window, is stated in `tests/testUtils.tsx`; no case needs an `act` call of its own.
+ * Each case reads its first post-render expectation through an awaited query, and moves a fake clock inside an
+ * awaited query rather than between two of them, because the providers issue requests when they mount and a
+ * toast countdown dismisses through a queue update: an update raised outside the testing library's `act` window
+ * is what React reports as an act warning. The rule, and why the awaited query is what keeps such a settle
+ * inside that window, is stated in `tests/testUtils.tsx`; no case needs an `act` call of its own.
  */
 
 /** The media-query shim `tests/setup.ts` installs, kept so a case that overrides it puts it back. */
@@ -90,6 +104,10 @@ const PANEL_VALUE = "Facet controls";
 const OPEN_MODAL = "Open modal";
 const OPEN_DRAWER = "Open drawer";
 const OPEN_CONFIRM = "Open confirmation";
+const RAISE_SUCCESS = "Report a success";
+const RAISE_ERROR = "Report a failure";
+const RAISE_DISTINCT = "Report another success";
+const TOOLTIP_TEXT = "Excludes cancelled orders.";
 
 beforeEach(applicationRoot);
 
@@ -152,6 +170,36 @@ function BusyConfirm({ onConfirm }: { readonly onConfirm: () => void }): ReactEl
       }}
       title={CONFIRM_TITLE}
     />
+  );
+}
+
+/**
+ * Raises notifications through the real queue, beside the viewport. The viewport takes the queue and its
+ * dismiss handle as props — `src/App.tsx` mounts it that way — so the harness passes what it reads.
+ *
+ * The first two controls raise a fixed message, which is what the queue collapses: raising either of them again
+ * while its message stands leaves one message and not two. The third raises a message whose words differ on
+ * every press, which is how a burst of distinct messages — the burst the visible cap bounds — is raised.
+ */
+function ToastHarness(): ReactElement {
+  const toast = useToast();
+  const distinctRef = useRef(0);
+  return (
+    <div>
+      <Button onClick={() => toast.success(FEEDBACK_COPY.TOAST_ADDRESS_SAVED)}>
+        {RAISE_SUCCESS}
+      </Button>
+      <Button onClick={() => toast.error(FEEDBACK_COPY.TOAST_EXPORT_FAILED)}>{RAISE_ERROR}</Button>
+      <Button
+        onClick={() => {
+          distinctRef.current += 1;
+          toast.success(`${FEEDBACK_COPY.TOAST_ADDRESS_SAVED} ${String(distinctRef.current)}`);
+        }}
+      >
+        {RAISE_DISTINCT}
+      </Button>
+      <ToastViewport toasts={toast.toasts} onDismiss={toast.dismiss} />
+    </div>
   );
 }
 
@@ -233,6 +281,19 @@ describe("the overlay family", () => {
     expect(isBackgroundInert()).toBe(false);
   });
 
+  it("defers the drawer's open class to the frame after the mount it travels from", async () => {
+    const { user } = renderWithProviders(<OverlayHarness />);
+    await user.click(screen.getByRole("button", { name: OPEN_DRAWER }));
+    // Read on the click's own commit, before any frame has run: the panel is already the named dialog with
+    // the focus inside it, and only the state class the sheet travels from is still outstanding — the
+    // resting transform a transition needs as its starting value, which is what makes the declared travel
+    // play instead of the panel popping into place.
+    const dialog = screen.getByRole("dialog", { name: DRAWER_TITLE });
+    expect(hasFocusInside(dialog)).toBe(true);
+    expect(dialog).not.toHaveClass("is-open");
+    await waitFor(() => expect(dialog).toHaveClass("is-open"));
+  });
+
   it("starts a destructive confirmation on its cancel control", async () => {
     const { user } = renderWithProviders(<OverlayHarness />);
     await user.click(screen.getByRole("button", { name: OPEN_CONFIRM }));
@@ -269,5 +330,133 @@ describe("the overlay family", () => {
     renderWithProviders(<ResponsivePanel />);
     expect(await screen.findByText(PANEL_VALUE)).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+// Supplementary surfaces ------------------------------------------------------------------------
+
+describe("supplementary surfaces", () => {
+  it("describes its trigger only while the tooltip is open, on hover and on focus", async () => {
+    const { user } = renderWithProviders(
+      <Tooltip content={TOOLTIP_TEXT}>
+        <Button onClick={() => undefined}>{COMMON_ACTIONS.APPLY}</Button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole("button", { name: COMMON_ACTIONS.APPLY });
+    expect(trigger).not.toHaveAttribute("aria-describedby");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.hover(trigger);
+    expect(trigger.getAttribute("aria-describedby")).toBe(screen.getByRole("tooltip").id);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(TOOLTIP_TEXT);
+    await user.unhover(trigger);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    expect(screen.getByRole("tooltip")).toHaveTextContent(TOOLTIP_TEXT);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(trigger).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("portals the toast viewport onto the document body, outside the tree it is mounted in", async () => {
+    const { container, user } = renderWithProviders(<ToastHarness />);
+    await user.click(screen.getByRole("button", { name: RAISE_SUCCESS }));
+    const viewport = await screen.findByRole("region", { name: A11Y_COPY.TOAST_REGION_LABEL });
+    // The application root is made inert while any overlay is open, which dims it and keeps its subtree out
+    // of the accessibility tree, so the viewport has to leave it for its declared rung and its live region
+    // to hold — the harness mounts it inside the container, which is the tree it must not be found in.
+    expect(viewport.parentElement).toBe(document.body);
+    expect(container.contains(viewport)).toBe(false);
+  });
+
+  it("announces each kind in its own register, dismisses by control and caps what it shows", async () => {
+    const { user } = renderWithProviders(<ToastHarness />);
+    await user.click(screen.getByRole("button", { name: RAISE_ERROR }));
+    const failure = await screen.findByRole("alert");
+    expect(failure).toHaveTextContent(FEEDBACK_COPY.TOAST_EXPORT_FAILED);
+    const viewport = screen.getByRole("region", { name: A11Y_COPY.TOAST_REGION_LABEL });
+    expect(viewport).not.toHaveAttribute("aria-live");
+    await user.click(within(failure).getByRole("button", { name: COMMON_ACTIONS.CLOSE }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.queryByRole("region", { name: A11Y_COPY.TOAST_REGION_LABEL })).toBeNull();
+    const raise = screen.getByRole("button", { name: RAISE_SUCCESS });
+    await user.click(raise);
+    expect(await screen.findByRole("status")).toHaveTextContent(FEEDBACK_COPY.TOAST_ADDRESS_SAVED);
+    // The cap is reached with distinct messages, because identical ones collapse into the message standing:
+    // this control varies the words it raises, and TOAST_MAX_VISIBLE + 1 of them leave the cap's count standing.
+    const raiseDistinct = screen.getByRole("button", { name: RAISE_DISTINCT });
+    for (let count = 0; count < TOAST_MAX_VISIBLE + 1; count += 1) {
+      await user.click(raiseDistinct);
+    }
+    expect(screen.getAllByRole("status")).toHaveLength(TOAST_MAX_VISIBLE);
+  });
+
+  it("collapses a repeat of one message and keeps the focus in the application when one is dismissed", async () => {
+    const { user } = renderWithProviders(<ToastHarness />);
+    const raise = screen.getByRole("button", { name: RAISE_SUCCESS });
+    for (let count = 0; count < 5; count += 1) {
+      await user.click(raise);
+    }
+    // Five raises of one message leave one message standing: a notification identical to the one already queued
+    // collapses into it rather than stacking another copy of the same words over the page.
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: RAISE_DISTINCT }));
+    await waitFor(() => expect(screen.getAllByRole("status")).toHaveLength(2));
+    const [older, younger] = screen.getAllByRole("status");
+    const olderClose = within(older).getByRole("button", { name: COMMON_ACTIONS.CLOSE });
+    const youngerClose = within(younger).getByRole("button", { name: COMMON_ACTIONS.CLOSE });
+    // The focus reaches the older message's dismiss control by Tab, and that control leaves the document with the
+    // message it belongs to: the dismissal owes the keyboard a survivor, and the younger message's control is
+    // still mounted when the queue removes the older one.
+    await user.tab();
+    expect(olderClose).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getAllByRole("status")).toHaveLength(1));
+    expect(youngerClose).toHaveFocus();
+
+    // Dismissing the last message the same way leaves no survivor and this harness has no routed-content region
+    // to hand the focus to: the guarded path moves nothing, throws nothing and empties the viewport.
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: A11Y_COPY.TOAST_REGION_LABEL })).toBeNull(),
+    );
+  });
+
+  it("clears a message when its duration elapses and holds it while it is attended to", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = renderWithProviders(<ToastHarness />);
+    const raise = screen.getByRole("button", { name: RAISE_SUCCESS });
+    await user.click(raise);
+    await screen.findByRole("status");
+    // The clock is moved inside an awaited query, so the dismissal the countdown raises lands in the window
+    // that query holds open rather than between two of them: an update raised outside that window is what React
+    // reports as an act warning. The budget is raised past the move, because the query's own timeout would
+    // otherwise fire inside it and end the query before the dismissal does.
+    await waitFor(
+      async () => {
+        await vi.advanceTimersByTimeAsync(TOAST_DURATION_MS.success);
+      },
+      { timeout: TOAST_DURATION_MS.success * 2 },
+    );
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    await user.click(raise);
+    const message = await screen.findByRole("status");
+    await user.hover(message);
+    vi.advanceTimersByTime(TOAST_DURATION_MS.success * 3);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    const dismiss = screen.getByRole("button", { name: COMMON_ACTIONS.CLOSE });
+    dismiss.focus();
+    vi.advanceTimersByTime(TOAST_DURATION_MS.success);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    await user.unhover(message);
+    dismiss.blur();
+    await waitFor(
+      async () => {
+        await vi.advanceTimersByTimeAsync(TOAST_DURATION_MS.success + 100);
+      },
+      { timeout: TOAST_DURATION_MS.success * 2 },
+    );
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   });
 });

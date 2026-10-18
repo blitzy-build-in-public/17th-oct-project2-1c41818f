@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 380
+ * Lines: 393
  */
 
 import { useEffect, useRef } from "react";
@@ -43,13 +43,14 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in,
  * `sp-page` the column of blocks at one rhythm, `sp-page__body` the region the page's own content lands in,
  * and `sp-split` the frame whose aside track is `--layout-aside-width` from the large stop. `src/styles/
- * commerce.css` owns the cart's register: `sp-cart` widens that frame's row gap, so a summary stacked below
- * the rows is separated from them; `sp-cart__lines` is the grid frame the rows sit in, each a `sp-cart-row`
- * item of it, a family `CartItemRow.tsx` owns and this file does not restate; `sp-cart__aside` is the
- * summary column, sticky below the header from the large stop; `sp-cart__empty` tightens the shared empty
- * state to this panel; and `sp-summary__actions`, the stacked action block the summary's own file does not
- * render, is `src/styles/summary-panel.css`'s — the panel belongs to `CartSummary.tsx`, so the page's two
- * navigation controls compose that block here, each carrying `sp-btn--block`. `src/styles/
+ * `src/styles/cart.css` owns the cart's register: `sp-cart` widens that frame's row gap, so a summary
+ * stacking below the rows on a phone is separated from them; `sp-cart__lines` is the grid frame the
+ * rows sit in, each row being a `sp-cart-row` item of it, a family `CartItemRow.tsx` owns and this file
+ * does not restate; `sp-cart__aside` is the summary column, sticky below the header from the large
+ * stop; `sp-cart__empty` tightens the shared empty state to this panel; and `sp-summary__actions`, the
+ * stacked action block the summary's own file does not render, is `src/styles/summary-panel.css`'s —
+ * the panel belongs to `CartSummary.tsx`, so the page's two navigation controls compose that block
+ * here, each carrying `sp-btn--block` as its contract asks. `src/styles/
  * controls.css` owns the button family, whose classes reach both controls this page draws that are not
  * `Button`'s: a control that navigates is an anchor carrying `sp-btn` with its variant and the block
  * modifier, never a `<button>`, and the clear control is `Button` in its link variant.
@@ -57,15 +58,16 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * The four states this route can be in belong to the surface that can show them, and none is drawn twice.
  * The empty cart is this file's: with no lines there is no basket to price, so the page renders the empty
  * state, the request is suppressed, and the panel is not drawn at all. A price in flight is the panel's:
- * the rows render from the lines the cart already holds, so the only region genuinely waiting is the
- * figures, and `CartSummary.tsx` stands its own placeholder in them rather than this page standing a
- * page-sized skeleton over data it has. A failed price is the panel's as well — its alert states the message
- * the seam shaped and its retry is this page's `reload` — while the rows stay usable, so a cart the shopper
- * can still correct is never hidden behind an error; that same failure is the one state in which the way on
- * to checkout is refused, because a basket whose price could not be read has no total to check out with, and
- * the retry beside it can restore one here rather than send the shopper into a flow that cannot total what
- * they hold. What remains, lines beside figures, is the loaded state, the only one of the four that draws
- * every region of the route.
+ * the rows render from the lines the cart already holds, the figures from the price last answered with, and
+ * the panel's live region is what reports the wait, so no region of the route is emptied by a re-price and
+ * the one figure block that does stand a placeholder is the panel's own — for a basket that has no price
+ * yet, rather than a page-sized skeleton over data this page already has. A failed price is the panel's as
+ * well — its alert states the message the seam shaped and its retry is this page's `reload` — while the
+ * rows stay usable, so a cart the shopper can still correct is never hidden behind an error; that same
+ * failure is the one state in which the way on to checkout is refused, because a basket whose price could
+ * not be read has no total to check out with, and the retry beside it can restore one here rather than send
+ * the shopper into a flow that cannot total what they hold. What remains, lines beside figures, is the
+ * loaded state, the only one of the four that draws every region of the route.
  *
  * Accessibility here is by construction rather than by attribute. The route's one `<h1>` is `PageHeader`'s;
  * the rows are a list of items and are marked as one; every control is a real `Button` or a real anchor
@@ -134,8 +136,9 @@ const CLASSES = {
  * An empty cart asks nothing. The pricing request is suppressed while the cart holds no lines, because
  * there is no basket to price: the empty state is rendered instead, no request is spent on it, and no
  * summary is drawn beneath it. `useAsync`'s lifecycle covers the rest without a page-sized skeleton over
- * data the cart already holds — the rows render from the lines immediately, and the region that is
- * genuinely pending is the figures, which `CartSummary.tsx` stands its own placeholder in.
+ * data the cart already holds — the rows render from the lines immediately and the figures from the price
+ * last answered with, so a re-price leaves every region of the page as it was and only the panel's live
+ * region reports the wait.
  *
  * A failure is reported where the figures are, with the message the seam shaped and the retry that asks
  * again, and the rows stay usable while it stands, so the shopper can correct the cart rather than be told
@@ -165,6 +168,13 @@ export function CartPage(): ReactElement {
    * change asks once and the answer to a superseded request is discarded; `enabled` is what keeps an empty
    * cart from asking at all. The priced cart is never copied into state here: the hook holds the last
    * answer, and a second copy could outlive the price it came from.
+   *
+   * `keepPreviousData` is what stops the shopper's own edit from emptying the page's figures: the price of
+   * the basket they just corrected is asked for on every change, and without it the rows and the summary
+   * would fall back to their placeholders for the length of the request. The price last answered with stays
+   * in hand instead, the summary's figures region carries the busy state, and the two regions take their
+   * figures from it together when the new price lands — which is the arrangement the checkout's own priced
+   * snapshot already has, where the basket the order is built from is held while the next price is read.
    */
   const {
     data: pricedCart,
@@ -174,7 +184,7 @@ export function CartPage(): ReactElement {
   } = useAsync<PricedCart>(
     (signal) => priceCart(lines, promoCode ?? undefined, FREE_SHIPPING_METHOD_ID, { signal }),
     [lines, promoCode],
-    { enabled: !isEmpty },
+    { enabled: !isEmpty, keepPreviousData: true },
   );
 
   useDocumentTitle(documentTitle(PAGE_TITLES.CART));
@@ -228,10 +238,13 @@ export function CartPage(): ReactElement {
   }, [isEmpty, status]);
 
   /**
-   * The priced lines keyed by their own id, so each row reads the figures for the line it renders and
-   * `undefined` while a newer price is in flight. Derived on each render from the priced cart rather than
-   * kept anywhere, which is what stops a map outliving the price it was built from; the lookup is by line
-   * id because the rows render the cart's own lines and never the priced array's.
+   * The priced lines keyed by their own id, so each row reads the figures for the line it renders.
+   *
+   * Derived on each render from the priced cart rather than kept anywhere, which is what stops a map
+   * outliving the price it was built from; the lookup is by line id because the rows render the cart's own
+   * lines and never the priced array's. A cart that has not been priced yet finds nothing here, so a row
+   * renders without the figures a price supplies — the same state the panel states for the whole basket —
+   * while a re-price leaves both reading the price last answered with.
    */
   const pricedLinesById = pricedCart === null ? null : selectPricedLinesById(pricedCart);
 

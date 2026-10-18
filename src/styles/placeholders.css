@@ -1,0 +1,199 @@
+/* Path: src/styles/placeholders.css
+ * Purpose: The shape each data-page placeholder takes while its region is loading
+ * Lines: 199
+ */
+
+/* The loading states' geometry, in one home rather than in each area sheet that renders one: the product tile,
+ * the KPI card, the chart block, the report body, the figure every table-shaped placeholder puts in a cell, and
+ * the taller block the one column whose text wraps stands in with. `src/styles/account.css` loads this sheet with `@import` above
+ * its own rules — a CSS `@import` is inlined where it sits, so the eight-sheet load contract is unchanged,
+ * because the entry point still imports the same eight mapped paths — and it is loaded by the last of the eight
+ * so that a placeholder's shape lands after every sheet that sizes a `.sp-skeleton` itself. The shapes have
+ * their home here rather than in `src/styles/admin-reports.css`, whose register every one of them is written
+ * against: that sheet stands at the 600 lines the request's ceiling allows and could take no addition, so
+ * §0.5.5's remedy — a second file rather than a raised ceiling — was applied, as it was for the earlier splits
+ * this repository records.
+ *
+ * What is here is the *space* each block occupies, never its paint: the surface, radius and shimmer belong to
+ * `.sp-skeleton` in `src/styles/components.css`, and every block below is a `Skeleton` the component hands one
+ * of these classes — apart from the tile's media, which is the skeleton inside the tile's own media box — and the
+ * two radii it does set are shapes rather than paint: a media box is square-cornered and a saving pill is a pill.
+ * Each size is the one the part it stands in for renders at, read from the same token that part reads: a text line takes its role's own size times that role's line height, a control-shaped block takes
+ * the control token it replaces, and a figure in a table cell takes the body-sm role's line box, which is what
+ * makes a placeholder row as tall as the row of figures it stands in for. Three blocks take a `ch` measure
+ * instead, and say at their rules why: the text they stand in for is sized by its own characters, so a fixed
+ * length would wrap a placeholder's row differently from the real one's.
+ */
+
+/* ==== A figure in a table cell ====
+ * The one line every table-shaped placeholder puts in a cell — the order history's rows, a report's rows and
+ * its totals row, and the paired data table under a chart. The cell's own padding and its rule are the table
+ * primitive's, so a placeholder row comes out exactly as tall as the row of figures it replaces, in the
+ * ordinary density and in the compact one alike. It is sized in `ch` because a figure's width is its digits'. */
+.sp-placeholder-cell {
+  inline-size: 6ch;
+  block-size: calc(var(--text-body-sm-size) * var(--text-body-sm-line-height));
+}
+
+/* ==== KPI card ====
+ * The card's own box is `.sp-kpi-card`'s, which the placeholder wears; these are the four parts the loaded card
+ * stacks inside it, each at the height of the part it replaces. */
+.sp-kpi-placeholder__label {
+  inline-size: 50%;
+  block-size: calc(var(--text-label-size) * var(--text-label-line-height));
+}
+.sp-kpi-placeholder__value {
+  inline-size: 65%;
+  block-size: calc(var(--text-display-size) * var(--text-display-line-height));
+}
+.sp-kpi-placeholder__delta {
+  inline-size: 35%;
+  block-size: calc(var(--text-body-sm-size) * var(--line-height-normal));
+}
+/* The comparison the change is measured against is a sentence naming a comparison and its two dates, so it
+ * takes two lines wherever the card is narrower than that sentence — which the four-across grid and the
+ * two-across one both are — and one where a single card fills the screen. Reserving two lines there would
+ * overshoot the card it stands in for by a line, so the small stop is where the reservation drops to one. */
+.sp-kpi-placeholder__baseline {
+  inline-size: 100%;
+  block-size: calc(var(--text-caption-size) * var(--text-caption-line-height) * 2);
+}
+@media (max-width: 479px) {
+  /* below --breakpoint-sm, where the KPI grid is one card across */
+  .sp-kpi-placeholder__baseline {
+    block-size: calc(var(--text-caption-size) * var(--text-caption-line-height));
+  }
+}
+
+/* ==== Chart block ====
+ * The plot the three renderers draw into `svg.sp-chart__svg`: the sheet scales that drawing to its container
+ * from the viewBox all three share, which is `720 x 280` in `src/components/charts/chartScales.ts`, so a block
+ * carrying the same ratio inside the frame's own padding is exactly as tall as the drawing it stands in for at
+ * every width — and no shorter than the frame's own minimum height, which floors both. */
+.sp-chart-placeholder__plot {
+  aspect-ratio: 720 / 280;
+  block-size: auto;
+  border-radius: var(--radius-none);
+}
+/* One legend entry, at the height an entry renders at and the width a series name takes. */
+.sp-chart-placeholder__legend-item {
+  inline-size: 20ch;
+  block-size: var(--space-6);
+}
+/* The paired data table's caption: the bar inside the primitive's own `caption` element, so the row height is
+ * the sheet's and this is only the line the words occupy. */
+.sp-chart-placeholder__caption {
+  inline-size: 40ch;
+  block-size: calc(var(--text-caption-size) * var(--line-height-normal));
+}
+
+/* ==== A name that wraps in its column ====
+ * The product column of the dashboard's ranking is the one cell in the back office whose text is long enough
+ * to wrap: five columns share a card's width, so the column is about a name's shortest word wide and the
+ * seeded catalogue's names take four or five body-sm lines in it — an average of 4.6, measured on the eight
+ * rows the ranking shows. The reservation takes the nearest whole line, five, so a ranking's rows land within
+ * one line of where its placeholder's rows stood instead of the several hundred pixels below them they landed
+ * before. It extends the shared cell bar rather than replacing it, so the width stays the measure every table
+ * placeholder uses. */
+.sp-placeholder-name {
+  block-size: calc(var(--text-body-sm-size) * var(--line-height-normal) * 5);
+}
+
+/* ==== Report body ====
+ * The report's summary figures, above its chart and its table: a summary item is a caption line over a
+ * heading-2 line, the export row's two parts are the control the download is offered by and the sentence beside
+ * it, and the paging control below the table is a block at the size every control in it is floored to. */
+.sp-report-placeholder__summary-label {
+  inline-size: 50%;
+  block-size: calc(var(--text-caption-size) * var(--line-height-normal));
+}
+.sp-report-placeholder__summary-value {
+  inline-size: 60%;
+  block-size: calc(var(--text-heading-2-size) * var(--line-height-normal));
+}
+.sp-report-placeholder__export-action {
+  inline-size: 10ch;
+  block-size: var(--control-height-md);
+}
+.sp-report-placeholder__export-note {
+  inline-size: 40ch;
+  block-size: calc(var(--text-caption-size) * var(--line-height-normal));
+}
+.sp-report-placeholder__pager {
+  inline-size: 30ch;
+  block-size: var(--touch-target-min);
+}
+
+/* ==== The catalogue tile ====
+ * `ProductCardPlaceholder` wears the loaded tile's own three regions, so these rules only size the blocks inside
+ * them: the media it is given fills the tile's own 4:3 box, each line takes the height of the role the part it
+ * stands in for renders at, and the action slot takes the control the quick add occupies. Every block follows the
+ * part it replaces rather than a bar of a convenient size, which is what leaves the placeholder tile exactly as
+ * tall as the tile that arrives in its place: the name block reserves the lanes `.sp-product-card__name` reserves
+ * at each stop, the price line's parts are sized in `ch` — the measure of the text they stand in for, because a
+ * proportion of the card would wrap them into different rows at each width than the real prices and words wrap
+ * into — and the saving pill leaves the price row's flow in the grid placements exactly as the loaded pill does.
+ * The rest is a var() from tokens.css.
+ *
+ * The tile itself is styled in `src/styles/catalog.css`, and its loading geometry is here for the reason this
+ * sheet exists at all: that sheet had reached the request's 600-line ceiling when the two had to be reconciled,
+ * and the remedy for a concern that cannot fit is the second file rather than a raised ceiling. Every rule below
+ * selects the placeholder's own classes, so the order the two sheets load in decides nothing between them. */
+.sp-product-card--placeholder .sp-product-card__media > .sp-skeleton {
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: var(--radius-none);
+}
+.sp-product-card--placeholder .sp-product-placeholder__brand {
+  inline-size: 60%;
+  block-size: calc(var(--text-caption-size) * var(--line-height-normal));
+}
+/* The name's two clamped lanes, at the floor the loaded tile reserves for them, rising to four at the four-column
+ * stop with the loaded tile's own reservation (see `.sp-product-card__name` in `src/styles/catalog.css`). */
+.sp-product-card--placeholder .sp-product-placeholder__name {
+  inline-size: 100%;
+  block-size: calc(var(--text-heading-3-size) * var(--text-heading-3-line-height) * 2);
+}
+@media (min-width: 1024px) {
+  /* --breakpoint-lg, the stop at which the loaded tile's heading reserves four lanes instead of two: the
+   * placeholder's name block moves with it, because left at two it would reserve 46.8px where the tile it stands
+   * in for reserves 93.6px — the larger part of the height the placeholder and the loaded tile disagree by. */
+  .sp-product-card--placeholder .sp-product-placeholder__name {
+    block-size: calc(var(--text-heading-3-size) * var(--text-heading-3-line-height) * 4);
+  }
+}
+.sp-product-card--placeholder .sp-product-placeholder__rating {
+  inline-size: 90%;
+  block-size: var(--space-6);
+}
+.sp-product-card--placeholder .sp-product-placeholder__price {
+  inline-size: 9ch;
+  block-size: calc(var(--text-heading-3-size) * var(--line-height-normal));
+}
+.sp-product-card--placeholder .sp-product-placeholder__compare {
+  inline-size: 8ch;
+  block-size: calc(var(--text-body-size) * var(--line-height-normal));
+}
+.sp-product-card--placeholder .sp-product-placeholder__discount {
+  inline-size: 5ch;
+  block-size: calc(var(--text-caption-size) * var(--line-height-normal) + var(--space-2));
+  border-radius: var(--radius-pill);
+}
+/* The saving pill is out of the price row's flow in the grid placements — see `.sp-product-card__price
+ * .sp-price__discount` in `src/styles/catalog.css` — and the placeholder's own pill leaves it with it: held in the
+ * row it would reserve a lane of 26px and its gap that the loaded tile never takes, which is the rest of the
+ * height the two disagree by. It stays a box of the pill's own size, painted where the loaded pill is painted,
+ * over the free top-right corner of the media. */
+.sp-product-grid .sp-product-card--placeholder .sp-product-placeholder__discount {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+}
+.sp-product-card--placeholder .sp-product-placeholder__stock {
+  inline-size: 100%;
+  block-size: calc(var(--text-body-sm-size) * var(--line-height-normal));
+}
+.sp-product-card--placeholder .sp-product-placeholder__action {
+  inline-size: 100%;
+  block-size: var(--control-height-sm);
+}

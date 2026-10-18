@@ -1,10 +1,11 @@
 /**
  * Path: src/components/ui/Toast.tsx
  * Purpose: Toast viewport and item with a live region and pausable auto-dismiss
- * Lines: 337
+ * Lines: 614
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/Button";
@@ -18,10 +19,18 @@ import type { ToastKind, ToastMessage } from "@/types/common";
  * viewport `sp-toast-viewport`, which carries `inset-block-end`, `inset-inline-end`, `--z-toast` and
  * `pointer-events: none`, so the placement, the stacking and the non-blocking behaviour are the sheet's and
  * no z-index is written here; the frame `sp-toast`, a two-column grid whose second track holds the dismiss
- * control; the three variants `sp-toast--success`, `sp-toast--error` and `sp-toast--info`; the text row
- * `sp-toast__message`, whose direct child `svg` the sheet sizes; and the dismiss control's `sp-toast__close`.
+ * control and which the sheet makes pass-through as well, so the words of a message never take the click
+ * aimed at the control they happen to sit over; the three variants `sp-toast--success`, `sp-toast--error`
+ * and `sp-toast--info`; the text row `sp-toast__message`, whose direct child `svg` the sheet sizes; and the
+ * dismiss control's `sp-toast__close`, the one descendant the sheet gives `pointer-events: auto`, because it
+ * is the one part of a message a reader has to click.
  * The dismiss control is the button primitive dressed with that class, so the 44px `--touch-target-min`
  * floor `sp-btn--icon` declares decides its target and stays the primitive's business.
+ * The viewport is portalled onto `document.body` instead of being left in the application root, which an
+ * open drawer, modal or confirm dialog makes inert: an inert root dims to `--opacity-inert` and so becomes a
+ * stacking context painted before the panel's backdrop, under which the declared `--z-toast` rung is
+ * trapped, and it keeps its subtree out of the accessibility tree as well, which would silence the live
+ * region these messages carry.
  * The register is never carried by hue alone. The variant class tints the frame, the leading border and the
  * text together, and each message also draws its kind's glyph inside the text row, so a reader who cannot
  * separate the three surfaces can still separate a tick, an exclamation and an "i".
@@ -34,6 +43,36 @@ const CLASSES = {
   message: "sp-toast__message",
   close: "sp-toast__close",
 } as const;
+
+/**
+ * The dismiss control of one message, as a selector: the class contract above read back from the live DOM, which
+ * is how a dismissal finds the control of a message other than the one the reader is on.
+ */
+const DISMISS_CONTROL_SELECTOR = `.${CLASSES.close}`;
+
+/**
+ * The id of the application's routed-content region, the `<main>` that `src/components/layout/AppLayout.tsx`
+ * gives `tabIndex={-1}` so it can be focused programmatically.
+ *
+ * Reached through the document rather than handed down, because that region belongs to the route and the route
+ * is a subtree the viewport is never given. `src/components/ui/overlayEngine.ts` reads `#root` the same way.
+ */
+const MAIN_CONTENT_ID = "main-content";
+/**
+ * Whether the box holds the point, its borders included: written once because the stack is measured from two
+ * directions — the pointer a move reports and the pointer's last known position when the stack mounts — and a
+ * box that measures nothing holds no point, so jsdom's laid-out-nothing elements read as holding none.
+ */
+function isWithin(box: DOMRect, x: number, y: number): boolean {
+  return (
+    box.width > 0 &&
+    box.height > 0 &&
+    x >= box.left &&
+    x <= box.right &&
+    y >= box.top &&
+    y <= box.bottom
+  );
+}
 
 /** The variant modifier each kind carries, exactly as the sheet spells it. */
 const KIND_CLASSES: Readonly<Record<ToastKind, string>> = {
@@ -122,22 +161,60 @@ function resolveVisibleCap(maxVisible: number): number {
   return Number.isFinite(maxVisible) ? Math.max(0, Math.trunc(maxVisible)) : TOAST_MAX_VISIBLE;
 }
 
+/** What a dismissal owes the keyboard: the element the reader was on, and the control that should follow it. */
+interface PendingFocus {
+  /** The element holding the focus when the dismissal began, which leaves the document with its message. */
+  readonly held: Element;
+  /** A dismiss control that outlives the message, or `null` when it was the last message standing. */
+  readonly survivor: HTMLElement | null;
+}
+
+/**
+ * Finds a dismiss control other than the one the reader is on: the control that can take the focus once the
+ * message holding it has left.
+ *
+ * The live DOM is what is read, because the queue holds no element and a message carries no identity outside
+ * React; what the search returns outlives the update the dismissal is about to make.
+ *
+ * @param viewport - The viewport element the messages stand in.
+ * @param held - The element the focus is inside, which the search skips.
+ * @returns A dismiss control still standing, or `null` when the one the focus is on is the only one.
+ */
+function survivingDismissControl(viewport: HTMLElement, held: Element): HTMLElement | null {
+  const controls = viewport.querySelectorAll<HTMLElement>(DISMISS_CONTROL_SELECTOR);
+  for (const control of controls) {
+    if (!control.contains(held)) {
+      return control;
+    }
+  }
+  return null;
+}
+
 /** What {@link ToastItem} renders: one queued message and the queue's dismiss handle. */
 interface ToastItemProps {
   /** The message to render, exactly as the queue holds it. */
   readonly toast: ToastMessage;
   /** The queue's stable `dismiss`, which is how a message leaves. */
   readonly onDismiss: (id: number) => void;
+  /**
+   * Whether the pointer is resting over the stack this message stands in, as
+   * {@link ToastViewport}'s probe reports it. Omitted by a caller that has no stack to measure, and absent
+   * then means "no pointer over the stack" rather than "unknown".
+   */
+  readonly pointerOverStack?: boolean;
 }
 
 /**
  * One queued message: its markup, its own live role and its own countdown.
  *
  * The countdown is armed on mount for the message's resolved duration and asks the queue to remove the
- * message when it elapses. A reader can hold it: the pointer entering the message suspends the timer, and so
- * does the keyboard focus reaching its dismiss control. Suspensions are counted rather than assumed, so a
- * message whose pointer has already left it keeps waiting while its dismiss control still holds focus —
- * otherwise a keyboard reader would be raced by a message the pointer had abandoned.
+ * message when it elapses. A reader can hold it: the pointer resting over the stack suspends the timer, and
+ * so does the keyboard focus reaching its dismiss control. The pointer half arrives by two routes that meet
+ * in the same count — the viewport's probe, for a real pointer, and the message element's own handlers, for
+ * the synthetic pointer a component test dispatches — because a box that takes no pointer input is never
+ * entered by a real pointer. Suspensions are counted rather than assumed, so a message whose pointer has
+ * already left it keeps waiting while its dismiss control still holds focus — otherwise a keyboard reader
+ * would be raced by a message the pointer had abandoned.
  *
  * Resuming arms the **remainder**, never a fresh full duration: a suspension records the time left as
  * `deadlineRef.current - Date.now()`, the deadline being the instant the countdown was last armed for, and
@@ -149,10 +226,10 @@ interface ToastItemProps {
  * countdown, its dismiss control, the queue's `clear()`, or the queue's own cap letting the oldest go —
  * leaves nothing behind that could dismiss a message the queue no longer holds.
  *
- * @param props - The queued message and the queue's dismiss handle.
+ * @param props - The queued message, the queue's dismiss handle, and whether the pointer rests over the stack.
  * @returns The rendered message element.
  */
-function ToastItem({ toast, onDismiss }: ToastItemProps): ReactElement {
+function ToastItem({ toast, onDismiss, pointerOverStack }: ToastItemProps): ReactElement {
   const timeoutRef = useRef<number | null>(null);
   const deadlineRef = useRef(0);
   const remainingRef = useRef(0);
@@ -170,11 +247,20 @@ function ToastItem({ toast, onDismiss }: ToastItemProps): ReactElement {
    *
    * The deadline is recorded before the timer so a suspension has an instant to subtract from, and the
    * callback clears the reference first, which is what tells a later release that nothing is counting down.
+   *
+   * A hold already in force is respected rather than raced: the time left is recorded and no timer is
+   * started, because the release that follows is what arms it. Without that, a countdown armed while a
+   * reader holds the message would run underneath the hold and dismiss a message the reader is attending to
+   * — which is what happens when the arming effect runs its setup a second time, as React does in
+   * development, since the count is already above zero and the first hold has already cleared the timer.
    */
   const arm = useCallback(
     (delayMs: number): void => {
       deadlineRef.current = Date.now() + delayMs;
       remainingRef.current = delayMs;
+      if (holdsRef.current > 0) {
+        return;
+      }
       timeoutRef.current = window.setTimeout(() => {
         timeoutRef.current = null;
         remainingRef.current = 0;
@@ -216,6 +302,29 @@ function ToastItem({ toast, onDismiss }: ToastItemProps): ReactElement {
     }
     arm(remainingRef.current);
   }, [arm]);
+
+  /*
+   * The pointer's own hold, reported by the viewport's probe because the message box is pass-through and a
+   * real pointer can therefore never enter it. It drives the same counted hold the pointer and focus
+   * handlers below drive, so the probe and a synthetic pointer compose instead of double counting: the count
+   * rises while either path holds the message and the countdown resumes when the last of them lets go.
+   *
+   * The transition is what is acted on, remembered in a ref, and unmounting releases nothing: a release
+   * there would arm the remainder against a timer that no later cleanup owns.
+   */
+  const pointerOverStackRef = useRef(false);
+  useEffect(() => {
+    const isOver = pointerOverStack === true;
+    if (isOver === pointerOverStackRef.current) {
+      return;
+    }
+    pointerOverStackRef.current = isOver;
+    if (isOver) {
+      hold();
+    } else {
+      release();
+    }
+  }, [hold, pointerOverStack, release]);
 
   return (
     <div
@@ -300,12 +409,28 @@ export interface ToastViewportProps {
  * `maxVisible` narrows what the queue already carries rather than revealing a backlog waiting behind it.
  *
  * It is mounted once, by `src/App.tsx`, outside the routed content, so a notification survives a route
- * change. With an empty queue it renders nothing at all rather than an empty landmark, and while it holds
- * messages the viewport itself takes no pointer events (the sheet's `pointer-events: none`, with the
- * messages opting back in), so it never covers the control a reader was reaching for.
+ * change, and it is rendered through `createPortal` onto `document.body` rather than into the application
+ * root it is mounted from. A panel of the overlay family makes that root inert while it is open, and an
+ * inert root is dimmed to `--opacity-inert` — which makes it a stacking context painted before the panel's
+ * own body-level backdrop — so a viewport left inside it would be trapped below the `--z-drawer` backdrop
+ * however high its own `--z-toast` rung reads, and the same attribute would keep the messages out of the
+ * accessibility tree the live region exists for. Portalling past the root is the shape the whole
+ * accessibility tree is then read: the container is a named `region` with no `aria-live`, and each message
+ * is a `status` or an `alert` of its own, in the accessibility tree whatever else is open.
  *
- * The container is a named `region` and deliberately not a live region: each message carries its own
- * `alert` or `status` role, and an `aria-live` here as well would announce every message twice.
+ * With an empty queue it renders nothing at all rather than an empty landmark, and while it holds messages
+ * neither the viewport nor a message box takes a pointer event (the sheet's `pointer-events: none` on both,
+ * re-enabled on the dismiss control alone), so a message never covers the control a reader was reaching for.
+ * The countdowns still pause while a reader attends to a message: the pointer resting anywhere over the
+ * stack, which is what the pointermove probe below reports, and the keyboard focus reaching a control inside
+ * one, which the message element's own focus handlers report.
+ *
+ * A message leaves by its own countdown or by its dismiss control, and that control stands inside the message
+ * being removed. A dismissal that begins with the focus inside the viewport therefore ends by handing the focus
+ * on — to a message still standing, or to the application's routed content region when that was the last one —
+ * so the reader's place in the page survives the message and the next Tab carries on from there rather than
+ * from the top of the document. A dismissal that begins with the focus anywhere else moves no focus at all,
+ * which is what keeps a message leaving the corner of the screen from pulling a reader away from their control.
  *
  * @param props - The queued messages, the queue's dismiss handle, optional classes and how many messages may
  *   stand on screen at once; see {@link ToastViewportProps}.
@@ -317,21 +442,173 @@ export function ToastViewport({
   className,
   maxVisible = TOAST_MAX_VISIBLE,
 }: ToastViewportProps): ReactElement | null {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const pointerOverStackRef = useRef(false);
+  /** Where the pointer was when the document last reported it moving: the only record of a pointer that was
+   * already resting where the stack appears. */
+  const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const [pointerOverStack, setPointerOverStack] = useState(false);
+
+  /*
+   * The queue's dismiss reaches an item through a stable wrapper: a wrapper rebuilt on every render would
+   * change the handle each item holds, and an item re-arms its countdown when its handle changes, so a
+   * second message arriving would hand the first one a fresh full duration. The ref carries the latest props
+   * into a wrapper whose identity never changes, and it is the same ref that tells the handler below whether
+   * the queue still holds the message a click asked to remove.
+   */
+  const queueRef = useRef({ toasts, onDismiss });
+  useEffect(() => {
+    queueRef.current = { toasts, onDismiss };
+  });
+
+  /*
+   * The focus one dismissal owes, recorded by the handler below and paid by the layout effect after it: the
+   * element the reader was on, and the control still standing that should take the focus if that element goes.
+   */
+  const pendingFocusRef = useRef<PendingFocus | null>(null);
+
+  /**
+   * Dismisses one message, keeping the reader's keyboard focus in the application.
+   *
+   * The dismiss control stands inside the message it removes, so activating it takes the focused element out of
+   * the document with the message, and a browser left with nothing focused falls back to the body: the reader
+   * loses their place in the page, and the next Tab starts again at the top of the document. A dismissal that
+   * begins while the focus is inside the viewport is therefore recorded — what the reader was on, and a control
+   * to hand the focus to — and the layout effect below pays it out once React has removed the message. A
+   * dismissal that begins with the focus anywhere else moves no focus at all, so a message leaving the corner of
+   * the screen never pulls a reader away from the control they are working.
+   *
+   * With a drawer or another panel open, the panel's own focus restore runs as well and wins, taking the reader
+   * back to the control that opened it. That is the right answer, and the focus stays in the application either
+   * way.
+   *
+   * @param id - The id the queue returned for the message to remove.
+   */
+  const dismissToast = useCallback((id: number): void => {
+    const viewport = viewportRef.current;
+    const held = document.activeElement;
+    /*
+     * Only a message the queue still holds leaves it, and only then is there an update for the layout effect to
+     * account for. An id already gone — a countdown and a control racing over one message — would otherwise
+     * leave a record standing, to be paid on some later render it has nothing to do with.
+     */
+    const isQueued = queueRef.current.toasts.some((toast) => toast.id === id);
+    if (isQueued && viewport !== null && held !== null && viewport.contains(held)) {
+      pendingFocusRef.current = { held, survivor: survivingDismissControl(viewport, held) };
+    }
+    queueRef.current.onDismiss(id);
+  }, []);
+
+  /*
+   * The focus a dismissal owes, paid once React has taken the message out of the document: the only moment at
+   * which the element that left can be told from the elements that outlived it. One ref is read, and a render
+   * with no dismissal to settle returns from here at once.
+   */
+  useLayoutEffect(() => {
+    const pending = pendingFocusRef.current;
+    if (pending === null) {
+      return;
+    }
+    pendingFocusRef.current = null;
+    if (pending.held.isConnected) {
+      /*
+       * The element the reader was on outlived the message that left — a countdown took a different one — so the
+       * focus is already where it belongs and is left exactly as it stands.
+       */
+      return;
+    }
+    const { survivor } = pending;
+    const target =
+      survivor !== null && survivor.isConnected
+        ? survivor
+        : document.getElementById(MAIN_CONTENT_ID);
+    /*
+     * Focusing the routed content region moves the focus and must not move the reader's view: the place in the
+     * page they had reached is theirs to keep.
+     */
+    target?.focus({ preventScroll: true });
+  });
+
   const visible = toasts.slice(0, resolveVisibleCap(maxVisible));
 
-  if (visible.length === 0) {
+  /*
+   * The stack-level probe that keeps auto-dismiss pausing on hover now that a message box takes no pointer
+   * input: the pointer is watched at the document and measured against the viewport's own rectangle, so
+   * resting anywhere over the stack holds every message standing in it without a message having to be
+   * entered. The listener is attached for the lifetime of the component rather than for as long as a message
+   * stands, because the state it drives is corrected only by a pointer move — a listener detached while the
+   * queue was empty would leave a stale "inside" behind, and the next message raised would hold until the
+   * reader happened to move the mouse again. What it costs is one passive listener, whose handler returns at
+   * once while no viewport is mounted and while the rectangle it reads measures nothing.
+   *
+   * The handler answers "not over the stack" while no viewport is mounted, because with nothing on screen
+   * there is nothing a pointer could be resting over: an answer left standing from a message that has since
+   * left would pause the next one raised, however far from the corner the pointer had travelled in between.
+   *
+   * A rectangle that measures nothing is not a rectangle a pointer can be inside, so a zero width or height
+   * leaves the state as it was: jsdom has no layout engine and reports zeros for every element, and a probe
+   * reading those zeros as "inside" would pause every message in the component tests. The setter is reached
+   * only from the handler below and only when the answer has changed, so a pointer move over the page costs
+   * one comparison and no render while the answer holds.
+   */
+  const reportPointerOver = useCallback((next: boolean): void => {
+    if (pointerOverStackRef.current === next) {
+      return;
+    }
+    pointerOverStackRef.current = next;
+    setPointerOverStack(next);
+  }, []);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent): void => {
+      pointerPositionRef.current = { x: event.clientX, y: event.clientY };
+      const viewport = viewportRef.current;
+      if (viewport === null) {
+        reportPointerOver(false);
+        return;
+      }
+      const rect = viewport.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      reportPointerOver(isWithin(rect, event.clientX, event.clientY));
+    };
+    document.addEventListener("pointermove", handlePointerMove, { passive: true });
+    return () => document.removeEventListener("pointermove", handlePointerMove);
+  }, [reportPointerOver]);
+
+  /*
+   * The stack is measured again as it mounts, against the pointer's last known position: a pointer already
+   * resting where a message appears is over that message, and no move will ever report it, so without this
+   * the two arrivals would disagree. The item's own hold pauses the countdown, and a release arms the remainder.
+   */
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const position = pointerPositionRef.current;
+    if (viewport === null || position === null) return;
+    reportPointerOver(isWithin(viewport.getBoundingClientRect(), position.x, position.y));
+  }, [reportPointerOver, visible.length]);
+
+  if (visible.length === 0 || typeof document === "undefined") {
     return null;
   }
 
-  return (
+  return createPortal(
     <div
       className={joinClassNames(CLASSES.viewport, className)}
       role="region"
       aria-label={A11Y_COPY.TOAST_REGION_LABEL}
+      ref={viewportRef}
     >
       {visible.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
+        <ToastItem
+          key={toast.id}
+          toast={toast}
+          onDismiss={dismissToast}
+          pointerOverStack={pointerOverStack}
+        />
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

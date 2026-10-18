@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 585
+ * Lines: 590
  */
 
 import { useId, useState } from "react";
@@ -542,13 +542,18 @@ export function CatalogPage(): ReactElement {
                 items={answer === null ? [] : answer.items}
                 status={status}
                 error={failure}
+                // The placeholder tiles stand in at the page size the query asked for, so the region the
+                // skeleton reserves is the region the answer fills and nothing below it moves when the
+                // products land.
+                placeholderCount={filters.pageSize}
                 onRetry={() => {
                   if (categories.error === null) view.reload();
                   else categories.reload();
                 }}
                 emptyAction={clearAllAction ?? undefined}
               />
-              {/* The paging belongs to the answer, so it is held back until that answer lands. */}
+              {/* The paging belongs to the answer, so it is held back while a new one is on its way: the page
+                  in hand is the previous query's until this one lands. */}
               {isReading || answer === null || answer.total === 0 ? null : (
                 <Pagination
                   page={answer.page}

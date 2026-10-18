@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content-reports.ts
  * Purpose: The back-office register of the user-facing copy: the refusal a signed-in visitor whose role cannot reach an admin path is told, the shared range control's labels, presets and messages, the dashboard's labels and the reports' headings and export note, split out of src/constants/content.ts, which re-exports them
- * Lines: 122
+ * Lines: 130
  */
 
 /*
@@ -64,6 +64,14 @@ export const ADMIN_COPY = {
   CHART_SERIES_TOTAL_LABEL: "Total",
   CHART_SERIES_CATEGORY_LABEL: "By category",
   CHART_SERIES_CHANNEL_LABEL: "By channel",
+  /**
+   * The hint the chart header's information control reveals: what the two splits have in common, which the
+   * toggle's own labels cannot say. The control that reveals it is named by the key below.
+   */
+  CHART_SERIES_HINT:
+    "Either split breaks down the same revenue total, by product category or by sales channel.",
+  /** Names the chart header's hint control by what its hint is about. */
+  CHART_SERIES_HINT_LABEL: "About the revenue split",
   BREAKDOWN_HEADING: "Where the revenue came from",
   TOP_PRODUCTS_HEADING: "Top products",
   TOP_PRODUCTS_RANK_CONTROL_LABEL: "Rank by",

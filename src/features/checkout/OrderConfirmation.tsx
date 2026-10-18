@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderConfirmation.tsx
  * Purpose: Confirmation route showing the order number, itemised lines, delivery estimate and address
- * Lines: 537
+ * Lines: 543
  */
 
 import type { ReactElement } from "react";
@@ -26,6 +26,7 @@ import {
   documentTitle,
 } from "@/constants/content";
 import { ROUTE_PARAMS, ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
+import { countryLabel } from "@/constants/taxonomy";
 // The seam's own reading of a failure, so this page never decides what a status or a sentence means: whether
 // a retry could answer differently is a fact about the refusal, and `src/lib/apiContract.ts` owns it.
 import { isNotFoundFailure, isSessionFailure } from "@/lib/apiClient";
@@ -36,7 +37,7 @@ import { useAsync, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import type { AsyncQueryState } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";
 import type { Address, Session } from "@/types/account";
-import type { Order, OrderLine, PaymentSummary } from "@/types/commerce";
+import type { Order, PaymentSummary, PricedCartLine } from "@/types/commerce";
 import type { ApiError, CurrencyCode, OrderId } from "@/types/common";
 import { addDays, formatDate, formatDateRange } from "@/utils/dates";
 import { formatMoney, formatQuantity } from "@/utils/format";
@@ -49,9 +50,9 @@ import { capitalise } from "@/utils/strings";
  * row also use), `__number` (monospaced, selectable in one gesture), `__estimate`, `__lines` (the itemised
  * band, ruled off above and below) and `__actions`. That band reuses the review step's form —
  * `sp-review__list` and `sp-review__item`, whose last child the sheet pushes to the trailing edge in tabular
- * figures. The amounts under it — `sp-review__totals` here — use the summary register: `sp-summary__title`,
- * `sp-summary__note` and `sp-summary__row` with its `--discount` and `--total` modifiers, all in
- * `src/styles/summary-panel.css`. Earlier sheets supply the rest: `sp-container` with `--narrow`, `sp-page`,
+ * figures — and the amounts under it sit in the order summary register `src/styles/summary-panel.css` owns:
+ * `sp-summary__title`, `sp-summary__note` and `sp-summary__row` with its `--discount` and `--total` modifiers,
+ * framed by `sp-review__totals`. Earlier sheets supply the rest: `sp-container` with `--narrow`, `sp-page`,
  * `sp-page__body` and `sp-grid` from `src/styles/layout.css`; `sp-btn` with the `--primary`, `--secondary`
  * and `--link` variants an anchor wears from `src/styles/controls.css`, because every control here navigates
  * and no member of `Button.tsx` renders a link; and `.sp-visually-hidden`, the removal of a `role="list"`
@@ -133,7 +134,9 @@ function deliveryEstimate(order: Order): string | null {
 
 /**
  * One address as the lines a reader reads it by, in postal order. A member left empty renders no line, so a
- * second street line or a phone number that was not supplied leaves no blank row.
+ * second street line or a phone number that was not supplied leaves no blank row. The country reads as the name
+ * `src/constants/taxonomy.ts` declares for the code the address stores, so an address renders here as it
+ * renders at the review step and in the address book.
  *
  * @param address - The address snapshot the order keeps.
  * @returns The non-empty lines to render.
@@ -144,7 +147,7 @@ function addressLines(address: Address): readonly string[] {
     address.line1,
     address.line2,
     `${address.city}, ${address.region} ${address.postalCode}`,
-    address.country,
+    countryLabel(address.country),
     address.phone,
   ].filter((line) => line.trim() !== "");
 }
@@ -165,13 +168,14 @@ function paymentSummaryLine(payment: PaymentSummary): string {
 
 /**
  * A line's quantity and the unit price it was bought at, joined by the sign that reads as "this many at this
- * price". Both figures are the snapshotted ones, so nothing is looked up again and nothing is multiplied here.
+ * price". Both figures are the priced line's own snapshot, so nothing is looked up in the catalogue again and
+ * the price printed beside the quantity is the one the line was priced at.
  *
- * @param line - The order line.
+ * @param line - The priced line the order keeps.
  * @param currency - The currency the order was priced in.
  * @returns The joined label.
  */
-function quantityAtPriceLabel(line: OrderLine, currency: CurrencyCode): string {
+function quantityAtPriceLabel(line: PricedCartLine, currency: CurrencyCode): string {
   const quantity = formatQuantity(line.quantity);
   const unitPrice = formatMoney(line.unitPriceMinor, currency);
   return `${quantity} ${QUANTITY_PRICE_SEPARATOR} ${unitPrice}`;
@@ -334,10 +338,12 @@ function OrderTotals({ order }: { readonly order: Order }): ReactElement {
  * The placed order as the confirmation reads it: what was bought and what it cost, where it goes, how it was
  * paid for, and where the reader can go next.
  *
- * Every value comes from the order — its snapshotted lines, its kept priced cart, its recorded addresses and
- * its payment summary — so this block renders a placed order and recomputes nothing, the currency every amount
- * is shown in travels with the order rather than being assumed, and the lines are keyed by the identifier a
- * cart line already carried.
+ * The itemised rows read the priced cart the order keeps, each row's amount being that line's own goods
+ * subtotal — the unit price times the quantity `src/lib/pricingService.ts` computed — so the amounts add up to
+ * the Subtotal row and the discount is stated once, in its own row. Every remaining value comes from the order —
+ * its recorded addresses and its payment summary — so this block renders a placed order and recomputes
+ * nothing, the currency every amount is shown in travels with the order rather than being assumed, and the
+ * lines are keyed by the identifier a cart line already carried.
  *
  * The order-history step is offered exactly when it resolves: an order that names no account lives in no
  * account's history, and one that names an account is offered that history only to the visitor whose session
@@ -364,12 +370,12 @@ function ConfirmationDetails({
         <CardBody>
           <div className="sp-confirmation__lines">
             <ul className="sp-review__list" role="list">
-              {order.lines.map((line) => (
+              {order.pricedCart.lines.map((line) => (
                 <li className="sp-review__item" key={line.id}>
-                  <span>{line.productName}</span>
+                  <span>{line.name}</span>
                   <span>{line.sku}</span>
                   <span>{quantityAtPriceLabel(line, currency)}</span>
-                  <span>{formatMoney(line.lineTotalMinor, currency)}</span>
+                  <span>{formatMoney(line.lineSubtotalMinor, currency)}</span>
                 </li>
               ))}
             </ul>

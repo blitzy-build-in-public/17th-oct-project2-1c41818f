@@ -1,13 +1,14 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 397
+ * Lines: 526
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Feedback";
 import { usePagination } from "@/components/ui/hooks";
 import { DataTable } from "@/components/ui/Table";
 import type { DataTableColumn, DataTablePaging, DataTableSort } from "@/components/ui/Table";
@@ -49,6 +50,12 @@ import { formatCellValue } from "@/utils/format";
  * `sp-export__note` the captions themselves: the cap the download is bounded by, and, once one has been
  * prepared for the run on screen, the row count its file held.
  *
+ * The loading state renders the same block with a placeholder line in every cell, and the classes only it puts
+ * on the page come from `src/styles/placeholders.css`, the sheet that owns the shape of every data-page
+ * placeholder: `sp-report-placeholder__export-action` and `__export-note` for the two parts of the export row,
+ * `sp-report-placeholder__pager` for the paging control's own block, and the shared `sp-placeholder-cell` a
+ * figure inside a table cell takes.
+ *
  * Everything else the table needs belongs to the primitive. `DataTable` owns the caption, the `aria-sort`
  * header semantics, the sticky header, the tabular-numeric treatment, the single empty row and the composed
  * paginator, so no comparator, page window or cell formatter is written here: the order comes from `sortByKey`
@@ -85,7 +92,129 @@ const CLASSES = {
   numeric: "sp-report-table__num",
   export: "sp-export",
   exportNote: "sp-export__note",
+  exportAction: "sp-report-placeholder__export-action",
+  exportNoteLine: "sp-report-placeholder__export-note",
+  pager: "sp-report-placeholder__pager",
+  cell: "sp-placeholder-cell",
 } as const;
+
+/**
+ * The rows the placeholder table stands in with: one page, which is exactly what the loaded table shows at the
+ * default page size. A report's paging opens there, so the placeholder's body is the height of the page that
+ * replaces it.
+ */
+const PLACEHOLDER_ROWS: readonly number[] = Array.from(
+  { length: DEFAULT_PAGE_SIZE },
+  (_row, index) => index,
+);
+
+/**
+ * The columns the placeholder table renders for a definition that is not known yet: the label column, the
+ * heading row and two figures beside it. A placeholder's column count does not change its height — every row is
+ * the same height whatever it holds — so the shape stands with the count a report's table plausibly opens at,
+ * and the caption, the headings and the cells of it all stay decorative.
+ */
+const GENERIC_COLUMN_COUNT = 4;
+
+/** One placeholder cell: the line `src/styles/placeholders.css` sizes for a figure inside a table cell. */
+function placeholderCell(): ReactElement {
+  return <Skeleton className={CLASSES.cell} variant="text" />;
+}
+
+/**
+ * The columns a placeholder table renders for `definition`: the definition's own columns with a placeholder line
+ * in place of each cell's figure.
+ *
+ * The headings, their order and the alignment of the numeric columns are read from the definition rather than
+ * restated, so a placeholder's heading row is the loaded one down to the words in it and the two cannot drift.
+ * Sorting is deliberately not carried over: a heading that reordered placeholder rows would offer a control
+ * that acts on nothing.
+ */
+function placeholderColumns(
+  definition: ReportDefinition | undefined,
+): readonly DataTableColumn<number>[] {
+  if (definition === undefined) {
+    return Array.from({ length: GENERIC_COLUMN_COUNT }, (_column, index) => ({
+      id: `placeholder-${String(index)}`,
+      header: "",
+      cell: placeholderCell,
+    }));
+  }
+  return definition.columns.map((column) => ({
+    id: column.key,
+    header: column.label,
+    align: column.align,
+    isNumeric: column.align === "end",
+    cell: placeholderCell,
+  }));
+}
+
+/** The totals row a placeholder table closes with: the same raised rule the loaded table's totals carry, with a
+ *  placeholder line in every cell of it. */
+function placeholderFooter(definition: ReportDefinition | undefined): ReactNode {
+  const columns = definition === undefined ? undefined : definition.columns;
+  const count = columns === undefined ? GENERIC_COLUMN_COUNT : columns.length;
+  return (
+    <tr className={CLASSES.totals}>
+      {Array.from({ length: count }, (_cell, index) => (
+        <td
+          className={columns?.[index]?.align === "end" ? CLASSES.numeric : undefined}
+          key={columns?.[index]?.key ?? `placeholder-total-${String(index)}`}
+        >
+          <Skeleton className={CLASSES.cell} variant="text" />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+/** Everything {@link ReportTablePlaceholder} accepts. */
+export interface ReportTablePlaceholderProps {
+  /**
+   * The definition the table will be run with, when the page already holds it: its columns are the placeholder's
+   * headings and the alignment of its numeric columns. Omitted, the table stands in with a generic column count
+   * — which is the state the reports route renders while the catalogue of definitions is still being read.
+   */
+  readonly definition?: ReportDefinition;
+}
+
+/**
+ * The loading state of a report table: the export action over the table's own frame, a page of placeholder rows
+ * and its totals row, and the paging control beneath them, each occupying the space it will occupy.
+ *
+ * It is the same block the loaded table renders — the export group, the scroll container floored to the sheet's
+ * table width, the table primitive's caption and sticky heading row, the totals row that closes it and the
+ * paginator — with a placeholder line where every figure goes. The row count is the page the table opens at and
+ * the row height is the primitive's own, so the region is the height it will be once the run answers.
+ *
+ * It is decorative: the block is marked `aria-busy`, and the table inside it is hidden from assistive
+ * technology, because a table of empty cells read out as content is not a state anyone asked for.
+ *
+ * @param props - The definition the table will run with, when it is known; see {@link ReportTablePlaceholderProps}.
+ * @returns The decorative report table block.
+ */
+export function ReportTablePlaceholder({ definition }: ReportTablePlaceholderProps): ReactElement {
+  return (
+    <div className={CLASSES.block} aria-busy="true">
+      <div className={CLASSES.export}>
+        <Skeleton className={CLASSES.exportAction} variant="card" />
+        <Skeleton className={CLASSES.exportNoteLine} variant="text" />
+      </div>
+      <div aria-hidden="true">
+        <DataTable
+          caption=""
+          className={CLASSES.scroll}
+          columns={placeholderColumns(definition)}
+          density="compact"
+          footer={placeholderFooter(definition)}
+          rowKey={(row) => String(row)}
+          rows={PLACEHOLDER_ROWS}
+        />
+      </div>
+      <Skeleton className={CLASSES.pager} variant="card" />
+    </div>
+  );
+}
 
 /** The identity of one report run: the report, the period it covered and the cut it was bucketed by. Two
  *  renders that agree here show the same rows, which is how the paging and the prepared export in force are

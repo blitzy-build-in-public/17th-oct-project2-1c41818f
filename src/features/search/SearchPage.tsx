@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 314
+ * Lines: 318
  */
 
 import { useId } from "react";
@@ -10,10 +10,10 @@ import { Link } from "react-router-dom";
 
 import type { BreadcrumbItem } from "@/components/layout/PageHeader";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { ProductCard } from "@/components/product/ProductCard";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { ProductCard, ProductCardPlaceholder } from "@/components/product/ProductCard";
+import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { Pagination } from "@/components/ui/Pagination";
-import { PAGE_SIZE_OPTIONS } from "@/constants/config";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "@/constants/config";
 import {
   CATALOG_COPY,
   COMMON_ACTIONS,
@@ -71,11 +71,6 @@ import { hasActiveFilters } from "@/utils/queryParams";
  * reached.
  */
 
-/** The placeholders the loading results stand in with, each named so that a decorative tile has an identity of
- *  its own rather than a position among its siblings. Six fill the grid at every stop that renders two columns
- *  or more, which is where a skeleton is read. */
-const PLACEHOLDER_TILE_KEYS = ["first", "second", "third", "fourth", "fifth", "sixth"] as const;
-
 /** The categories the empty state offers as a way back into the catalogue: the top level of the vocabulary
  *  `src/constants/taxonomy.ts` declares, read from it rather than restated, each one a chip that links to its
  *  own listing. */
@@ -91,20 +86,29 @@ const BREADCRUMBS: readonly BreadcrumbItem[] = [
 ];
 
 /**
- * The results while a page of them is on its way: tiles shaped like the product cards they stand in for.
+ * The results while a page of them is on its way: the grid the answer will fill, holding one placeholder tile
+ * per result the query asked for.
+ *
+ * It is the loaded grid's own markup and the loaded tile's own shape — a real `<ul>` whose items are the
+ * placeholder `ProductCard` renders — so the region the skeleton reserves is the region the answer fills. The
+ * count is the page size the query was paged by, because the count decides the height as much as the shape
+ * does: a page of twelve is three rows of four, and a shorter band would grow the page under everything below
+ * it when the products landed.
  *
  * Silent to assistive technology — every placeholder is hidden and the region around them reports the wait
  * with `aria-busy` — so a load is heard once, from the region's own state.
  *
+ * @param props - The number of results the query paged by.
  * @returns The placeholder grid.
  */
-function ResultPlaceholders(): ReactElement {
+function ResultPlaceholders({ count }: { readonly count: number }): ReactElement {
+  const tiles = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : DEFAULT_PAGE_SIZE;
   return (
-    <div className="sp-product-grid">
-      {PLACEHOLDER_TILE_KEYS.map((key) => (
-        <Skeleton key={key} variant="card" />
+    <ul className="sp-product-grid" role="list">
+      {Array.from({ length: tiles }, (_slot, index) => (
+        <ProductCardPlaceholder key={`search-placeholder-${String(index)}`} />
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -187,7 +191,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
   let body: ReactElement;
 
   if (view.isLoading) {
-    body = <ResultPlaceholders />;
+    body = <ResultPlaceholders count={catalog.filters.pageSize} />;
   } else if (view.error !== null) {
     body = (
       <Alert
@@ -256,7 +260,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
   } else {
     // The load settled with neither a page nor a failure, so nothing is known yet: the placeholders stand
     // rather than an empty grid that would claim there are no results.
-    body = <ResultPlaceholders />;
+    body = <ResultPlaceholders count={catalog.filters.pageSize} />;
   }
 
   return (

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 538
+ * Lines: 554
  */
 
 import { useId, useState } from "react";
@@ -105,6 +105,13 @@ const TAB_IDS = {
 /** The placeholder cards a loading strip stands in with, one per related product the endpoint answers with at most;
  *  each carries its own identity rather than a position, so no key is an index. */
 const RELATED_PLACEHOLDER_KEYS = ["first", "second", "third", "fourth"] as const;
+
+/** The crumbs the settled trail holds: the home crumb, the two levels a category is nested to and the product's
+ *  own name. `categoryTrailFor` below builds exactly that trail from the answer, and a product whose category the
+ *  read did not answer with keeps the middle two slots empty, which is the same trail with fewer crumbs rather
+ *  than a shorter one — the header reserves the rows the full trail takes either way. `PageHeader`'s
+ *  `breadcrumbSlots` is where the count is spent. */
+const SETTLED_TRAIL_LENGTH = 4;
 
 /** The brand names, keyed by the slug each brand identifier carries. */
 const BRAND_NAME_BY_SLUG: ReadonlyMap<string, string> = new Map(
@@ -471,7 +478,9 @@ function ProductDetailBody({ product }: { readonly product: Product }): ReactEle
  * The category read feeds the breadcrumb trail alone and runs beside the product rather than before it, so the page
  * renders as soon as it knows what it is showing. The states are derived during render — the placeholders while
  * the read is in flight, the alert carrying a failure's message with its retry, and the loaded product — so
- * nothing is mirrored into state and no placeholder is ever shown beside a stale product. The fourth, an address
+ * nothing is mirrored into state and no placeholder is ever shown beside a stale product. The heading block
+ * reserves the room its three data-named parts take before that read answers, so the page below it does not move
+ * when they arrive: `SETTLED_TRAIL_LENGTH` is what `PageHeader`'s `breadcrumbSlots` spends. The fourth, an address
  * naming no product, is not a state of this page at all: it returns the shared not-found view in place of the
  * header and the body, which is what keeps the route's single `h1` naming the state the visitor is in.
  *
@@ -492,6 +501,12 @@ export function ProductDetailPage(): ReactElement {
   const isMissing = !hasSlug || (product.error !== null && isMissingProduct(product.error));
   const isReading = hasSlug && (product.status === "idle" || product.status === "loading");
   const heading = loaded === null ? PAGE_TITLES.PRODUCT : loaded.name;
+
+  // The header's own names — the trail, the heading and the supporting line — are all named by the product read,
+  // so while it holds no product the header reserves the rows they take instead of painting the two crumbs the URL
+  // supports on its own. The reservation stands for as long as the names are unknown, the failure path included:
+  // a header that collapsed when a read failed would move the block below it by the height it had reserved.
+  const hasProductNames = loaded !== null;
 
   useDocumentTitle(documentTitle(pageTitleFor(loaded, isMissing)));
 
@@ -525,6 +540,7 @@ export function ProductDetailPage(): ReactElement {
     <div className="sp-container">
       <div className="sp-page">
         <PageHeader
+          breadcrumbSlots={hasProductNames ? undefined : SETTLED_TRAIL_LENGTH}
           breadcrumbs={
             loaded === null ? undefined : categoryTrailFor(loaded, categories.data ?? [])
           }

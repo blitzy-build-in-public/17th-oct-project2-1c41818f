@@ -45,7 +45,7 @@ import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
  * `src/components/ui/Modal.tsx` is the file that composes them; this file renders the drawer's content
  * and nothing of the drawer itself.
  *
- * `src/styles/commerce.css` owns that content: `.sp-minicart` is the panel's flex column, `.sp-minicart__list`
+ * `src/styles/cart.css` owns that content: `.sp-minicart` is the panel's flex column, `.sp-minicart__list`
  * the scrolling region the rows fill, `.sp-minicart__footer` the actions block over its own rule, and
  * `.sp-minicart__empty` the padded box the empty state sits in. The rows themselves are
  * `src/features/cart/CartItemRow.tsx`'s family and arrive as `.sp-minicart__item` in its compact
@@ -53,7 +53,7 @@ import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
  *
  * BLITZY [DESIGN_SYSTEM_GAP]: the drawer declares no part for the item-count line, so its one sentence
  * reads in `.sp-cart-row__meta`, the muted supporting-line register the cart's own sheet declares. One
- * added class in `commerce.css` — a `.sp-minicart__count` at the same register — would give the line a
+ * added class in `cart.css` — a `.sp-minicart__count` at the same register — would give the line a
  * name of its own; the class is reported rather than invented here.
  *
  * BLITZY [LAYOUT]: the plan asks for a bottom sheet below the small stop, and the sheets declare no

@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/taxonomy.ts
  * Purpose: The controlled vocabulary: categories, brands, sort keys, order statuses, facet and report definitions
- * Lines: 535
+ * Lines: 552
  */
 
 import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
@@ -433,6 +433,23 @@ export const SUPPORTED_COUNTRIES = [
   { code: "AU", label: "Australia", postalCodePattern: "^\\d{4}$" },
   { code: "DE", label: "Germany", postalCodePattern: "^\\d{5}$" },
 ] as const satisfies readonly CountryOption[];
+
+/**
+ * The display name a stored country code reads as, so one address renders the same way wherever the product
+ * shows it: the order confirmation's and the order detail's address blocks resolve their codes through here.
+ *
+ * The code is matched against the configured set ignoring surrounding space and case, because the code reaches
+ * this vocabulary from a stored address rather than from the select that wrote it. A code the set does not
+ * carry reads as itself rather than as nothing, so an address entered before a country left the list still
+ * names the country it was entered in.
+ *
+ * @param code - The country code a stored address carries.
+ * @returns The label the configured entry declares, or the code as given when no entry carries it.
+ */
+export function countryLabel(code: string): string {
+  const wanted = code.trim().toUpperCase();
+  return SUPPORTED_COUNTRIES.find((country) => country.code === wanted)?.label ?? code;
+}
 
 // Address fields ----------------------------------------------------------------------------------
 

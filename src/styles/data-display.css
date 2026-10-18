@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 602
+ * Lines: 608
  */
 
 @import "./tabs-accordion.css";
@@ -546,12 +546,15 @@
   max-inline-size: var(--tooltip-max-width);
   pointer-events: none;
 }
-/* The viewport takes no click, so only a toast is interactive, and it is deliberately not a live region: each
- * message carries its own live role — `status` for a note or confirmation, `alert` for a failure — so what a
- * screen reader reads is the message's, not the column's. A live region on the container would read that column
- * again whenever a message joined or left, announcing every message twice. Entry is the transition from the
- * values the item is mounted with; auto-dismiss pauses on hover or focus, the viewport's timer. The leading
- * border takes the variant's text colour, so icon, words and rule agree: the hue is never the only carrier. */
+/* The viewport takes no click and neither does a message box: the stack passes the pointer straight through to
+ * whatever it covers, so a transient message never swallows the click aimed at the control beneath it, and the
+ * dismiss control is the one part that opts back in. Pausing therefore cannot come from entering a pass-through
+ * box; the component measures the pointer against this viewport's own rectangle and holds every message standing
+ * in it while the pointer rests there, as does the keyboard focus reaching a control inside one. It is not a live
+ * region: each message carries its own role — `status` for a note or a confirmation, `alert` for a failure — so a
+ * container region would announce the whole column again whenever one message joined or left it. Entry is the
+ * transition from the values the item is mounted with, and the leading border takes the variant's text colour, so
+ * icon, words and rule agree and the hue is never the only carrier. */
 .sp-toast {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -564,7 +567,8 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-2);
   color: var(--color-text);
-  pointer-events: auto;
+  /* Pass-through, so the words of a message can never intercept the click aimed at what they cover. */
+  pointer-events: none;
   transition:
     opacity var(--duration-base) var(--ease-decelerate),
     transform var(--duration-base) var(--ease-decelerate);
@@ -587,6 +591,8 @@
   block-size: var(--space-6);
   color: var(--color-text-muted);
   cursor: pointer;
+  /* The one part of a message that opts back into the pointer, so a reader can always dismiss it. */
+  pointer-events: auto;
 }
 .sp-toast--success {
   background-color: var(--color-success-surface);

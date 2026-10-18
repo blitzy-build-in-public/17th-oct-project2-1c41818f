@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchBar.tsx
  * Purpose: The search input with debounced suggestions, keyboard selection and recent history
- * Lines: 493
+ * Lines: 499
  */
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -42,7 +42,7 @@ import { filtersToPath, setQuery as withQueryTerm } from "@/utils/queryParams";
  * path it points at and the seeded collections sit behind the transport. A product row therefore renders
  * its name alone here; the brand-and-price caption waits on a layer that can resolve a product.
  *
- * BLITZY [BUDGET]: the concern reached 491 lines against its 330-line budget and stays inside the
+ * BLITZY [BUDGET]: the concern reached 499 lines against its 330-line budget and stays inside the
  * 600-line ceiling, so its overrun is taken from the remainder rather than from a capability. The lines
  * hold the surface the plan names — `SearchBarProps` and `SearchBar` — plus the eight private members the
  * bar cannot do without: the class table, the two glyphs, the facet-derived name lookup the suggestion
@@ -217,11 +217,17 @@ export function SearchBar({
   const request = useAsync<readonly SearchSuggestion[]>(
     (signal) => suggest(settled, SEARCH_SUGGESTION_LIMIT, signal),
     [settled],
-    { enabled: !isBlank },
+    // Every settled term is a new read, so the rows the last answered term produced are kept while the next
+    // one is being read: the popup is refilled in place rather than emptied and refilled around the shopper's
+    // own keystrokes, and the panel's own busy state reports the wait. Only a term with no answer behind it
+    // yet has nothing to keep, and there the panel stands its loading ring.
+    { enabled: !isBlank, keepPreviousData: true },
   );
 
   const lookup = useMemo(() => nameLookupFrom(facets), [facets]);
 
+  // The rows the panel renders: the answer in hand, or the one the last answered term produced while a newer
+  // term is being answered, which is what keeps the list the shopper is reading on screen across a keystroke.
   const suggestions = request.data ?? NO_SUGGESTIONS;
   const showHistory = isPanelOpen && isBlank && terms.length > 0;
   const showSuggestions = isPanelOpen && !isBlank && request.status !== "idle";
