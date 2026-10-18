@@ -1,7 +1,7 @@
 /**
  * Path: src/data/customers.ts
  * Purpose: The seeded customer base of 40 accounts including 2 administrators, with profiles, digests and addresses
- * Lines: 492
+ * Lines: 495
  */
 
 import { DEMO_ACCOUNTS } from "@/constants/config";
@@ -33,9 +33,11 @@ const SECOND_ADMIN_INDEX = 2;
 const ADDRESS_COUNT_MIN = 1;
 const ADDRESS_COUNT_SPREAD = 2;
 
-/** How far back an ordinary account is dated: four hundred days or more, so it predates the trailing year
- *  the order history covers and can own the orders `src/data/orders.ts` attributes to it. The cohort of
- *  accounts declared below is the one exception, and it is dated inside that year. */
+/** How far back an ordinary account is dated: four hundred days or more, so it predates the trailing year the
+ *  history places its attributed orders in and can own the ones `src/data/orderAttribution.ts` gives it. The
+ *  year the history covers before that one carries guest orders alone, so no order older than an account is
+ *  ever attributed to one. The cohort of accounts declared below is the one exception, and it is dated inside
+ *  the trailing year. */
 const ACCOUNT_AGE_MIN_DAYS = 400;
 const ACCOUNT_AGE_MAX_DAYS = 900;
 
@@ -50,9 +52,10 @@ const ACCOUNT_AGE_MAX_DAYS = 900;
  *  from.
  *
  *  It is the last {@link NEW_CUSTOMER_COHORT_SIZE} generated shoppers, and they own no order: the history
- *  attributes its sixty customer orders through `ATTRIBUTION_PLAN` in `src/data/orders.ts`, whose positions
- *  stop at index 24 and never reach these accounts. Dating them inside the year therefore breaks no order
- *  the seed places — an account still predates every order attributed to it.
+ *  attributes its sixty customer orders through `ATTRIBUTION_PLAN` in `src/data/orderAttribution.ts`, whose
+ *  positions stop at index 24 and never reach these accounts, and it attributes them in the trailing year
+ *  alone. Dating them inside that year therefore breaks no order the seed places — an account still predates
+ *  every order attributed to it.
  *
  *  Ages are read off a position in the cohort rather than drawn: the first is dated
  *  {@link NEW_CUSTOMER_FIRST_AGE_DAYS} days back and each account after it
@@ -341,7 +344,7 @@ function timestampOn(day: IsoDateString, rand: SeededRandom): IsoDateTimeString 
  *
  *  An account of the cohort is dated by its position in it, so its age is the same on every build and needs
  *  no draw; every other account draws one between {@link ACCOUNT_AGE_MIN_DAYS} and
- *  {@link ACCOUNT_AGE_MAX_DAYS}, which dates it before the trailing year the order history covers.
+ *  {@link ACCOUNT_AGE_MAX_DAYS}, which dates it before the trailing year the attributed orders fall in.
  *
  *  @param index - The account's position in the base, counted from zero.
  *  @param rand - The build's stream, drawn from for every account outside the cohort.

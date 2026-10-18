@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/seedInvariants.test.ts
  * Purpose: The seeded data's own invariants: no attributed order and no review dated before its product or the account it belongs to, and nothing seeded dated after the anchor day's first hour.
- * Lines: 89
+ * Lines: 90
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -35,9 +35,10 @@ beforeEach(() => {
 describe("the seeded facts' invariants", () => {
   it("dates no attributed order before the account that placed it was created", () => {
     // The cohort of accounts `src/data/customers.ts` dates inside the trailing year owns no order, because
-    // `ATTRIBUTION_PLAN` in `src/data/orders.ts` stops at index 24, and that is what keeps the seed's own
-    // invariant: an account predates every order attributed to it, so no seeded order is placed before the
-    // account that placed it existed.
+    // `ATTRIBUTION_PLAN` in `src/data/orderAttribution.ts` stops at index 24 and the history attributes its
+    // sixty orders in the trailing year alone. That is what keeps the seed's own invariant: an account
+    // predates every order attributed to it, so no seeded order is placed before the account that placed it
+    // existed.
     let attributed = 0;
     for (const order of source.getRecentOrders(ALL_ROWS)) {
       const customerId = order.customerId;

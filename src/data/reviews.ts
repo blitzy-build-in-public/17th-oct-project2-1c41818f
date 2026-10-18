@@ -1,7 +1,7 @@
 /**
  * Path: src/data/reviews.ts
  * Purpose: The seeded reviews, and the product rating aggregates derived from them
- * Lines: 594
+ * Lines: 589
  */
 
 import { BRAND_DEFINITIONS, CATEGORY_DEFINITIONS } from "@/constants/taxonomy";
@@ -18,7 +18,7 @@ import type {
   IsoDateTimeString,
   ProductId,
 } from "@/types/common";
-import { averageOf, clampNumber, groupBy, indexBy, sortByKey } from "@/utils/collections";
+import { averageOf, clampNumber, indexBy, sortByKey } from "@/utils/collections";
 import {
   addDays,
   differenceInDays,
@@ -567,28 +567,23 @@ export interface ProductRatingAggregate {
 }
 
 /**
- * Derives each reviewed product's rating figures from its own rows, so the aggregate is a reading of the
- * reviews rather than a second statement of the catalogue's numbers, and the mean is `collections.ts`'s.
+ * The aggregate rule's one home: what a product's rows say about it — how many rows there are, and the
+ * mean of their ratings to one decimal, or `0` over no row at all.
  *
- * @param reviews - The rows to aggregate; never mutated.
- * @returns One aggregate per product that holds rows, and no entry for a product that holds none.
+ * Every figure a product is served with is taken from here, so a rating is one calculation rather than
+ * a second statement of the catalogue's numbers: the store derives each product it serves from the rows
+ * it holds, which are the seeded rows with this browser's own laid over them; a submitted review's fold
+ * re-derives its product from the rows the store now holds; and the seeded catalogue's own figures were
+ * this same rule over the seeded rows. A product nothing has been written about holds no row and so
+ * reports a count of zero, which is how the detail page's empty review state and the rating-filtered
+ * empty result stay reachable.
+ *
+ * @param rows - One product's reviews; never mutated.
+ * @returns That product's rating figures.
  */
-function buildRatingSummary(
-  reviews: readonly Review[],
-): Readonly<Record<ProductId, ProductRatingAggregate>> {
-  const summary: Record<ProductId, ProductRatingAggregate> = {};
-  for (const [productId, rows] of groupBy(reviews, (review) => review.productId)) {
-    summary[productId] = {
-      ratingAverage: roundToTenths(averageOf(rows.map((row) => row.rating))),
-      ratingCount: rows.length,
-    };
-  }
-  return summary;
+export function ratingAggregateFor(rows: readonly Review[]): ProductRatingAggregate {
+  return {
+    ratingAverage: rows.length === 0 ? 0 : roundToTenths(averageOf(rows.map((row) => row.rating))),
+    ratingCount: rows.length,
+  };
 }
-
-/** The rating figures the seeded reviews imply, per product: what `src/data/repositories.ts` overlays on each
- *  product it serves, so the rating a tile shows and the one its detail page shows are the reviews' own. A
- *  product the catalogue seeds a count of zero for holds no row and so has no entry here, which is how the
- *  detail page's empty review state and the rating-filtered empty result stay reachable. */
-export const PRODUCT_RATING_SUMMARY: Readonly<Record<ProductId, ProductRatingAggregate>> =
-  buildRatingSummary(REVIEWS);

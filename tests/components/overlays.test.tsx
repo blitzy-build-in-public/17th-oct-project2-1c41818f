@@ -1,12 +1,13 @@
 /**
  * Path: tests/components/overlays.test.tsx
  * Purpose: The overlay family and the supplementary surfaces beside it — dialog semantics, the inert background, focus moved in and restored, Escape, the Tab-edge wrap, the busy confirmation, the drawer presentation, the tooltip and the toast — including keyboard and focus handling
- * Lines: 462
+ * Lines: 502
  */
 
 import { useRef, useState } from "react";
 import type { ReactElement } from "react";
 
+import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "@/components/ui/Button";
@@ -29,9 +30,10 @@ import { renderWithProviders, screen, waitFor, within } from "../testUtils";
 /*
  * The overlays and the surfaces beside them seen from the outside — the modal, the drawer, the destructive
  * confirmation, the tooltip and the toast viewport — through roles, accessible names, ARIA state, rendered
- * text and where the keyboard focus is. No assertion touches a class name or a computed style, so none needs a
- * stylesheet; every subject is mounted through `renderWithProviders`, and the overlay panels portal onto
- * `document.body`, so queries come from `screen`.
+ * text and where the keyboard focus is. No assertion reads a computed style, so none needs a stylesheet: the
+ * one class name any case reads is the drawer's frame-deferred `is-open` entrance, asserted as the token it is
+ * rather than as the transform the sheet resolves it to. Every subject is mounted through
+ * `renderWithProviders`, and the overlay panels portal onto `document.body`, so queries come from `screen`.
  *
  * A §0.5.5 split of `tests/components/controls.test.tsx`, which had reached the request's 600-line ceiling
  * with these two describes inside it: the overlays are a family in their own right, the button, field and
@@ -45,7 +47,10 @@ import { renderWithProviders, screen, waitFor, within } from "../testUtils";
  * awaited query rather than between two of them, because the providers issue requests when they mount and a
  * toast countdown dismisses through a queue update: an update raised outside the testing library's `act` window
  * is what React reports as an act warning. The rule, and why the awaited query is what keeps such a settle
- * inside that window, is stated in `tests/testUtils.tsx`; no case needs an `act` call of its own.
+ * inside that window, is stated in `tests/testUtils.tsx`; no case needs an `act` call of its own, with one
+ * exception: the drawer's entrance case takes the frame queue into its own hands — asserting the pending class
+ * before any frame has run, then running the captured callback inside `act` — so the ordering it asserts is
+ * decided by the case rather than by the host's clock.
  */
 
 /** The media-query shim `tests/setup.ts` installs, kept so a case that overrides it puts it back. */
@@ -283,15 +288,50 @@ describe("the overlay family", () => {
 
   it("defers the drawer's open class to the frame after the mount it travels from", async () => {
     const { user } = renderWithProviders(<OverlayHarness />);
-    await user.click(screen.getByRole("button", { name: OPEN_DRAWER }));
-    // Read on the click's own commit, before any frame has run: the panel is already the named dialog with
-    // the focus inside it, and only the state class the sheet travels from is still outstanding — the
-    // resting transform a transition needs as its starting value, which is what makes the declared travel
-    // play instead of the panel popping into place.
-    const dialog = screen.getByRole("dialog", { name: DRAWER_TITLE });
-    expect(hasFocusInside(dialog)).toBe(true);
-    expect(dialog).not.toHaveClass("is-open");
-    await waitFor(() => expect(dialog).toHaveClass("is-open"));
+    // This case owns the frame queue instead of racing it. jsdom runs `requestAnimationFrame` on a real
+    // timer of its own — a frame of wall-clock time — while the click and the query below spend wall-clock
+    // time too, so on a loaded host the frame could already have run by the time the assertions read the
+    // panel. Capturing the queue rather than scheduling it puts the ordering under the case's control: the
+    // panel's mount effect still asks for its frame, nothing runs it until the case does, and a frame its
+    // cleanup cancelled is dropped the way a browser drops it.
+    const queuedFrames: { readonly handle: number; readonly callback: FrameRequestCallback }[] = [];
+    const cancelledFrames = new Set<number>();
+    const requestFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback: FrameRequestCallback): number => {
+        const handle = queuedFrames.length + 1;
+        queuedFrames.push({ handle, callback });
+        return handle;
+      });
+    const cancelFrame = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation((handle: number): void => {
+        cancelledFrames.add(handle);
+      });
+    try {
+      await user.click(screen.getByRole("button", { name: OPEN_DRAWER }));
+      // Read on the click's own commit, before any frame has run: the panel is already the named dialog with
+      // the focus inside it, and only the state class the sheet travels from is still outstanding — the
+      // resting transform a transition needs as its starting value, which is what makes the declared travel
+      // play instead of the panel popping into place.
+      const dialog = screen.getByRole("dialog", { name: DRAWER_TITLE });
+      expect(hasFocusInside(dialog)).toBe(true);
+      expect(dialog).not.toHaveClass("is-open");
+      expect(queuedFrames.length).toBeGreaterThan(0);
+      // The frame the panel asked for, run where the browser would run it: the callbacks are run inside
+      // `act`, which commits the state update they carry before the query below reads the class. The scope
+      // is synchronous because the frame's write is — an async callback with nothing to await in it is the
+      // `require-await` failure this codebase's lint rejects.
+      act((): void => {
+        for (const frame of queuedFrames) {
+          if (!cancelledFrames.has(frame.handle)) frame.callback(performance.now());
+        }
+      });
+      await waitFor(() => expect(dialog).toHaveClass("is-open"));
+    } finally {
+      requestFrame.mockRestore();
+      cancelFrame.mockRestore();
+    }
   });
 
   it("starts a destructive confirmation on its cancel control", async () => {

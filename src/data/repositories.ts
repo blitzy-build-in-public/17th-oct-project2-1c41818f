@@ -1,7 +1,7 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 512
+ * Lines: 522
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
@@ -17,7 +17,7 @@ import { CART_COPY, VALIDATION_MESSAGES } from "@/constants/content";
 import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { BRANDS, CATEGORIES } from "@/data/categories";
-import { nextOrderMint, rememberOrder } from "@/data/clientWrites";
+import { nextOrderMint, rememberOrder, rememberReview } from "@/data/clientWrites";
 import {
   SEARCH_TARGETS,
   accept,
@@ -39,6 +39,7 @@ import {
   type DataStore,
 } from "@/data/collectionStore";
 import { PROMO_CODES } from "@/data/orders";
+import { ratingAggregateFor } from "@/data/reviews";
 // The deferred analytics and report graph — its loader, the shape it resolves to and the refusal a failed
 // fetch answers with — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`.
 import {
@@ -79,7 +80,7 @@ import type {
 } from "@/types/catalog";
 import type { PageResult, ProductId, Result } from "@/types/common";
 import type { CartLine, Order, PricedCart, PromoCode } from "@/types/commerce";
-import { averageOf, clampNumber, paginate } from "@/utils/collections";
+import { clampNumber, paginate } from "@/utils/collections";
 import {
   isWithinRange,
   sortByIso,
@@ -91,7 +92,6 @@ import {
   type DateRangeErrorCode,
 } from "@/utils/dates";
 import { DEFAULT_FILTER_STATE, readFilterState, writeFilterState } from "@/utils/queryParams";
-import { roundToTenths } from "@/utils/statistics";
 import { reviewId as newReviewId, sequenceId as newSequenceId } from "@/utils/strings";
 
 /** The wording for each rule a dated range can break, so a range refused here reads as the same range refused
@@ -194,21 +194,21 @@ function insertReview(store: DataStore, input: NewProductReviewInput): Review {
   if (rows === undefined) store.reviewsByProduct.set(input.productId, [review]);
   else rows.unshift(review);
   foldRating(store, input.productId);
+  // The row is recorded once the store holds it, so the next document lists it and derives this product's
+  // figures from it rather than serving the seed's rows and the seed's rating again.
+  rememberReview(review);
   return review;
 }
 
 /** Folds a product's rows back into the rating it is served with: how many it has and their mean to one
  * decimal, so a submitted review shows on the detail page and on every tile beside it without either
- * recomputing anything. */
+ * recomputing anything. The mean and the count are `src/data/reviews.ts`'s own rule, so the aggregate the
+ * write folds in and the one a load derives from the same rows cannot drift apart. */
 function foldRating(store: DataStore, productId: ProductId): void {
   const product = store.productById.get(productId);
   if (product === undefined) return;
   const rows = store.reviewsByProduct.get(productId) ?? [];
-  const updated: Product = {
-    ...product,
-    ratingCount: rows.length,
-    ratingAverage: rows.length === 0 ? 0 : roundToTenths(averageOf(rows.map((row) => row.rating))),
-  };
+  const updated: Product = { ...product, ...ratingAggregateFor(rows) };
   store.productById.set(productId, updated);
   const index = store.productIndexById.get(productId);
   if (index !== undefined) store.products[index] = updated;
@@ -380,11 +380,12 @@ function listCustomerOrders(store: DataStore, query: CustomerOrderQuery): PageRe
 
 // Analytics and reports -----------------------------------------------------------------------------
 
-// The graph the readings below run over — the seeded daily fact table, the aggregation rules and the report
-// composition, fetched on first use — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`, which holds
-// the loader, the shape it resolves to and the refusal a failed fetch answers with, because this file's own
-// 33-member contract and that concern cannot both be held inside the request's 600-line ceiling. The members
-// below reach it through `overAnalyticsGraph` and, for a report run, `loadAnalyticsGraph`.
+// The graph the readings below run over — the reduction that builds a sales fact table, the aggregation rules
+// and the report composition, fetched on first use — is this file's §0.5.5 split path
+// `src/data/analyticsGraph.ts`, which holds the loader, the shape it resolves to and the refusal a failed fetch
+// answers with, because this file's own 33-member contract and that concern cannot both be held inside the
+// request's 600-line ceiling. The members below reach it through `overAnalyticsGraph` and, for a report run,
+// `loadAnalyticsGraph`.
 
 /** The refusal a dated range earns, or `null` when it can run: the rules are `src/utils/dates.ts`'s and the
  * wording the copy module's, so the same range is refused with the same sentence and the same field whether it
@@ -414,7 +415,11 @@ function runReportOver(
   return accept(
     graph.runReportDefinition(
       query.kind,
-      { orders: store.orders, salesRecords: graph.salesRecords, customers: store.customers },
+      {
+        orders: store.orders,
+        salesRecords: graph.salesRecordsFor(store.orders),
+        customers: store.customers,
+      },
       query,
       definition,
     ),
@@ -473,12 +478,14 @@ export function createSalesProDataSource(): SalesProDataSource {
     removeAddress: (id, addressId) => removeBookAddress(store, id, addressId),
     setDefaultAddress: (id, addressId, request) =>
       setBookDefault(store, id, addressId, request.kind),
-    // Analytics and reports: the seeded fact table and the order collection, bucketed and aggregated by the
-    // analytics and report services, which the first read of either fetches.
+    // Analytics and reports: the fact rows of the orders this store serves, reduced from that same collection
+    // by the analytics module, so an order placed in this browser moves the KPIs, the chart and the sales
+    // report together with the order collection they are checked against — the first read of either fetches
+    // the modules.
     getKpis: (query) =>
       overAnalyticsGraph((graph) =>
         graph.computeKpis({
-          records: graph.salesRecords,
+          records: graph.salesRecordsFor(store.orders),
           orders: store.orders,
           customers: store.customers,
           query,
@@ -486,7 +493,10 @@ export function createSalesProDataSource(): SalesProDataSource {
       ),
     getRevenueSeries: (query) =>
       overAnalyticsGraph((graph) =>
-        graph.computeRevenueSeries({ records: graph.salesRecords, query }),
+        graph.computeRevenueSeries({
+          records: graph.salesRecordsFor(store.orders),
+          query,
+        }),
       ),
     getTopProducts: (query) =>
       overAnalyticsGraph((graph) =>

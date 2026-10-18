@@ -1,7 +1,7 @@
 /**
  * Path: src/data/salesHistory.ts
  * Purpose: The daily sales fact rows derived from the generated orders, keyed by category and channel
- * Lines: 326
+ * Lines: 362
  */
 
 import { ORDERS } from "@/data/orders";
@@ -16,13 +16,16 @@ import { parseIso, startOfDay } from "@/utils/dates";
 
 /**
  * The historical sales series the dashboard and the three reports are read from: what each category sold
- * through each channel on each day of the trailing year.
+ * through each channel on each day the order history covers.
  *
- * **Reduced from the orders, never generated beside them.** `src/data/orders.ts` already holds the whole
- * seeded history, so the rows here are one reduction over that collection — no second seeded stream, no
- * re-priced basket, no clock read and no randomness — and the two collections therefore come from the same
- * generator. That is what makes a period's revenue and the orders placed in it agree rather than drift
- * apart, and it is the property to keep: every amount a row carries was computed once by
+ * **One reduction, over the collection a read is actually serving.** `src/data/orders.ts` holds the whole
+ * seeded history, so the rows here are one reduction over an order collection — no second seeded stream, no
+ * re-priced basket, no clock read and no randomness — and the collection they are reduced from is the one
+ * the read is answering from: the seeded history for a figure stated over the seed, and the orders the data
+ * source is serving whenever a live one is asked, through `salesRecordsFor` below. `src/data/repositories.ts`
+ * is the only caller of either, and both paths run the one reduction this module owns. That is what makes a
+ * period's revenue and the orders placed in it agree rather than drift apart, a sale placed in this browser
+ * included, and it is the property to keep: every amount a row carries was computed once by
  * `src/lib/pricingService.ts`, is read here, and is never recalculated.
  *
  * **Keyed by day, category and channel, and by nothing else.** A row deliberately carries no product key.
@@ -32,8 +35,9 @@ import { parseIso, startOfDay } from "@/utils/dates";
  * for no question the dashboard or a report asks.
  *
  * **Sparse.** A row exists per combination activity actually reached, not per combination that could
- * exist: the trailing year crossed with twelve categories and three channels is 13,140 combinations,
- * almost all of them empty. Twelve and not the catalogue's twenty, because a line files under the category
+ * exist: the two years the history spans crossed with twelve categories and three channels is 26,316
+ * combinations, almost all of them empty. Twelve and not the catalogue's twenty, because a line files under
+ * the category
  * of the product it names and only the twelve leaf categories hold products — the eight parents are
  * navigation, so no order can reach a row of theirs. Every reader buckets and sums the rows anyway, so a
  * zero-filled table would cost size and carry no figure a missing row does not already state.
@@ -279,20 +283,23 @@ function toSalesRecord(row: SalesRow): SalesRecord {
 }
 
 /**
- * Builds the daily sales fact table from the seeded order history: one row per day, category and channel
- * the trailing year's orders actually sold into.
+ * Builds the daily sales fact table from an order collection: one row per day, category and channel that
+ * collection's orders actually sold into.
  *
- * One grouping pass over the orders and one accumulation loop, and nothing else reads the clock, a random
- * stream or a stored value of its own, so two calls return deeply equal collections — the same rows in the
- * same order — and the rows reconcile with the orders they came from: a period's `orders` is the orders
- * placed in it that were not cancelled, its `units` the units those orders sold, and its revenue the goods
- * they brought net of the discounts applied to them.
+ * The reduction is one grouping pass over the orders and one accumulation loop, and nothing else reads the
+ * clock, a random stream or a stored value of its own, so two calls over equal collections return deeply
+ * equal tables — the same rows in the same order — and the rows reconcile with the orders they came from: a
+ * period's `orders` is the orders placed in it that were not cancelled, its `units` the units those orders
+ * sold, and its revenue the goods they brought net of the discounts applied to them.
  *
+ * @param orders - The collection to reduce; neither it nor any order in it is written to. The seeded history
+ * when a caller names nothing, so the reference table below and every test stated over the seed are built
+ * the same way a live one is.
  * @returns The rows, oldest day first, then by category and channel.
  */
-export function buildSalesRecords(): readonly SalesRecord[] {
+export function buildSalesRecords(orders: readonly Order[] = ORDERS): readonly SalesRecord[] {
   const rows = new Map<string, SalesRow>();
-  for (const contribution of ORDERS.flatMap(contributionsOf)) {
+  for (const contribution of orders.flatMap(contributionsOf)) {
     const key = rowKeyOf(contribution);
     const row = rows.get(key);
     if (row === undefined) {
@@ -318,9 +325,38 @@ export function buildSalesRecords(): readonly SalesRecord[] {
 }
 
 /**
- * The seeded sales fact table, exactly as {@link buildSalesRecords} builds it: the collection
- * `src/data/repositories.ts` serves for `GET /api/analytics/kpis` and `GET /api/analytics/revenue`, and the
- * one the dashboard, the KPI cards and the three reports are read from. Built once, at import, from the
- * same seeded orders the order history was built from, so the two reconcile by construction.
+ * The fact table for a collection a read is actually serving: {@link buildSalesRecords}'s one reduction,
+ * applied to the orders the caller hands it rather than to the seed alone.
+ *
+ * The collection is remembered with the table built from it — and with that collection's length at the time
+ * — because the store a read serves mutates its own order array in place: a placement prepends to it, so the
+ * same array holds one more order afterwards while the identity a naive memo would compare is unchanged.
+ * Keying on the identity *and* the length is what stops such a write from being served the table built before
+ * it, which is the whole point of reducing the served collection instead of the seed.
+ *
+ * @param orders - The collection the read is serving.
+ * @returns The rows for that collection, recomputed when it is not the one already reduced.
+ */
+export function salesRecordsFor(orders: readonly Order[]): readonly SalesRecord[] {
+  const held = servedTable;
+  if (held !== null && held.orders === orders && held.length === orders.length) return held.records;
+  const records = buildSalesRecords(orders);
+  servedTable = { orders, length: orders.length, records };
+  return records;
+}
+
+/** The last collection {@link salesRecordsFor} reduced, the length it held then, and the table it produced,
+ *  so a read of one collection reduces it once however many surfaces ask for it. */
+let servedTable: {
+  readonly orders: readonly Order[];
+  readonly length: number;
+  readonly records: readonly SalesRecord[];
+} | null = null;
+
+/**
+ * The seeded sales fact table, exactly as {@link buildSalesRecords} builds it over the seeded history alone:
+ * the table every figure stated over the seed itself is read from. A read serving the collection a running
+ * application holds — the orders this browser has placed included — goes through {@link salesRecordsFor},
+ * because this one is reduced once, at import, and can never carry a later write.
  */
 export const SALES_RECORDS: readonly SalesRecord[] = buildSalesRecords();

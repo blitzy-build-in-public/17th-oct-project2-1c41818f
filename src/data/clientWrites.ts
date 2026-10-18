@@ -1,7 +1,7 @@
 /**
  * Path: src/data/clientWrites.ts
  * Purpose: The durable record of this browser's own writes to the seeded collections, and the folds that replay it onto the seeds
- * Lines: 562
+ * Lines: 586
  */
 
 // This is not a path the plan maps on its own: it is a second §0.5.5 split of the concern
@@ -9,16 +9,20 @@
 // plan's over-budget rule because the seeded collections are rebuilt from the frozen seed on every
 // document load. Everything this browser writes itself would otherwise live only inside the document
 // that wrote it — the order a checkout placed, the account a registration created together with the
-// digest that verifies it, the profile a customer edited and the address book they wrote — so §0.8.1's
-// reload-safe confirmation route and its session restore on reload could not hold. This module owns
-// the shape of the durable record, the writes that extend it and the pure folds that lay it over the
-// seeds; `src/utils/storage.ts` remains the product's only store, under the key
-// `src/constants/config.ts` declares, and the store's own collections stay the source of truth for a
-// running document — a refused write changes nothing about them.
+// digest that verifies it, the profile a customer edited, the address book they wrote and the review
+// they published — so §0.8.1's reload-safe confirmation route and its session restore on reload could
+// not hold. This module owns the shape of the durable record, the writes that extend it and the pure
+// folds that lay it over the seeds, with the review member's own guard, append and fold split into
+// `src/data/reviewWrites.ts` under the same rule rather than being pushed past the file ceiling here;
+// `src/utils/storage.ts` remains the product's only store, under the key `src/constants/config.ts`
+// declares, and the store's own collections stay the source of truth for a running document — a refused
+// write changes nothing about them.
 
 import { STORAGE_KEYS } from "@/constants/config";
 import type { StoredCredential } from "@/data/customers";
+import { isStoredReviews, reviewsOf, withReview } from "@/data/reviewWrites";
 import type { Address, CredentialDigest, Customer, Role } from "@/types/account";
+import type { Review } from "@/types/catalog";
 import type { CustomerId, IsoDateString } from "@/types/common";
 import type {
   Order,
@@ -61,14 +65,18 @@ export interface OrderMint {
 }
 
 /** Everything this browser has written to the seeded collections: the orders it placed with the marks
- * its minting has reached, the accounts it registered, the profile edits it made and the address books
- * it wrote. Held under one key, so one read replays all of it onto the seed. */
+ * its minting has reached, the accounts it registered, the profile edits it made, the address books it
+ * wrote and the reviews it published. Held under one key, so one read replays all of it onto the seed. */
 export interface ClientWrites {
   readonly orders: readonly Order[];
   readonly orderMint: OrderMint;
   readonly accounts: readonly RegisteredAccount[];
   readonly profiles: readonly Customer[];
   readonly books: readonly AddressBookWrite[];
+  /** The reviews this browser published, newest first. Optional because a payload written before the
+   * record carried reviews holds none, and `src/data/reviewWrites.ts` reads its absence as no review
+   * rather than as a payload this build will not read. */
+  readonly reviews?: readonly Review[];
 }
 
 /** The record before this browser has written anything: what a reader gets with no store, an empty one,
@@ -80,6 +88,7 @@ export const NO_CLIENT_WRITES: ClientWrites = {
   accounts: [],
   profiles: [],
   books: [],
+  reviews: [],
 };
 
 /** The roles an account record can carry, as the union `src/types/account.ts` declares them: the guard
@@ -307,7 +316,10 @@ function isAddressBookWrite(value: unknown): value is AddressBookWrite {
  * Every member is checked through the guard for its own shape, because a payload that reached the
  * store before a shape changed cannot be handed to a store that indexes and renders the current one.
  * A payload that fails anywhere is rejected wholesale, which is `src/utils/storage.ts`'s documented
- * policy: the reader's fallback is the whole record, never a partly decoded one.
+ * policy: the reader's fallback is the whole record, never a partly decoded one. The review list is the
+ * one member a payload may lack without being refused: `src/data/reviewWrites.ts` reads its absence as
+ * no review, so a payload written before the record carried reviews keeps the orders, accounts, profiles
+ * and books it does hold rather than costing every one of them.
  *
  * @param value - The payload the store handed back.
  * @returns `true` when the payload carries every member this module writes.
@@ -323,7 +335,8 @@ function isClientWrites(value: unknown): value is ClientWrites {
     isNumber(mint.sequence) &&
     isEvery(value.accounts, isRegisteredAccount) &&
     isEvery(value.profiles, isCustomer) &&
-    isEvery(value.books, isAddressBookWrite)
+    isEvery(value.books, isAddressBookWrite) &&
+    isStoredReviews(value.reviews)
   );
 }
 
@@ -333,12 +346,15 @@ function isClientWrites(value: unknown): value is ClientWrites {
  * Reads from the store. Anything unusable — no store at all, a private window that refuses the write,
  * a payload this build will not read, a full quota that left an older copy behind — answers the empty
  * record, so a data source built without a store behaves exactly as it did before this module existed:
- * the seeds alone. This is what makes persistence an addition rather than a dependency.
+ * the seeds alone. This is what makes persistence an addition rather than a dependency. The review list
+ * is completed on the way out, so a payload written before the record carried reviews is read with the
+ * empty list rather than with an absent member every reader would have to resolve for itself.
  *
  * @returns The writes to replay onto the seeds, or {@link NO_CLIENT_WRITES}.
  */
 export function readClientWrites(): ClientWrites {
-  return readStored(STORAGE_KEYS.CLIENT_WRITES, NO_CLIENT_WRITES, isClientWrites);
+  const writes = readStored(STORAGE_KEYS.CLIENT_WRITES, NO_CLIENT_WRITES, isClientWrites);
+  return { ...writes, reviews: reviewsOf(writes) };
 }
 
 // Writing the record --------------------------------------------------------------------------------
@@ -422,6 +438,14 @@ export function rememberAddressBook(customerId: CustomerId, addresses: readonly 
     books: upsert(writes.books, customerId, (item) => item.customerId, { customerId, addresses }),
   };
   writeStored(STORAGE_KEYS.CLIENT_WRITES, next);
+}
+
+/** Records a review this browser published, prepended so the record reads newest first exactly as the
+ * store's own review list does. `src/data/reviewWrites.ts` owns the append itself: a review is the one
+ * write the record holds as a list of rows rather than as a record keyed by an identifier, so its guard
+ * and its fold live there with it. */
+export function rememberReview(review: Review): void {
+  writeStored(STORAGE_KEYS.CLIENT_WRITES, withReview(readClientWrites(), review));
 }
 
 // Minting an order's identity ------------------------------------------------------------------------

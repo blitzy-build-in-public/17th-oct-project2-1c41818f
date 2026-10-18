@@ -1,10 +1,10 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 570
+ * Lines: 599
  */
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactElement, RefObject } from "react";
 
 import { Link, useLocation } from "react-router-dom";
@@ -220,6 +220,11 @@ function ReviewForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   /** Set before the request is issued, so a second submission arriving in the same tick is refused. */
   const submittingRef = useRef(false);
+  /** The write in flight, so a form leaving the tree cancels it rather than reporting it to nothing. */
+  const writeRef = useRef<AbortController | null>(null);
+  // A write still in flight when the form leaves the tree is aborted, and its answer dropped below. One that
+  // settles first is a submission the shopper completed before leaving: published, and confirmed by the toast.
+  useEffect(() => () => writeRef.current?.abort(), []);
   /** The region the submission hands the focus off to: the form itself, which holds the control that starts the
    *  write and survives every outcome of it, and whose own heading names it wherever the focus lands. */
   const { handOffFocus } = useFocusHandoff(formRef);
@@ -248,8 +253,11 @@ function ReviewForm({
     setFieldErrors((current) => mergeErrors(clearFieldError(current, field), errors));
   };
 
-  const submitReview = async (input: ReviewInput): Promise<void> => {
-    const result = await submitProductReview(productId, input, { sessionToken });
+  const submitReview = async (input: ReviewInput, signal: AbortSignal): Promise<void> => {
+    const result = await submitProductReview(productId, input, { sessionToken, signal });
+    // The form is gone — or a newer submission took over the write — so this answer belongs to nobody: nothing
+    // here reports it to a screen the shopper has left, whatever the store kept of the row.
+    if (signal.aborted) return;
     submittingRef.current = false;
     setIsSubmitting(false);
     if (!result.ok) {
@@ -276,12 +284,19 @@ function ReviewForm({
     // The rule above reports an unchosen star as missing, so this is unreachable from the form; it is what
     // keeps the submitted body total rather than making the rating optional downstream.
     if (!isRatingValue(rating)) return;
+    // The write's own controller, superseding any earlier one and aborted with the form: the guard above holds
+    // one submission in flight at a time, and this is what leaves that one with nothing to report once the
+    // shopper has left the page that started it.
+    writeRef.current?.abort();
+    const controller = new AbortController();
+    writeRef.current = controller;
     submittingRef.current = true;
     // Armed before the write: the submit control and every field are disabled for its duration, so the focus
     // they give up is claimed by the form rather than dropped onto the document body.
     handOffFocus();
     setIsSubmitting(true);
-    void submitReview({ rating, title: draft.title.trim(), body: draft.body.trim() });
+    const input: ReviewInput = { rating, title: draft.title.trim(), body: draft.body.trim() };
+    void submitReview(input, controller.signal);
   };
 
   return (
@@ -343,6 +358,9 @@ export interface ProductReviewsProps {
   readonly productId: ProductId;
   /** Extra classes for the section's own box, for the page's layout. */
   readonly className?: string;
+  /** What a published review reports to the surface above, whose own rating figures are a reading of the same
+   *  rows this section lists; the list is refreshed here either way. */
+  readonly onReviewPublished?: () => void;
 }
 
 /**
@@ -371,10 +389,19 @@ export interface ProductReviewsProps {
  * region, so a count changed by a filter is announced rather than only seen, and the pager defers to it: its
  * caption states that figure while its own region announces the page alone.
  *
- * @param props - The product to read reviews of, and the section's extra classes.
+ * A published review is a change to the review collection, so this section refreshes the list it owns and
+ * reports the write above through `onReviewPublished`, whose surface states the product's own figures: left
+ * unreported, the list would move under a header still stating the review set of the page's first read.
+ *
+ * @param props - The product to read reviews of, the section's extra classes and the report a published review
+ *   makes above.
  * @returns The labelled section holding the summary, the reviews and the form.
  */
-export function ProductReviews({ productId, className }: ProductReviewsProps): ReactElement {
+export function ProductReviews({
+  productId,
+  className,
+  onReviewPublished,
+}: ProductReviewsProps): ReactElement {
   const { session } = useAuth();
   const { pathname } = useLocation();
   const headingId = useId();
@@ -450,10 +477,12 @@ export function ProductReviews({ productId, className }: ProductReviewsProps): R
     formRef.current?.focus();
   }, []);
 
-  /** Refreshes the list a published review belongs to, leading it rather than leaving the reader elsewhere. */
+  /** Refreshes the list a published review belongs to, leading it rather than leaving the reader elsewhere, and
+   *  reports the write above so the product's own rating figures are read again beside it. */
   const handleSubmitted = (): void => {
     goToFirstPage();
     reviews.reload();
+    onReviewPublished?.();
   };
 
   const loaded = reviews.data;

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 554
+ * Lines: 593
  */
 
 import { useId, useState } from "react";
@@ -36,7 +36,12 @@ import type { RoutePath } from "@/constants/routes";
 import { BRAND_DEFINITIONS } from "@/constants/taxonomy";
 import { ProductReviews } from "@/features/catalog/ProductReviews";
 import { API_ERROR_CODES } from "@/lib/apiClient";
-import { flattenCategoryTree, getProductBySlug, listCategories } from "@/lib/catalogReads";
+import {
+  flattenCategoryTree,
+  getProductBySlug,
+  isProductSegment,
+  listCategories,
+} from "@/lib/catalogReads";
 import { getRelated } from "@/lib/catalogService";
 import { useCartDispatch, useQuickAdd } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
@@ -429,12 +434,29 @@ function RelatedProducts({ productId }: { readonly productId: ProductId }): Reac
   );
 }
 
-/** The loaded product: the gallery and the buy column beside each other, then the sections beneath them. Two of the
- *  three tabs are the page's own; the reviews tab hosts `ProductReviews`, which owns the review list, its rating
- *  filter, its paging and the form a signed-in customer submits, so the route composes that section rather than
- *  repeating any of it. The related strip sits after the tabs, so a shopper reads about the product they opened
- *  before being offered its neighbours. */
-function ProductDetailBody({ product }: { readonly product: Product }): ReactElement {
+/**
+ * The loaded product: the gallery and the buy column beside each other, then the sections beneath them. Two of
+ * the three tabs are the page's own; the reviews tab hosts `ProductReviews`, which owns the review list, its
+ * rating filter, its paging and the form a signed-in customer submits, so the route composes that section rather
+ * than repeating any of it. The related strip sits after the tabs, so a shopper reads about the product they
+ * opened before being offered its neighbours.
+ *
+ * Every figure the buy column states is a figure of the product read, the rating summary among them, while the
+ * count the reviews tab states is read from the review collection. A review published in that tab therefore
+ * reports itself back here through `onReviewPublished`, which is the route's own re-read of this product: the
+ * header above and the list below are then derived from one store after the write resolves, instead of the list
+ * moving under a summary left at the figures the page opened with.
+ *
+ * @param props - The product being shown and the re-read a published review asks the route for.
+ * @returns The loaded product's body.
+ */
+function ProductDetailBody({
+  product,
+  onReviewPublished,
+}: {
+  readonly product: Product;
+  readonly onReviewPublished: () => void;
+}): ReactElement {
   const tabs: readonly TabItem[] = [
     {
       id: TAB_IDS.DESCRIPTION,
@@ -449,7 +471,7 @@ function ProductDetailBody({ product }: { readonly product: Product }): ReactEle
     {
       id: TAB_IDS.REVIEWS,
       label: CATALOG_COPY.REVIEWS_HEADING,
-      content: <ProductReviews productId={product.id} />,
+      content: <ProductReviews productId={product.id} onReviewPublished={onReviewPublished} />,
     },
   ];
 
@@ -475,10 +497,14 @@ function ProductDetailBody({ product }: { readonly product: Product }): ReactEle
  * The route segment is the product's readable slug and `getProductBySlug` in `src/lib/catalogReads.ts` is the single
  * read that turns it into the product, so no request here asks the detail endpoint for an identifier the segment is
  * not; the product's own identifier then serves the two reads that need one — the related strip and the reviews.
+ * That read is also the one a published review refreshes: the reviews tab reports the write through
+ * `onReviewPublished`, which re-reads this product, so the rating summary above the tabs and the review list
+ * below them state one store's figures after the write resolves rather than disagreeing under one page.
  * The category read feeds the breadcrumb trail alone and runs beside the product rather than before it, so the page
- * renders as soon as it knows what it is showing. The states are derived during render — the placeholders while
- * the read is in flight, the alert carrying a failure's message with its retry, and the loaded product — so
- * nothing is mirrored into state and no placeholder is ever shown beside a stale product. The heading block
+ * renders as soon as it knows what it is showing. The states are derived during render — the placeholders while a
+ * segment's own payload is still being read, the alert carrying a failure's message with its retry, and the loaded
+ * product — so nothing is mirrored into state, no placeholder is ever shown beside a stale product, and a refresh
+ * over a product the page already holds renders that product instead of blanking it. The heading block
  * reserves the room its three data-named parts take before that read answers, so the page below it does not move
  * when they arrive: `SETTLED_TRAIL_LENGTH` is what `PageHeader`'s `breadcrumbSlots` spends. The fourth, an address
  * naming no product, is not a state of this page at all: it returns the shared not-found view in place of the
@@ -492,14 +518,27 @@ export function ProductDetailPage(): ReactElement {
   const slug = (params[ROUTE_PARAMS.PRODUCT_SLUG] ?? "").trim();
   const hasSlug = slug !== "";
 
+  // The payload a read already answered with is kept while the next read of the same segment is in flight, so
+  // the one refresh this page asks for over a product it is already showing — the re-read a published review
+  // reports — replaces that product in place instead of taking the page down to its placeholders.
   const product = useAsync<Product>((signal) => getProductBySlug(slug, { signal }), [slug], {
     enabled: hasSlug,
+    keepPreviousData: true,
   });
   const categories = useAsync<CategoryNode[]>((signal) => listCategories({ signal }), []);
 
-  const loaded = product.data;
+  // What the page may render is the payload that answers the segment being read, not merely the last payload the
+  // read published. A kept payload is this address's product, so a refresh over it renders that product; a
+  // payload a moved-to segment does not answer leaves the page at its placeholders rather than showing the
+  // product the visitor came from. The question is `isProductSegment`'s, the one home for the two spellings a
+  // segment may use.
+  const loaded =
+    product.data !== null && isProductSegment(product.data, slug) ? product.data : null;
   const isMissing = !hasSlug || (product.error !== null && isMissingProduct(product.error));
-  const isReading = hasSlug && (product.status === "idle" || product.status === "loading");
+  // The wait a first read of a segment shows is a payload that is neither in hand nor failed. A refresh over the
+  // product already on screen is answered by the product itself — it stays rendered and the section reports the
+  // read through its own busy state — while a failure is a state of its own and keeps the alert below.
+  const isReading = hasSlug && loaded === null && product.error === null;
   const heading = loaded === null ? PAGE_TITLES.PRODUCT : loaded.name;
 
   // The header's own names — the trail, the heading and the supporting line — are all named by the product read,
@@ -533,7 +572,7 @@ export function ProductDetailPage(): ReactElement {
     // claiming the product does not exist.
     body = <DetailPlaceholders />;
   } else {
-    body = <ProductDetailBody product={loaded} />;
+    body = <ProductDetailBody product={loaded} onReviewPublished={product.reload} />;
   }
 
   return (

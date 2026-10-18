@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/sessionLifecycle.test.tsx
  * Purpose: The session's lifecycle: the stored token revalidated on mount, the refusal, the lapse and the sign-out that end it and announce it, and the durable issuance table the endpoints answer from.
- * Lines: 442
+ * Lines: 461
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -438,5 +438,24 @@ describe("durable session issuance at the seam", () => {
       }),
     );
     expect(denied.status).toBe(403);
+  });
+});
+
+describe("the guard's wait for the first answer", () => {
+  beforeEach(() => {
+    resetApiState();
+  });
+
+  it("takes no decision from a guard whose screen is gone before its own turn", async () => {
+    // The guard waits one turn for the session before it may read the absence of one as an answer. This mount
+    // is thrown away inside that turn — synchronously, so the turn it queued is still pending — which is the
+    // case the guard's own cancellation exists for: the discarded mount decides nothing, and the mount that
+    // follows decides from the session it reads.
+    const abandoned = renderApp({ route: ROUTES.ACCOUNT });
+    abandoned.unmount();
+    await Promise.resolve();
+
+    renderApp({ route: ROUTES.ACCOUNT });
+    expect(await screen.findByText(ACCOUNT_COPY.SIGN_IN_HEADING)).toBeVisible();
   });
 });

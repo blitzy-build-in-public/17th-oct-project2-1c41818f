@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 433
+ * Lines: 434
  */
 
 import type { CurrencyCode, ToastKind } from "@/types/common";
@@ -26,8 +26,9 @@ export const STORAGE_KEY_PREFIX = "salespro";
  *
  * Three of the six exist because the collections themselves are rebuilt from the frozen seed on every
  * document load: `SESSIONS` keeps each issued session's own issue instant and expiry, `CLIENT_WRITES` holds
- * what this browser placed, registered or edited, which `src/data/clientWrites.ts` replays onto that seed,
- * and `ORDER_TOKENS` holds the read credential a session-less buyer's own confirmation is reopened with.
+ * what this browser placed, registered, edited or published, which `src/data/clientWrites.ts` replays onto
+ * that seed, and `ORDER_TOKENS` holds the read credential a session-less buyer's own confirmation is
+ * reopened with.
  *
  * Consumer: `src/utils/storage.ts`, the only module in the product that touches `localStorage`. It
  * reads every key from here so no caller invents one, and stamps each payload with
@@ -52,9 +53,9 @@ export const STORAGE_KEYS = {
    * credentials only: no personal data, no payment data and no credential of any account. */
   ORDER_TOKENS: `${STORAGE_KEY_PREFIX}.order-tokens`,
   /** This browser's own writes to the seeded collections — the orders it placed, the accounts it
-   * registered together with the digests that verify them, the profiles it edited and the address
-   * books it wrote, alongside the marks its order minting has reached — replayed onto the seed by
-   * `src/data/clientWrites.ts` when a data source is built. */
+   * registered together with the digests that verify them, the profiles it edited, the address books it
+   * wrote and the reviews it published, alongside the marks its order minting has reached — replayed
+   * onto the seed by `src/data/clientWrites.ts` when a data source is built. */
   CLIENT_WRITES: `${STORAGE_KEY_PREFIX}.writes`,
 } as const;
 

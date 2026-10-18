@@ -1,7 +1,7 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections, the indexes built over them once, and the account, session and address writes they carry
- * Lines: 571
+ * Lines: 576
  */
 
 // This is not a path the plan maps on its own: it is the store half of `src/data/repositories.ts`, split out
@@ -33,7 +33,8 @@ import { ADDRESSES, CREDENTIALS, CUSTOMERS, type StoredCredential } from "@/data
 import { readSessionTable, writeSessionTable } from "@/data/sessionTable";
 import { ORDERS } from "@/data/orders";
 import { PRODUCTS } from "@/data/products";
-import { PRODUCT_RATING_SUMMARY, REVIEWS } from "@/data/reviews";
+import { REVIEWS, ratingAggregateFor } from "@/data/reviews";
+import { mergeReviews } from "@/data/reviewWrites";
 import type {
   Address,
   AddressInput,
@@ -219,26 +220,30 @@ function countByDay(orders: readonly Order[]): Map<IsoDateString, number> {
 /**
  * Builds one data source's collections and indexes in a single pass over the seeds.
  *
- * The rating a product is served with is the one its reviews imply, overlaid once rather than recomputed per
- * read; the address books are reassembled from the account references; the order history is sorted newest
- * first, because the seeded array is grouped by day rather than by instant and an order created at runtime is
- * placed at the front of it; this browser's own writes to the collections — the orders it placed, the accounts
- * it registered, the profile edits and the address books it made — are replayed onto the seeds first, so a
+ * The rating a product is served with is the one the reviews it is served with imply, derived here rather than
+ * recomputed per read, and the reviews themselves are the seeded rows with this browser's own laid over them,
+ * so a review the last document published is listed here and counted by that same rule; the address books are
+ * reassembled from the account references; the order history is sorted newest first, because the seeded array
+ * is grouped by day rather than by instant and an order created at runtime is placed at the front of it; this
+ * browser's own writes to the collections — the orders it placed, the accounts it registered, the profile
+ * edits, the address books it made and the reviews it published — are replayed onto the seeds first, so a
  * document load carries on where the last one left off instead of reading only the seed; and every lookup a
  * member needs — by identifier, by email, by customer, by account-and-product, together with the position each
  * product and each account holds in its collection — is built here, so a read and a replacement are both a map
- * lookup rather than a scan of 1,155 orders or 140 products. The session registry is read from its durable
+ * lookup rather than a scan of 2,255 orders or 140 products. The session registry is read from its durable
  * table: a session's own issue instant is what that table is for. Nothing in the seeds is written: this store
  * holds copies.
  *
  * @returns The collections and indexes one data source reads and writes.
  */
 export function createStore() {
-  const products: Product[] = PRODUCTS.map((product) => {
-    const aggregate = PRODUCT_RATING_SUMMARY[product.id];
-    return aggregate === undefined ? product : { ...product, ...aggregate };
-  });
   const writes = readClientWrites();
+  const reviews = mergeReviews(REVIEWS, writes);
+  const reviewsByProduct = groupBy(reviews, (review) => review.productId);
+  const products: Product[] = PRODUCTS.map((product) => ({
+    ...product,
+    ...ratingAggregateFor(reviewsByProduct.get(product.id) ?? []),
+  }));
   const customers = mergeCustomers(CUSTOMERS, writes);
   const credentials = mergeCredentials(CREDENTIALS, writes);
   const books = mergeAddressBooks(ADDRESSES, customers, writes);
@@ -260,8 +265,8 @@ export function createStore() {
     productById: new Map(products.map((product) => [product.id, product])),
     productIndexById: new Map(products.map((product, index) => [product.id, index])),
     categoryByProduct: new Map(PRODUCTS.map((product) => [product.id, product.categoryId])),
-    reviews: [...REVIEWS],
-    reviewsByProduct: groupBy(REVIEWS, (review) => review.productId),
+    reviews,
+    reviewsByProduct,
     customers,
     customerById: new Map(customers.map((customer) => [customer.id, customer])),
     customerIndexById: new Map(customers.map((customer, index) => [customer.id, index])),

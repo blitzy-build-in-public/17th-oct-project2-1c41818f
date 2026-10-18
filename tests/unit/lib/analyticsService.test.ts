@@ -215,9 +215,9 @@ beforeAll(async () => {
   if (newest === undefined) return;
   const lastDay = dates.startOfDay(newest.placedAt);
   seededRange = { from: dates.addDays(lastDay, -29), to: lastDay };
-  // Four hundred days before the pinned period clears the seeded window's 365 days and the fixtures'
-  // rows alike; from the draw it would slide into their days as the host day advances.
-  const offset = -400;
+  // Eight hundred days before the pinned period clears the seeded history's own span — the widest accepted
+  // range plus the year before it, 731 days — and the fixtures' rows alike, while sitting in the past.
+  const offset = -800;
   emptyRange = {
     from: dates.addDays(fixtures.FIXED_DATE_RANGE.from, offset),
     to: dates.addDays(fixtures.FIXED_DATE_RANGE.to, offset),

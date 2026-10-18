@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/catalogReads.ts
  * Purpose: The catalogue's reads that are not a filtered listing — the category tree and the walk over it, the brands, the product a route's segment names, and a product's reviews
- * Lines: 222
+ * Lines: 239
  */
 
 import { PAGE_SIZE_OPTIONS } from "@/constants/config";
@@ -87,6 +87,23 @@ export function listBrands(options: CatalogRequestOptions = {}): Promise<Result<
 
 // The product a route's segment names ------------------------------------------------------------------
 
+/**
+ * Reports whether a product is the one a detail route's segment names.
+ *
+ * {@link getProductBySlug} resolves a product under either spelling: the readable `slug` a `/product/:slug`
+ * route carries, and the prefixed `id` a link from `src/features/admin/TopProductsTable.tsx` carries. That
+ * question is asked by more than one reader — the scan below asks it of every row it pages through, and a page
+ * holding a product from an earlier read asks it of that payload before showing it under a segment whose own
+ * read is still in flight — so it is answered in one place rather than repeated at each of them.
+ *
+ * @param product - The product a caller holds.
+ * @param segment - The route segment: the product's slug, or its identifier.
+ * @returns Whether the product is the one the segment names.
+ */
+export function isProductSegment(product: Product, segment: string): boolean {
+  return product.slug === segment || product.id === segment;
+}
+
 /** The page size the slug read walks the listing at: the largest configured size, so the products the term
  *  matches are crossed in as few requests as the catalogue's own sizes allow. */
 const SCAN_PAGE_SIZE = PAGE_SIZE_OPTIONS[PAGE_SIZE_OPTIONS.length - 1];
@@ -153,7 +170,7 @@ async function scanListingFor(segment: string, signal?: AbortSignal): Promise<Re
       { signal },
     );
     if (!listing.ok) return listing;
-    const found = listing.value.items.find((one) => one.slug === segment || one.id === segment);
+    const found = listing.value.items.find((one) => isProductSegment(one, segment));
     if (found !== undefined) return { ok: true, value: found };
     if (!listing.value.hasNext) return missingProduct();
   }

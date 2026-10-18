@@ -532,8 +532,8 @@ describe("the export a report offers", () => {
 
 describe("a period that recorded nothing", () => {
   it("states the empty period rather than drawing an empty table, and widens it on request", async () => {
-    // A thirty-day window that closed long before the seeded year of facts begins, and so holds none.
-    const quietTo = addDays(defaultReportRange().to, -730);
+    // A thirty-day window ending 740 days back — ten days clear of a history reaching 730 days back — holds none.
+    const quietTo = addDays(defaultReportRange().to, -740);
     const quiet = { from: addDays(quietTo, -(DEFAULT_REPORT_RANGE_DAYS - 1)), to: quietTo };
     const reports = await openAsAdmin(ROUTES.ADMIN_REPORTS);
     const sales = definitionOf("sales");

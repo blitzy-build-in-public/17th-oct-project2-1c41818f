@@ -337,7 +337,7 @@ function readableSuffix(source: string): string {
  * clock and no randomness, so two passes over the same data build the same identifiers, which is the
  * determinism the seeded catalogue, the analytics and the tests rest on. Two sources that slugify
  * identically therefore produce the same identifier, so a caller needing distinct ids for such a pair —
- * the roughly 1,100 generated orders, for instance — numbers them with {@link sequenceId} instead.
+ * the roughly 2,250 generated orders, for instance — numbers them with {@link sequenceId} instead.
  *
  * @param prefix - The identifier's prefix, with or without its trailing underscore: `"prod"` and
  *   `"prod_"` both yield a `prod_`-prefixed identifier.

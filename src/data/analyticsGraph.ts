@@ -1,7 +1,7 @@
 /**
  * Path: src/data/analyticsGraph.ts
  * Purpose: The modules a first analytics or report read fetches on use — the seeded daily sales fact table, the aggregation rules and the report composition — with the loader that resolves them and the refusal a failed fetch answers with
- * Lines: 125
+ * Lines: 126
  */
 
 // Not a path the plan maps on its own: it is a §0.5.5 split path of `src/data/repositories.ts`, the same way
@@ -13,29 +13,30 @@
 
 import { FEEDBACK_COPY } from "@/constants/content";
 import { accept } from "@/data/collectionStore";
-// The two foundations modules whose graph a first analytics or report read fetches, imported for their types
+// The three foundations modules whose graph a first analytics or report read fetches, imported for their types
 // alone: an `import type` is erased, so naming the members the loader caches below costs the entry chunk nothing
 // — which is the whole point of fetching them, and the reason the loader below names no module of the layer
 // above this one, which the data-access layer may not reach.
 import type * as AnalyticsRules from "@/utils/analyticsRules";
 import type * as ReportRules from "@/utils/reportRules";
-import type { SalesRecord } from "@/types/analytics";
+import type * as SalesHistory from "@/data/salesHistory";
 import type { Result } from "@/types/common";
 
 /**
- * The graph a first analytics or report read needs and no other read does: the seeded daily sales fact table,
- * the aggregation rules that bucket it, and the report composition that turns a definition and a range into
- * rows.
+ * The graph a first analytics or report read needs and no other read does: the reduction that builds a sales
+ * fact table from an order collection, the aggregation rules that bucket it, and the report composition that
+ * turns a definition and a range into rows.
  *
  * It is fetched on first use rather than carried by the entry chunk, because none of it belongs to the
- * catalogue, the cart or the checkout: `src/data/salesHistory.ts` reduces its daily rows out of the generated
- * orders, and the two services carry the bucketing, the comparison baselines and the report composition over
- * them. Vite splits at the dynamic-import boundary the loader below opens, so the first read that needs the
- * graph is what fetches it and every read after that reuses the copy it resolved.
+ * catalogue, the cart or the checkout: `src/data/salesHistory.ts` reduces its daily rows out of the orders a
+ * read is serving, and the two services carry the bucketing, the comparison baselines and the report
+ * composition over them. Vite splits at the dynamic-import boundary the loader below opens, so the first read
+ * that needs the graph is what fetches it and every read after that reuses the copy it resolved.
  */
 export interface DeferredAnalytics {
-  /** The daily fact rows, one per category, channel and day of activity. */
-  readonly salesRecords: readonly SalesRecord[];
+  /** The reduction that builds the daily fact rows for the order collection a read is serving, so a sale
+   *  placed in this browser reaches the KPIs and the sales report as well as the order collection. */
+  readonly salesRecordsFor: typeof SalesHistory.salesRecordsFor;
   /** The KPI aggregation, with its comparison baseline. */
   readonly computeKpis: typeof AnalyticsRules.computeKpis;
   /** The revenue series, bucketed and optionally split. */
@@ -75,7 +76,7 @@ export function loadAnalyticsGraph(): Promise<DeferredAnalytics | null> {
   ]).then(
     ([salesHistory, analytics, reports]) => {
       const loaded: DeferredAnalytics = {
-        salesRecords: salesHistory.SALES_RECORDS,
+        salesRecordsFor: salesHistory.salesRecordsFor,
         computeKpis: analytics.computeKpis,
         computeRevenueSeries: analytics.computeRevenueSeries,
         computeTopProducts: analytics.computeTopProducts,

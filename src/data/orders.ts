@@ -1,11 +1,17 @@
 /**
  * Path: src/data/orders.ts
- * Purpose: The generated 365-day order history, with 60 orders attributed to the seeded customers
- * Lines: 599
+ * Purpose: The generated order history, spanning the widest accepted range and the year before it, with 60 orders in its trailing year attributed to the seeded customers
+ * Lines: 595
  */
 
-import { DEMO_ACCOUNTS, DEMO_CARD_NUMBERS, SHIPPING_METHODS } from "@/constants/config";
+import {
+  DEMO_ACCOUNTS,
+  DEMO_CARD_NUMBERS,
+  MAX_REPORT_RANGE_DAYS,
+  SHIPPING_METHODS,
+} from "@/constants/config";
 import { ADDRESSES, CUSTOMERS, buildAddress } from "@/data/customers";
+import { planAttribution, type Attribution } from "@/data/orderAttribution";
 import { DATA_SEED, PRODUCTS, createSeededRandom, type SeededRandom } from "@/data/products";
 import { appendStatusHistory, orderNumber, toOrderLines } from "@/utils/orderRules";
 import { decidePromo, priceCartLines } from "@/utils/pricingRules";
@@ -25,14 +31,24 @@ import { addDays, differenceInDays, parseIso, toIsoDate, toIsoDateTime } from "@
 import { addHoursToDate } from "@/utils/dates";
 import { categoryId, prefixedId, sequenceId, slugify } from "@/utils/strings";
 
-// The seeded stream and the window -----------------------------------------------------------------
+// The seeded streams and the span -----------------------------------------------------------------
 
 /** This module's own stream, offset from the seed `src/data/products.ts` declares, so no seeded collection
  *  inherits another's draws. */
 const SEED = DATA_SEED + 5_009;
 
-/** The anchor day and the 364 days before it, inclusive. */
-const WINDOW_DAYS = 365;
+/** The trailing days the history's sixty attributed orders are placed in: the year the seeded accounts' own
+ *  order history covers, which the era now preceding it must leave exactly where it is. */
+const TRAILING_WINDOW_DAYS = 365;
+
+/** The offset the earlier era's stream carries, for the reason {@link SEED} itself is offset from the
+ *  catalogue's: neither era of one history may inherit the other's draws. */
+const EARLIER_ERA_SEED = SEED + 7_919;
+
+/** The days the history spans: the widest accepted range plus the year before it, so that the previous-year
+ *  window of every range ending today falls inside the seed and the baseline the dashboard offers has a
+ *  figure to state. */
+const HISTORY_DAYS = MAX_REPORT_RANGE_DAYS + TRAILING_WINDOW_DAYS;
 
 /** The first and last hour an order is placed at, the hour the anchor day ends at, and the hours in a day. */
 const DAY_FIRST_HOUR = 7;
@@ -165,95 +181,35 @@ const BILLING_ADDRESS_LABEL = "Billing";
 
 // The daily volume curve --------------------------------------------------------------------------
 
-/** Orders per weekday, Sunday first, so every day of the window trades — the smallest carries two orders — and no
+/** Orders per weekday, Sunday first, so every day of the span trades — the smallest carries two orders — and no
  *  day is a hole in the revenue series and in the sales facts derived from this history. */
 const WEEKLY_VOLUME = [4, 2, 2, 3, 3, 4, 3];
 /** The trailing days that carry the seasonal lift, and how many orders each adds. */
 const SEASONAL_LIFT_DAYS = 60;
 const SEASONAL_LIFT_VOLUME = 1;
 
-/** Plans the history's days: every day of the trailing window, oldest first, with the orders it trades in. */
+/** Plans the history's days: every day of its whole span, oldest first, with the orders it trades in. The
+ *  seasonal lift still falls on the last {@link SEASONAL_LIFT_DAYS} of them — the same calendar days it lifted
+ *  before the span grew — so the trailing window trades exactly as it did. */
 function planDays(anchorDay: IsoDateString): readonly { date: IsoDateString; volume: number }[] {
-  const firstDay = addDays(anchorDay, -(WINDOW_DAYS - 1));
+  const firstDay = addDays(anchorDay, -(HISTORY_DAYS - 1));
   const days: { date: IsoDateString; volume: number }[] = [];
-  for (let offset = 0; offset < WINDOW_DAYS; offset += 1) {
+  for (let offset = 0; offset < HISTORY_DAYS; offset += 1) {
     const date = addDays(firstDay, offset);
     const weekday = parseIso(date)?.getDay() ?? 0;
-    const lifted = offset >= WINDOW_DAYS - SEASONAL_LIFT_DAYS ? SEASONAL_LIFT_VOLUME : 0;
+    const lifted = offset >= HISTORY_DAYS - SEASONAL_LIFT_DAYS ? SEASONAL_LIFT_VOLUME : 0;
     days.push({ date, volume: WEEKLY_VOLUME[weekday] + lifted });
   }
   return days;
 }
 
-// Attribution -------------------------------------------------------------------------------------
+// Planning the two eras ---------------------------------------------------------------------------
 
-/** How many of the history's orders belong to a seeded account. The rest are placed by guests, which keeps a year
- *  of a real shop's revenue in the totals rather than forty customers' worth of shopping. */
-const ATTRIBUTED_ORDER_TOTAL = 60;
-
-/** The accounts the attributed orders belong to: each entry is a position in `CUSTOMERS` and how many orders it holds,
- *  spread through the year by {@link planAttribution}. Sixteen of the forty accounts own no order at all. */
-const ATTRIBUTION_PLAN: readonly (readonly [customerIndex: number, orders: number])[] = [
-  [1, 5],
-  [0, 2],
-  [3, 4],
-  [4, 3],
-  [5, 4],
-  [6, 3],
-  [7, 3],
-  [8, 4],
-  [9, 3],
-  [10, 3],
-  [11, 2],
-  [12, 3],
-  [13, 2],
-  [14, 2],
-  [15, 2],
-  [16, 2],
-  [17, 2],
-  [18, 2],
-  [19, 2],
-  [20, 2],
-  [21, 2],
-  [22, 1],
-  [23, 1],
-  [24, 1],
-];
-
-/** The account whose earliest attributed order is forced into `cancelled`, because the order history's status
- *  filter needs more than the settled statuses to select. Not the shopper, whose history is kept clear of
- *  cancellation so it can also reach an empty status-filtered result. */
-const CANCELLED_HISTORY_CUSTOMER_INDEX = 3;
-/** One attributed order: the account it belongs to and, for the single order the plan forces, its status. */
-type Attribution = { readonly customerIndex: number; readonly forcedStatus: OrderStatus | null };
-
-/** Places the attributed orders in the history. Each entry of the plan is walked once per order it holds, so an account
- *  with five orders has them spread through the year rather than five in a row in one month, and the sixty slots fall evenly. */
-function planAttribution(orderTotal: number): ReadonlyMap<number, Attribution> {
-  const shares = ATTRIBUTION_PLAN.map((share) => share[1]);
-  if (sum(shares) !== ATTRIBUTED_ORDER_TOTAL) {
-    throw new Error("The attribution plan does not hold the sixty orders it claims.");
-  }
-  const customers: number[] = [];
-  for (let round = 0; round < Math.max(...shares); round += 1) {
-    for (const [customerIndex, orders] of ATTRIBUTION_PLAN) {
-      if (orders > round) customers.push(customerIndex);
-    }
-  }
-  const spacing = orderTotal / ATTRIBUTED_ORDER_TOTAL;
-  const cancellationAt = customers.indexOf(CANCELLED_HISTORY_CUSTOMER_INDEX);
-  const attribution = new Map<number, Attribution>();
-  customers.forEach((customerIndex, position) => {
-    const slot = Math.floor((position + 0.5) * spacing);
-    attribution.set(slot, {
-      customerIndex,
-      forcedStatus: position === cancellationAt ? "cancelled" : null,
-    });
-  });
-  if (attribution.size !== ATTRIBUTED_ORDER_TOTAL) {
-    throw new Error("Two attributed orders were given the same slot in the history.");
-  }
-  return attribution;
+/** The history's two eras, oldest first: the earlier one, which precedes the trailing window and whose orders
+ *  are all guests'; and the trailing window itself, which holds the plan's sixty attributed orders. */
+interface PlannedHistory {
+  readonly earlier: readonly PlannedOrder[];
+  readonly recent: readonly PlannedOrder[];
 }
 
 /** One order the history is about to place: the day it belongs to, its position within that day — which is what
@@ -265,17 +221,41 @@ interface PlannedOrder {
   readonly attribution: Attribution | undefined;
 }
 
-/** Plans the whole history: every order's day, its position within that day, its age and its account. */
-function planOrders(anchorDay: IsoDateString): readonly PlannedOrder[] {
+/** Turns a run of the history's days into one slot per order each day trades, with no account yet: attribution
+ *  is planned over one era's slots rather than over the whole history's. */
+function planSlots(
+  days: readonly { readonly date: IsoDateString; readonly volume: number }[],
+  anchorDay: IsoDateString,
+): PlannedOrder[] {
   const slots: PlannedOrder[] = [];
-  for (const day of planDays(anchorDay)) {
+  for (const day of days) {
     const ageDays = differenceInDays(day.date, anchorDay);
     for (let position = 0; position < day.volume; position += 1) {
       slots.push({ date: day.date, sequence: position + 1, ageDays, attribution: undefined });
     }
   }
-  const attribution = planAttribution(slots.length);
-  return slots.map((slot, index) => ({ ...slot, attribution: attribution.get(index) }));
+  return slots;
+}
+
+/**
+ * Plans the whole history in its two eras, oldest first: the earlier era — the history's first 366 days, left to
+ * guests alone — and the trailing window of 365 days immediately after it, which holds the sixty attributed orders.
+ *
+ * The two are planned separately because attribution is spread over one era's slots: `planAttribution` places
+ * sixty orders evenly through whatever order count it is given, so planning the history in one pass would
+ * space them across both eras and move every account, day and status the trailing window holds today. The
+ * earlier era's days are the only ones the window's own plan does not see.
+ */
+function planOrders(anchorDay: IsoDateString): PlannedHistory {
+  const days = planDays(anchorDay);
+  const windowOpens = days.length - TRAILING_WINDOW_DAYS;
+  const earlier = planSlots(days.slice(0, windowOpens), anchorDay);
+  const recent = planSlots(days.slice(windowOpens), anchorDay);
+  const attribution = planAttribution(recent.length);
+  return {
+    earlier,
+    recent: recent.map((slot, index) => ({ ...slot, attribution: attribution.get(index) })),
+  };
 }
 
 // The status distribution -------------------------------------------------------------------------
@@ -461,8 +441,8 @@ function instantOn(date: IsoDateString, rand: SeededRandom): IsoDateTimeString {
 const MAX_STATUS_STEP_HOURS = 36;
 
 /** Records a planned order's whole status history: the path its status allows from the opening `pending` entry,
- *  its entries as many whole hours apart as the order's age leaves room for, so the last still falls inside the
- *  window the history covers. */
+ *  its entries as many whole hours apart as the order's age leaves room for, so the last still falls no later
+ *  than the day the history ends on. */
 function recordStatusHistory(order: Order, plan: PlannedOrder, status: OrderStatus): Order {
   const path = STATUS_PATHS[status];
   const start = parseIso(order.placedAt);
@@ -571,9 +551,16 @@ function buildOrder(
 /**
  * Builds the entire seeded order history in one deterministic pass: the trailing year's orders, priced through
  * `src/lib/pricingService.ts` and numbered and moved on through `src/lib/orderService.ts`, with exactly the plan's
- * sixty attributed to seeded accounts and the rest placed by guests.
+ * sixty attributed to seeded accounts and the rest placed by guests, after the year that precedes them.
  *
- * Pure and re-callable: one seed stream and one reading of the clock reduced to a day, nothing else, so two calls
+ * The earlier era is generated first and from a stream of its own, so that the trailing window is drawn from
+ * `SEED`'s very first step: its baskets, prices, promos, methods and statuses are then the ones this history
+ * held before the earlier era existed, and the accounts' own order history, the customers report and the
+ * default range's sales facts all stay where they were. Its own orders are guests' alone — the cohort of
+ * accounts dated inside the trailing year must keep owning none — and it is generated before the window so
+ * that the identifiers below run chronologically from the oldest order to the newest.
+ *
+ * Pure and re-callable: two seed streams and one reading of the clock reduced to a day, nothing else, so two calls
  * on the same day return deeply equal collections. Each basket is drawn with a bounded number of stream steps
  * rather than by shuffling the sellable catalogue. Because every amount came from the product's one pricing
  * implementation, a seeded order's total agrees with what `POST /api/cart/price` answers for the same lines.
@@ -581,12 +568,19 @@ function buildOrder(
  * @returns The whole history, oldest order first.
  */
 export function buildOrders(): readonly Order[] {
-  const rand = createSeededRandom(SEED);
   const anchorDay = anchorDayFor(new Date());
+  const { earlier, recent } = planOrders(anchorDay);
   const orders: Order[] = [];
   let linesSoFar = 0;
-  planOrders(anchorDay).forEach((plan, position) => {
-    const order = buildOrder(position, plan, rand, linesSoFar);
+  const earlierRand = createSeededRandom(EARLIER_ERA_SEED);
+  earlier.forEach((plan, position) => {
+    const order = buildOrder(position, plan, earlierRand, linesSoFar);
+    linesSoFar += order.lines.length;
+    orders.push(order);
+  });
+  const recentRand = createSeededRandom(SEED);
+  recent.forEach((plan, offset) => {
+    const order = buildOrder(earlier.length + offset, plan, recentRand, linesSoFar);
     linesSoFar += order.lines.length;
     orders.push(order);
   });
@@ -595,5 +589,7 @@ export function buildOrders(): readonly Order[] {
 
 /** The seeded order history, exactly as {@link buildOrders} builds it: the collection `src/data/repositories.ts`
  *  serves for a customer's own order history, an order's detail, the dashboard's recent orders and the
- *  product-performance reads that scan it by product. */
+ *  product-performance reads that scan it by product. It spans the widest accepted range plus the year before
+ *  it, so that the dashboard's previous-year baseline is answered from orders rather than from nothing, and its
+ *  trailing year alone is what the sixty attributed orders and a customer's history are drawn from. */
 export const ORDERS: readonly Order[] = buildOrders();
