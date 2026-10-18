@@ -1,7 +1,7 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections, the indexes built over them once, and the account, session and address writes they carry
- * Lines: 554
+ * Lines: 576
  */
 
 // This is not a path the plan maps on its own: it is the store half of `src/data/repositories.ts`, split out
@@ -383,10 +383,32 @@ export function signInAccount(store: DataStore, credentials: Credentials): Resul
   return accept(openSession(store, customer, now));
 }
 
+/**
+ * The instant a session reconstructed from a stored token is dated by.
+ *
+ * A token this store never minted is rebuilt from the account it names — that derivation is what lets a
+ * session survive a reload — but the instant the token was minted is not durable: the client persists the
+ * token alone, and an account's `lastLoginAt` is written in memory and rebuilt from the seeds on every
+ * document, so it describes the account's seeded past rather than the token in hand. Dating the rebuilt
+ * session by that value handed every reload a session that had already lapsed — the seeded sign-in is older
+ * than the seven-day lifetime for 38 of the 40 seeded accounts — and the client signed the visitor out on
+ * the spot, which is the reload a session is required to survive.
+ *
+ * The account's own last sign-in is therefore kept only while it still supports a live session, the case a
+ * record can vouch for; otherwise the presented token is dated from the moment it is presented. Expiry keeps
+ * its full force wherever a record exists to judge it against: every session this store mints carries an
+ * expiry from {@link sessionExpiresAt}, and `restore` refuses one that is past it.
+ */
+function reconstructedIssuedAt(customer: Customer, now: IsoDateTimeString): IsoDateTimeString {
+  const lastSignIn = customer.lastLoginAt ?? customer.createdAt;
+  return Date.parse(sessionExpiresAt(lastSignIn)) > Date.parse(now) ? lastSignIn : now;
+}
+
 /** The session a token still names, whether or not it has expired, because expiry is the transport's decision
  * and only the transport can tell an expired session from an unknown one. A token this process never issued —
- * the case a reload creates — is rebuilt from the account it was minted for and dated by that account's own
- * last sign-in, which is when the session it names was opened. */
+ * the case a reload creates — is rebuilt from the account it was minted for and dated by
+ * {@link reconstructedIssuedAt}, which keeps the account's own last sign-in while it still supports a live
+ * session and dates the token from now when it does not. */
 export function lookUpSession(store: DataStore, token: string | undefined): Session | undefined {
   if (token === undefined || token.trim() === "") return undefined;
   // A token its own account signed out of: refused before the rebuild below could revive it.
@@ -397,7 +419,7 @@ export function lookUpSession(store: DataStore, token: string | undefined): Sess
   if (customerId === undefined) return undefined;
   const customer = store.customerById.get(customerId);
   if (customer === undefined) return undefined;
-  const issuedAt = customer.lastLoginAt ?? customer.createdAt;
+  const issuedAt = reconstructedIssuedAt(customer, toIsoDateTime(new Date()));
   const rebuilt: Session = {
     // The transport brands a token where it resolves one; here it is the text the registry keys it by.
     token: token as SessionToken,
