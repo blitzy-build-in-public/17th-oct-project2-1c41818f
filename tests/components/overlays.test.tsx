@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog, Drawer, Modal } from "@/components/ui/Modal";
 import { A11Y_COPY, CATALOG_COPY, COMMON_ACTIONS, SEARCH_COPY } from "@/constants/content";
-import { useBreakpoint } from "@/state/hooks";
+import { useBreakpoint } from "@/components/ui/hooks";
 
 import { renderWithProviders, screen, waitFor } from "../testUtils";
 

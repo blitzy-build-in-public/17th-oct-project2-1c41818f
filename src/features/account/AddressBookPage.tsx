@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/AddressBookPage.tsx
  * Purpose: Address cards with add, edit, remove and set-default actions, and a confirm dialog on removal
- * Lines: 545
+ * Lines: 554
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -13,13 +13,13 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { Checkbox, Select } from "@/components/ui/Select";
+import { editSectionLabel } from "@/constants/checkoutCopy";
 import {
   ACCOUNT_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   PAGE_TITLES,
   documentTitle,
-  editSectionLabel,
   removeAddressLabel,
 } from "@/constants/content";
 import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
@@ -36,6 +36,7 @@ import {
 } from "@/lib/customerService";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { useRefusalFocus } from "@/state/focusHooks";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Address, AddressInput, AddressKind } from "@/types/account";
 import type { AddressId, FieldErrors, Result } from "@/types/common";
@@ -295,6 +296,8 @@ export function AddressBookPage(): ReactElement {
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
+  const alertRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
   /** The address whose removal was applied, so the focus effect below can tell that change from a re-read. */
   const removedIdRef = useRef<AddressId | null>(null);
 
@@ -325,6 +328,8 @@ export function AddressBookPage(): ReactElement {
   const formHeading =
     editing === null ? ACCOUNT_COPY.ADD_ADDRESS_LABEL : editSectionLabel(addressLabel(editing));
 
+  // A refused save lands the keyboard on the dialog's own alert, or on the first control the failure named.
+  useRefusalFocus(hasErrors(fieldErrors), alertRef, formRef);
   // Removing an address takes that card's own controls with it, so the confirmation cannot hand the focus
   // back to the control that opened it: once the applied book no longer holds the removed address, the
   // section's heading takes it, which keeps a keyboard user inside the region they were working in.
@@ -514,17 +519,21 @@ export function AddressBookPage(): ReactElement {
           title={formHeading}
         >
           {fieldErrors[FORM_ERROR_KEY] === undefined ? null : (
-            <Alert tone="danger">{fieldErrors[FORM_ERROR_KEY]}</Alert>
+            <div ref={alertRef} tabIndex={-1}>
+              <Alert tone="danger">{fieldErrors[FORM_ERROR_KEY]}</Alert>
+            </div>
           )}
-          <AddressForm
-            errors={fieldErrors}
-            firstFieldRef={firstFieldRef}
-            onChange={changeDraft}
-            onSubmit={(): void => {
-              void saveAddress();
-            }}
-            values={draft}
-          />
+          <div ref={formRef}>
+            <AddressForm
+              errors={fieldErrors}
+              firstFieldRef={firstFieldRef}
+              onChange={changeDraft}
+              onSubmit={(): void => {
+                void saveAddress();
+              }}
+              values={draft}
+            />
+          </div>
         </Modal>
       )}
       <ConfirmDialog

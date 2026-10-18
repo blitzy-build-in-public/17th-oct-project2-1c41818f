@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/analyticsRules.ts
  * Purpose: The aggregation rules the dashboard and the reports read and the seeded repositories compose: period bucketing, KPI aggregation, comparison baselines and top-product performance
- * Lines: 493
+ * Lines: 510
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -338,20 +338,38 @@ function seriesGroups(
   return sortBy(groups, SERIES_ORDER);
 }
 
-/** One point of a series: the bucket's key, the net revenue it earned — zero for a bucket the group did not
- * sell in — and the band's label, worded by `src/utils/dates.ts` from the run's own `keys` and its `range`, so
- * no two bands of one run word alike and a bucket the range clipped states the days of it the range holds. */
-function seriesPoint(
-  bucket: DateBucket,
-  byBucket: ReadonlyMap<string, number> | undefined,
+/**
+ * The wording of every band of one run, resolved once per run by `src/utils/dates.ts` from the run's own
+ * `keys` and its `range`, so no two bands of one run word alike and a bucket the range clipped states the
+ * days of it the range holds.
+ *
+ * One entry per bucket, built once: a band words the same for every series of a run, and wording it per
+ * point would word each band once per series — twelve categories over 366 days is 4,392 calls of the same
+ * 366 bands, and `formatBandLabel` re-reads the run's calendar years and the range's days on every call, so
+ * the count of calls is the cost.
+ */
+function bandLabels(
+  buckets: readonly DateBucket[],
   granularity: BucketGranularity,
   keys: readonly string[],
   range: DateRange,
+): ReadonlyMap<string, string> {
+  return new Map(
+    buckets.map((bucket) => [bucket.key, formatBandLabel(bucket.key, granularity, keys, range)]),
+  );
+}
+
+/** One point of a series: the bucket's key, the net revenue it earned — zero for a bucket the group did not
+ * sell in — and the band's label, read from the run's own wording so no two bands of one run word alike. */
+function seriesPoint(
+  bucket: DateBucket,
+  byBucket: ReadonlyMap<string, number> | undefined,
+  labels: ReadonlyMap<string, string>,
 ): ChartPoint {
   return {
     x: bucket.key,
     y: roundMinorUnits(byBucket?.get(bucket.key) ?? 0),
-    label: formatBandLabel(bucket.key, granularity, keys, range),
+    label: labels.get(bucket.key) ?? bucket.key,
   };
 }
 
@@ -371,6 +389,7 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
   const granularity = query.bucket ?? DEFAULT_BUCKET_GRANULARITY;
   const buckets = eachBucket(range, granularity);
   const keys = buckets.map((bucket) => bucket.key);
+  const labels = bandLabels(buckets, granularity, keys, range);
   const totals = new Map<string, Map<string, number>>();
   // The whole-period series stands even when the range holds nothing, so an empty period is a drawn
   // zero line rather than an absent chart.
@@ -390,9 +409,7 @@ export function computeRevenueSeries(input: RevenueSeriesInput): ChartSeries[] {
     id: group.id,
     label: group.label,
     color: CHART_SERIES_TOKEN_REFERENCES[index % CHART_SERIES_TOKEN_REFERENCES.length],
-    points: buckets.map((bucket) =>
-      seriesPoint(bucket, totals.get(group.id), granularity, keys, range),
-    ),
+    points: buckets.map((bucket) => seriesPoint(bucket, totals.get(group.id), labels)),
   }));
 }
 

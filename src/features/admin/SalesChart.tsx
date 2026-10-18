@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/SalesChart.tsx
  * Purpose: The dashboard's revenue chart with a bucket control and a series toggle for category or channel
- * Lines: 361
+ * Lines: 398
  */
 
 import { useCallback, useId, useMemo } from "react";
@@ -10,13 +10,14 @@ import type { ChangeEvent, ElementType, ReactElement } from "react";
 import { LineChart } from "@/components/charts/LineChart";
 import type { LabelFormatter } from "@/components/charts/chartScales";
 import { Button, ButtonGroup } from "@/components/ui/Button";
-import { Skeleton } from "@/components/ui/Feedback";
+import { Alert, Skeleton } from "@/components/ui/Feedback";
 import { Select } from "@/components/ui/Select";
-import { ADMIN_COPY } from "@/constants/content";
+import { COMMON_ACTIONS, PAGING_NOUNS } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import { GRANULARITY_OPTIONS } from "@/constants/taxonomy";
 import { bucketLabel } from "@/lib/analyticsService";
 import type { BucketGranularity, ChartSeries, RevenueGroupBy } from "@/types/analytics";
-import type { DateRange } from "@/types/common";
+import type { ApiError, DateRange } from "@/types/common";
 import { formatDateRange } from "@/utils/dates";
 
 /*
@@ -29,7 +30,9 @@ import { formatDateRange } from "@/utils/dates";
  * bordered, token-height plot area a pending series stands in for. The frame this file renders while loading
  * carries `aria-busy`, which is the state the sheet's skeleton family is written against. `sp-skeleton` is
  * the placeholder primitive's own class and `sp-select`, `sp-btn` and `sp-btn-group` are the controls', all
- * declared by the sheets those components answer to.
+ * declared by the sheets those components answer to. The failure the page hands in takes that same frame
+ * through the alert primitive, whose `sp-alert` family `src/styles/components.css` declares with the other
+ * primitives, and no class is restated here for it.
  *
  * The line chart itself is not drawn here. `src/components/charts/LineChart.tsx` owns the frame, the grid,
  * the axis ticks, the point marks, the pointer and keyboard readout, the text-and-swatch legend, the paired
@@ -43,10 +46,10 @@ import { formatDateRange } from "@/utils/dates";
  * graphic is named with the same words through the chart's own `ariaLabel`. The sentence naming the period
  * moves into the chart's header row, beside the controls, exactly where the sheet places it.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` holds no wording for the bucket control — a label
+ * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content-reports.ts` holds no wording for the bucket control — a label
  * such as "Grouping" — so its accessible name is composed from the labels of the granularity choices the
  * vocabulary module already words, and the choices it offers are that module's `GRANULARITY_OPTIONS`. One
- * added key in content.ts is all this control needs to read as a sentence.
+ * added key in content-reports.ts is all this control needs to read as a sentence.
  */
 
 /** Every class this file puts on the page, each taken by name from the sheet that declares it. */
@@ -233,8 +236,12 @@ function ChartControls({
  * back through `onBucketChange` and `onGroupByChange` and renders nothing of its own in between.
  *
  * `baselineLabel`, `from` and `to` are the context the sentence under the heading is built from, and each is
- * optional: a page that states neither still gets a chart, with no sentence. There is deliberately no error
- * prop, because the page owns the single error surface for the range it asked for.
+ * optional: a page that states neither still gets a chart, with no sentence.
+ *
+ * The revenue read's failure is handed in rather than decided here, because §0.6.4's four states belong to the
+ * surface that owns the query: this chart renders the failure in its own frame, directly under the heading row
+ * and the two controls, so the bucket or the split can still be changed while the failure is on screen and the
+ * alert's retry re-runs that one read.
  */
 export interface SalesChartProps {
   /** The revenue series to plot, exactly as the page read them: one per category or one per channel. */
@@ -264,6 +271,19 @@ export interface SalesChartProps {
    *  the two controls stay reachable, so the bucket can be changed without leaving the page. Defaults to
    *  false. */
   readonly isLoading?: boolean;
+  /**
+   * The failure the page's own revenue read reported, or `null` when it answered. While a failure is handed in
+   * the frame states it in place of the plot, under the same heading row and beside the same two controls, so
+   * the chart keeps its place on the dashboard and the bucket or the split remains a way to ask again. A
+   * failure takes precedence over `isLoading`, because a read that did not answer is not still in flight.
+   */
+  readonly error?: ApiError | null;
+  /**
+   * Called when the reader asks for the series again: the page's `reload` for the read behind this chart, so
+   * the retry re-runs that one request and no other. It renders no control of its own, being the alert's action
+   * alone, and is passed through untouched.
+   */
+  readonly onRetry?: () => void;
 }
 
 /**
@@ -281,10 +301,12 @@ export interface SalesChartProps {
  * A period with no revenue is the chart's own empty state, in its own fixed-height frame, and the paired data
  * table beneath the plot is what keeps every figure readable without colour or geometry. While the page is
  * still reading, the frame holds a skeleton instead: the heading and both controls are already rendered, so a
- * reader can change the bucket or the split while the request is in flight.
+ * reader can change the bucket or the split while the request is in flight. A read the page could not answer
+ * takes that same frame, with the same heading row and the same live controls above it, and states the failure
+ * with its retry, so the chart is one surface of the dashboard failing rather than the dashboard.
  *
  * @param props - The series, the two query values with their callbacks, the period and comparison wording,
- *   the heading and its level, and the loading flag.
+ *   the heading and its level, the loading flag, and the failure with its retry.
  * @returns The chart block: an optional heading, the sentence, and the chart with its controls.
  */
 export function SalesChart({
@@ -299,11 +321,14 @@ export function SalesChart({
   title,
   headingLevel = DEFAULT_HEADING_LEVEL,
   isLoading = false,
+  error,
+  onRetry,
 }: SalesChartProps): ReactElement {
   const headingId = useId();
   const Heading = HEADING_ELEMENTS[headingLevel];
   const hasTitle = hasCopy(title);
   const description = describePeriod(from, to, baselineLabel);
+  const failure = error ?? null;
 
   // The period the series cover, when the page states one: it is what the bucket wording qualifies a clipped
   // band by, and it is built from the two props so the formatter below stays stable while they hold still.
@@ -337,23 +362,35 @@ export function SalesChart({
         </Heading>
       ) : null}
 
-      {isLoading ? (
+      {isLoading || failure !== null ? (
         <div className={CLASSES.chart}>
           <div className={CLASSES.header}>
             {description === undefined ? null : <p>{description}</p>}
             <div className={CLASSES.controls}>{controls}</div>
           </div>
-          <div className={CLASSES.frame} aria-busy="true">
-            <Skeleton variant="block" height={CHART_SKELETON_HEIGHT} />
+          <div className={CLASSES.frame} aria-busy={failure === null ? "true" : undefined}>
+            {failure === null ? (
+              <Skeleton variant="block" height={CHART_SKELETON_HEIGHT} />
+            ) : (
+              <Alert
+                actionLabel={COMMON_ACTIONS.RETRY}
+                error={failure}
+                onAction={onRetry}
+                tone="danger"
+              />
+            )}
           </div>
         </div>
       ) : (
+        /* The paired table's rows are the buckets the series are cut into — reporting periods and never
+         * products — so the pager beneath it counts periods, which is what the chart is over. */
         <LineChart
           series={series}
           description={description}
           actions={controls}
           ariaLabel={title}
           formatLabel={formatLabel}
+          countNoun={PAGING_NOUNS.PERIODS}
         />
       )}
     </section>

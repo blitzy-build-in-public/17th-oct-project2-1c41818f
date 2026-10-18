@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/LoginPage.tsx
  * Purpose: Sign-in form with inline validation and return-path preservation
- * Lines: 376
+ * Lines: 387
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -25,6 +25,7 @@ import { RETURN_TO_QUERY_KEY, ROUTES, canReachPath, registerPath } from "@/const
 import { authErrorMessage, roleHomePath, toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
 import type { Credentials } from "@/types/account";
 import type { ApiError, FieldErrors, SessionToken } from "@/types/common";
@@ -161,6 +162,11 @@ export function LoginPage(): ReactElement {
   /** The token this page's own submission obtained, which is what tells its sign-in from a restored one. */
   const [obtainedToken, setObtainedToken] = useState<SessionToken | null>(null);
 
+  /** The region the refusal is stated in and the form it was raised from: what a refused submission hands the
+   *  keyboard to, whether the store named a control or answered with the one sentence it words for a stranger. */
+  const alertRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+
   const returnTo = intendedPath(searchParams.get(RETURN_TO_QUERY_KEY));
   // An action reports itself through the same status as the mount revalidation, so the submitting flag is
   // what keeps a submission from replacing the form the visitor is filling in with its own placeholder.
@@ -259,11 +265,16 @@ export function LoginPage(): ReactElement {
 
   const formMessage = errors[FORM_ERROR_KEY];
 
+  // A refused sign-in is answered with the alert where the store named no control, and otherwise on the first
+  // control it did name: the move is the same one every other refusal makes, through the shared hook.
+  useRefusalFocus(hasErrors(errors) || failure !== null, alertRef, formRef);
+
   const renderForm = (): ReactElement => (
     <>
       <form
         className="sp-auth__form"
         noValidate
+        ref={formRef}
         onSubmit={(event: FormEvent<HTMLFormElement>): void => {
           // Enter in either field submits through the form, so the keyboard path and the button run the
           // same handler; the browser's own validation stays off, because the rule is the library's.
@@ -272,7 +283,7 @@ export function LoginPage(): ReactElement {
         }}
       >
         {failure === null || formMessage === undefined ? null : (
-          <div className="sp-auth__alert">
+          <div className="sp-auth__alert" ref={alertRef} tabIndex={-1}>
             <Alert tone="danger">{authErrorMessage(failure)}</Alert>
           </div>
         )}

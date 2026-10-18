@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/charts.test.tsx
  * Purpose: Scale mathematics, rendered geometry and the data-table alternative
- * Lines: 548
+ * Lines: 596
  */
 
 import { describe, expect, it } from "vitest";
@@ -12,8 +12,17 @@ import { LineChart } from "@/components/charts/LineChart";
 // The subject is imported as a namespace, as pricingService.test.ts does: this file asserts well over a
 // dozen of its exports, and naming them singly cost twenty-two lines of the budget.
 import * as scales from "@/components/charts/chartScales";
-import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
-import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
+import { CHART_SERIES_TOKEN_REFERENCES, PAGE_SIZE_OPTIONS } from "@/constants/config";
+import {
+  CHART_COLUMN_LABELS,
+  EMPTY_STATES,
+  PAGING_NOUNS,
+  chartDataTableCaption,
+  pageAnnouncement,
+  pagingCountLabel,
+} from "@/constants/content";
+import type { PagingNoun } from "@/constants/content";
+import { addDays } from "@/utils/dates";
 import { formatMoney, formatMoneyCompact, formatShare } from "@/utils/format";
 
 import { makeChartSeries } from "../fixtures";
@@ -73,6 +82,19 @@ function oneBandSeries(id: string, label: string, token: number, value: MinorUni
     points: [point(BAND_ONE, value)],
   });
 }
+
+/** One more band than a paired table fits on one page, counted from the configured sizes the table counts
+ *  by, so the paging cases below page it without restating a page size. */
+const PAGED_BAND_COUNT = Math.max(...PAGE_SIZE_OPTIONS) + 1;
+const PAGED_PAGE_COUNT = 2;
+const PAGED_BANDS: readonly string[] = Array.from({ length: PAGED_BAND_COUNT }, (_unused, index) =>
+  addDays(BAND_ONE, index),
+);
+
+/** Those bands as one series: the shape a year-bucketed report hands a chart, at a size needing two pages. */
+const PAGED_SERIES: readonly ChartSeries[] = [
+  makeChartSeries({ id: "net-paged", points: PAGED_BANDS.map((band) => point(band, NET_ONE)) }),
+];
 
 /** A ring of three known slices — 100 + 300 + 1 minor units — that the case reads as one whole. */
 const SLICE_A = oneBandSeries("slice-a", "First slice", 2, 100);
@@ -333,7 +355,9 @@ describe("the chart renderers", () => {
     const legend = screen.getAllByRole("listitem");
     expect(legend).toHaveLength(SERIES.length);
     expect(within(legend[0]).getByText("Net revenue")).toBeInTheDocument();
-    expect(legend[0]).toHaveTextContent(formatMoney(NET_TWO));
+    // The entry states the series' period total, which is the sum of the rows the paired table carries for it
+    // and the same figure the donut's legend states — not the one bucket the series happens to end on.
+    expect(legend[0]).toHaveTextContent(formatMoney(NET_ONE + NET_TWO));
 
     await user.tab();
     const bandOne = screen.getByRole("status").textContent;
@@ -344,6 +368,30 @@ describe("the chart renderers", () => {
     expect(screen.getByRole("status")).toHaveTextContent(DAY_TWO_LABEL);
     await user.hover(svg.querySelectorAll("rect")[0]);
     expect(screen.getByRole("status").textContent).toBe(bandOne);
+  });
+
+  /* The paging control under a chart's paired table counts the rows that table holds, which are the chart's
+   * bands and not products: the surface that drew the chart names the collection, and a caller that names
+   * none keeps the paired table's product default. The sentence is stated in full, so a caption counting
+   * another collection cannot pass by being merely close. */
+  it.each<[string, PagingNoun | undefined, PagingNoun]>([
+    ["a caller's own noun", PAGING_NOUNS.PERIODS, PAGING_NOUNS.PERIODS],
+    ["the paired table's default", undefined, PAGING_NOUNS.PRODUCTS],
+  ])("counts the rows a chart's paired table pages with %s", async (_case, countNoun, counted) => {
+    renderWithProviders(
+      <LineChart series={PAGED_SERIES} title={CHART_TITLE} countNoun={countNoun} />,
+    );
+
+    const pager = await screen.findByRole("navigation", {
+      name: chartDataTableCaption(CHART_TITLE),
+    });
+    const status = within(pager).getByRole("status");
+    expect(status.textContent).toBe(
+      `${pagingCountLabel(PAGED_BAND_COUNT, counted)} ${pageAnnouncement(1, PAGED_PAGE_COUNT)}`,
+    );
+    // And no other collection's noun is counted beside it, which is the announcement this contract closes.
+    const others = Object.values(PAGING_NOUNS).filter((noun) => noun.plural !== counted.plural);
+    expect(others.some((noun) => status.textContent?.includes(noun.plural) ?? false)).toBe(false);
   });
 
   it("writes a large money axis in one notation and keeps the exact figure in the table", async () => {
@@ -480,15 +528,15 @@ describe("the chart renderers", () => {
 
     expect(await screen.findByRole("img", { name: CHART_TITLE })).toBeInTheDocument();
     expect(svg.querySelectorAll("path")).toHaveLength(slices.length);
-    // Every wedge is labelled: the two roomy ones carry their whole-percent share inside the ring, and the
-    // sliver — whose share is below the slice-label minimum — carries its one-decimal share outside it, on the
-    // one leader line its mark reserved. Nothing is dropped for want of room.
+    // Every wedge is labelled outside the ring, on the surface the legend's shares are read on, in the digits
+    // the legend writes, and each figure has the leader joining it back to its own wedge. Nothing is dropped
+    // for want of room, and no figure is painted on a fill too saturated to read it against.
     expect(labelsOf(svg)).toEqual([
-      formatShare(100, SLICE_TOTAL, 0),
-      formatShare(300, SLICE_TOTAL, 0),
+      formatShare(100, SLICE_TOTAL, 1),
+      formatShare(300, SLICE_TOTAL, 1),
       formatShare(1, SLICE_TOTAL, 1),
     ]);
-    expect(svg.querySelectorAll("line.sp-chart__leader")).toHaveLength(1);
+    expect(svg.querySelectorAll("line.sp-chart__leader")).toHaveLength(slices.length);
     expect(screen.getByText(formatMoneyCompact(SLICE_TOTAL))).toBeInTheDocument();
 
     const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });

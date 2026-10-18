@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductList.tsx
  * Purpose: The result grid with its loading, empty and error states
- * Lines: 270
+ * Lines: 280
  */
 
 import type { ReactElement, ReactNode } from "react";
@@ -9,6 +9,7 @@ import type { ReactElement, ReactNode } from "react";
 import { ProductCard } from "@/components/product/ProductCard";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { CATALOG_COPY, COMMON_ACTIONS, EMPTY_STATES, FEEDBACK_COPY } from "@/constants/content";
+import { useQuickAdd } from "@/state/CartContext";
 import type { Product } from "@/types/catalog";
 import type { ApiError, AsyncStatus } from "@/types/common";
 
@@ -160,8 +161,10 @@ export interface ProductListProps {
  * produced them and the failure if there was one, and it renders one of four things — a skeleton shaped like
  * the grid while the read is in flight, the recovery block when a successful read matched nothing, an alert
  * carrying the shaped `ApiError` when the read failed, and the tiles themselves when there is something to
- * show. It fetches nothing, runs no effect, reads no context and keeps no state, so a page can drive it from
- * a context, from a hook or from a test without this file knowing which.
+ * show. It fetches nothing, runs no effect and keeps no state, so a page can drive it from a context, from a
+ * hook or from a test without this file knowing which. Its one read is the cart's add, taken through
+ * `useQuickAdd` in `src/state/CartContext.tsx` and handed to each tile, because a tile is shared presentation
+ * and may not read the cart itself.
  *
  * Every figure a tile shows comes from the tile, which resolves its own brand, rating, both prices, its
  * discount and its availability, so no price is formatted and no total is computed here. The tiles are keyed
@@ -190,6 +193,8 @@ export function ProductList({
   layout = "grid",
   className,
 }: ProductListProps): ReactElement {
+  const onAddToCart = useQuickAdd();
+
   // The container is the same element, keeps the same name and keeps the list role in the loading state and
   // the loaded one, so the named list a visitor's screen reader has entered does not change out from under
   // them when the tiles arrive: `aria-busy` is what states that it is filling, and the placeholders inside
@@ -263,7 +268,12 @@ export function ProductList({
       aria-label={CATALOG_COPY.RESULTS_REGION_LABEL}
     >
       {items.map((product) => (
-        <ProductCard key={product.id} product={product} variant={layout} />
+        <ProductCard
+          key={product.id}
+          product={product}
+          onAddToCart={onAddToCart}
+          variant={layout}
+        />
       ))}
     </ul>
   );

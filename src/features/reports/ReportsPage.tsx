@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportsPage.tsx
  * Purpose: The reports route: report selector, range control and the selected report's view
- * Lines: 366
+ * Lines: 361
  */
 
 import { useCallback, useState } from "react";
@@ -13,13 +13,8 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import type { TabItem } from "@/components/ui/Tabs";
-import {
-  COMMON_ACTIONS,
-  FEEDBACK_COPY,
-  PAGE_TITLES,
-  REPORTS_COPY,
-  documentTitle,
-} from "@/constants/content";
+import { COMMON_ACTIONS, FEEDBACK_COPY, PAGE_TITLES, documentTitle } from "@/constants/content";
+import { REPORTS_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
 import { GRANULARITY_OPTIONS, REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { defaultReportQuery, findDefinition, listReportDefinitions } from "@/lib/reportService";
@@ -67,9 +62,9 @@ import { SalesReport } from "./SalesReport";
  * over the vocabulary module's own cut choices; and `Alert`, `EmptyState` and `Skeleton` are the shared states.
  * No colour, radius or shadow literal and no pixel media query is written here.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` words no label for the cut control, so the control
+ * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content-reports.ts` words no label for the cut control, so the control
  * goes by its choices' own words, joined — exactly how the dashboard's bucket control names itself in
- * `src/features/admin/SalesChart.tsx`. One key in content.ts is all that control needs to be labelled.
+ * `src/features/admin/SalesChart.tsx`. One key in content-reports.ts is all that control needs to be labelled.
  *
  * BLITZY [COPY GAP]: the same module words no line for a report's own description, and no sheet declares a
  * class for one, so the definition's sentence is left to the view that already states it — `SalesReport` opens

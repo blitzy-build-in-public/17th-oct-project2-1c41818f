@@ -9,9 +9,9 @@ import type { ReactElement } from "react";
 
 import { Card } from "@/components/ui/Card";
 import { Alert, Skeleton } from "@/components/ui/Feedback";
+import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
 import {
   CART_COPY,
-  CHECKOUT_COPY,
   COMMON_ACTIONS,
   appliedPromoLabel,
   cartItemCountLabel,

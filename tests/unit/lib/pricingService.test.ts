@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/pricingService.test.ts
  * Purpose: Line and order totals, promo kinds and limits, shipping thresholds and tax rounding
- * Lines: 474
+ * Lines: 492
  */
 
 import { describe, expect, it } from "vitest";
@@ -300,6 +300,24 @@ describe("the delivery charge", () => {
     const unnamed = priced([line("Aurora Desk Lamp", 3_000)], undefined, "ship_nope");
     expect(unnamed.shippingMethodId).toBeNull();
     expect(unnamed.shippingMinor).toBe(0);
+  });
+
+  /** The baskets the charge is asked about: at the threshold, below it, and waiving delivery by code. */
+  const atThreshold = [line("Cascade Speaker", THRESHOLD_MINOR)];
+  const under = [line("Cascade Speaker", BELOW_THRESHOLD_MINOR)];
+  const cheap = [line("Aurora Desk Lamp", 3_000)];
+  const freeCode = makePromoCode({ code: "TESTFREE", kind: "free_shipping", minSubtotalMinor: 0 });
+
+  // One row per rule the charge answers to, each basket priced with Express already chosen.
+  it.each<[string, readonly CartLine[], PromoCode | undefined, string, MinorUnits]>([
+    ["waives the configured method above the threshold", atThreshold, undefined, FREE_METHOD_ID, 0],
+    ["charges the stored price", under, undefined, FREE_METHOD_ID, FREE_METHOD_PRICE_MINOR],
+    ["charges another method its stored price", under, undefined, "ship_express", 2_499],
+    ["waives every method for a free-shipping code", cheap, freeCode, "ship_economy", 0],
+  ])("%s", (_label, lines, promo, methodId, expected) => {
+    const cart = priced(lines, promo, "ship_express");
+    expect(pricing.chargeForMethod(cart, methodId)).toBe(expected);
+    expect(pricing.chargeForMethod(cart, "ship_express")).toBe(cart.shippingMinor);
   });
 
   it("reports the shortfall to free delivery, never a negative one", () => {

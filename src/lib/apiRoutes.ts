@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 494
+ * Lines: 486
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -250,37 +250,29 @@ function listOrders(context: RouteContext): Common.Result<unknown> {
   return query.ok ? ok(context.source.listOrders(query.value)) : query;
 }
 
-/**
- * Reads one order.
- *
- * An order that names no account answers the caller presenting the credential minted when it was
- * placed ({@link holdsGuestOrderCredential}), or an administrator; every other caller is refused
- * exactly as a foreign account-owned order is, so a response cannot be read to learn whether an
- * identifier exists. That refusal is the dispatcher's own `sessionProblem` — `401` for a caller that
- * sent no session, and a token naming no live session answers its own code — for a caller whose
- * session cannot be resolved, and the same `404` an identifier no order holds answers for a caller the
- * order does not belong to. A foreign id is therefore `404`, never `403`, and the level admits a
- * session-less caller, which is what a confirmation carrying a placement credential is.
- */
+/** The order an identifier names, decided in the order the answers matter: an identifier no order answers is
+ * `404` before any credential or session is judged, because the session's own refusal would misdirect a
+ * mistyped confirmation address to a sign-in and would let a response be read to learn whether an identifier
+ * exists. An order that names no account is then answered to the caller holding the credential minted when it
+ * was placed ({@link holdsGuestOrderCredential}), which is all a session-less buyer's own confirmation holds,
+ * or to an administrator; every other caller is refused exactly as a foreign account-owned order is — the
+ * dispatcher's own `sessionProblem` for a caller whose session cannot be resolved, and the same `404` an
+ * identifier no order holds answers for a caller the order does not belong to. A foreign id is therefore
+ * `404`, never `403`, and the level admits a session-less caller. */
 function getOrder(context: RouteContext): Common.Result<unknown> {
   const orderId = context.params.id as Common.OrderId;
   const order = context.source.getOrder(orderId);
+  if (order === undefined) return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
   // The placement credential is judged before the session, because it is all a session-less buyer's own
   // confirmation holds; it proves the order was created here and refuses everyone else just as below.
-  if (
-    order !== undefined &&
-    order.customerId === null &&
-    holdsGuestOrderCredential(orderId, context.orderToken)
-  ) {
+  if (order.customerId === null && holdsGuestOrderCredential(orderId, context.orderToken)) {
     return ok(order);
   }
   if (context.sessionProblem !== null) return { ok: false, error: context.sessionProblem };
-  if (order === undefined) return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
   const session = sessionOf(context);
   if (session.role === "admin" || order.customerId === session.customerId) return ok(order);
   return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
 }
-
 function registerCustomer(context: RouteContext): Common.Result<unknown> {
   const input = readRegistration(bodyOf(context));
   const errors = validateRegistration(input);

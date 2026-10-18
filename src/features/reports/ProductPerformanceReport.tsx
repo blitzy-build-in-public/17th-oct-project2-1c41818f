@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ProductPerformanceReport.tsx
  * Purpose: The product-performance report: units, revenue and share by product
- * Lines: 322
+ * Lines: 306
  */
 
 import { useCallback, useMemo } from "react";
@@ -9,7 +9,8 @@ import type { ReactElement } from "react";
 
 import { BarChart } from "@/components/charts/BarChart";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { COMMON_ACTIONS, DATE_RANGE_COPY, EMPTY_STATES, REPORTS_COPY } from "@/constants/content";
+import { COMMON_ACTIONS, EMPTY_STATES } from "@/constants/content";
+import { DATE_RANGE_COPY, REPORTS_COPY, productChartBoundNote } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { ReportTable } from "@/features/reports/ReportTable";
 import { findDefinition, runReport } from "@/lib/reportService";
@@ -40,12 +41,6 @@ import { formatCellValue } from "@/utils/format";
  * `src/components/ui/Tabs.tsx` labels with the report's own name, so the region already carries an accessible
  * name and the first heading inside it is the paired chart's. The empty state's headline takes that same
  * level, so the first heading keeps its level whether the period recorded activity or not.
- *
- * BLITZY [COPY GAP]: `src/constants/content.ts` words the report headings, the empty state and the
- * caveat under the chart, but has no sentence for the bound the chart is drawn to. A ranking runs
- * to every product that sold while an axis draws a handful of bands, so the chart plots the
- * revenue-ordered head and its note says so. The sentence stays here, not in `REPORTS_COPY` where
- * the other reports sentences live, since that library stands over the request's 600-line ceiling.
  */
 
 // The run this view performs ---------------------------------------------------------------------
@@ -102,7 +97,7 @@ const EMPTY_HEADING_LEVEL = 2;
 
 /**
  * What joins the resolved period and the caveat under the chart. Neither half is worded here: the period is
- * `src/utils/dates.ts`'s and the caveat is the content module's.
+ * `src/utils/dates.ts`'s and the caveat is `src/constants/content-reports.ts`'s.
  */
 const SENTENCE_SEPARATOR = ". ";
 
@@ -124,17 +119,6 @@ function describePeriod(from: IsoDateString, to: IsoDateString): string {
   return period === ""
     ? DATE_RANGE_COPY.LOCAL_TIME_NOTE
     : [period, DATE_RANGE_COPY.LOCAL_TIME_NOTE].join(SENTENCE_SEPARATOR);
-}
-
-/**
- * The note beneath the chart stating the bound it plots to, so the leading products are not read as the whole
- * ranking. See the copy gap noted above the constants.
- *
- * @param limit - How many products the chart plots.
- * @returns The note.
- */
-function chartBoundNote(limit: number): string {
-  return `The chart plots the ${String(limit)} products with the highest revenue; the table below lists every product that sold.`;
 }
 
 /**
@@ -304,7 +288,7 @@ export function ProductPerformanceReport({
         description={describePeriod(data.from, data.to)}
         orientation="horizontal"
         labelHeader={DEFINITION.columns[0].label}
-        footer={chartBoundNote(CHART_PRODUCT_LIMIT)}
+        footer={productChartBoundNote(CHART_PRODUCT_LIMIT)}
       />
 
       {/* The table and its export, built from the run the chart was built from: the same definition, the same

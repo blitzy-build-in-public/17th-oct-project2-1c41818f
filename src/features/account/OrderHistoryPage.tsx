@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 594
+ * Lines: 568
  */
 
 import { useCallback, useId, useState } from "react";
@@ -10,24 +10,25 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { OrderStatusBadge } from "@/components/ui/Card";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { usePagination } from "@/components/ui/hooks";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { DataTable } from "@/components/ui/Table";
 import type { DataTableColumn, DataTablePaging } from "@/components/ui/Table";
+import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
 import { DEFAULT_PAGE_SIZE, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
 import {
   ACCOUNT_COPY,
   CART_COPY,
-  CHECKOUT_COPY,
   COMMON_ACTIONS,
-  DATE_RANGE_COPY,
   FEEDBACK_COPY,
   PAGE_TITLES,
   PAGING_NOUNS,
+  PAYMENT_METHOD_LABELS,
   VALIDATION_MESSAGES,
   documentTitle,
-  rangeTooLongMessage,
 } from "@/constants/content";
+import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import { ROUTE_PARAMS, ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
 import { ORDER_STATUS_OPTIONS } from "@/constants/taxonomy";
 // The seam's own reading of a failure, so neither mode decides what a status or a sentence means: whether a
@@ -38,13 +39,12 @@ import { getOrder, listOrders } from "@/lib/orderService";
 // tell a visitor whose session has not survived why it has nothing to show. `src/state/AuthContext.tsx`
 // is the product's single home for it, and the account area's sibling views read it the same way.
 import { useAuth } from "@/state/AuthContext";
-import { useAsync, useDocumentTitle, usePagination } from "@/state/hooks";
+import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type {
   Order,
   OrderHistoryQuery,
   OrderLine,
   OrderStatus,
-  PaymentMethod,
   PaymentSummary,
 } from "@/types/commerce";
 import type { CurrencyCode, OrderId, PageResult, Result } from "@/types/common";
@@ -71,40 +71,14 @@ import { formatMoney, formatQuantity } from "@/utils/format";
  *
  * Both account order routes render here, because the slice spends three view files on four routes: the
  * history and one order, branched once on the order segment, sharing this module's helpers and formatting.
- *
- * BLITZY [COPY GAP]: `src/constants/content.ts` holds no wording for the status filter's unfiltered choice,
- * the billing address's heading, the last-updated label, the word each payment method reads as, or what an
- * empty history says when filters rather than the account are why nothing is listed; those five are held
- * here until a plan amendment adds them to `ACCOUNT_COPY`.
  */
 
 // The screen's own vocabulary
-
-/** The status filter's unfiltered choice, and so how a chosen status is cleared. */
-const ANY_STATUS_LABEL = "All statuses";
-
-/** The billing block's heading; the shipping block is labelled by the account vocabulary's own. */
-const BILLING_ADDRESS_LABEL = "Billing address";
-
-/** The label beside the timestamp the order was last written at. */
-const UPDATED_LABEL = "Last updated";
-
-/** What each payment method reads as when the order carries no card to name — see the copy gap. */
-const PAYMENT_METHOD_LABELS: Readonly<Record<PaymentMethod, string>> = {
-  card: "Card",
-  invoice: "Invoice",
-};
 
 /** The masked head of a card's tail, and the signs between a line's figures and the header's timestamps. */
 const CARD_TAIL_MASK = "•••• ";
 const QUANTITY_PRICE_SEPARATOR = " × ";
 const STAMP_SEPARATOR = " · ";
-
-/** What an empty history says when the filters, not the account, are why nothing is listed. */
-const NO_MATCHING_ORDERS = {
-  TITLE: "No orders match these filters",
-  DESCRIPTION: "Widen the period or choose another status.",
-} as const;
 
 /** The field keys the range rule reports under, which are also the `name` each date control carries, so one
  * error map lands on the control that owns it. No field renders the third, so the alert reads it. */
@@ -346,9 +320,9 @@ function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): 
       return range !== null || statusValue !== "" ? (
         <EmptyState
           actionLabel={COMMON_ACTIONS.CLEAR_ALL}
-          description={NO_MATCHING_ORDERS.DESCRIPTION}
+          description={ACCOUNT_COPY.ORDERS_NO_MATCH_DESCRIPTION}
           onAction={clearFilters}
-          title={NO_MATCHING_ORDERS.TITLE}
+          title={ACCOUNT_COPY.ORDERS_NO_MATCH_TITLE}
         />
       ) : (
         <EmptyState
@@ -380,7 +354,7 @@ function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): 
           label={ACCOUNT_COPY.ORDERS_STATUS_FILTER_LABEL}
           onChange={changeFilter(setStatusValue)}
           options={ORDER_STATUS_OPTIONS}
-          placeholder={ANY_STATUS_LABEL}
+          placeholder={ACCOUNT_COPY.ORDERS_STATUS_ANY_LABEL}
           value={statusValue}
         />
         <Input
@@ -483,7 +457,7 @@ function OrderDetail({
         <p className="sp-summary__note">
           {`${CHECKOUT_COPY.CONFIRMATION_PLACED_DATE_LABEL} ${formatDate(order.placedAt)}`}
           {STAMP_SEPARATOR}
-          {`${UPDATED_LABEL} ${formatDateTime(order.updatedAt)}`}
+          {`${ACCOUNT_COPY.ORDER_DETAIL_UPDATED_LABEL} ${formatDateTime(order.updatedAt)}`}
         </p>
         <Link to={ROUTES.ACCOUNT_ORDERS}>{ACCOUNT_COPY.ORDER_DETAIL_BACK_LABEL}</Link>
       </div>
@@ -532,7 +506,7 @@ function OrderDetail({
           <AddressBlock address={order.shippingAddress} />
         </section>
         <section className="sp-stack">
-          <h3>{BILLING_ADDRESS_LABEL}</h3>
+          <h3>{ACCOUNT_COPY.ORDER_DETAIL_BILLING_ADDRESS_HEADING}</h3>
           <AddressBlock address={order.billingAddress} />
         </section>
       </div>

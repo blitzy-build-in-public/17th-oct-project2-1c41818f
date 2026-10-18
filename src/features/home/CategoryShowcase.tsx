@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/CategoryShowcase.tsx
  * Purpose: Category tiles with product counts that link into the filtered catalogue
- * Lines: 232
+ * Lines: 233
  */
 
 import type { ReactElement } from "react";
@@ -18,11 +18,12 @@ import type { AsyncStatus, ApiError } from "@/types/common";
  *
  * No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every class
  * below is consumed by name. `src/styles/catalog-landing.css` owns the band: `sp-category-showcase` for the
- * section's own rhythm, `sp-category-tiles` for the grid that draws two columns on a phone, three from
- * --breakpoint-sm and four from --breakpoint-md, and the tile's `sp-category-tile` with its `__name` and
- * `__count` regions. `src/styles/data-display.css` owns the frame the tile borrows: `sp-card` paints the
- * surface, the border, the radius and the elevation, and `sp-card--interactive` adds the pointer cursor and
- * the hover and focus-within emphasis.
+ * section's own rhythm, `sp-category-showcase__subtitle` for the supporting line under its heading, which is
+ * the muted register the same role takes on every other surface, `sp-category-tiles` for the grid that draws
+ * two columns on a phone, three from --breakpoint-sm and four from --breakpoint-md, and the tile's
+ * `sp-category-tile` with its `__name` and `__count` regions. `src/styles/data-display.css` owns the frame the
+ * tile borrows: `sp-card` paints the surface, the border, the radius and the elevation, and
+ * `sp-card--interactive` adds the pointer cursor and the hover and focus-within emphasis.
  *
  * That sheet states the markup it expects — the tile is a link that takes the card's frame in markup — so
  * the tile is a `Link` wearing both families rather than a `Card` with a link inside it: `Card` declares no
@@ -225,7 +226,7 @@ export function CategoryShowcase({
       aria-busy={isReading}
     >
       <h2 id={SHOWCASE_HEADING_ID}>{HOME_COPY.SHOWCASE_TITLE}</h2>
-      <p>{HOME_COPY.SHOWCASE_SUBTITLE}</p>
+      <p className="sp-category-showcase__subtitle">{HOME_COPY.SHOWCASE_SUBTITLE}</p>
       {band}
     </section>
   );

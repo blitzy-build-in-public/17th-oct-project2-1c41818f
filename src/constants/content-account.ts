@@ -1,10 +1,11 @@
 /**
  * Path: src/constants/content-account.ts
  * Purpose: The account register of the user-facing copy: signing in and registering, the profile, the loyalty labels, the order history and the address book, split out of src/constants/content.ts, which re-exports them
- * Lines: 90
+ * Lines: 101
  */
 
 import type { LoyaltyTier } from "@/types/account";
+import type { PaymentMethod } from "@/types/commerce";
 
 /*
  * A §0.5.5 split of `src/constants/content.ts`. The account register is one concern: the copy the sign-in page,
@@ -45,7 +46,10 @@ export const ACCOUNT_COPY = {
   PROFILE_MEMBER_SINCE_LABEL: "Member since",
   ORDERS_HEADING: "Order history",
   ORDERS_STATUS_FILTER_LABEL: "Filter by status",
+  ORDERS_STATUS_ANY_LABEL: "All statuses",
   ORDERS_DATE_FILTER_LABEL: "Filter by the date the order was placed",
+  ORDERS_NO_MATCH_TITLE: "No orders match these filters",
+  ORDERS_NO_MATCH_DESCRIPTION: "Widen the period or choose another status.",
   ORDERS_COLUMN_ORDER: "Order",
   ORDERS_COLUMN_PLACED: "Placed",
   ORDERS_COLUMN_STATUS: "Status",
@@ -55,8 +59,10 @@ export const ACCOUNT_COPY = {
   ORDER_DETAIL_ITEMS_HEADING: "Items",
   ORDER_DETAIL_TOTALS_HEADING: "Totals",
   ORDER_DETAIL_ADDRESS_HEADING: "Shipping address",
+  ORDER_DETAIL_BILLING_ADDRESS_HEADING: "Billing address",
   ORDER_DETAIL_PAYMENT_HEADING: "Payment",
   ORDER_DETAIL_HISTORY_HEADING: "Status history",
+  ORDER_DETAIL_UPDATED_LABEL: "Last updated",
   ADDRESS_BOOK_HEADING: "Address book",
   ADD_ADDRESS_LABEL: "Add an address",
   DEFAULT_SHIPPING_BADGE: "Default shipping",
@@ -88,3 +94,8 @@ export const removeAddressLabel = (addressLabel: string): string => `Remove ${ad
 /** Lists the seeded demonstration accounts and the password they share. */
 export const demoSignInHint = (adminEmail: string, userEmail: string, password: string): string =>
   `Seeded accounts: ${adminEmail} for the dashboard and ${userEmail} for a customer account, both with the password ${password}.`;
+/** What each payment method reads as when the order carries no card to name. */
+export const PAYMENT_METHOD_LABELS: Readonly<Record<PaymentMethod, string>> = {
+  card: "Card",
+  invoice: "Invoice",
+};

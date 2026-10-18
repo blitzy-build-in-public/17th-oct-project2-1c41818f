@@ -1,22 +1,16 @@
 /**
  * Path: src/components/layout/Header.tsx
  * Purpose: Logo, primary navigation, search entry, cart badge and account menu, compressed below the small breakpoint
- * Lines: 632
+ * Lines: 605
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { FormEvent, ReactElement } from "react";
+import type { FormEvent, ReactElement, ReactNode } from "react";
 import { Link, NavLink, createSearchParams, useLocation, useNavigate } from "react-router-dom";
 
+import { useMediaQuery, useOnClickOutside } from "@/components/ui/hooks";
 import { BREAKPOINTS } from "@/constants/config";
-import {
-  A11Y_COPY,
-  APP_COPY,
-  COMMON_ACTIONS,
-  HEADER_COPY,
-  PAGE_TITLES,
-  cartButtonLabel,
-} from "@/constants/content";
+import { A11Y_COPY, APP_COPY, COMMON_ACTIONS, HEADER_COPY, PAGE_TITLES } from "@/constants/content";
 import {
   CATEGORY_SECTION_PATH,
   ROUTES,
@@ -25,10 +19,6 @@ import {
   registerPath,
 } from "@/constants/routes";
 import type { ActiveDestination, RoutePath } from "@/constants/routes";
-import { useAuth, useAuthDispatch } from "@/state/AuthContext";
-import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
-import { useMediaQuery, useOnClickOutside } from "@/state/hooks";
-import { sumQuantities } from "@/utils/collections";
 
 /*
  * Class contract. Every class rendered below is defined in `src/styles/` and none of it is defined here:
@@ -284,76 +274,55 @@ function returnFocusToTrigger(panel: HTMLElement | null, trigger: HTMLElement | 
 }
 
 /**
- * The header's cart trigger: the button that reports what the basket holds and opens the mini-cart drawer.
- *
- * It is a component of its own for the reason `src/state/CartContext.tsx` splits its contexts. This is the
- * only control in the header that displays the cart, so a change to the lines or a toggle of the drawer must
- * re-render this button's subtree and not the header's: keeping the read here leaves the wordmark, the
- * navigation (rendered twice, in the row and in the mobile panel), the search row and the account menu out
- * of every cart change, which the header they all sit in would otherwise take as its own render.
- *
- * It reads the lines for the count the badge shows and the label announces, and the drawer flag for
- * `aria-expanded` — both of which are facts about the cart, which is why they are read here rather than
- * handed in as props by a header that would then have to read the cart itself. The count is summed during
- * render and stored nowhere: a count kept beside the lines it counts is a second answer to one question.
- * `src/features/cart/cartSelectors.ts` owns the cart's own reading of the lines and is deliberately not
- * imported, because this file sits below the feature layer.
- *
- * @returns The cart button, with its badge whenever the basket holds anything.
+/**
+ * The session facts the header renders, read once by the composition root in `src/App.tsx` and handed down as
+ * one value: the header sits below the state layer and reads no state context, so the four facts the account
+ * menu needs travel together rather than as four props that would have to be kept in step.
  */
-function CartTrigger(): ReactElement {
-  const { lines } = useCart();
-  const isMiniCartOpen = useMiniCartOpen();
-  // The cart's actions are read as the object they are, not destructured: `CartActions` declares its
-  // members with method syntax, and a method taken off its receiver is what the type-aware lint rule
-  // treats as unsafe.
-  const cartActions = useCartDispatch();
+export interface HeaderAccount {
+  /** The account's full name for the menu, or `""` while it is not known. */
+  readonly displayName: string;
+  /** The account's email address for the menu, or `null` while the identity projection is not known. */
+  readonly email: string | null;
+  /** Whether a session worth acting on is held, which is what the account menu branches on. */
+  readonly isAuthenticated: boolean;
+  /** Whether that session is a sales administrator's, which is what offers the back office link. */
+  readonly isAdministrator: boolean;
+}
 
-  // The count is one fact about the lines, so it is read through the shared aggregation helper during
-  // render and stored nowhere: the same reading the cart slice uses, so the badge cannot disagree with the
-  // cart page, the mini-cart or the checkout's summary panel about one basket.
-  const itemCount = sumQuantities(lines);
-
-  return (
-    <button
-      aria-expanded={isMiniCartOpen}
-      aria-haspopup="dialog"
-      aria-label={cartButtonLabel(itemCount)}
-      className="sp-cart-button"
-      onClick={() => {
-        cartActions.toggleMiniCart();
-      }}
-      type="button"
-    >
-      {HEADER_COPY.NAV_CART_LABEL}
-      {/* A real separator text node, not layout: the WCAG 2.5.3 audit compares the accessible name with
-          the element's own text nodes concatenated, and the absolutely positioned badge would otherwise
-          read as "Cart1" beside the name "Cart 1 item". A whitespace-only text run is not rendered by a
-          flex container, so the button looks exactly as it did. */}
-      {itemCount > 0 ? (
-        <>
-          {" "}
-          <span aria-hidden="true" className="sp-cart-badge">
-            {itemCount}
-          </span>
-        </>
-      ) : null}
-    </button>
-  );
+/**
+ * Everything {@link Header} accepts.
+ *
+ * Every one is required, and the shell supplies all of them: the composition root composes the header inside
+ * every provider, so no fact here is ever unknown. A default would be worse — a missing account would hide the
+ * controls a signed-in shopper needs.
+ *
+ * The cart arrives as an element rather than as facts. That control is the only piece of the row that displays
+ * the basket, so it is the cart slice's own component that reads the cart, and it is handed in here so a cart
+ * change or a drawer toggle re-renders that button and not the wordmark, the navigation, the search row and the
+ * account menu beside it — while this file, which sits below the state layer, imports nothing from it.
+ */
+export interface HeaderProps {
+  /** The session the account menu renders; see {@link HeaderAccount}. */
+  readonly account: HeaderAccount;
+  /** Ends the session, once the account menu has closed itself. */
+  readonly onSignOut: () => void;
+  /** The cart trigger the row renders; see {@link HeaderProps} and `src/features/cart/HeaderCartButton.tsx`. */
+  readonly cartTrigger: ReactNode;
 }
 
 /**
  * The site header: the wordmark, the primary navigation, the search entry, the cart and the account.
  *
- * `src/components/layout/AppLayout.tsx` renders it above the routed content on every screen, with no props, so
- * it paints with the rest of the shell on first load: a visitor with no session and an empty cart sees the
- * complete header.
+ * `src/components/layout/AppLayout.tsx` renders it above the routed content on every screen and hands it the
+ * shell's props, so it paints with the rest of the shell on first load: a visitor with no session and an empty
+ * cart sees the complete header.
  *
- * What it reads. The session, for the account menu's contents and the administrator link; and the location,
- * for the return path the sign-in links carry and for the key the open panel is compared against. The cart is
- * the one thing in the row this component does not read: the count on the cart button and the state of the
- * mini-cart drawer belong to the private {@link CartTrigger} below, so a cart change or a drawer toggle
- * re-renders that button's subtree rather than this component and everything it holds.
+ * What it reads, and what it is handed. It reads the location, for the return path the sign-in links carry
+ * and for the key the open panel is compared against, and the viewport stop through the shared media-query
+ * hook. The session facts and the cart trigger arrive as props, because the session and the cart belong to
+ * `src/state`, a layer above this one, and this file imports nothing from it: the shell reads the session in
+ * `src/App.tsx` and the cart slice reads the cart in its own trigger component.
  *
  * The two disclosures. The account menu and the mobile navigation are disclosures rather than modals, which is
  * what `src/styles/layout.css` states for the dropdown: the trigger keeps the focus, so there is no trap to
@@ -369,11 +338,12 @@ function CartTrigger(): ReactElement {
  * thing the markup decides there. Both stops are read through the shared media-query hook from the widths
  * `src/constants/config.ts` owns, never from a literal here.
  *
+ * @param props - The session facts, the sign-out, the cart count and the mini-cart disclosure; see
+ *   {@link HeaderProps}.
  * @returns The header landmark, with the mobile navigation panel it can open beneath the row.
  */
-export function Header(): ReactElement {
-  const { displayName, email, isAdministrator, isAuthenticated } = useAuth();
-  const { signOut } = useAuthDispatch();
+export function Header({ account, onSignOut, cartTrigger }: HeaderProps): ReactElement {
+  const { displayName, email, isAdministrator, isAuthenticated } = account;
   const location = useLocation();
 
   const isWideRow = useMediaQuery(`(min-width: ${BREAKPOINTS.MEDIUM}px)`);
@@ -441,11 +411,12 @@ export function Header(): ReactElement {
 
   const handleSignOut = useCallback((): void => {
     closeAccountMenu(false);
-    // The session ends whether or not the store answers, so nothing waits on it here. A page a signed-out
-    // visitor may no longer see is the route guard's business in `src/Router.tsx`, not a redirect of this
-    // file's own, and the authoritative check stays in `src/lib/mockServer.ts`.
-    void signOut();
-  }, [closeAccountMenu, signOut]);
+    // The session ends whether or not the store answers, which is the shell's own decision, and nothing here
+    // waits on it. A page a signed-out visitor may no longer see is the route guard's business in
+    // `src/Router.tsx`, not a redirect of this file's own, and the authoritative check stays in
+    // `src/lib/mockServer.ts`.
+    onSignOut();
+  }, [closeAccountMenu, onSignOut]);
 
   const handleMobileOutside = useCallback(
     (event: MouseEvent | TouchEvent): void => {
@@ -540,9 +511,11 @@ export function Header(): ReactElement {
             ) : null
           }
 
-          {/* The cart read is the trigger's own, so a cart change or a drawer toggle re-renders this button
-              and not the row it sits in. */}
-          <CartTrigger />
+          {/* The cart read belongs to the trigger itself, which the shell composes out of the cart slice: a
+              cart change or a drawer toggle re-renders that button and not the row it sits in, and nothing in
+              this file imports the state layer to make it so. */}
+          {cartTrigger}
+
           <div className="sp-account-menu" ref={accountRegionRef}>
             <button
               aria-controls={accountPanelId}

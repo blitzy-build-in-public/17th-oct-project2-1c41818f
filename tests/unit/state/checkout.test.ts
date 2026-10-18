@@ -1,11 +1,13 @@
 /**
  * Path: tests/unit/state/checkout.test.ts
  * Purpose: Checkout transitions: the step machine, value and error patches, and the submission guards
- * Lines: 257
+ * Lines: 326
  */
 
 import { describe, expect, it } from "vitest";
 
+import { DEMO_CARD_NUMBERS } from "@/constants/config";
+import { API_ERROR_CODES } from "@/lib/apiContract";
 import { cartActions, cartReducer, createInitialCartState } from "@/state/cartReducer";
 import {
   CHECKOUT_FORM_STEPS,
@@ -19,6 +21,7 @@ import {
   previousStep,
   stepIndex,
 } from "@/state/checkoutReducer";
+import { FORM_ERROR_KEY, fieldErrorsFromApiError } from "@/utils/validation";
 import {
   FIXED_NOW,
   makeApiError,
@@ -233,6 +236,72 @@ describe("checkout submission", () => {
     expect(failed.idempotencyKey).toBe("idem-1");
     // The retry is accepted again, and it sends the same key so a placed order cannot double.
     expect(startSubmission(failed)).toMatchObject({ submitting: true, error: null });
+  });
+
+  it("withdraws the submission's refusal on the shopper's next move, and not before", () => {
+    // The fieldless failure the seam answers a declined card with, filed the way the checkout context
+    // files it: `fieldErrorsFromApiError` lands its message under the form key, which is where a step
+    // reads the words it shows above its fields.
+    const declined = makeApiError({ status: 402, code: API_ERROR_CODES.PAYMENT_DECLINED });
+    const failed = checkoutReducer(
+      startSubmission(REVIEWING_CHECKOUT),
+      checkoutActions.submitFailed(declined, fieldErrorsFromApiError(declined)),
+    );
+    expect(failed).toMatchObject({ status: "error", error: declined });
+    expect(failed.errors[FORM_ERROR_KEY]).toBe(declined.message);
+
+    // The refusal stands until the shopper moves: it is what the step they are standing on reports, and
+    // every move after it answers the attempt that refusal already settled — a patch to any group of
+    // values, and a return to an earlier step alike.
+    const addressed = checkoutReducer(failed, editShipping({ city: "Portland" }));
+    expect(addressed.status).toBe("idle");
+    expect(addressed.error).toBeNull();
+    expect(addressed.errors[FORM_ERROR_KEY]).toBeUndefined();
+    expect(addressed.values.shipping.city).toBe("Portland");
+
+    const returned = checkoutReducer(failed, checkoutActions.setStep("shipping"));
+    expect(returned).toMatchObject({ step: "shipping", status: "idle", error: null });
+    expect(returned.errors[FORM_ERROR_KEY]).toBeUndefined();
+
+    // A corrected card member is the retry the seam decides again, so the patch carries the values and
+    // leaves the message it filed and the failure behind, disturbing no other group.
+    const corrected = checkoutReducer(
+      failed,
+      checkoutActions.updateValues({ payment: { number: DEMO_CARD_NUMBERS.APPROVED } }),
+    );
+    expect(corrected.errors).toEqual({});
+    expect(corrected.error).toBeNull();
+    expect(corrected.values.payment.number).toBe(DEMO_CARD_NUMBERS.APPROVED);
+    expect(corrected.values.shipping).toBe(failed.values.shipping);
+  });
+
+  it("keeps the complaint a failure named against one control when the values move on", () => {
+    // A refusal naming a control is not the flow's own refusal: the message states what is wrong with
+    // that field's value, so a patch elsewhere on the form must not take it off the screen — only the
+    // failure it came with leaves, and the field's own patch clears the field's own message.
+    const named = checkoutReducer(
+      startSubmission(REVIEWING_CHECKOUT),
+      checkoutActions.submitFailed(
+        makeApiError({
+          status: 422,
+          code: API_ERROR_CODES.VALIDATION_FAILED,
+          field: "number",
+        }),
+      ),
+    );
+    expect(named.errors["number"]).toBe(named.error?.message);
+
+    const movedOn = checkoutReducer(named, editShipping({ city: "Portland" }));
+    expect(movedOn.error).toBeNull();
+    expect(movedOn.errors[FORM_ERROR_KEY]).toBeUndefined();
+    expect(movedOn.errors["number"]).toBe(named.error?.message);
+
+    const fixed = checkoutReducer(
+      movedOn,
+      checkoutActions.updateValues({ payment: { number: DEMO_CARD_NUMBERS.APPROVED } }),
+    );
+    expect(fixed.errors).toEqual({});
+    expect(fixed.status).toBe("idle");
   });
 
   it("leaves an emptied cart to the cart reducer, which the checkout dispatches on success", () => {

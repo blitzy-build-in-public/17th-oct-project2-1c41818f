@@ -1,28 +1,32 @@
 /**
  * Path: src/components/layout/AdminSidebar.tsx
  * Purpose: Administrator navigation that marks the current section
- * Lines: 165
+ * Lines: 183
  */
 
 import type { ReactElement } from "react";
 import { Link, NavLink } from "react-router-dom";
 
-import { ADMIN_COPY, HEADER_COPY, PAGE_TITLES } from "@/constants/content";
+import { HEADER_COPY, PAGE_TITLES } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
 import type { RoutePath } from "@/constants/routes";
 
 /*
  * Class contract. `src/styles/layout.css` is the sole definition site of the sidebar skeleton
  * (`sp-sidebar`) and of its `__title`, `__nav`, `__list`, `__item`, `__link`, `__icon`, `__label`
- * and `__return` parts, together with the rail the sidebar collapses to below the medium
- * breakpoint. That rail hides `sp-sidebar__label` with the visually-hidden technique
- * `src/styles/base.css` declares as `.sp-visually-hidden`, never with `display: none`, so an
- * administrator who cannot see the glyph still hears the destination's name. Nothing here imports
- * a stylesheet — only `src/main.tsx` imports `src/styles/**` — and no breakpoint appears here,
- * because the collapse belongs to the stylesheet that owns the layout.
+ * and `__return` parts, together with the rail the sidebar is at every width below the large stop.
+ * That rail hides `sp-sidebar__label` — and the section title beside it — with the visually-hidden
+ * technique `src/styles/base.css` declares as `.sp-visually-hidden`, never with `display: none`, so
+ * an administrator who cannot see the glyph still hears the destination's name, and the `title`
+ * each link carries names it to a pointer. From the large stop the stylesheet reveals those same
+ * elements in place as the labelled column, so this component renders one copy of the navigation
+ * and no second one hangs off the document. Nothing here imports a stylesheet — only `src/main.tsx`
+ * imports `src/styles/**` — and no breakpoint appears here, because the rail belongs to the
+ * stylesheet that owns the layout.
  */
 
-/** Names the heading that labels this landmark's navigation, so the words are written once. */
+/** Names the line that labels this landmark and its navigation, so the words are written once. */
 const ADMIN_SIDEBAR_HEADING_ID = "admin-sidebar-heading";
 
 /**
@@ -117,7 +121,7 @@ function AdminLinkBody({
 }
 
 /**
- * The administrator navigation: the section's title and the surfaces inside it.
+ * The administrator navigation: the section's name and the surfaces inside it.
  *
  * `src/components/layout/AppLayout.tsx` renders it, with no props, in the branch that decides this
  * sidebar belongs on the page; everything it shows therefore comes from the constants above. It
@@ -128,6 +132,16 @@ function AdminLinkBody({
  * `/admin/reports` and sends everybody else to sign-in, and `src/lib/mockServer.ts` refuses the
  * analytics a non-administrator asks for. A check repeated in a navigation component would be a
  * guard that hiding a link could defeat, so this file performs none.
+ *
+ * The section's name is a paragraph rather than a heading, and it is the landmark's accessible name.
+ * The shell renders this complement ahead of the page's own `h1`, so a heading here would open the
+ * document outline at level 2 with nothing above it and would name a different page than the one the
+ * `h1` heads; as a paragraph the same words still name the landmark through `aria-labelledby` and the
+ * navigation inside it, and the stylesheet gives them the same treatment either way.
+ *
+ * Every link also carries its destination's name as the browser's own `title`, so the rail's glyph —
+ * whose label the stylesheet keeps visually hidden — is identifiable by pointing at it. The words are
+ * the label the link already renders, so no second name is written for the same destination.
  *
  * Marking the current section is `NavLink`'s: it applies `aria-current="page"` to the active link,
  * and `src/styles/components.css` and `src/styles/layout.css` style the current item from that
@@ -142,22 +156,26 @@ function AdminLinkBody({
  */
 export function AdminSidebar(): ReactElement {
   return (
-    <aside className="sp-sidebar">
-      <h2 className="sp-sidebar__title" id={ADMIN_SIDEBAR_HEADING_ID}>
+    <aside aria-labelledby={ADMIN_SIDEBAR_HEADING_ID} className="sp-sidebar">
+      <p className="sp-sidebar__title" id={ADMIN_SIDEBAR_HEADING_ID}>
         {ADMIN_COPY.HEADING}
-      </h2>
+      </p>
       <nav aria-labelledby={ADMIN_SIDEBAR_HEADING_ID} className="sp-sidebar__nav">
         <ul className="sp-sidebar__list">
           {ADMIN_NAV_ITEMS.map((item) => (
             <li className="sp-sidebar__item" key={item.to}>
-              <NavLink className="sp-sidebar__link" end={item.end} to={item.to}>
+              <NavLink className="sp-sidebar__link" end={item.end} title={item.label} to={item.to}>
                 <AdminLinkBody icon={item.icon} label={item.label} />
               </NavLink>
             </li>
           ))}
         </ul>
       </nav>
-      <Link className="sp-sidebar__link sp-sidebar__return" to={ROUTES.HOME}>
+      <Link
+        className="sp-sidebar__link sp-sidebar__return"
+        title={HEADER_COPY.NAV_HOME_LABEL}
+        to={ROUTES.HOME}
+      >
         <AdminLinkBody icon="storefront" label={HEADER_COPY.NAV_HOME_LABEL} />
       </Link>
     </aside>

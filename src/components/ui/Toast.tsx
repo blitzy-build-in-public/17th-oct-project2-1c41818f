@@ -1,16 +1,16 @@
 /**
  * Path: src/components/ui/Toast.tsx
  * Purpose: Toast viewport and item with a live region and pausable auto-dismiss
- * Lines: 338
+ * Lines: 337
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import type { ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/Button";
+import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE } from "@/constants/config";
 import { A11Y_COPY, COMMON_ACTIONS } from "@/constants/content";
-import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE, useToast } from "@/state/ToastContext";
-import type { ToastKind, ToastMessage } from "@/state/ToastContext";
+import type { ToastKind, ToastMessage } from "@/types/common";
 
 /*
  * Class contract. `src/styles/data-display.css` — the sheet `src/styles/components.css` loads through
@@ -270,6 +270,17 @@ function ToastItem({ toast, onDismiss }: ToastItemProps): ReactElement {
 
 /** Everything {@link ToastViewport} accepts. */
 export interface ToastViewportProps {
+  /** The queued notifications, oldest first, exactly as the queue holds them. */
+  readonly toasts: readonly ToastMessage[];
+  /**
+   * The queue's `dismiss`, which is how a message leaves.
+   *
+   * It is the composition root that takes it from `useToast()` and passes it on, once: the queue's own
+   * `dismiss` is stable for the life of its provider, and a handle rebuilt on every render would change each
+   * item's handle, where an item re-arms its countdown when the handle it holds changes and would therefore
+   * hand a standing message a fresh full duration each time another one arrived.
+   */
+  readonly onDismiss: (id: number) => void;
   /** Extra classes for the viewport, for a caller that has to place it differently on one screen. */
   readonly className?: string;
   /** How many messages may stand on screen at once, up to the queue's own cap. Defaults to that cap. */
@@ -279,13 +290,14 @@ export interface ToastViewportProps {
 /**
  * Renders the queued notifications, newest last, and drives their countdowns.
  *
- * The queue is the single source of truth and this component holds no copy of it: it reads `toasts` from
- * `useToast()` on every render and renders a view of that array, capped at `maxVisible` messages taken in
- * order. That slice is a read and never a mutation: nothing here is added to or spliced out of the queue, and
- * the only way this component removes anything is by calling the queue's `dismiss`. The queue itself never
- * holds more than `TOAST_MAX_VISIBLE` messages — the provider keeps the newest and lets the oldest go as each
- * one arrives — so `maxVisible` narrows what the queue already carries rather than revealing a backlog
- * waiting behind it.
+ * The queue is the single source of truth and this component holds no copy of it: it renders a view of the
+ * `toasts` it is handed, capped at `maxVisible` messages taken in order, and the only way it removes anything
+ * is by calling the `onDismiss` it is handed with a message's id. That slice is a read and never a mutation:
+ * nothing here is added to or spliced out of the queue. Both come from the composition root in `src/App.tsx`,
+ * which reads them inside the providers — this file sits below the state layer and imports nothing from it,
+ * which is why the queue arrives as a prop rather than through a hook. The queue itself never holds more than
+ * `TOAST_MAX_VISIBLE` messages — the provider keeps the newest and lets the oldest go as each one arrives — so
+ * `maxVisible` narrows what the queue already carries rather than revealing a backlog waiting behind it.
  *
  * It is mounted once, by `src/App.tsx`, outside the routed content, so a notification survives a route
  * change. With an empty queue it renders nothing at all rather than an empty landmark, and while it holds
@@ -295,30 +307,17 @@ export interface ToastViewportProps {
  * The container is a named `region` and deliberately not a live region: each message carries its own
  * `alert` or `status` role, and an `aria-live` here as well would announce every message twice.
  *
- * @param props - Optional classes, and how many messages may stand on screen at once.
+ * @param props - The queued messages, the queue's dismiss handle, optional classes and how many messages may
+ *   stand on screen at once; see {@link ToastViewportProps}.
  * @returns The viewport, or `null` while the queue is empty.
  */
 export function ToastViewport({
+  toasts,
+  onDismiss,
   className,
   maxVisible = TOAST_MAX_VISIBLE,
 }: ToastViewportProps): ReactElement | null {
-  const toastApi = useToast();
-
-  /*
-   * The queue's dismiss reaches an item through a stable wrapper: a wrapper rebuilt on every render would
-   * change the handle each item holds, and an item re-arms its countdown when its handle changes, so a
-   * second message arriving would hand the first one a fresh full duration. The ref carries the latest queue
-   * into a wrapper whose identity never changes.
-   */
-  const latestApiRef = useRef(toastApi);
-  useEffect(() => {
-    latestApiRef.current = toastApi;
-  }, [toastApi]);
-  const dismissToast = useCallback((id: number): void => {
-    latestApiRef.current.dismiss(id);
-  }, []);
-
-  const visible = toastApi.toasts.slice(0, resolveVisibleCap(maxVisible));
+  const visible = toasts.slice(0, resolveVisibleCap(maxVisible));
 
   if (visible.length === 0) {
     return null;
@@ -331,7 +330,7 @@ export function ToastViewport({
       aria-label={A11Y_COPY.TOAST_REGION_LABEL}
     >
       {visible.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onDismiss={dismissToast} />
+        <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
     </div>
   );

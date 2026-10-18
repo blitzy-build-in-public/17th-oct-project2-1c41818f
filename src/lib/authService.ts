@@ -1,10 +1,11 @@
 /**
  * Path: src/lib/authService.ts
  * Purpose: Registration, sign-in, sign-out, session restore and role checks for the demonstration account store
- * Lines: 359
+ * Lines: 361
  */
 
-import { ACCOUNT_COPY, ADMIN_COPY, FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
+import { ACCOUNT_COPY, FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
 import type {
   Credentials,
@@ -144,9 +145,9 @@ export function isAdministrator(session: Session | undefined): boolean {
  * unauthenticated`, which a screen reads as "sign in first" and handles by sending the visitor to the
  * sign-in screen with the intended path preserved. With a session whose role is not enough the answer
  * is `403 forbidden`, which a screen reads as "not this account" and handles by stating the refusal
- * rather than showing a sign-in form that would not help. Both sentences come from
- * `src/constants/content.ts`, and they are the ones the seam answers the same conditions with, so a
- * guard and an endpoint never word one refusal two ways.
+ * rather than showing a sign-in form that would not help. Both sentences come from the copy modules,
+ * `src/constants/content.ts` and `src/constants/content-reports.ts`, and they are the ones the seam answers
+ * the same conditions with, so a guard and an endpoint never word one refusal two ways.
  *
  * Expiry is deliberately not judged here: this function holds no clock, and the authority on whether a
  * token is still accepted is the seam that issued it, which {@link restoreSession} asks. A screen that
@@ -204,8 +205,9 @@ export function roleHomePath(role: Role): string {
 // Wording an authentication failure ---------------------------------------------------------------
 
 /**
- * The canonical sentence for each code whose wording this module owns, read from
- * `src/constants/content.ts` so no user-facing sentence is written twice.
+ * The canonical sentence for each code whose wording this module owns, read from the copy modules —
+ * `src/constants/content.ts` for the account sentences and `src/constants/content-reports.ts` for the
+ * administrator's — so no user-facing sentence is written twice.
  *
  * One deliberate absence: `validation-failed` has no entry, because its sentence belongs to the field
  * rule that produced it and travels in the failure's own message — a fixed sentence here would replace

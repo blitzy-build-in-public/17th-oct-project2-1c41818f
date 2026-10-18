@@ -512,7 +512,7 @@ export function clampPage(page: number, pageCount: number): number {
  * that exist as {@link clampPage} and {@link pageCountFor} produce them: a next page exists while
  * the current one is before the last, and a previous page exists once it is past the first. This
  * is the rule's only implementation, so the payload {@link paginate} builds and the pagination
- * control hook in `src/state/hooks.ts` cannot answer "is there another page" differently.
+ * control hook in `src/components/ui/hooks.ts` cannot answer "is there another page" differently.
  *
  * @param currentPage - The page being shown, clamped to the pages that exist.
  * @param pageCount - The pages that exist, as {@link pageCountFor} reports them; never below `1`.

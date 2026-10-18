@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog-landing.css
  * Purpose: Styles for the landing page's bands: the hero with its illustration, the promotional banner, the trust strip, the category showcase and the featured strip
- * Lines: 287
+ * Lines: 346
  */
 
 /* The landing surface: the hero band with its drawing, the promotional band, the trust strip, the category
@@ -11,9 +11,10 @@
  * unchanged. It composes the primitives the component sheets own (.sp-btn, .sp-card) and restates none
  * of their rules, and every value is a var() from tokens.css.
  *
- * The hero and trust names are the ones the committed src/features/home/HeroSection.tsx renders — it carries its
- * own __inner rather than layout.css's .sp-container, which is why that container geometry is written here
- * instead. The featured strip's cards take .sp-product-grid--strip from catalog.css, which loads after this sheet.
+ * The hero, trust and promotional names are the ones the committed src/features/home/HeroSection.tsx and
+ * src/features/home/HomePage.tsx render — each of those bands carries its own __inner rather than layout.css's
+ * .sp-container, which is why that container geometry is written here instead. The featured strip's cards take
+ * .sp-product-grid--strip from catalog.css, which loads after this sheet.
  */
 
 /* ==== Hero ====
@@ -47,23 +48,32 @@
   letter-spacing: var(--letter-spacing-wide);
   text-transform: uppercase;
 }
-/* The h1 the page owns takes the display role; tokens.css raises it at --breakpoint-md, so no query is needed. */
+/* The h1 the page owns takes the display role; tokens.css raises it at --breakpoint-md, so no query is needed.
+ * At a scaled-up root font the heading's longest word is wider than the copy's own column, and `break-word`
+ * leaves the heading's min-content size untouched, so the grid sizing the band from that column carries the
+ * hero past the window; `anywhere` counts the break in the min-content size, so the word splits inside the copy. */
 .sp-hero__title {
   font-size: var(--text-display-size);
   font-weight: var(--text-display-weight);
   line-height: var(--text-display-line-height);
   letter-spacing: var(--text-display-tracking);
+  overflow-wrap: anywhere;
 }
 .sp-hero__body {
   color: var(--color-text-muted);
 }
-/* One column on a phone, where each action takes the full row; the row itself arrives at --breakpoint-sm. */
+/* One column on a phone, where each action takes the full row; the row itself arrives at --breakpoint-sm and
+ * wraps once a scaled-up label no longer fits beside its sibling. */
 .sp-hero__actions {
   display: grid;
   gap: var(--space-2);
 }
+/* The label wraps rather than overflowing the band when a single action is wider than the row it sits in: the
+ * button family states the opposite for a control's own line, and a call to action whose text outgrows its
+ * share of a scaled-up viewport is the one case where the break belongs inside it. */
 .sp-hero__action {
   inline-size: 100%;
+  white-space: normal;
 }
 /* The artboard's own ratio, so the band reserves the drawing's height before it paints. */
 .sp-hero__media {
@@ -97,8 +107,11 @@
 }
 @media (min-width: 480px) {
   /* --breakpoint-sm */
+  /* The two actions share one row from this stop. The row wraps, so a label that outgrows its share of the row
+   * moves to the next line instead of setting the width of the band's grid track. */
   .sp-hero__actions {
-    grid-auto-flow: column;
+    display: flex;
+    flex-wrap: wrap;
     justify-content: start;
   }
   .sp-hero__action {
@@ -111,10 +124,10 @@
     padding-block: var(--space-10) var(--space-12);
   }
   /* The media takes the larger share of the row and the copy keeps the prose measure. The copy track's floor
-   * is its own content rather than 0: the action row above is a row of nowrap buttons whose min-content
-   * (about 309px) is wider than the copy's 1fr share at the narrow end of this stop, so a 0 floor lets the
-   * copy's four children overhang the column by the difference. Only the media track keeps a 0 floor, so it
-   * yields that width instead and stays the wider of the two. */
+   * is its own content rather than 0: the eyebrow, the title and the body it holds are what the floor
+   * protects, so a 0 floor would let the track be squeezed below the width those lines need and the copy
+   * would paint them past its own column. Only the media track keeps a 0 floor, so it yields that width
+   * instead and stays the wider of the two. */
   .sp-hero__inner {
     grid-template-columns: minmax(min-content, 1fr) minmax(0, 1.2fr);
     align-items: center;
@@ -123,6 +136,8 @@
 }
 
 /* ==== Promotional band and trust strip ==== */
+/* A full-bleed tinted band like the hero; __inner carries the container geometry, so the tint spans the viewport
+ * while the copy and its controls keep the gutter every other band's content sits in. */
 .sp-promo-banner {
   display: grid;
   gap: var(--space-3);
@@ -131,12 +146,28 @@
   background-color: var(--color-accent-subtle);
   color: var(--color-accent-contrast);
 }
+.sp-promo-banner__inner {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  inline-size: 100%;
+  max-inline-size: var(--layout-container-max);
+  margin-inline: auto;
+  padding-inline: var(--layout-gutter);
+}
 .sp-promo-banner__body {
   max-inline-size: var(--layout-measure);
   font-weight: var(--font-weight-medium);
 }
 .sp-promo-banner__action {
   justify-self: start;
+}
+/* The band's two controls carry the same exemption the hero's own actions carry from the button family's
+ * one-line label: at a scaled-up root font a label wider than the column the band can give it breaks inside
+ * the control instead of fixing the page's minimum width past the viewport. Scoped here and not on the family,
+ * because every other control keeps its label on one line. */
+.sp-promo-banner__action .sp-btn {
+  white-space: normal;
 }
 /* The strip closes the hero band, separated from the copy by a rule rather than by spacing alone. */
 .sp-trust {
@@ -169,10 +200,15 @@
   color: var(--color-accent);
   stroke-width: var(--border-width-thick);
 }
+/* At a scaled-up root font the claim's longest word is the floor its line is held to — one of three tracks at
+ * --breakpoint-md, the whole row below it — and `break-word`, which base.css sets for every text node, leaves
+ * that min-content size untouched, so the line overhangs its own item once the share is narrower than the
+ * word. Only `anywhere` counts the break in the size, so the word splits inside the track instead. */
 .sp-trust__claim {
   color: var(--color-text-muted);
   font-size: var(--text-caption-size);
   letter-spacing: var(--text-caption-tracking);
+  overflow-wrap: anywhere;
 }
 
 /* ==== Category showcase ==== */
@@ -200,15 +236,21 @@
   background-color: var(--color-surface-sunken);
 }
 /* The tile's name is an h3 in markup, so base.css supplies the heading-3 role and this sheet adds nothing to it
- * beyond the colour and the removed underline a link would otherwise take. */
+ * beyond the colour, the removed underline a link would otherwise take and the break below. A tile is one of
+ * two, three or four equal tracks, so at a scaled-up root font a word the track cannot hold breaks inside it
+ * instead of running past the tile and past the viewport. */
 .sp-category-tile__name {
   color: var(--color-text);
   text-decoration-line: none;
+  overflow-wrap: anywhere;
 }
+/* The count breaks for the same reason the name does: it is the tile's second line of text and shares the
+ * track's width. */
 .sp-category-tile__count {
   color: var(--color-text-muted);
   font-size: var(--text-caption-size);
   letter-spacing: var(--text-caption-tracking);
+  overflow-wrap: anywhere;
 }
 /* The subcategory chips under a category heading; the current one is marked by the router's attribute and marks
  * itself with its tint, its border and its weight rather than with hue alone. */
@@ -253,7 +295,7 @@
   .sp-category-tiles {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .sp-promo-banner {
+  .sp-promo-banner__inner {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-6);
@@ -279,9 +321,26 @@
   justify-content: space-between;
   gap: var(--space-3);
 }
+/* The row's action takes the exemption the hero's actions carry: the label is what would otherwise fix the
+ * row's minimum width for the whole section, and a row that already wraps its children lets the control break
+ * its own label once it has a line of its own too narrow to hold the longest word. */
+.sp-featured__header .sp-btn,
+.sp-related__header .sp-btn {
+  white-space: normal;
+}
+/* The supporting sentence under a section heading — the one role the featured strip and the category showcase
+ * share. It takes the muted text register the hero paragraph, a page header's description and a card's own
+ * brand and stock lines already carry, so the role reads the same colour on every surface while the heading
+ * above it stays the one figure at full strength. Only the colour is set: the sentence's size, measure and
+ * rhythm are the section's, and the paragraph carries no frame of its own. */
+.sp-featured__subtitle,
+.sp-category-showcase__subtitle {
+  color: var(--color-text-muted);
+}
 
 /* ==== Responsive summary ====
- * At --breakpoint-sm: the hero's two actions sit inline and the category tiles run three across. At
+ * At --breakpoint-sm: the hero's two actions sit inline on a row that wraps when a label outgrows its share of
+ * it, and the category tiles run three across with their text breaking inside the tile's own track. At
  * --breakpoint-md: the hero becomes two columns with the media taking the larger share, the tiles four across and
  * the promotional band's copy and action share one row.
  */

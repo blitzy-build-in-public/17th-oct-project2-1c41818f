@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutPage.tsx
  * Purpose: The checkout route: step indicator, the current step's view and the order summary panel
- * Lines: 398
+ * Lines: 379
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -9,28 +9,23 @@ import type { ReactElement } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import {
-  CHECKOUT_COPY,
-  PAGE_TITLES,
-  documentTitle,
-  errorSummaryFieldAnchor,
-  stepProgressLabel,
-} from "@/constants/content";
+import { EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { stepProgressLabel } from "@/constants/checkoutCopy";
+import { PAGE_TITLES, documentTitle } from "@/constants/content";
 import { ROUTES, orderConfirmationPath } from "@/constants/routes";
+import { CheckoutErrorSummary } from "@/features/checkout/CheckoutErrorSummary";
 import { CheckoutSteps, checkoutStepCopy } from "@/features/checkout/CheckoutSteps";
 import type { CheckoutFormStep } from "@/features/checkout/CheckoutSteps";
 import { OrderSummaryPanel } from "@/features/checkout/OrderSummaryPanel";
-import { PaymentForm } from "@/features/checkout/PaymentForm";
+import { PaymentForm, paymentFieldLabel } from "@/features/checkout/PaymentForm";
 import { ReviewOrder } from "@/features/checkout/ReviewOrder";
-import { ShippingForm } from "@/features/checkout/ShippingForm";
+import { ShippingForm, shippingFieldLabel } from "@/features/checkout/ShippingForm";
 import { useCart } from "@/state/CartContext";
 import { useCheckout } from "@/state/CheckoutContext";
 import { CHECKOUT_FORM_STEPS } from "@/state/checkoutReducer";
 import type { CheckoutStep } from "@/state/checkoutReducer";
 import { useDocumentTitle } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";
-import type { FieldErrors } from "@/types/common";
 
 /*
  * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
@@ -43,10 +38,11 @@ import type { FieldErrors } from "@/types/common";
  * owns the checkout's register: `sp-checkout` widens that frame's row gap, `sp-checkout__main` narrows the step
  * column and `sp-checkout__aside` is the summary column, sticky below the header from the large stop.
  *
- * The step shell is `sp-step` for the region, with `sp-step__header`, `sp-step__title`, `sp-step__count` and
- * `sp-step__errors` for the heading block and the summary of what is wrong, and `sp-step__body` for the region
- * the current step renders in — the class the shipping and payment forms also carry on their own roots, and
- * the one the sheet dims and closes to the pointer while the shell is `aria-busy`. Each step's action row is
+ * The step shell is `sp-step` for the region, with `sp-step__header`, `sp-step__title` and `sp-step__count`
+ * for the heading block, and `sp-step__body` for the region the current step renders in — the class the
+ * shipping and payment forms also carry on their own roots, and the one the sheet dims and closes to the
+ * pointer while the shell is `aria-busy`. The summary of what is wrong states its own register in
+ * `src/features/checkout/CheckoutErrorSummary.tsx`, which owns that class. Each step's action row is
  * `sp-step__actions`, rendered by that step's own file, and the indicator is `CheckoutSteps`' family.
  *
  * The order summary panel the aside renders is `OrderSummaryPanel.tsx`'s, and that file's own comment holds its
@@ -66,7 +62,6 @@ const CLASSES = {
   stepHeader: "sp-step__header",
   stepTitle: "sp-step__title",
   stepCount: "sp-step__count",
-  stepErrors: "sp-step__errors",
   stepBody: "sp-step__body",
   note: "sp-summary__note",
 } as const;
@@ -145,45 +140,6 @@ function StepPlaceholder(): ReactElement {
   );
 }
 
-/** Everything {@link ErrorSummary} renders from. */
-interface ErrorSummaryProps {
-  /** What is wrong with the flow's values, keyed by the field each message belongs to. */
-  readonly errors: FieldErrors;
-  /** Puts the keyboard on the control a message names; returns whether it found one. */
-  readonly onJumpToField: (field: string) => boolean;
-}
-
-/**
- * What is wrong with the step in hand, stated once above it, each message reaching the control it belongs to.
- *
- * A message is a link to the field it names. The controls carry the `name` the flow's error map keys them by,
- * while the id each one is labelled with is generated inside the field component, so the click moves the
- * keyboard to the control itself and lets the browser follow the fragment only where no control matched.
- *
- * @param props - The error map and the move the messages perform.
- * @returns The summary in the danger register, one message per field.
- */
-function ErrorSummary({ errors, onJumpToField }: ErrorSummaryProps): ReactElement {
-  return (
-    <Alert className={CLASSES.stepErrors} title={CHECKOUT_COPY.ERROR_SUMMARY_HEADING} tone="danger">
-      <ul>
-        {Object.entries(errors).map(([field, message]) => (
-          <li key={field}>
-            <a
-              href={errorSummaryFieldAnchor(field)}
-              onClick={(event) => {
-                if (onJumpToField(field)) event.preventDefault();
-              }}
-            >
-              {message}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </Alert>
-  );
-}
-
 // The route -------------------------------------------------------------------------------------
 
 /**
@@ -214,8 +170,17 @@ function ErrorSummary({ errors, onJumpToField }: ErrorSummaryProps): ReactElemen
  * @returns The checkout route.
  */
 export function CheckoutPage(): ReactElement {
-  const { actions, errors, isSubmitting, order, pricingError, pricingStatus, snapshot, step } =
-    useCheckout();
+  const {
+    actions,
+    errors,
+    isSubmitting,
+    order,
+    pricingError,
+    pricingStatus,
+    refusals,
+    snapshot,
+    step,
+  } = useCheckout();
   const { lines } = useCart();
   const navigate = useNavigate();
 
@@ -346,6 +311,14 @@ export function CheckoutPage(): ReactElement {
   const showsErrorSummary =
     form !== null && form.step !== "review" && Object.keys(errors).length > 0;
 
+  /**
+   * The labels the summary names its entries with, read from the step in hand's own field list: the shipping
+   * step's contact and address controls, or the payment step's five card controls. A message the step's list
+   * answers nothing for is not listed at all, which is what leaves a failure that names no control — a refused
+   * card, held for the flow as a whole — to the one region that reports it.
+   */
+  const summaryFieldLabel = form?.step === "shipping" ? shippingFieldLabel : paymentFieldLabel;
+
   const body = isCartEmpty ? (
     <EmptyState actionHref={ROUTES.CATALOG} surface="cart" />
   ) : (
@@ -369,7 +342,15 @@ export function CheckoutPage(): ReactElement {
               <p className={CLASSES.note}>{form.copy.supporting}</p>
             </div>
           )}
-          {showsErrorSummary ? <ErrorSummary errors={errors} onJumpToField={jumpToField} /> : null}
+          {showsErrorSummary ? (
+            <CheckoutErrorSummary
+              errors={errors}
+              fieldLabel={summaryFieldLabel}
+              onJumpToField={jumpToField}
+              refusals={refusals}
+              stepRef={stepBodyRef}
+            />
+          ) : null}
           <div className={CLASSES.stepBody} ref={stepBodyRef}>
             {stepRegion}
           </div>

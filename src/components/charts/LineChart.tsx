@@ -1,16 +1,18 @@
 /**
  * Path: src/components/charts/LineChart.tsx
  * Purpose: Accessible line and area chart with grid, axis ticks, hover readout and a data-table alternative
- * Lines: 466
+ * Lines: 478
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
 import type { KeyboardEvent, MouseEvent, ReactElement, ReactNode } from "react";
 
+import { ChartDataTable } from "@/components/charts/ChartDataTable";
 import {
   CHART_VIEWBOX_WIDTH,
   DEFAULT_CHART_HEIGHT,
   axisLabelTransform,
+  chartSeriesTotal,
   collectBandKeys,
   defaultLabelFormatter,
   gridLineFor,
@@ -22,17 +24,13 @@ import type {
   LabelFormatter,
   ValueFormatter,
 } from "@/components/charts/chartScales";
-import {
-  READOUT_LIFT,
-  bandCentre,
-  buildPlotModel,
-  finiteValueAt,
-  lastFiniteValue,
-  readoutStyle,
-} from "@/components/charts/lineChartModel";
+import { indexedFiniteValueAt } from "@/components/charts/chartGeometry";
+import { READOUT_LIFT, bandCentre, buildPlotModel } from "@/components/charts/lineChartModel";
+import { readoutPlacement } from "@/components/charts/readoutPlacement";
 import type { Readout } from "@/components/charts/lineChartModel";
 import { EmptyState } from "@/components/ui/Feedback";
 import { APP_COPY, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
+import type { PagingNoun } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
 import { formatMoney, formatMoneyAxis } from "@/utils/format";
 
@@ -110,6 +108,12 @@ export interface LineChartProps {
   readonly ariaLabel?: string;
   /** The headline the no-data state shows, in place of the shared one. */
   readonly emptyMessage?: string;
+  /**
+   * The collection the paired table's paging caption counts, named by the surface that knows what its rows
+   * are: `PAGING_NOUNS.PERIODS` for a chart bucketed into reporting periods, and `PAGING_NOUNS.PRODUCTS` for
+   * one drawn over products. Defaults to the paired table's own default, `PAGING_NOUNS.PRODUCTS`.
+   */
+  readonly countNoun?: PagingNoun;
 }
 
 /** Joins the class names this component composes, leaving out every absent one. */
@@ -187,6 +191,7 @@ export function LineChart({
   formatLabel = defaultLabelFormatter,
   ariaLabel,
   emptyMessage,
+  countNoun,
 }: LineChartProps): ReactElement {
   const tableId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -223,13 +228,17 @@ export function LineChart({
     ],
   );
 
+  // A legend entry states its series' period total — the same figure the donut's legend states for the same
+  // breakdown, and the sum of the rows the paired table carries for it — rather than the single bucket the
+  // series happens to end on, which names no period and cannot be read against the other legends. A series
+  // with no finite point at all states no figure, having nothing to total.
   const legendEntries = useMemo(
     () =>
       series.map((one, index) => ({
         id: one.id,
         label: one.label,
         className: seriesClassName(one.color, index),
-        value: lastFiniteValue(one),
+        value: hasChartData([one]) ? chartSeriesTotal([one]) : undefined,
       })),
     [series],
   );
@@ -245,21 +254,30 @@ export function LineChart({
 
   const readout = useMemo<Readout | null>(() => {
     if (activeKey === undefined) return null;
-    const parts = series.map(
-      (one) => `${one.label} ${formatValue(finiteValueAt(one, activeKey) ?? 0)}`,
+    // One band is resolved across every series here, and the pointer moves the band on every event: the
+    // series are read through the point indexes the model built once, so each figure costs a map hit rather
+    // than a scan of the series' points — the same shape the drawing and the paired table read.
+    const values = model.pointIndexes.map((index) => indexedFiniteValueAt(index, activeKey));
+    const parts = series.map((one, index) => `${one.label} ${formatValue(values[index] ?? 0)}`);
+    const highest = values.reduce<number>(
+      (top, value) => (value === undefined ? top : Math.min(top, model.valueScale.scale(value))),
+      model.plotArea.y + model.plotArea.height,
     );
-    const highest = series.reduce((top, one) => {
-      const value = finiteValueAt(one, activeKey);
-      return value === undefined ? top : Math.min(top, model.valueScale.scale(value));
-    }, model.plotArea.y + model.plotArea.height);
     const text = [formatLabel(activeKey), ...parts].join(READOUT_SEPARATOR);
     return {
       text,
-      style: readoutStyle(
-        bandCentre(model.bandScale, activeKey) / CHART_VIEWBOX_WIDTH,
-        Math.max(highest - READOUT_LIFT, model.plotArea.y) / frameHeight,
-        text.length,
-      ),
+      // The anchor is the band's centre across the drawing and the lift above the highest marker of the band,
+      // both in the drawing's own units: `readoutPlacement` maps them onto the plot box the drawing occupies,
+      // holds the block one inside the plot area and bounds the box it places from there — so a long sentence
+      // wraps inside the plot instead of reaching the axis' gutter or its label row.
+      style: readoutPlacement({
+        anchorX: bandCentre(model.bandScale, activeKey),
+        anchorY: Math.max(highest - READOUT_LIFT, model.plotArea.y),
+        plotArea: model.plotArea,
+        width: CHART_VIEWBOX_WIDTH,
+        height: frameHeight,
+        characters: text.length,
+      }),
     };
   }, [activeKey, series, formatValue, formatLabel, model, frameHeight]);
 
@@ -313,87 +331,97 @@ export function LineChart({
           onBlur={clearActive}
           onMouseLeave={clearActive}
         >
-          <svg
-            className="sp-chart__svg"
-            viewBox={`0 0 ${CHART_VIEWBOX_WIDTH} ${frameHeight}`}
-            role="img"
-            aria-label={chartName}
-            aria-describedby={tableId}
-          >
-            {model.valueTicks.map((tick) => (
-              <line
-                key={`grid-${String(tick.value)}`}
-                className="sp-chart__grid-line"
-                {...gridLineFor("vertical", model.plotArea, tick.position)}
-              />
-            ))}
-            <line
-              className="sp-chart__axis-line"
-              {...gridLineFor("vertical", model.plotArea, model.plotArea.y + model.plotArea.height)}
-            />
-            {model.valueTicks.map((tick) => (
-              <text
-                key={`value-${String(tick.value)}`}
-                className="sp-chart__tick"
-                {...axisLabelTransform("vertical", "value", model.plotArea, tick.position)}
-              >
-                {tick.label}
-              </text>
-            ))}
-            {model.bandTicks.map((tick) => (
-              <text
-                key={`band-${tick.key}`}
-                className="sp-chart__tick"
-                {...axisLabelTransform(
-                  "vertical",
-                  "band",
-                  model.plotArea,
-                  bandCentre(model.bandScale, tick.key),
-                )}
-              >
-                {tick.label}
-              </text>
-            ))}
-            {model.marks.map((mark) => (
-              <g key={mark.id}>
-                {mark.areaPath === "" ? null : (
-                  <path className={mark.className} d={mark.areaPath} />
-                )}
-                <path className={mark.className} d={mark.linePath} />
-                {mark.markers.map((point, index) => (
-                  <circle
-                    key={`${mark.id}-${model.bandKeys[index]}`}
-                    className={joinClassNames("sp-chart__point", mark.className)}
-                    cx={point.x}
-                    cy={point.y}
-                    r={POINT_RADIUS}
-                  />
-                ))}
-              </g>
-            ))}
-            {model.hits.map((hit) => (
-              <rect
-                key={hit.key}
-                data-band-index={hit.index}
-                x={hit.x}
-                y={hit.y}
-                width={hit.width}
-                height={hit.height}
-                opacity={0}
-                onMouseEnter={handleBandEnter}
-              />
-            ))}
-          </svg>
-          {readout === null ? null : (
-            <div
-              className="sp-chart__readout"
-              role="status"
-              aria-live="polite"
-              style={readout.style}
+          {/* The drawing and its readout share one positioned box, so the readout's percentages and
+              the bounds holding them resolve against the box the drawing occupies rather than the
+              frame's padding box — which is what keeps the readout, and the width the geometry
+              reserves for it, inside the plot on every screen. */}
+          <div className="sp-chart__plot">
+            <svg
+              className="sp-chart__svg"
+              viewBox={`0 0 ${CHART_VIEWBOX_WIDTH} ${frameHeight}`}
+              role="img"
+              aria-label={chartName}
+              aria-describedby={tableId}
             >
-              {readout.text}
-            </div>
-          )}
+              {model.valueTicks.map((tick) => (
+                <line
+                  key={`grid-${String(tick.value)}`}
+                  className="sp-chart__grid-line"
+                  {...gridLineFor("vertical", model.plotArea, tick.position)}
+                />
+              ))}
+              <line
+                className="sp-chart__axis-line"
+                {...gridLineFor(
+                  "vertical",
+                  model.plotArea,
+                  model.plotArea.y + model.plotArea.height,
+                )}
+              />
+              {model.valueTicks.map((tick) => (
+                <text
+                  key={`value-${String(tick.value)}`}
+                  className="sp-chart__tick"
+                  {...axisLabelTransform("vertical", "value", model.plotArea, tick.position)}
+                >
+                  {tick.label}
+                </text>
+              ))}
+              {model.bandTicks.map((tick) => (
+                <text
+                  key={`band-${tick.key}`}
+                  className="sp-chart__tick"
+                  {...axisLabelTransform(
+                    "vertical",
+                    "band",
+                    model.plotArea,
+                    bandCentre(model.bandScale, tick.key),
+                  )}
+                >
+                  {tick.label}
+                </text>
+              ))}
+              {model.marks.map((mark) => (
+                <g key={mark.id}>
+                  {mark.areaPath === "" ? null : (
+                    <path className={mark.className} d={mark.areaPath} />
+                  )}
+                  <path className={mark.className} d={mark.linePath} />
+                  {mark.markers.map((point, index) => (
+                    <circle
+                      key={`${mark.id}-${model.bandKeys[index]}`}
+                      className={joinClassNames("sp-chart__point", mark.className)}
+                      cx={point.x}
+                      cy={point.y}
+                      r={POINT_RADIUS}
+                    />
+                  ))}
+                </g>
+              ))}
+              {model.hits.map((hit) => (
+                <rect
+                  key={hit.key}
+                  data-band-index={hit.index}
+                  x={hit.x}
+                  y={hit.y}
+                  width={hit.width}
+                  height={hit.height}
+                  opacity={0}
+                  onMouseEnter={handleBandEnter}
+                />
+              ))}
+            </svg>
+            {readout === null ? null : (
+              <div
+                className="sp-chart__readout"
+                role="status"
+                aria-live="polite"
+                style={readout.style}
+              >
+                {readout.text}
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="sp-chart__frame">
@@ -433,30 +461,14 @@ export function LineChart({
           aria-label={chartDataTableCaption(chartName)}
           tabIndex={0}
         >
-          <table className="sp-table sp-table--compact" id={tableId}>
-            <caption className="sp-table__caption">{chartDataTableCaption(chartName)}</caption>
-            <thead>
-              <tr>
-                {model.dataTable.columns.map((heading, index) => (
-                  <th key={columnKeys[index]} scope="col">
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {model.dataTable.rows.map((row) => (
-                <tr key={row.key}>
-                  <th scope="row">{row.label}</th>
-                  {row.cells.map((cell, index) => (
-                    <td className="sp-table__num" key={columnKeys[index + 1]}>
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ChartDataTable
+            caption={chartDataTableCaption(chartName)}
+            tableId={tableId}
+            columns={model.dataTable.columns}
+            columnKeys={columnKeys}
+            rows={model.dataTable.rows}
+            countNoun={countNoun}
+          />
         </div>
       ) : null}
 

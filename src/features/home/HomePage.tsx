@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/HomePage.tsx
  * Purpose: Landing route composing the hero, featured-products and category-showcase sections
- * Lines: 310
+ * Lines: 315
  */
 
 import type { ReactElement } from "react";
@@ -29,23 +29,24 @@ import { DEFAULT_FILTER_STATE, filtersToPath, toggleFacetValue } from "@/utils/q
  * below is consumed by name, and this comment is the list the sheets owe this file. `src/styles/layout.css`
  * owns the page: `sp-page` is a route's column of blocks at one rhythm, `sp-page--flush` cancels the application
  * region's opening padding so the hero band meets the header — the one page whose first band is full-bleed —
- * and `sp-container` is the width and gutter the bands below the hero sit in. `sp-stack` is the shared rhythm
- * this file gives the band's two actions.
+ * and `sp-container` is the width and gutter the two data bands between them sit in. `sp-stack` is the shared
+ * rhythm this file gives the band's two actions.
  *
  * The bands themselves belong to `src/styles/catalog-landing.css`, which owns the landing surface:
  * `sp-hero*` and `sp-trust*` for `HeroSection`, `sp-featured*` for `FeaturedProducts`,
  * `sp-category-showcase` and `sp-category-tiles` for `CategoryShowcase`, and the promotional family this file
- * renders: `sp-promo-banner` and its `__body` and `__action` regions, which from `--breakpoint-md` place the
- * copy and the actions at the ends of one row. `src/styles/controls.css` owns the button family the band's
- * links borrow — `sp-btn` with `sp-btn--primary` and `sp-btn--secondary`, the spelling a file written from the
- * primitives onward uses — and `HeroSection` shows the same pair of a navigating link wearing a button's skin.
+ * renders: `sp-promo-banner` with its `__inner`, `__body` and `__action` regions, whose `__inner` places the
+ * copy and the actions at the ends of one row from `--breakpoint-md`. `src/styles/controls.css` owns the button
+ * family the band's links borrow — `sp-btn` with `sp-btn--primary` and `sp-btn--secondary`, the spelling a file
+ * written from the primitives onward uses — and `HeroSection` shows the same pair of a navigating link wearing a
+ * button's skin.
  *
- * Two placements are deliberate. The band carries no container of its own: `.sp-promo-banner` sets a vertical
- * padding and a tint and nothing inline, so it renders inside `sp-container` and takes that geometry, while the
- * hero above it is a full-bleed band carrying its own `__inner`. And the two actions sit in the sheet's single
- * `__action` slot inside the shared `sp-stack` rhythm: two inline-flex buttons left in a row would have no gap
- * between them and would run against the band's edge on a narrow phone, whereas the stack spaces them, reflows
- * them as one column and keeps each one's own target.
+ * Two placements are deliberate. The band is full-bleed like the hero: `.sp-promo-banner` carries the tint and
+ * the vertical padding, and its `__inner` carries the container geometry, so the tint spans the viewport while
+ * its copy and controls line up with the featured and showcase bands above it. And the two actions sit in the
+ * sheet's single `__action` slot inside the shared `sp-stack` rhythm: two inline-flex buttons left in a row
+ * would have no gap between them and would run against the band's edge on a narrow phone, whereas the stack
+ * spaces them, reflows them as one column and keeps each one's own target.
  *
  * This file renders no `<h1>` and no `<main>`. The page's single level-1 heading is the hero's: the landing route
  * is given a hero where every other route has a page header, and a breadcrumb trail has no parent segment at the
@@ -235,16 +236,18 @@ async function loadHomeContent(signal: AbortSignal): Promise<Result<HomeContent>
 function PromoBanner(): ReactElement {
   return (
     <section className="sp-promo-banner" aria-labelledby={PROMO_HEADING_ID}>
-      <div className="sp-promo-banner__body">
-        <h2 id={PROMO_HEADING_ID}>{HOME_COPY.PROMO_HEADING}</h2>
-        <p>{HOME_COPY.PROMO_BODY}</p>
-      </div>
-      <div className="sp-promo-banner__action sp-stack">
-        {PROMO_ACTIONS.map((action) => (
-          <Link className={`sp-btn sp-btn--${action.variant}`} key={action.id} to={action.to}>
-            {action.label}
-          </Link>
-        ))}
+      <div className="sp-promo-banner__inner">
+        <div className="sp-promo-banner__body">
+          <h2 id={PROMO_HEADING_ID}>{HOME_COPY.PROMO_HEADING}</h2>
+          <p>{HOME_COPY.PROMO_BODY}</p>
+        </div>
+        <div className="sp-promo-banner__action sp-stack">
+          {PROMO_ACTIONS.map((action) => (
+            <Link className={`sp-btn sp-btn--${action.variant}`} key={action.id} to={action.to}>
+              {action.label}
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -276,8 +279,10 @@ export function HomePage(): ReactElement {
   return (
     <div className="sp-page sp-page--flush">
       <HeroSection />
-      {/* The hero is a full-bleed band with its own inner, so the bands below it take the shared container and
-          the route's rhythm from a nested page column: one geometry rule for the width, one gap between blocks. */}
+      {/* The hero and the promotional band are full-bleed bands carrying their own inner, so the two bands
+          between them take the shared container and the route's rhythm from a nested page column: one geometry
+          rule for the width, one gap between blocks. The band below the column is spaced by the outer page's
+          own gap, so the route keeps a single rhythm on both sides of it. */}
       <div className="sp-container">
         <div className="sp-page">
           {/* One live region covers the page's whole load. The two bands' placeholders are decorative and
@@ -302,9 +307,9 @@ export function HomePage(): ReactElement {
             onRetry={homeRead.reload}
             browseAllTo={CATALOGUE_PATH}
           />
-          <PromoBanner />
         </div>
       </div>
+      <PromoBanner />
     </div>
   );
 }

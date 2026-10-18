@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/validation.ts
  * Purpose: Every field and form validator, each returning a field-keyed error map
- * Lines: 597
+ * Lines: 600
  */
 
 import { PASSWORD_POLICY, SHIPPING_METHODS } from "@/constants/config";
@@ -31,7 +31,7 @@ import type { CardInput, PaymentInput } from "@/types/commerce";
  * accepts with an empty map and refuses with one entry keyed by the member name its control binds to, so a
  * control meets the same shape whether a rule or the seam refused it. A rule that judges more than one
  * control — {@link validateRequired}, {@link validateName} — takes that member name as its first parameter,
- * and {@link validateCardExpiry} keys the expiry half in fault. Every sentence comes from
+ * and {@link validateCardExpiry} keys the expiry half or halves in fault. Every sentence comes from
  * `src/constants/content.ts`, every limit from `src/constants/config.ts` or the taxonomy, and the
  * query-state, date-range and paging rules live in their own modules, reused as they stand. Consumers: every
  * submit path in the product, and `src/lib/mockServer.ts`, which runs these rules over an untrusted body so a
@@ -307,10 +307,10 @@ export function validateCardNumber(value: FieldValue): FieldErrors {
 /** The rule a card expiry is accepted by: an integer month from 1 to 12, a four-digit year, and a pair that
  * has not passed — a card stays valid to the end of its expiry month, so one expiring in the month `now`
  * falls in is still accepted. `value` holds the two expiry members, either possibly absent while the form is
- * filled; `now` is the injectable instant measured against. The map is keyed by the half in fault:
- * `expiryMonth` for a month absent, unreadable or outside 1-12, and `expiryYear` for a year absent or
- * unreadable as well as for a pair whose halves are both well formed but which has passed — the coarser half,
- * and the one a correction usually changes. Empty when the pair holds. */
+ * filled; `now` is the injectable instant measured against. Each half is judged on its own: a blank half
+ * breaks the required rule on its own key, both keys being filed when both halves are blank, and a half
+ * holding something unusable breaks the expiry rule on that half. A pair whose halves are both well formed
+ * but which has passed is filed on `expiryYear`, the coarser half and the one a correction usually changes. */
 export function validateCardExpiry(
   value: FormValues<CardExpiryInput>,
   now: Date = new Date(),
@@ -319,13 +319,16 @@ export function validateCardExpiry(
   const year = integerOf(value?.expiryYear);
   const monthUsable = month !== undefined && month >= MONTH_MIN && month <= MONTH_MAX;
   const yearUsable = year !== undefined && year >= EXPIRY_YEAR_MIN && year <= EXPIRY_YEAR_MAX;
-  if (!monthUsable) return ruleErrors("expiryMonth", VALIDATION_MESSAGES.CARD_EXPIRY);
-  if (!yearUsable) return ruleErrors("expiryYear", VALIDATION_MESSAGES.CARD_EXPIRY);
-  const expiresAfter = new Date(year, month, 1).getTime();
-  if (now.getTime() >= expiresAfter) {
-    return ruleErrors("expiryYear", VALIDATION_MESSAGES.CARD_EXPIRY);
+  const faults = mergeErrors(
+    ruleErrors("expiryMonth", monthUsable ? undefined : VALIDATION_MESSAGES.CARD_EXPIRY),
+    ruleErrors("expiryYear", yearUsable ? undefined : VALIDATION_MESSAGES.CARD_EXPIRY),
+    validateRequired("expiryMonth", value?.expiryMonth),
+    validateRequired("expiryYear", value?.expiryYear),
+  );
+  if (monthUsable && yearUsable && now.getTime() >= new Date(year, month, 1).getTime()) {
+    faults.expiryYear = VALIDATION_MESSAGES.CARD_EXPIRY;
   }
-  return {};
+  return faults;
 }
 
 /** The rule a security code is accepted by: three or four digits and nothing else. Returns the `cvc` map

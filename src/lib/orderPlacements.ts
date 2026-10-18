@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/orderPlacements.ts
  * Purpose: The read credential this browser holds for each order it placed without an account
- * Lines: 85
+ * Lines: 94
  */
 
 import { STORAGE_KEYS } from "@/constants/config";
@@ -82,4 +82,13 @@ export function rememberPlacement(order: Order, token: string): void {
  */
 export function placementTokenFor(orderId: OrderId): string | null {
   return storedPlacements().find((placement) => placement.orderId === orderId)?.token ?? null;
+}
+
+/**
+ * Forgets every placement this browser holds, so a fresh case starts with none: the store is rewritten
+ * empty through the same util every other write uses, which is what keeps a case from reading an order an
+ * earlier case placed.
+ */
+export function clearPlacements(): void {
+  writeStored<readonly Placement[]>(STORAGE_KEYS.ORDER_TOKENS, []);
 }

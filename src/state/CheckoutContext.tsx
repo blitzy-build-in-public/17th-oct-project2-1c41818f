@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CheckoutContext.tsx
  * Purpose: The checkout step machine, its entered values, submission state and error map
- * Lines: 573
+ * Lines: 590
  */
 
 import {
@@ -70,6 +70,11 @@ export interface CheckoutView {
   readonly values: CheckoutValues;
   /** What is wrong with those values, keyed by the field each message belongs to. */
   readonly errors: FieldErrors;
+  /** How many advances this flow has refused: each attempt its step's validators sent back, counted as the
+   *  attempt happened. The value changes on every refusal, which is what lets the step's summary claim the
+   *  keyboard every time a step is sent with faults and not only the first time — the error map alone is
+   *  identical between two refusals of the same faults, so it cannot say that a second one occurred. */
+  readonly refusals: number;
   /** Where the submission stands. */
   readonly status: AsyncStatus;
   /** Whether a submission is in flight: the half of the double-submission guard a control reads. */
@@ -319,6 +324,13 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
   }, [state]);
 
   const [pricing, setPricing] = useState<PricingSnapshot>(IDLE_PRICING);
+  /**
+   * The refusals this flow has answered, one per advance its validators sent back. It is this provider's
+   * own state rather than the reducer's, because no transition of the flow is decided by it: it exists so
+   * that two refusals of one step are two distinguishable facts, and the step's summary — whose focus move
+   * is keyed to the identity it reads — takes the keyboard on each of them.
+   */
+  const [refusals, setRefusals] = useState(0);
   // Every retry of one basket gets a token of its own, so the effect below runs again without the lines
   // having to change: that is what the pricing error state's retry needs.
   const [pricingRunToken, setPricingRunToken] = useState(0);
@@ -423,6 +435,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
     const errors = stepErrors(current.step, current.values);
     if (hasErrors(errors)) {
       dispatch(checkoutActions.setErrors(errors));
+      // Counted because the map this refusal produces may be exactly the one already standing: the count is
+      // what tells the step in hand that this attempt was refused as well, so its summary takes the keyboard
+      // again. The update is functional, so this callback's identity does not change with it.
+      setRefusals((count) => count + 1);
       return;
     }
     // A step that passes on a second attempt clears the complaints the first one left, so a message a
@@ -533,6 +549,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
       step: state.step,
       values: state.values,
       errors: state.errors,
+      refusals,
       status: state.status,
       isSubmitting: state.submitting,
       error: state.error,
@@ -544,7 +561,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
       isOrderPlaced: state.order !== null,
       actions,
     }),
-    [state, pricing, canSubmit, actions],
+    [state, pricing, canSubmit, actions, refusals],
   );
 
   return <CheckoutContext value={value}>{children}</CheckoutContext>;

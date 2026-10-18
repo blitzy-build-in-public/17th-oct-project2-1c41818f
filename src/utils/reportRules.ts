@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/reportRules.ts
  * Purpose: The report rules the report service and the seeded repositories both compose: the catalogue, row building, summaries, chart series and the CSV matrix for export
- * Lines: 579
+ * Lines: 591
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -501,17 +501,35 @@ function runKeysOf(rows: readonly ReportRow[]): string[] {
   return rows.map((row) => String(row.cells.period ?? ""));
 }
 
+/**
+ * The wording of every band of one run, resolved once per run: which bands carry their year, and what a band
+ * the range clipped states, are facts about the run rather than about a point, and wording each point would
+ * re-read them once per charted column — `src/utils/dates.ts`'s `formatBandLabel` is the one home for that
+ * rule, shared with the dashboard's series, and a band words the same for every column charted beside it.
+ */
+function bandLabeller(
+  granularity: BucketGranularity,
+  keys: readonly string[],
+  range: DateRange | undefined,
+): (key: string) => string {
+  const labels = new Map<string, string>();
+  return (key: string): string => {
+    const known = labels.get(key);
+    if (known !== undefined) return known;
+    const text = formatBandLabel(key, granularity, keys, range);
+    labels.set(key, text);
+    return text;
+  };
+}
+
 /** One charted column: its identity, its heading and a point per row whose band is named, not valued. A band
- *  is worded by `src/utils/dates.ts`'s `formatBandLabel` against the `keys` of the run it belongs to — the
- *  one home for that rule, shared with the dashboard's series — so no two bands of one run word alike. */
+ *  is worded by the run's own labeller, so no two bands of one run word alike. */
 function seriesOfColumn(
   rows: readonly ReportRow[],
   column: ReportColumn,
   seriesIndex: number,
   axisKey: string,
-  granularity: BucketGranularity,
-  keys: readonly string[],
-  range: DateRange | undefined,
+  labelOf: (key: string) => string,
 ): ChartSeries {
   return {
     id: column.key,
@@ -523,7 +541,7 @@ function seriesOfColumn(
       return {
         x: key,
         y: typeof value === "number" ? value : 0,
-        label: formatBandLabel(key, granularity, keys, range),
+        label: labelOf(key),
       };
     }),
   };
@@ -555,25 +573,19 @@ export function buildReportSeries(
   granularity: BucketGranularity = definition.granularity,
   range?: DateRange,
 ): ChartSeries[] {
-  const keys = runKeysOf(rows);
+  const labelOf = bandLabeller(granularity, runKeysOf(rows), range);
   switch (kind) {
     case "sales": {
       const headline = headlineColumn(definition);
-      return headline === undefined
-        ? []
-        : [seriesOfColumn(rows, headline, 0, "period", granularity, keys, range)];
+      return headline === undefined ? [] : [seriesOfColumn(rows, headline, 0, "period", labelOf)];
     }
     case "products": {
       const headline = headlineColumn(definition);
-      return headline === undefined
-        ? []
-        : [seriesOfColumn(rows, headline, 0, "product", granularity, keys, range)];
+      return headline === undefined ? [] : [seriesOfColumn(rows, headline, 0, "product", labelOf)];
     }
     case "customers":
       return definition.columns
         .filter((column) => column.key === "newCustomers" || column.key === "returningCustomers")
-        .map((column, index) =>
-          seriesOfColumn(rows, column, index, "period", granularity, keys, range),
-        );
+        .map((column, index) => seriesOfColumn(rows, column, index, "period", labelOf));
   }
 }

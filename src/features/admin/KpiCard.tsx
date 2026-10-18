@@ -1,14 +1,15 @@
 /**
  * Path: src/features/admin/KpiCard.tsx
  * Purpose: One KPI with its value, named comparison baseline and change indicator
- * Lines: 250
+ * Lines: 251
  */
 
 import { useId } from "react";
 import type { ElementType, ReactElement } from "react";
 
 import { Card } from "@/components/ui/Card";
-import { ADMIN_COPY, FEEDBACK_COPY, KPI_CHANGE_WORDS } from "@/constants/content";
+import { FEEDBACK_COPY } from "@/constants/content";
+import { ADMIN_COPY, KPI_CHANGE_WORDS } from "@/constants/content-reports";
 import { describeBaseline } from "@/lib/analyticsService";
 import type { KpiBaseline } from "@/types/analytics";
 import {
@@ -79,7 +80,7 @@ interface KpiKindSpec {
  *
  * It reads the summary's figures rather than producing any: revenue and average order value are minor units
  * rendered by `src/utils/format.ts`, orders and units are plain counts, each name is the dashboard's own
- * copy from `src/constants/content.ts`, and each KPI is measured by the comparison's own change figure.
+ * copy from `src/constants/content-reports.ts`, and each KPI is measured by the comparison's own change figure.
  */
 const KPI_KINDS: Readonly<Record<KpiKind, KpiKindSpec>> = {
   revenue: {

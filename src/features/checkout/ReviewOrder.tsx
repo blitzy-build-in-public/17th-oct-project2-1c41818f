@@ -1,29 +1,29 @@
 /**
  * Path: src/features/checkout/ReviewOrder.tsx
  * Purpose: The review step: items, addresses, shipping, totals and payment restated before submission
- * Lines: 468
+ * Lines: 472
  */
 
-import { useId } from "react";
+import { useId, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { CHECKOUT_COPY, editSectionLabel } from "@/constants/checkoutCopy";
 import { SHIPPING_METHODS } from "@/constants/config";
 import {
   CART_COPY,
-  CHECKOUT_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   appliedPromoLabel,
-  editSectionLabel,
   freeShippingProgressLabel,
 } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { useCheckout } from "@/state/CheckoutContext";
 import type { CheckoutActions, CheckoutView } from "@/state/CheckoutContext";
+import { useRefusalFocus } from "@/state/focusHooks";
 import type { AddressInput } from "@/types/account";
 import type { ApiError, CurrencyCode } from "@/types/common";
 import type { PricedCart, PricedCartLine } from "@/types/commerce";
@@ -54,15 +54,6 @@ const CARD_TAIL_MASK = "•••• ";
 const ROW_CLASS = "sp-summary__row";
 const ROW_DISCOUNT_CLASS = "sp-summary__row sp-summary__row--discount";
 const ROW_TOTAL_CLASS = "sp-summary__row sp-summary__row--total";
-
-/**
- * The heading the billing address is restated under when it differs from the shipping one.
- *
- * `src/constants/content.ts` names a shipping address (`CHECKOUT_COPY.REVIEW_SHIPPING_HEADING`) and no
- * counterpart for the billing one, and a generated file is added to rather than rewritten, so the label of the
- * second address an order keeps is stated once, here. Leaving it unsaid would restate only one of the two.
- */
-const BILLING_ADDRESS_HEADING = "Billing address";
 
 /** The steps an edit control may return the shopper to: the two that own a form, the review itself excepted. */
 type ReviewStep = "shipping" | "payment";
@@ -284,6 +275,17 @@ function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactE
   const { actions, canSubmit, error, isSubmitting, values } = flow;
   const { appliedPromos, currency, freeShippingRemainingMinor, shippingMethodId, shippingMinor } =
     snapshot;
+  /**
+   * The region the refusal is stated in, which is what a refused order hands the keyboard to: the alert mounts
+   * at the top of a review longer than most viewports, so without the move the refusal is announced from above
+   * the place the buyer is looking.
+   */
+  const failureRef = useRef<HTMLDivElement | null>(null);
+
+  // The trigger is the failure itself rather than whether one is standing: every refused submission is
+  // answered with an `ApiError` of its own, so pressing the order control again after a refusal takes the
+  // keyboard back to the notice, while a re-render that changes nothing about the failure moves nothing.
+  useRefusalFocus(error, failureRef);
   const method = SHIPPING_METHODS.find((candidate) => candidate.id === shippingMethodId);
   /**
    * What the free-delivery band says, read from the two figures the pricing service already settled: what is
@@ -312,7 +314,9 @@ function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactE
   return (
     <>
       {error === null ? null : (
-        <Alert tone="danger" title={CHECKOUT_COPY.ERROR_SUMMARY_HEADING} error={error} />
+        <div ref={failureRef} tabIndex={-1}>
+          <Alert tone="danger" title={CHECKOUT_COPY.ERROR_SUMMARY_HEADING} error={error} />
+        </div>
       )}
       <div className="sp-review">
         <ReviewSection
@@ -350,7 +354,7 @@ function ReviewSummary({ flow, snapshot, noticeId }: ReviewSummaryProps): ReactE
           <AddressBlock lines={addressLines(values.shipping)} />
           {values.shipping.billingSameAsShipping ? null : (
             <AddressBlock
-              label={BILLING_ADDRESS_HEADING}
+              label={CHECKOUT_COPY.REVIEW_BILLING_HEADING}
               lines={addressLines(values.shipping.billing)}
             />
           )}

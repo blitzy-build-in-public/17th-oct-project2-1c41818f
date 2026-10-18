@@ -1,7 +1,7 @@
 /**
  * Path: src/types/common.ts
  * Purpose: Shared primitives: money units, currency, paging, results, API errors, async status and option types
- * Lines: 263
+ * Lines: 296
  */
 
 // Money, currency and time ---------------------------------------------------------------------
@@ -261,3 +261,36 @@ export type PromoCodeId = Brand<string, "prom_">;
 
 /** Session token, prefixed `ses_`, issued at sign-in and sent on every authenticated request. */
 export type SessionToken = Brand<string, "ses_">;
+
+// Notifications --------------------------------------------------------------------------------
+
+/**
+ * The three registers a transient outcome can be reported in: an action that
+ * completed, an action that failed, and a neutral note.
+ *
+ * A string union rather than an `enum`, because the compiler runs with
+ * `erasableSyntaxOnly`, which forbids syntax it cannot erase.
+ */
+export type ToastKind = "success" | "error" | "info";
+
+/**
+ * One queued notification, complete enough for the viewport to render as it
+ * stands.
+ *
+ * `durationMs` is the queue's duration policy for this message: the viewport's
+ * timer honours it, while the behaviour around that timer — pausing while the
+ * pointer or the keyboard focus rests on the item, and then asking the queue to
+ * remove it — belongs to the viewport.
+ */
+export interface ToastMessage {
+  /** Stable handle for this message: handed out by `notify`, accepted by `dismiss`. */
+  readonly id: number;
+  /** Which register the message is reported in. */
+  readonly kind: ToastKind;
+  /** The message text, supplied by the caller and never composed here. */
+  readonly message: string;
+  /** Short heading rendered above the message when the caller supplies one. */
+  readonly title?: string;
+  /** How long the message may stay on screen, in milliseconds. */
+  readonly durationMs: number;
+}

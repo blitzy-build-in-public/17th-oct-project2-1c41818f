@@ -279,9 +279,9 @@
    * trailing comment naming the token it came from, as the block at the foot of this file does.
    * The rules they govern: the header navigation collapses below --breakpoint-sm; the facet panel
    * becomes a drawer below --breakpoint-xl, because the 260px column it would take there leaves the
-   * product grid narrower than its cards' own content; the admin sidebar is a rail below
-   * --breakpoint-md; the grid runs two columns at --breakpoint-sm, three at --breakpoint-md and
-   * four at --breakpoint-lg. */
+   * product grid narrower than its cards' own content; the admin sidebar is an icon rail at every width
+   * below --breakpoint-lg; the product grid runs two columns at --breakpoint-sm, three at --breakpoint-md
+   * and four at --breakpoint-lg. */
   --breakpoint-sm: 480px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;

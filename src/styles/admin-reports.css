@@ -1,6 +1,6 @@
 /* Path: src/styles/admin-reports.css
  * Purpose: Styles for the dashboard, the report tables and the chart frames
- * Lines: 530
+ * Lines: 593
  */
 
 /* The administrator register: denser than the storefront, one question answered in a screenful. This sheet
@@ -20,9 +20,8 @@
 
 /* ==== Administrator content area ====
  * The sidebar grid and its placement are layout.css's `.sp-app--admin`; this block styles the content column
- * beside it. min-inline-size: 0 on both the column and its main region is what lets a 960px table scroll
- * inside its own container instead of widening the page, and either element can be the grid item depending
- * on how the shell nests the two. */
+ * beside it. min-inline-size: 0 on both the column and its main region lets a 960px table scroll inside its
+ * container instead of widening the page, and either may be the grid item the shell nests. */
 .sp-admin {
   display: grid;
   gap: var(--space-6);
@@ -67,6 +66,18 @@
   gap: var(--space-6);
   min-inline-size: 0;
 }
+/* A stretched card splits its surplus across its implicit auto rows, which once raised the shorter card's
+ * header to 371.94px against its neighbour's 73px and its table's first column 299px down at 1280px. The row
+ * holds one block per row at every width, so no card is stretched by a sibling's height today; the two
+ * declarations below are the guard that keeps that defect from returning under any container that stretches a
+ * card — the floor holds a header at its content's own height, and `align-content` stops the freed space
+ * re-inflating it. */
+.sp-dashboard__row > .sp-card {
+  align-content: start;
+}
+.sp-dashboard__row > .sp-card > .sp-card__header {
+  min-block-size: calc(var(--space-5) * 2 + var(--control-height-sm) + var(--border-width));
+}
 .sp-dashboard__section {
   display: grid;
   gap: var(--space-4);
@@ -74,9 +85,9 @@
 }
 
 /* ==== KPI cards ====
- * One figure per card with its name, its change and the wording of the comparison that change is measured
- * against. The card repeats the four declarations the card primitive is built from, so it is whole whether
- * or not the markup also carries `.sp-card`. */
+ * One figure per card, its name, its change and the comparison that change is measured against. It repeats
+ * the card primitive's own four declarations, so it is whole with or without `.sp-card` in the markup. The
+ * figure breaks inside the card, and only `overflow-wrap: anywhere` lowers the min-content that would widen it. */
 .sp-kpi-grid {
   display: grid;
   gap: var(--space-4);
@@ -103,6 +114,7 @@
   line-height: var(--text-display-line-height);
   letter-spacing: var(--text-display-tracking);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 /* The change is carried by the arrow glyph and the change text the component renders, and the two variants
  * below only reinforce that meaning with a colour, so a greyscale rendering loses no direction. */
@@ -224,16 +236,17 @@
   fill: var(--chart-label);
   font-size: var(--font-size-xs);
 }
-/* A wedge too thin to hold its own percentage carries it outside the ring instead, hung off a leader line;
- * the leader is a hairline of the axis register, kept to one device pixel by the same non-scaling stroke. */
+/* Every wedge's percentage is written outside the ring, on the surface the legend's shares are read on,
+ * because a slice's fill is too saturated a ground for any single ink to clear the contrast a figure needs;
+ * the leader is the hairline joining a figure back to its own wedge, of the axis register and kept to one
+ * device pixel by the same non-scaling stroke. */
 .sp-chart__leader {
   stroke: var(--chart-axis);
   stroke-width: var(--border-width);
   vector-effect: non-scaling-stroke;
 }
-/* A hovered or active point marker is solid in its series colour behind a solid surface-coloured ring, so it
- * reads as a marker over the line rather than as the line thickening; the dash a series carries is reset
- * here and on the slice below. */
+/* A hovered or active point marker is solid in its series colour behind a surface-coloured ring, so it reads
+ * as a marker over the line, not the line thickening; its dash is reset here and on the slice below. */
 .sp-chart__point {
   stroke: var(--color-surface);
   stroke-width: var(--border-width-thick);
@@ -260,19 +273,32 @@
   stroke-dasharray: none;
   fill-opacity: 1;
 }
-/* The readout's placement travels in two custom properties — the offset the component computed for the
- * hovered point and the width it measured — because a stylesheet cannot clamp an inline inset and may not
- * reach for !important. The frame clamps the box inside its own padding box, and a value too long for the
- * space left is ellipsised rather than painted past the chart's edge. */
+/* The drawing's own box: the readout's percentages and its block-size bound are taken against it, so they
+ * are exact at every rendered width. */
+.sp-chart__plot {
+  position: relative;
+}
+/* The readout's placement travels in custom properties — the anchor the component computed, the width its
+ * text reserves, the place it grows from and the room it has there — because a stylesheet cannot clamp an
+ * inline inset or measure the box. The box is held inside the plot area's own span, capped to the room beside
+ * its anchor, and a sentence too long for one line wraps; below the small stop it tightens its padding and
+ * scrolls, so nothing is cut off on a phone. */
 .sp-chart__readout {
   position: absolute;
   inset-block-start: var(--sp-chart-readout-y, 0px);
   inset-inline-start: clamp(
-    0px,
+    var(--sp-chart-readout-left, 0px),
     var(--sp-chart-readout-x, 0px),
-    max(0px, calc(100% - var(--space-2) - var(--sp-chart-readout-w, 0px)))
+    max(
+      var(--sp-chart-readout-left, 0px),
+      calc(var(--sp-chart-readout-right, 100%) - var(--space-2) - var(--sp-chart-readout-w, 0px))
+    )
   );
-  max-inline-size: calc(100% - 2 * var(--space-2));
+  max-inline-size: calc(
+    var(--sp-chart-readout-right, 100%) - var(--sp-chart-readout-left, 0px) - var(--space-2)
+  );
+  max-block-size: var(--sp-chart-readout-max, none);
+  transform: translateY(var(--sp-chart-readout-flip, 0px));
   z-index: var(--z-dropdown);
   padding: var(--space-2) var(--space-3);
   background-color: var(--color-surface);
@@ -281,12 +307,18 @@
   box-shadow: var(--shadow-2);
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line-height);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
   transition: opacity var(--duration-fast) var(--ease-standard);
 }
+/* The legend wraps as a row of items and each item wraps inside itself. At 200% text one item's
+ * max-content width — swatch, label, figure and share side by side — is wider than the frame's whole
+ * content box, and a wrapping row cannot rescue that on its own: a wrapped line whose only item is wider
+ * than the container widens the page rather than the item. `min-inline-size: 0` releases the item from its
+ * content-derived minimum and `overflow-wrap: anywhere` lowers the min-content of the label and of the
+ * figures it cannot break at a space, so an item always fits the frame and grows downwards, never sideways. */
 .sp-chart__legend {
   display: flex;
   flex-wrap: wrap;
@@ -294,18 +326,22 @@
 }
 .sp-chart__legend-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+  min-inline-size: 0;
 }
 /* The swatch's own paint — its size, and the rhythm it repeats from its series — lives with the series
  * rules in chart-series.css, so a swatch and the mark it stands for are stated in one file. */
 .sp-chart__legend-label {
   font-size: var(--text-body-sm-size);
   color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 .sp-chart__legend-value {
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 /* The donut's centre total, centred over the plot the frame holds. */
 .sp-chart__center {
@@ -437,8 +473,8 @@
 }
 
 /* ==== Date-range control ====
- * Presets, the two date fields, the resolved range in words and the baseline every change is measured
- * against; the range rule itself belongs to src/utils/dates.ts and this block styles the message it returns. */
+ * Presets, the two date fields, the resolved range in words and the baseline every change is measured against; the
+ * range rule itself belongs to src/utils/dates.ts and this block styles the message it returns. */
 .sp-date-range {
   display: grid;
   gap: var(--space-3);
@@ -464,7 +500,8 @@
 .sp-date-range__fields {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: minmax(0, 1fr);
+  /* tokens.css declares no field-floor token, so the floor is named here as .sp-grid names its own: 12rem. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
 }
 .sp-date-range__summary {
   font-size: var(--text-body-sm-size);
@@ -500,10 +537,8 @@
   font-size: var(--text-caption-size);
   color: var(--color-text-subtle);
 }
-
 @media (min-width: 480px) {
   /* --breakpoint-sm */
-  .sp-date-range__fields,
   .sp-report__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -524,7 +559,35 @@
   }
 }
 
+/* The drawing scales with the frame, so below 45rem its 12-unit type renders too small to read: these two
+ * bands raise the SVG type in user units to hold the rendered size near 11px. */
+@media (max-width: 30rem) {
+  /* below --breakpoint-sm */
+  .sp-chart__tick,
+  .sp-chart__label {
+    font-size: calc(var(--font-size-xs) * 2);
+  }
+  /* The plot is at its shortest here: the readout tightens its padding and type, so its sentence takes as few
+   * lines as the box's own cap allows. It never takes the pointer: a box wide enough to cover most of a
+   * phone-width plot would otherwise become the topmost hit-test element, so the next band would receive
+   * nothing and the readout would not even return once the pointer had left the chart. The cap therefore
+   * hides the lines it cannot show rather than offering a scroll no hover can drive, and the figures those
+   * lines carry are still stated — the readout is the live region its whole sentence is announced from, and
+   * the paired table under the chart lists every one of them. */
+  .sp-chart__readout {
+    padding: var(--space-1) var(--space-2);
+    font-size: calc(var(--font-size-xs) * 0.9);
+    pointer-events: none;
+  }
+}
+@media (min-width: 30.0625rem) and (max-width: 45rem) {
+  .sp-chart__tick,
+  .sp-chart__label {
+    font-size: calc(var(--font-size-xs) * 1.5);
+  }
+}
+
 /* ==== Responsive summary ====
- * At --breakpoint-sm: two KPI cards and two summary figures across, date fields side by side. At
- * --breakpoint-md: the toolbars inline with their heading. At --breakpoint-lg: four KPI cards and four
- * summary figures across, and the plot at its full height. */
+ * At --breakpoint-sm: two KPI cards and two summary figures across, and the date fields side by side while each
+ * keeps its 12rem floor. At --breakpoint-md: the toolbars inline with the heading and a pair of dashboard panels
+ * on one row. At --breakpoint-lg: four KPI cards and four summary figures across, and the plot at its full height. */

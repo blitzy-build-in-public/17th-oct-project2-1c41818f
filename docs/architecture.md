@@ -1,12 +1,12 @@
 <!--
 Path: docs/architecture.md
 Purpose: The layers, the import rules and the data flow any new file must fit
-Lines: 285
+Lines: 290
 -->
 
 # Architecture
 
-SalesPro is one client-rendered React 19 + TypeScript application: a storefront and a sales back office in the same bundle, with no server, database or external service anywhere in it. Every request is answered in the browser by `src/lib/mockServer.ts` behind `src/lib/apiClient.ts`, and the durable state in the product — the cart, the session, the last-used report range, the read credential of each order this browser placed, the orders this browser created and the placement credential the seam recorded for each of those orders — is kept in `localStorage` through `src/utils/storage.ts`.
+SalesPro is one client-rendered React 19 + TypeScript application: a storefront and a sales back office in the same bundle, with no server, database or external service anywhere in it. Every request is answered in the browser by `src/lib/mockServer.ts` behind `src/lib/apiClient.ts`, and the durable state in the product — the cart, the session, the last-used report range and the read credential of each order this browser placed — is kept in `localStorage` through `src/utils/storage.ts`.
 
 This document fixes where a new file belongs, which imports are legal, how data moves through the product, and where a change of a given kind lands. The endpoint contract lives in `docs/mock-api.md`; the naming, file-size, duplication and formatting conventions live in `docs/contributing.md`.
 
@@ -29,15 +29,19 @@ This document fixes where a new file belongs, which imports are legal, how data 
 The 600-line ceiling is never raised. When one concern cannot be held in one file it is split along its own seam into a second path in the same layer, the two together holding what the one file held, and the split path is imported by the concrete path that owns the concern — the product has no barrel `index.ts` anywhere, so an importer always names the file that owns what it needs.
 
 - `src/lib/mockServer.ts` → `src/lib/apiContract.ts`, `src/lib/apiRoutes.ts`, `src/lib/apiRequests.ts`, `src/lib/apiOrders.ts`
-- `src/lib/reportService.ts` → `src/lib/reportSeries.ts`; `src/data/repositories.ts` → `src/data/collectionStore.ts`, and the durable record of the orders this browser created → `src/data/placedOrders.ts`
+- `src/lib/reportService.ts` → `src/lib/reportSeries.ts`; `src/data/repositories.ts` → `src/data/collectionStore.ts`
 - the chart files → `src/components/charts/chartGeometry.ts`, `barGeometry.ts`, `lineChartModel.ts`
 - `src/utils/dates.ts` → `src/utils/isoInstants.ts` and `src/utils/dateDisplay.ts`, whose names `dates.ts` re-exports so no consumer changes
 - `src/utils/format.ts` → `src/utils/formatPrimitives.ts`, which `format.ts` imports one way and re-exports the members consumers read from it
 - the service rule engines → `src/utils/pricingRules.ts`, `orderRules.ts`, `catalogRules.ts`, `searchRules.ts`, `analyticsRules.ts`, `reportRules.ts`
 - `src/styles/catalog.css` → `src/styles/catalog-landing.css`, `src/styles/catalog-detail.css`
 - `src/styles/commerce.css` → the cart and mini-cart register in `src/styles/commerce-cart.css`, the checkout's step indicator in `src/styles/commerce-steps.css` and the order summary panel register in `src/styles/summary-panel.css`, each loaded by the mapped sheet with `@import` at the position the moved rules held
-- `src/constants/content.ts` → the account surfaces' copy in `src/constants/content-account.ts` and the back-office and report copy in `src/constants/content-reports.ts`, both re-exported by `content.ts`, so no consumer changes
+- `src/constants/content.ts` → the checkout and its confirmation's copy in `src/constants/checkoutCopy.ts`, the account surfaces' copy in `src/constants/content-account.ts` and the back-office and report copy in `src/constants/content-reports.ts`, all re-exported by `content.ts`, so no consumer changes
 - `tests/components/controls.test.tsx` → `tests/components/overlays.test.tsx`, the overlay family's own suite
+- `src/styles/commerce.css` → `src/styles/commerce-cart.css`, which the mapped sheet loads with `@import`
+- `src/constants/content.ts` → `src/constants/content-reports.ts`, whose names `content.ts` re-exports so no consumer changes
+- `tests/components/controls.test.tsx` → `tests/components/overlays.test.tsx`, the overlay family's cases
+- `src/state/hooks.ts` → `src/components/ui/hooks.ts`: not a split but a move, and the only entry here that is one. The view-facing hooks — `usePagination`, `useMediaQuery`, `useBreakpoint`, `useOnClickOutside` — live in the presentation layer because the primitives that read them (the pagination control, the tooltip and the shared overlay engine, the header) sit **below** State, and a hook they need has to be reachable downward. The state-facing hooks stayed where the layer puts them, so each hook still has one home and no file imports upward.
 
 The service rule engines are placed in Foundations for a second reason on top of the ceiling: the pure rules a service applies are the same rules `src/data/repositories.ts` and its store half compose to answer a route, and the data module may import only its own layer or one below it. So each engine lives in `src/utils/*Rules.ts` — pricing, order, catalog, search, analytics, report and account — its service re-exports every name it published before, and each rule still has exactly one body. A file below a service never imports the service.
 
@@ -74,6 +78,7 @@ flowchart TD
         SharedHooks["hooks.ts"]
     end
     subgraph SharedUi["Shared presentation"]
+        UiHooks["components/ui/hooks.ts"]
         LayoutComp["components/layout"]
         UiPrimitives["components/ui"]
         ProductComp["components/product"]
@@ -121,6 +126,8 @@ flowchart TD
     ProviderSet --> IdentitySvc
     ProviderSet --> InsightSvc
     LayoutComp --> UiPrimitives
+    LayoutComp --> UiHooks
+    UiPrimitives --> UiHooks
     LayoutComp --> TokensCss
     UiPrimitives --> TokensCss
     ProductComp --> TokensCss
@@ -140,7 +147,7 @@ flowchart TD
     Repositories --> TypesMod
 ```
 
-Every solid edge is an import. The two rules the diagram encodes: no feature slice reaches another (`src/features/home` never imports `src/features/catalog`; the piece both need is promoted below them), and the single dashed edge is a binding rather than an import — `src/data/repositories.ts` registers its data source with `src/lib/mockServer.ts` at the composition root, which is what keeps the transport free of a compile-time dependency on the data module.
+Every solid edge is an import. The two rules the diagram encodes: no feature slice reaches another (`src/features/home` never imports `src/features/catalog`; the piece both need is promoted below them), and the single dashed edge is a binding rather than an import — `src/data/repositories.ts` registers its data source with `src/lib/mockServer.ts` at the composition root, which is what keeps the transport free of a compile-time dependency on the data module. The view-facing hooks in `src/components/ui/hooks.ts` are read from beside the primitives by the layout and the primitives themselves, and by the feature pages that compose them — a feature importing presentation has always been a downward import.
 
 ## 4. Data flow
 
@@ -151,10 +158,6 @@ route → feature component → a context selector or feature hook → a domain 
 ### 4.2 Write
 
 A write runs the same path and then dispatches into the reducer that owns the state it changed — cart actions to `src/state/cartReducer.ts`, checkout actions to `src/state/checkoutReducer.ts`, catalogue load transitions to `src/state/catalogReducer.ts`. No component writes another concern's state.
-
-**Which layer owns which durable key.** A key belongs to the layer that owns the fact it holds, and no layer writes another's key. The cart and the session token belong to the state layer (`salespro.cart`, `salespro.session`); the demonstration account store's session table belongs to the data layer, because a session's window is a fact about its issue instant (`src/data/collectionStore.ts`, `salespro.sessions`); the last-used report range belongs to the reports surfaces (`salespro.report-range`); the read credential this browser holds for a guest's order belongs to the domain-services layer (`src/lib/orderPlacements.ts`, `salespro.order-tokens`); and the two records a guest's own order is answered from after a reload are split the same way — the **order** to the data layer (`src/data/placedOrders.ts`, `salespro.placed-orders`, written where `createOrderIn` creates it) and the **placement credential** to the seam (`src/lib/apiOrders.ts`, `salespro.order-credentials`, recorded where the account-less order is created).
-
-**Why the data layer reads its own created orders back.** A created order exists nowhere but the store the request was answered from, and that store is rebuilt from the seed generators on every document load, so without a durable record the history would lose it and the confirmation route would refuse a buyer their own order. `createSalesProDataSource` therefore builds the store and immediately reads the record back into it — the collection newest-first, the identifier index, the per-customer grouping and the numbering counters included — and the read that follows answers the order the URL names. Neither the client's copy nor the seam's satisfies that on its own: the client holds a credential, not an order, and the seam holds the credential the read is verified against, not the history the route prints.
 
 ### 4.3 Query state
 
@@ -197,32 +200,34 @@ Money changes representation nowhere along that path: it is an integer number of
 
 ## 6. The state contract
 
-| Concern                                                                   | Owner                           | Reducer                        | Consumer hooks                    |
-| ------------------------------------------------------------------------- | ------------------------------- | ------------------------------ | --------------------------------- |
-| Session and role                                                          | `src/state/AuthContext.tsx`     | —                              | `useAuth`, `useAuthDispatch`      |
-| Cart lines, promo code, persistence and mini-cart visibility              | `src/state/CartContext.tsx`     | `src/state/cartReducer.ts`     | `useCart`, `useCartDispatch`      |
-| Catalogue page, facets and load status, plus the URL-derived filter state | `src/state/CatalogContext.tsx`  | `src/state/catalogReducer.ts`  | `useCatalog`, `useCatalogFilters` |
-| Checkout steps, per-step values and submission state                      | `src/state/CheckoutContext.tsx` | `src/state/checkoutReducer.ts` | `useCheckout`                     |
-| Toast queue                                                               | `src/state/ToastContext.tsx`    | —                              | `useToast`                        |
+| Concern                                                                       | Owner                           | Reducer                        | Consumer hooks                                                 |
+| ----------------------------------------------------------------------------- | ------------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| Session and role                                                              | `src/state/AuthContext.tsx`     | —                              | `useAuth`, `useAuthDispatch`                                   |
+| Cart lines, promo code, persistence, the drawer flag and the tile's quick add | `src/state/CartContext.tsx`     | `src/state/cartReducer.ts`     | `useCart`, `useCartDispatch`, `useMiniCartOpen`, `useQuickAdd` |
+| Catalogue page, facets and load status, plus the URL-derived filter state     | `src/state/CatalogContext.tsx`  | `src/state/catalogReducer.ts`  | `useCatalog`, `useCatalogFilters`                              |
+| Checkout steps, per-step values and submission state                          | `src/state/CheckoutContext.tsx` | `src/state/checkoutReducer.ts` | `useCheckout`                                                  |
+| Toast queue                                                                   | `src/state/ToastContext.tsx`    | —                              | `useToast`                                                     |
 
 Two consequences follow from React comparing a context value with `Object.is`:
 
 - **Every provider hands out a memoised value with stable callbacks.** A fresh object or function per render re-renders every consumer of that context, which is why the hooks are split by what a component actually needs rather than by which provider owns the data.
 - **Derived values are computed during render**, never stored in state and never written back by an effect. A total, a filtered list and a selected entity are recomputed where they are shown; a stored copy would be a second answer that drifts from the first.
 
-The reducers are pure and exhaustively typed: `cartReducer` clamps a quantity against its line's stock ceiling, `checkoutReducer` defines the steps and their transitions, `catalogReducer` owns load transitions alone. The hooks every feature shares live in `src/state/hooks.ts`: `useLocalStorage`, `useDebouncedValue`, `usePagination`, `useMediaQuery`, `useBreakpoint`, `useAsync`, `useDocumentTitle` and `useOnClickOutside`.
+The reducers are pure and exhaustively typed: `cartReducer` clamps a quantity against its line's stock ceiling, `checkoutReducer` defines the steps and their transitions, `catalogReducer` owns load transitions alone. The shared hooks are split by who reads them, which is what keeps every import one-directional. `src/state/hooks.ts` holds the hooks the contexts and the feature pages read — `useLocalStorage`, `useDebouncedValue`, `useAsync` and `useDocumentTitle` — and `src/components/ui/hooks.ts` holds the view-facing hooks the shared primitives and their composing pages read: `usePagination`, `useMediaQuery`, `useBreakpoint` and `useOnClickOutside`, which sit beside the primitives because Shared presentation is a layer **below** State and a primitive reaching into `src/state` would be an import running upward. The tile's add follows the same split: `useQuickAdd`, in `src/state/CartContext.tsx`, is its one home, beside the cart it acts on. The cart's own contexts are split the same way: the drawer flag travels in a context of its own, read through `useMiniCartOpen()`, and `CartActions.readLines()` hands the lines to a control whose activation needs them without subscribing it to them — so opening or closing the drawer re-renders the two components that display the flag and none that read the lines, and a change to the lines re-renders the cart's surfaces and no tile's action row.
+
+The values those primitives render arrive as props or elements from the layer that may read a context. `src/App.tsx` is the product's only reader of the session and the toast queue: it hands the shell the account, the sign-out and the cart trigger — the cart slice's own `HeaderCartButton` element, created once so its identity never changes — and the toast viewport the queue and its dismiss handle, and it passes the routed subtree through as `children` so a re-render of its frame never repaints the page. The header's cart read is the trigger's own, because the header sits **below** the state layer while the cart slice does not: a cart change or a drawer toggle re-renders that button and not the wordmark, the navigation, the search row or the account menu beside it. The product tile follows the same rule from the other side: the surface composing a grid reads the cart through `useQuickAdd` and hands each tile the `onAddToCart` callback it calls, so the tile itself reads no cart.
 
 ## 7. The app shell
 
 The shell is three files with one responsibility each, and the split is what lets a test choose its own starting location.
 
-| File             | Owns                                                                                                                                                                                                                                                                                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/main.tsx`   | `StrictMode` and the application's `BrowserRouter`; the eight stylesheet imports in their load-bearing order; the `registerDataSource` binding, made at module scope before the first render; the mount into `#root`, guarded so a document without that element fails with a sentence naming what is missing                                     |
-| `src/App.tsx`    | The five providers — `ToastProvider` → `AuthProvider` → `CatalogProvider` → `CartProvider` → `CheckoutProvider`; the shell around the routed content; the error boundary inside the shell; and, beside the shell and so outside the routed region, the `MiniCart` drawer and the `ToastViewport`, which both have to survive a route change       |
-| `src/Router.tsx` | `AppRoutes`: one `React.lazy` binding per screen, declared at module top level so a screen keeps its state; one `Suspense` boundary with a page placeholder; the guards — `/account/*` admits `customer` or `admin`, `/admin/*` admits `admin` alone — each preserving the intended path in the sign-in link's `returnTo`; and the not-found view |
+| File             | Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.tsx`   | `StrictMode` and the application's `BrowserRouter`; the eight stylesheet imports in their load-bearing order; the `registerDataSource` binding, made at module scope before the first render; the mount into `#root`, guarded so a document without that element fails with a sentence naming what is missing                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `src/App.tsx`    | The five providers — `ToastProvider` → `AuthProvider` → `CatalogProvider` → `CartProvider` → `CheckoutProvider`; the shell around the routed content; the error boundary inside the shell; and, beside the shell and so outside the routed region, the `MiniCart` drawer — bound with `React.lazy` at module scope behind a `Suspense` boundary, so the cart slice's drawer travels in its own chunk rather than in the shell's entry bundle — and the `ToastViewport`, which both have to survive a route change. It is also the product's only reader of the session and the toast queue — the account, the sign-out and the cart's own trigger element go to the shell, the queue and its dismiss handle to the viewport — so no file below it reads a context |
+| `src/Router.tsx` | `AppRoutes`: one `React.lazy` binding per screen, declared at module top level so a screen keeps its state; one `Suspense` boundary with a page placeholder; the guards — `/account/*` admits `customer` or `admin`, `/admin/*` admits `admin` alone — each preserving the intended path in the sign-in link's `returnTo`; and the not-found view                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-`src/App.tsx` mounts the cart slice's `MiniCart` drawer beside the shell, which is a downward import the topmost layer is allowed to make and the reason `src/features/cart/MiniCart.tsx` appears outside its own slice.
+`src/App.tsx` mounts the cart slice's `MiniCart` drawer beside the shell, bound lazily so its code is fetched in its own chunk, which is a downward import the topmost layer is allowed to make and the reason `src/features/cart/MiniCart.tsx` appears outside its own slice.
 
 Neither `src/App.tsx` nor `src/Router.tsx` renders a router, and the router sits outermost because `src/state/CatalogContext.tsx` reads the query string through `useSearchParams`. `tests/testUtils.tsx` mounts the same tree under a `MemoryRouter` accordingly, which nests correctly only because no file below it declares one. The layout is composed in `src/App.tsx` around the boundary rather than in the route table, so `src/Router.tsx` stays a route table instead of becoming a second composition root.
 
@@ -244,9 +249,9 @@ A render failure is caught by the error boundary in `src/App.tsx`, which replace
 - **Money is an integer number of minor units end to end**, never a float, and is formatted only through `src/utils/format.ts`.
 - **Dates are ISO 8601 strings**, parsed, formatted and bucketed only through `src/utils/dates.ts`, which re-exports the instant primitives of `src/utils/isoInstants.ts`.
 - **Identifiers are prefixed strings** (`prod_`, `cat_`, `brd_`, `cus_`, `adr_`, `ord_`, `line_`, `rev_`, `prom_`, `ses_`) produced by the generators in `src/utils/strings.ts`.
-- **Persistence has one door.** Nothing writes to `localStorage` outside `src/utils/storage.ts`, and the keys it uses — `salespro.cart`, `salespro.session`, `salespro.sessions`, `salespro.report-range`, `salespro.order-tokens` (the read credential of each order this browser placed without an account), `salespro.placed-orders` (the orders this browser created, owned by `src/data/placedOrders.ts`) and `salespro.order-credentials` (the placement credential the seam recorded for each of those orders, owned by `src/lib/apiOrders.ts`) — live in `src/constants/config.ts` with the version stamp that discards a payload written by an older shape rather than migrating it.
+- **Persistence has one door.** Nothing writes to `localStorage` outside `src/utils/storage.ts`, and the keys it uses — `salespro.cart`, `salespro.session`, `salespro.sessions`, `salespro.order-tokens`, `salespro.writes` and `salespro.report-range` — live in `src/constants/config.ts` with the version stamp that discards a payload written by an older shape rather than migrating it. `salespro.writes` holds this browser's own writes to the seeded collections — the orders it placed, the accounts it registered with the digests that verify them, the profiles it edited and the address books it wrote — which `src/data/clientWrites.ts` folds onto the seeds when a data source is built, so a document load carries on where the last one left off instead of reading the seed alone; `salespro.order-tokens` holds the read credential a session-less buyer's own confirmation is reopened with.
 - **Paths are written once**, in `src/constants/routes.ts`, together with the builders (`productPath`, `categoryPath`, `loginPath`, `registerPath`, `accountOrderPath`, `orderConfirmationPath`) that keep the route table, the navigation and the links from drifting apart.
-- **Text has one home per kind**: every surface's copy in `src/constants/content.ts` and the two modules it re-exports, `src/constants/content-account.ts` (the account surfaces) and `src/constants/content-reports.ts` (the back office and its reports); and the controlled vocabulary of categories, brands, sort keys, statuses, and the facet and report definitions in `src/constants/taxonomy.ts`.
+- **Text has one home per kind**: every surface's copy in `src/constants/content.ts` and the three registers it re-exports — `src/constants/checkoutCopy.ts` (the checkout and its confirmation), `src/constants/content-account.ts` (the account surfaces) and `src/constants/content-reports.ts` (the back office and its reports); and the controlled vocabulary of categories, brands, sort keys, statuses, and the facet and report definitions in `src/constants/taxonomy.ts`.
 - **No package outside the three pinned runtime dependencies** of `package.json` — `react`, `react-dom` and `react-router-dom`, the only non-React runtime import in the tree. Everything a library would have supplied — validation, formatting, the charts, the table, CSV — is built here.
 
 ## 10. Where a change lands

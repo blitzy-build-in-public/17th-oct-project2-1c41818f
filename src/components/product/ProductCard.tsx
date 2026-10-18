@@ -1,10 +1,10 @@
 /**
  * Path: src/components/product/ProductCard.tsx
  * Purpose: Catalogue tile with imagery, price, discount, rating and quick add to cart
- * Lines: 408
+ * Lines: 413
  */
 
-import { useId } from "react";
+import { memo, useId } from "react";
 import type { ReactElement } from "react";
 
 import { Link } from "react-router-dom";
@@ -13,17 +13,10 @@ import { Button } from "@/components/ui/Button";
 import { Badge, Card } from "@/components/ui/Card";
 import { PriceTag, Rating } from "@/components/ui/Rating";
 import { DEFAULT_CURRENCY } from "@/constants/config";
-import {
-  CATALOG_COPY,
-  EMPTY_STATES,
-  addedToCartMessage,
-  lowStockLabel,
-  quickAddLabel,
-} from "@/constants/content";
+import { CATALOG_COPY, EMPTY_STATES, quickAddLabel } from "@/constants/content";
 import { productPath } from "@/constants/routes";
 import { BRAND_DEFINITIONS } from "@/constants/taxonomy";
-import { useCartDispatch } from "@/state/CartContext";
-import { useToast } from "@/state/ToastContext";
+
 import type { Product, ProductStatus } from "@/types/catalog";
 import { formatAvailability, formatRating } from "@/utils/format";
 import { brandId } from "@/utils/strings";
@@ -52,9 +45,11 @@ import { brandId } from "@/utils/strings";
  * columns, the media and the body, and a third direct child would be auto-placed into a second row under
  * the media.
  *
- * The tile holds no cart state of its own: its one cart-touching piece is the private quick-add control
- * below, which reads the cart only when its button is activated, so the tile renders identically whether
- * or not the shopper has a cart.
+ * The tile reads no cart and holds no cart state: what its quick add does is handed to it as a callback by the
+ * surface composing the grid, and that callback reads the line it compares at activation, so the tile renders
+ * identically whether or not the shopper has a cart and a change to it re-renders no card. One implementation
+ * therefore serves the catalogue, the search results, the landing band and the related strip without any of them
+ * teaching it about the cart.
  */
 
 /** The class names of this block, named once so a render body repeats no string. */
@@ -165,6 +160,16 @@ export interface ProductCardProps {
    * caller passes no price, no count and no pre-formatted string.
    */
   readonly product: Product;
+  /**
+   * Adds one unit of the product to the cart, which is the whole of what the tile's quick add does.
+   *
+   * It is the surface composing the tile that owns this, and the reason is the layer order: a tile is shared
+   * presentation and the cart lives in the state layer above it, so a tile reading the cart would be an import
+   * running upward. The surface reads the cart for it — through `useQuickAdd` in `src/state/CartContext.tsx`,
+   * the single home of the rule, so a line already at its ceiling raises the same notice on every surface — and
+   * hands the returned callback down here. The tile calls it only for a product it has already found buyable.
+   */
+  readonly onAddToCart: (product: Product) => void;
   /** The placement the tile is rendered in. Defaults to `"grid"`. */
   readonly variant?: ProductCardVariant;
   /**
@@ -202,6 +207,9 @@ export interface ProductCardProps {
  * its rating with its review count, its price with any discount, its availability in words, and a quick
  * add that puts one unit in the cart.
  *
+ * Its render entry point is {@link ProductCard}, the `memo` wrapper below: this function is not exported,
+ * because every surface should reach the tile through the wrapper that keeps a page re-render out of the grid.
+ *
  * The tile is presentational. It receives its product as a prop, fetches nothing, runs no effect and holds
  * no asynchronous state; the loading, empty and error states of a catalogue page belong to the page that
  * renders a row of these. Every figure it shows comes from the one home that owns it — money and ratings
@@ -217,12 +225,13 @@ export interface ProductCardProps {
  * the control reports itself unavailable in the ARIA spelling and is described by the mark over the image,
  * so a keyboard user who reaches it is told why.
  *
- * @param props - The product, the placement, whether the quick add is offered, the image priority, an
- *   optional brand name override and the tile's extra classes.
+ * @param props - The product, the add the composing surface owns, the placement, whether the quick add is
+ *   offered, the image priority, an optional brand name override and the tile's extra classes.
  * @returns The tile, ready to sit directly inside a product grid.
  */
-export function ProductCard({
+function ProductCardTile({
   product,
+  onAddToCart,
   variant = "grid",
   showQuickAdd = true,
   priority = false,
@@ -244,6 +253,7 @@ export function ProductCard({
       product={product}
       canBuy={canBuy}
       describedById={canBuy ? undefined : flagId}
+      onAddToCart={onAddToCart}
     />
   ) : null;
 
@@ -309,6 +319,29 @@ export function ProductCard({
   );
 }
 
+/**
+ * {@link ProductCardTile} wrapped in `memo`: the tile every surface of the product renders.
+ *
+ * The wrapper is what keeps a page re-render out of the grid. The catalogue's filter drawer is that route's
+ * own state, so opening or closing it re-renders the page and, without this, every tile the page holds — up
+ * to a full page of forty-eight. A tile's props are the product object, identical between two renders of the
+ * same page; the callback its composing surface hands in, which is the memoised function `useQuickAdd`
+ * returns; and small flags and a class name. The comparison is therefore cheap and the subtrees behind it are
+ * skipped rather than re-rendered.
+ *
+ * Nothing a tile shows changes without one of those props changing: the cart is read inside the callback at
+ * activation rather than subscribed to during render, so a change to the cart re-renders no tile, and a
+ * context update re-renders its consumer whatever a `memo` around an ancestor decides.
+ *
+ * @param props - The product, the add the composing surface owns, the placement, whether the quick add is
+ *   offered, the image priority, an optional brand name override and the tile's extra classes.
+ * @returns The tile, ready to sit directly inside a product grid.
+ */
+export const ProductCard = memo(ProductCardTile);
+
+// `memo` reports the wrapped function's name to the profiling tools, so the tile's known name is written back.
+ProductCard.displayName = "ProductCard";
+
 /** Everything the tile's quick-add control is handed. */
 interface QuickAddControlProps {
   /** The product one activation adds. */
@@ -317,69 +350,41 @@ interface QuickAddControlProps {
   readonly canBuy: boolean;
   /** The identifier of the mark that explains an unbuyable product, for the control to be described by. */
   readonly describedById?: string;
+  /** The composing surface's add, passed on unchanged once the product is known to be buyable. */
+  readonly onAddToCart: (product: Product) => void;
 }
 
 /**
  * The tile's quick add: one button that puts a single unit of the product in the cart.
  *
- * It is a separate component for one reason. It is the only piece of the tile that has to know what the
- * cart already holds — a second activation must report the ceiling rather than pass silently — and the
- * tile itself, with its image, its two prices and its rating, has to stay independent of the cart.
+ * The button itself, which owns no cart: the add it raises is the `onAddToCart` callback the surface composing
+ * the tile handed in, so this control imports nothing from the state layer and the ceiling, the merge into an
+ * existing line and the notice the add raises all belong to that callback and the reducer behind it.
  *
- * Its render output does not depend on the cart either, so it holds no subscription to it: the line it
- * compares against its ceiling is read through `useCartDispatch()`'s `readLines()` at the moment the
- * button is activated, which is the only moment the line is needed. Subscribing instead — reading the
- * cart during render, as this control first did — re-renders the action row of every tile on screen on
- * every change to the cart, so one quick add on a catalogue page costs a pass over all of them, twice
- * when the add also opens the drawer. `src/state/CartContext.tsx` splits its contexts, and offers
- * `readLines` beside them, precisely so a control that only changes the cart is re-rendered by neither.
+ * The rule the callback holds keeps the property this control first had: the line the cart holds is read at
+ * activation, through `readLines()`, which `src/state/CartContext.tsx` offers beside its contexts precisely so a
+ * control that only changes the cart subscribes to neither — so a cart change re-renders no tile's action row,
+ * and one quick add on a catalogue page costs no pass over the cards. `useQuickAdd` in that module is the
+ * callback's single home, shared by every surface that renders tiles.
  *
- * The add is a single call. `src/state/cartReducer.ts` merges a repeated add into the line the product
- * already holds and clamps the quantity to that line's ceiling, so the control dispatches nothing else and
- * keeps no state of its own; a product with nothing on hand builds no line at all, which is why the button
- * reports itself unavailable before it is ever pressed and states that availability when it is. Nothing is
- * derived here — the item count belongs to the header and every money total to `src/lib/pricingService.ts`.
+ * A product with nothing on hand is refused by the callback, which states the tile's own availability words:
+ * the control reports itself `aria-disabled` rather than disabled, so a keyboard user keeps it and the
+ * activation explains why it will not act. Nothing is derived here — the item count belongs to the shell that
+ * composes the header, and every money total to `src/lib/pricingService.ts`.
  *
- * @param props - The product, whether it can be bought, and the mark that explains it when it cannot.
+ * @param props - The product, whether it can be bought, the mark that explains it when it cannot, and the
+ *   add the composing surface owns.
  * @returns The action slot holding the quick-add button.
  */
-function QuickAddControl({ product, canBuy, describedById }: QuickAddControlProps): ReactElement {
-  // The action object is held rather than its members destructured: `CartActions` declares its members in
-  // method position, and a member separated from the object it belongs to is the shape the linter's
-  // `unbound-method` rule exists to catch.
-  const cartActions = useCartDispatch();
-  const { error, success } = useToast();
-
-  /**
-   * Adds one unit, and states in a toast what happened either way.
-   *
-   * The ceiling comparison is made at activation, against the line's own bound — the one
-   * `src/state/cartReducer.ts` clamps to — so the notice is raised for the same condition the reducer
-   * would silently absorb.
-   *
-   * Every outcome is reported in the toast register rather than by opening the drawer: an add is one action,
-   * and the drawer is a modal whose background is made inert, so opening it on the shopper's behalf would
-   * cost a dismissal before the next add. The header's cart button keeps the drawer reachable from the badge
-   * on every route, which is what the drawer is for.
-   *
-   * The refusal states the product's availability, in the words the tile's own availability line carries,
-   * because the control stays in the tab order: a control a keyboard user can reach either acts or explains
-   * itself.
-   */
+function QuickAddControl({
+  product,
+  canBuy,
+  describedById,
+  onAddToCart,
+}: QuickAddControlProps): ReactElement {
+  /** Raises the add the composing surface owns, which decides what a product it cannot sell is told. */
   const addToCart = (): void => {
-    if (!canBuy) {
-      error(CATALOG_COPY.OUT_OF_STOCK_LABEL);
-      return;
-    }
-
-    const line = cartActions.readLines().find((candidate) => candidate.productId === product.id);
-    if (line !== undefined && line.quantity >= line.maxQuantity) {
-      error(lowStockLabel(line.maxQuantity));
-      return;
-    }
-
-    cartActions.addItem(product);
-    success(addedToCartMessage(product.name));
+    onAddToCart(product);
   };
 
   return (

@@ -1,6 +1,6 @@
 /* Path: src/styles/controls.css
  * Purpose: Styles for the shared primitives of buttons, form fields and selection controls, loaded from src/styles/components.css
- * Lines: 590
+ * Lines: 599
  */
 
 /* ==== Buttons ====
@@ -158,8 +158,12 @@
   opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
+/* The group wraps: two labels side by side outgrow the page's own column once the root font is doubled, and
+ * a group is a layout rather than one control, so the row breaks instead of hanging a control past the window.
+ * The line is unchanged wherever the controls already fit the space the group is given. */
 .sp-btn-group {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: stretch;
 }
 .sp-btn-group > .sp-btn {
@@ -220,6 +224,11 @@
 }
 .sp-btn-group--align-end {
   justify-content: flex-end;
+}
+/* A group that names an alignment spans the page's own column and already wraps its controls, so at a
+ * scaled-up root font a label wider than that column breaks inside the control instead of widening the page. */
+.sp-btn-group--align-center > .sp-btn {
+  white-space: normal;
 }
 
 /* ==== Forms and fields ====

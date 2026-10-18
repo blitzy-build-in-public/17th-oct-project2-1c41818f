@@ -1,16 +1,16 @@
 /**
  * Path: src/lib/apiOrders.ts
  * Purpose: The submission half of `POST /api/orders` — the demonstration card decision, the idempotency store and the reading of an order request.
- * Lines: 390
+ * Lines: 325
  */
 
-import { DEMO_CARD_NUMBERS, STORAGE_KEYS } from "@/constants/config";
-import { FEEDBACK_COPY, VALIDATION_MESSAGES, demoPaymentNote } from "@/constants/content";
+import { paymentDeclinedNote } from "@/constants/checkoutCopy";
+import { DEMO_CARD_NUMBERS } from "@/constants/config";
+import { FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Commerce from "@/types/commerce";
 import type * as Common from "@/types/common";
 import { toIsoDateTime } from "@/utils/dates";
-import { readStored, removeStored, writeStored } from "@/utils/storage";
 import { createCredentialDigest } from "@/utils/strings";
 import {
   hasErrors,
@@ -28,6 +28,7 @@ import {
   type OrderCreationRequest,
   type RouteContext,
 } from "@/lib/apiContract";
+import { clearPlacements, placementTokenFor, rememberPlacement } from "@/lib/orderPlacements";
 import {
   invalidFields,
   isMembers,
@@ -56,9 +57,10 @@ function cardBrand(digits: string): string {
 /**
  * The payment an order records, decided here and not by the store: the number is read, validated and
  * reduced to its brand, its last four digits and a decision, so no number reaches the data module, an
- * order or a payload. One configured number is declined, with the demonstration note as its message,
- * and every other card that passed the payment rules is authorised; an invoice is recorded as accepted
- * with no card and no authorisation instant, because nothing authorised anything.
+ * order or a payload. One configured number is declined, and the refusal says so in its own words —
+ * nothing was ordered, and which demonstration number is approved — rather than repeating the payment
+ * step's notice; every other card that passed the payment rules is authorised, and an invoice is
+ * recorded as accepted with no card and no authorisation instant, because nothing authorised anything.
  */
 function settlePayment(payment: PaymentValidationInput): Common.Result<Commerce.PaymentSummary> {
   if (payment.method !== "card") {
@@ -74,7 +76,7 @@ function settlePayment(payment: PaymentValidationInput): Common.Result<Commerce.
   if (digits === DEMO_CARD_NUMBERS.DECLINED) {
     return failure(
       API_ERROR_CODES.PAYMENT_DECLINED,
-      demoPaymentNote(DEMO_CARD_NUMBERS.APPROVED, DEMO_CARD_NUMBERS.DECLINED),
+      paymentDeclinedNote(DEMO_CARD_NUMBERS.APPROVED),
     );
   }
   return ok({
@@ -108,88 +110,21 @@ interface RememberedSubmission {
  * double-submission guard still holds. */
 const rememberedOrders = new Map<string | null, Map<string, RememberedSubmission>>();
 
-/** The read credential of every account-less order this document created, keyed by the order's
+/** The credential of every account-less order this process created, keyed by the identifier: this
+ * document's own record of what it placed, kept beside the durable one `src/lib/orderPlacements.ts`
+ * writes so a read is answered even where there is no store to read (a build with Web Storage refused,
+ * a unit case running without one). */
+const guestOrderCredentials = new Map<Common.OrderId, string>();
+
+/** The read credential of every account-less order this browser created, keyed by the order's
  * identifier: the idempotency key of the submission that placed it, which is the one value the placing
  * client mints and holds. Only an account-less order is recorded, because an order that names an
  * account is read through the session that owns it — which is why a seeded account-less order holds no
- * entry here and is readable by an administrator alone. It is a demonstration-grade capability rather
- * than a production credential, the note `src/utils/strings.ts` carries for the digest applying here
- * too, and it holds what this document created: {@link rememberCredential} writes the same pair to the
- * durable record below, which is where a credential minted before a reload is verified from. */
-const guestOrderCredentials = new Map<Common.OrderId, string>();
-
-/** One credential the seam recorded durably: the account-less order it was minted for and the key the
- * submission that placed it was sent under. */
-interface RecordedCredential {
-  readonly orderId: Common.OrderId;
-  readonly credential: string;
-}
-
-/** How many credentials the durable record keeps, newest first: the confirmation of a recent order is
- * still answered after a reload, while a browser that places order after order cannot grow the record
- * without bound. */
-const KEPT_CREDENTIALS = 20;
-
-/** Whether a stored value is one recorded credential: both members present and text, so an entry a build
- * this one does not know wrote is discarded rather than read as a credential. */
-function isRecordedCredential(value: unknown): value is RecordedCredential {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { readonly orderId?: unknown; readonly credential?: unknown };
-  return typeof candidate.orderId === "string" && typeof candidate.credential === "string";
-}
-
-/** Whether a stored value is the payload this module writes: a list whose every entry is a recorded
- * credential. A payload of another shape — or one holding a single entry that is not a credential — is
- * discarded whole rather than read in part, so a value this build cannot describe never verifies a
- * read. */
-function isCredentialRecord(value: unknown): value is readonly RecordedCredential[] {
-  if (!Array.isArray(value)) return false;
-  return (value as readonly unknown[]).every((entry) => isRecordedCredential(entry));
-}
-
-/** The credentials the seam recorded durably, newest first: an empty list when nothing is stored, the
- * store cannot be reached, or the payload fails its guard. */
-function storedCredentials(): readonly RecordedCredential[] {
-  return readStored<readonly RecordedCredential[]>(
-    STORAGE_KEYS.ORDER_CREDENTIALS,
-    [],
-    isCredentialRecord,
-  );
-}
-
-/** Writes the credentials the seam holds, so a record that drops entries drops them durably too. A
- * refused write is tolerated silently, like every other write through the storage util. */
-function writeCredentials(records: readonly RecordedCredential[]): void {
-  writeStored<readonly RecordedCredential[]>(STORAGE_KEYS.ORDER_CREDENTIALS, records);
-}
-
-/** The credential the durable record holds for an account-less order, or `undefined` when it holds none:
- * the half {@link holdsGuestOrderCredential} reads when this document recorded nothing for that order. */
-function recordedCredentialFor(orderId: Common.OrderId): string | undefined {
-  return storedCredentials().find((entry) => entry.orderId === orderId)?.credential;
-}
-
-/** Records a credential where an account-less order is created, so the proof of placement outlives the
- * document that minted it: the order it belongs to and the key its submission carried, newest first and
- * bounded like the record the placing client keeps. An entry for an order already recorded replaces
- * that entry rather than repeating it. */
-function rememberCredential(orderId: Common.OrderId, credential: string): void {
-  const kept = storedCredentials().filter((entry) => entry.orderId !== orderId);
-  writeCredentials([{ orderId, credential }, ...kept].slice(0, KEPT_CREDENTIALS));
-}
-
-/** Drops the credentials of the orders one forgotten scope created, so what a scope remembered and what
- * this record remembered end together: an order cannot be read through a scope that has been
- * forgotten. */
-function forgetScopeCredentials(entries: ReadonlyMap<string, RememberedSubmission>): void {
-  const created = new Set<Common.OrderId>();
-  for (const entry of entries.values()) {
-    if (entry.outcome.ok) created.add(entry.outcome.value.id);
-  }
-  const records = storedCredentials();
-  const kept = records.filter((entry) => !created.has(entry.orderId));
-  if (kept.length !== records.length) writeCredentials(kept);
-}
+ * entry and is readable by an administrator alone. It is a demonstration-grade capability rather than a
+ * production credential, the note `src/utils/strings.ts` carries for the digest applying here too, and
+ * it is held in the durable store `src/lib/orderPlacements.ts` writes through `src/utils/storage.ts`,
+ * so the confirmation of an order placed here reopens after a reload rather than only in the document
+ * that placed it. */
 
 /** Forgets every remembered placement: the orders a submission created here, so no case replays one an
  * earlier case created, and the credential each account-less order was recorded with — in this document
@@ -197,15 +132,12 @@ function forgetScopeCredentials(entries: ReadonlyMap<string, RememberedSubmissio
 export function clearRememberedOrders(): void {
   rememberedOrders.clear();
   guestOrderCredentials.clear();
-  removeStored(STORAGE_KEYS.ORDER_CREDENTIALS);
+  clearPlacements();
 }
 
 /** Forgets what one session scope remembered: the entries a session that has ended left behind, so a
- * later request carrying its token inherits none of them, and the credential its submissions recorded
- * for the orders they created, so a forgotten scope cannot still be read through this record. */
+ * later request carrying its token inherits none of them. */
 export function forgetRememberedOrders(scope: string | null): void {
-  const entries = rememberedOrders.get(scope);
-  if (entries !== undefined) forgetScopeCredentials(entries);
   rememberedOrders.delete(scope);
 }
 
@@ -233,8 +165,11 @@ export function holdsGuestOrderCredential(
   orderId: Common.OrderId,
   presented: string | undefined,
 ): boolean {
-  const recorded = guestOrderCredentials.get(orderId) ?? recordedCredentialFor(orderId);
-  return recorded !== undefined && presented !== undefined && recorded === presented;
+  if (presented === undefined || presented.trim() === "") return false;
+  // This document's own record first, then the durable one a later document reads: the credential is the
+  // same value in both, and the durable half is what makes a reload's read succeed.
+  const recorded = guestOrderCredentials.get(orderId) ?? placementTokenFor(orderId);
+  return recorded !== undefined && recorded !== null && recorded === presented;
 }
 
 /** The scope a request's submissions are remembered under: the token of the live session it carries, or
@@ -381,7 +316,7 @@ export function createOrder(context: RouteContext): Common.Result<unknown> {
     // a read made after a reload is still verified against the credential that order was placed with.
     if (created.value.customerId === null) {
       guestOrderCredentials.set(created.value.id, key);
-      rememberCredential(created.value.id, key);
+      rememberPlacement(created.value, key);
     }
     entries.set(key, { fingerprint, outcome: created });
     rememberedOrders.set(scope, entries);

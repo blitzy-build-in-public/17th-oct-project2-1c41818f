@@ -1,18 +1,17 @@
 /**
  * Path: src/lib/apiRequests.ts
  * Purpose: Reads a request for the in-process API: the members a query carries, the vocabularies they are validated against and the refusals they produce
- * Lines: 600
+ * Lines: 599
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
 import {
-  DATE_RANGE_COPY,
   NOT_FOUND_COPY,
   PROMO_REJECTION_MESSAGES,
   VALIDATION_MESSAGES,
   quantityRangeMessage,
-  rangeTooLongMessage,
 } from "@/constants/content";
+import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import {
   BASELINE_OPTIONS,
   GRANULARITY_OPTIONS,

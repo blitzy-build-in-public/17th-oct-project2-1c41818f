@@ -1,7 +1,7 @@
 /**
  * Path: src/state/checkoutReducer.ts
  * Purpose: Checkout step transitions, validation errors, submission and success
- * Lines: 599
+ * Lines: 598
  */
 
 import { FORM_ERROR_KEY, hasErrors } from "@/utils/validation";
@@ -27,7 +27,7 @@ export type CheckoutStep = "shipping" | "payment" | "review" | "confirmation";
 /**
  * The steps that own a form, in order: what the step indicator renders as reachable, and whose
  * validators the checkout context runs before advancing. Their labels come from
- * `src/constants/content.ts`.
+ * `src/constants/checkoutCopy.ts`.
  */
 export const CHECKOUT_FORM_STEPS = ["shipping", "payment", "review"] as const;
 
@@ -482,9 +482,9 @@ function mergeGroup<TGroup extends object>(
 }
 
 /**
- * The values with a patch applied and the error of every field it touched cleared. What the patch
- * touches is {@link touchedFields}' answer, read once here: a patch that names no field — `{}`, or
- * a group with no key inside it — changes nothing and comes back as the state it was handed.
+ * The values with a patch applied and the errors of the fields it touched cleared, the last
+ * submission's refusal withdrawn with them, since a refusal answers an attempt the patch has
+ * moved on from. A patch naming no field — `{}`, or a group with no key — is handed back as it was.
  */
 function applyValuesPatch(state: CheckoutState, patch: CheckoutValuesPatch): CheckoutState {
   const touched = touchedFields(patch);
@@ -579,11 +579,10 @@ function withoutSubmissionFailure(state: CheckoutState): CheckoutState {
  * where it was: a shopper who has just typed into a field must not be left reading the complaint
  * about the value they replaced.
  *
- * `touched` is the set {@link touchedFields} read from the patch. A field is cleared under both
- * spellings a validator might key it by — the bare member name, and the name qualified by the group
- * it sits in — while a field the patch does not name keeps its error, so correcting one control
- * cannot silence the complaint about another. An error map from which nothing was cleared keeps its
- * own reference.
+ * `touched` is the set {@link touchedFields} read from the patch. A field is cleared under both spellings a
+ * validator might key it by — the bare member name, and the name qualified by the group it sits in — while a
+ * field the patch does not name keeps its error, so correcting one control cannot silence the complaint
+ * about another. An error map from which nothing was cleared keeps its own reference.
  */
 function clearErrorsFor(errors: FieldErrors, touched: ReadonlySet<string>): FieldErrors {
   const next: FieldErrors = {};

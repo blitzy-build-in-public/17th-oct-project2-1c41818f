@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderConfirmation.tsx
  * Purpose: Confirmation route showing the order number, itemised lines, delivery estimate and address
- * Lines: 535
+ * Lines: 537
  */
 
 import type { ReactElement } from "react";
@@ -10,18 +10,20 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardBody, CardHeader, OrderStatusBadge } from "@/components/ui/Card";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import {
+  CHECKOUT_COPY,
+  deliveryEstimateLabel,
+  orderConfirmationHeading,
+} from "@/constants/checkoutCopy";
 import { SHIPPING_METHODS, STORAGE_KEYS } from "@/constants/config";
 import {
   CART_COPY,
-  CHECKOUT_COPY,
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   NOT_FOUND_COPY,
   PAGE_TITLES,
   appliedPromoLabel,
-  deliveryEstimateLabel,
   documentTitle,
-  orderConfirmationHeading,
 } from "@/constants/content";
 import { ROUTE_PARAMS, ROUTES, accountOrderPath, loginPath } from "@/constants/routes";
 // The seam's own reading of a failure, so this page never decides what a status or a sentence means: whether

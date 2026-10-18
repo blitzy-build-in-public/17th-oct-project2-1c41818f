@@ -2,7 +2,7 @@
  * Path: tests/unit/utils/dates.test.ts
  * Purpose: The range arithmetic, bucket boundaries and comparison periods of src/utils/dates.ts, in its
  * own suite because the two suites that touch the module sit at the per-file 600-line ceiling
- * Lines: 600
+ * Lines: 599
  */
 
 // A pure-function suite: it reaches no DOM, mocks no module and reads no ambient clock — every rule
@@ -12,7 +12,8 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_REPORT_RANGE_DAYS, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
-import { DATE_RANGE_COPY, VALIDATION_MESSAGES, rangeTooLongMessage } from "@/constants/content";
+import { VALIDATION_MESSAGES } from "@/constants/content";
+import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import type { BaselineKind, BucketGranularity } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
 // The subject and the shared builders are imported as namespaces, as the two sibling suites import
@@ -174,10 +175,8 @@ describe("the week and the month a date opens: startOfWeek, endOfWeek, startOfMo
 
   it("leaves a value it cannot parse with no week and no month", () => {
     for (const value of UNPARSABLE_VALUES) {
-      expect(dates.startOfWeek(value)).toBe("");
-      expect(dates.endOfWeek(value)).toBe("");
-      expect(dates.startOfMonth(value)).toBe("");
-      expect(dates.endOfMonth(value)).toBe("");
+      expect([dates.startOfWeek(value), dates.endOfWeek(value)]).toEqual(["", ""]);
+      expect([dates.startOfMonth(value), dates.endOfMonth(value)]).toEqual(["", ""]);
     }
   });
 });

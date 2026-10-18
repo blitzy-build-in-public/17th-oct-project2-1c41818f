@@ -1,42 +1,22 @@
 /**
  * Path: src/state/ToastContext.tsx
  * Purpose: The toast queue with success, error and info helpers
- * Lines: 249
+ * Lines: 208
  */
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
-/**
- * The three registers a transient outcome can be reported in: an action that
- * completed, an action that failed, and a neutral note.
- *
- * A string union rather than an `enum`, because the compiler runs with
- * `erasableSyntaxOnly`, which forbids syntax it cannot erase.
- */
-export type ToastKind = "success" | "error" | "info";
+import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE } from "@/constants/config";
+import type { ToastKind, ToastMessage } from "@/types/common";
 
-/**
- * One queued notification, complete enough for the viewport to render as it
- * stands.
- *
- * `durationMs` is the queue's duration policy for this message: the viewport's
- * timer honours it, while the behaviour around that timer — pausing while the
- * pointer or the keyboard focus rests on the item, and then asking the queue to
- * remove it — belongs to the viewport.
+/*
+ * The queue's two shapes and its two configured numbers belong to the foundations, and are imported rather
+ * than declared here: `ToastKind` and `ToastMessage` are in `src/types/common.ts`, and `TOAST_DURATION_MS`
+ * and `TOAST_MAX_VISIBLE` in `src/constants/config.ts`. Neither is re-exported, because a re-export would
+ * give a concern a second name beside the one home it has, and the viewport — which sits below this layer —
+ * imports them from those owners directly.
  */
-export interface ToastMessage {
-  /** Stable handle for this message: handed out by `notify`, accepted by `dismiss`. */
-  readonly id: number;
-  /** Which register the message is reported in. */
-  readonly kind: ToastKind;
-  /** The message text, supplied by the caller and never composed here. */
-  readonly message: string;
-  /** Short heading rendered above the message when the caller supplies one. */
-  readonly title?: string;
-  /** How long the message may stay on screen, in milliseconds. */
-  readonly durationMs: number;
-}
 
 /**
  * What a caller hands to `notify` or to one of the three kind helpers.
@@ -96,27 +76,6 @@ export interface ToastApi {
   /** Removes every queued message at once. */
   readonly clear: () => void;
 }
-
-/**
- * The single home of the queue's duration policy: how long a message of each kind
- * stays on screen unless the caller overrides it through `ToastInput.durationMs`.
- *
- * A failure needs longer to read than a confirmation, which is why an error
- * outlasts a success or an info note. The viewport reads the resolved value from
- * the message it renders, so it carries no copy of these numbers.
- */
-export const TOAST_DURATION_MS: Readonly<Record<ToastKind, number>> = {
-  success: 5000,
-  error: 8000,
-  info: 5000,
-};
-
-/**
- * How many notifications a burst may leave on screen. A burst longer than this
- * keeps the newest and lets the oldest go, so an action that reports twice cannot
- * stack a column of notices over the page it is reporting on.
- */
-export const TOAST_MAX_VISIBLE = 4;
 
 /**
  * The queue itself, private to this module: consumers reach it through

@@ -1,6 +1,6 @@
 /* Path: src/styles/commerce.css
  * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
- * Lines: 256
+ * Lines: 251
  */
 
 /* The cart, the mini-cart and the checkout: this sheet composes the primitives the six sheets before it own —
@@ -249,8 +249,3 @@
  * At --breakpoint-sm the checkout's actions and the cart row's controls take their own full-width lines; at
  * --breakpoint-md the rules above fold the cart row onto two lines and set the grids and option cards; at
  * --breakpoint-lg `.sp-split` sets the cart and the checkout two abreast with a sticky aside. */
-
-/* The incoming landing's later rules, carried into this sheet. */
-.sp-checkout {
-  row-gap: var(--space-8);
-}

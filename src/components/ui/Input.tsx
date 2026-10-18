@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Input.tsx
  * Purpose: Input, text area and form field wrapper with label, hint, required and error handling
- * Lines: 537
+ * Lines: 549
  */
 
 import { useId, useState } from "react";
@@ -40,7 +40,11 @@ export interface FieldControlProps {
   readonly isDisabled: boolean;
   /** The hint element's id, or `undefined` when the field renders no hint. */
   readonly hintId: string | undefined;
-  /** The error element's id, or `undefined` when the field renders no error. */
+  /**
+   * The id of the element carrying the field's message, or `undefined` when the field renders none.
+   * That element is what the control points at with `aria-describedby`, so the message reaches
+   * assistive technology as the control's own description rather than as a live region of its own.
+   */
   readonly errorId: string | undefined;
 }
 
@@ -244,9 +248,15 @@ function renderAddon(addon: ReactNode, id: string): ReactElement | null {
  * control carries the state, and the asterisk beside the label marks it for sighted users. The
  * asterisk is hidden from assistive technology, and no wording joins the label, because a control's
  * accessible name has to be its label alone — a field that is missing a value says so through its own
- * error paragraph, whose `role="alert"` speaks once a submission has failed and not before. The label
- * still ends with that marker, so a query for a required field's name matches the copy as a pattern
- * rather than as the exact string.
+ * error paragraph, which is the control's description and speaks when the reader reaches the control.
+ * The label still ends with that marker, so a query for a required field's name matches the copy as a
+ * pattern rather than as the exact string.
+ *
+ * The message is the control's description and nothing more: the paragraph carries the id the control
+ * names in `aria-describedby`, so a visitor hears it on reaching the control and again on returning to
+ * it, while the summary a form renders above its fields is the one region that announces a refused
+ * submit. Marking the paragraph an alert as well would speak the same failure twice, and eight times
+ * over a form whose fields are all empty.
  *
  * @param props - The field's label, optional hint and error, the required and disabled flags, an
  *   optional class name and the control to render; `id` falls back to a generated one.
@@ -332,11 +342,13 @@ export function FieldHint({ id, text }: FieldRowProps): ReactElement | null {
 }
 
 /**
- * The field's error row: the message a field announces when its control is invalid.
+ * The field's error row: the message that states what is wrong with a field's value.
  *
- * `role="alert"` is what makes a message that appears after a submission heard without the reader moving the
- * focus, and the id-guard is the one {@link FieldHint} applies: the field describes its control by this row
- * while the row exists, which is also the state the control's `aria-invalid` reports.
+ * The row carries no live role of its own. It is the control's description: the id-guard is the one
+ * {@link FieldHint} applies, and the field puts this id on the control's `aria-describedby` while the row
+ * exists, which is also the state the control's `aria-invalid` reports. A submit that refuses a whole step
+ * announces itself once, through the one summary region the form renders above its fields; a live role here
+ * would speak the same failure again from every invalid field — eight times over an empty form.
  *
  * @param props - The row's id and its message, both optional; with no id the row renders nothing at all.
  * @returns The `sp-field__error` paragraph, or `null` when no id was given.
@@ -344,7 +356,7 @@ export function FieldHint({ id, text }: FieldRowProps): ReactElement | null {
 export function FieldError({ id, text }: FieldRowProps): ReactElement | null {
   if (id === undefined) return null;
   return (
-    <p className="sp-field__error" id={id} role="alert">
+    <p className="sp-field__error" id={id}>
       {text ?? ""}
     </p>
   );

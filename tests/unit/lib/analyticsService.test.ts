@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
  * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines.
- * Lines: 580
+ * Lines: 584
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
@@ -543,10 +543,14 @@ describe("the administrator-only reads, through the service and the seam", () =>
 const MONTH: DateRange = { from: "2026-09-19", to: "2026-10-18" };
 const TRAILING_YEAR: DateRange = { from: "2025-10-18", to: "2026-10-18" };
 
-/** The six figures the fact rows of each period total, in the order the sales report states them. */
+/** The six figures the fact rows of each period total, in the order the sales report states them. They
+ * follow the seeded collection, so they move when the seeded draw does: bounding `pickMany` to one stream
+ * step per drawn item changed which products every basket holds and how many steps the shared stream spent,
+ * which shifts the rest of the plan. The identities below are what this block asserts, and they hold at these
+ * figures exactly as they held at the ones drawn by the catalogue-wide shuffle. */
 const SEEDED_TOTALS: readonly (readonly [DateRange, readonly number[]])[] = [
-  [MONTH, [111, 836, 14_425_301, 225_097, 1_263_633, 12_936_571]],
-  [TRAILING_YEAR, [983, 7_264, 128_857_068, 2_470_194, 19_554_394, 106_832_480]],
+  [MONTH, [101, 754, 12_746_083, 224_276, 2_411_990, 10_109_817]],
+  [TRAILING_YEAR, [981, 7_245, 133_154_218, 2_633_668, 20_698_601, 109_821_949]],
 ];
 
 /** The units one seeded order's lines sold, which the fact rows count and the product report sums. */

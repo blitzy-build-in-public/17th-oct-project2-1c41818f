@@ -1,88 +1,58 @@
 /**
  * Path: src/components/charts/donutLabelModel.ts
  * Purpose: Where each of a donut's percentages is written — inside its own wedge, or outside the ring on a leader line when the wedge is too thin to hold it — and where its readout is placed
- * Lines: 221
+ * Lines: 161
  */
 
-import {
-  MIN_SLICE_LABEL_SHARE,
-  polarToCartesian,
-  roundCoordinate,
-} from "@/components/charts/chartScales";
+import { polarToCartesian, roundCoordinate } from "@/components/charts/chartScales";
 import type { ArcDatum } from "@/components/charts/chartScales";
-import type { CSSProperties } from "react";
 
 import { formatShare } from "@/utils/format";
 
 /*
  * A §0.5.5 split of `src/components/charts/DonutChart.tsx`, which could take no rule of its own once every slice
  * needed a label: the component keeps the drawing, the legend, the readout's markup and the paired table, while
- * the two questions of where a percentage is written and where the readout that repeats it is placed live here. The folder's own
- * pattern — `chartScales.ts`, `chartGeometry.ts`, `barGeometry.ts`, `lineChartModel.ts` — puts the model of a
- * drawing beside the component that draws it, where it is testable without mounting SVG.
+ * the question of where each percentage is written lives here. The folder's own pattern — `chartScales.ts`,
+ * `chartGeometry.ts`, `barGeometry.ts`, `lineChartModel.ts` — puts the model of a drawing beside the component
+ * that draws it, where it is testable without mounting SVG. The readout's own placement is not repeated here:
+ * `src/components/charts/readoutPlacement.ts` owns that arithmetic for all three renderers.
  *
- * One rule, stated once: a slice with room for it carries its percentage on itself, and a slice too thin to
- * hold one carries the same percentage outside the ring on a leader line, so every segment is annotated and no
- * figure is reachable through the ring's geometry alone. The threshold is `MIN_SLICE_LABEL_SHARE`, read from
- * `chartScales.ts`; the band a label outside the ring needs is `OUTSIDE_LABEL_BAND`. Nothing here states a
- * colour, a stroke, a fill or a piece of copy: the only strings this file produces are percentages formatted
- * through `src/utils/format.ts`, so the renderer decides how a figure looks and the stylesheet decides how it
- * is painted.
+ * One rule, stated once: every slice's percentage is written outside the ring, on the surface the legend's
+ * shares are read on, in the digits the legend writes, and a leader joins it back to the wedge it belongs to.
+ * A slice's own fill is too saturated a ground for any ink a figure could be read in, and a wedge has no room
+ * for a figure at all once it is thin, so no figure is ever painted on the ring. Nothing here states a colour,
+ * a stroke, a fill or a piece of copy: the only strings this file produces are percentages formatted through
+ * `src/utils/format.ts`, so the renderer decides how a figure looks and the stylesheet decides how it is
+ * painted.
  *
- * The geometry is reasoned, not measured, so nothing here reads an element's size. With the band reserved the
- * ring's radius is unchanged — a 720×384 drawing holds the same 124-unit ring it held in 720×280 — and the
- * farthest label sits about 18 units into that 384-unit frame, a line of type's worth of clearance below its
- * top edge, so no label and no leader can be painted outside the chart's frame, which is what the band buys.
- * The band's own arithmetic is in `OUTSIDE_LABEL_BAND`.
+ * The geometry is reasoned, not measured, so nothing here reads an element's size. The ring takes
+ * `DONUT_RING_SHARE` of the half-extent the drawing offers, the rails stand `LABEL_GAP` past it, and a side's
+ * rows are `LABEL_ROW` apart as far as the drawing's own height allows, so neither a figure nor a leader is
+ * ever painted outside the chart's frame.
  */
 
-/** The share a slice needs to carry its percentage on itself: the same threshold the arcs are read against. */
-const INSIDE_LABEL_SHARE = MIN_SLICE_LABEL_SHARE;
+/** The digits every slice's figure reads, which are the legend's own: one share is never stated two ways. */
+const LABEL_DIGITS = 1;
 
-/** The digits an on-wedge label reads: whole percents, which is what a wedge has room for. */
-const INSIDE_LABEL_DIGITS = 0;
+/** How far past the ring the rails stand, in user units, which is the room a leader needs to leave the rim. */
+const LABEL_GAP = 20;
+
+/** The row pitch a side's figures take, in user units, narrowed only where a side carries more rows than fit. */
+const LABEL_ROW = 33;
+
+/** The side of the ring a figure's rail runs from: `start` is right of it, `end` left of it. */
+type LabelSide = "start" | "end";
+
+/** The two rails, built in this order, so a rail's own index is its side's. */
+const LABEL_SIDES: readonly LabelSide[] = ["start", "end"];
 
 /**
- * The digits a label outside the ring reads: one decimal, matching the legend's own share.
+ * The share of the half-extent the drawing offers that the ring itself takes, the rest holding the two rails.
  *
- * A wedge thin enough for this treatment is one small fraction of the ring, and whole percents would round it
- * to `0%` — a label that states nothing. One decimal keeps it a figure, and keeps it reading the same as the
- * row the legend and the paired table carry for it.
+ * A ring at this share is centred in the drawing and leaves `LABEL_GAP` and a figure's own width on either
+ * side of it, so the drawing is the same box whatever width it is rendered at.
  */
-const OUTSIDE_LABEL_DIGITS = 1;
-
-/** How far past the ring the leader starts, in user units: the segment gap, so it never touches a wedge. */
-const LEADER_GAP = 6;
-
-/** How far past the leader's start the first level of outside labels sits, in user units. */
-const OUTSIDE_LABEL_GAP = 14;
-
-/** How much further out each successive level sits, in user units. */
-const OUTSIDE_LABEL_STEP = 15;
-
-/**
- * How many levels the outside labels cycle through, in ring order.
- *
- * Two thin wedges beside each other have mid-angles close enough that labels at one radius would collide, so
- * each successive thin slice steps out one level and the fourth returns to the first — by which point the ring
- * has turned far enough that the two labels are no longer neighbours.
- */
-const OUTSIDE_LABEL_LEVELS = 3;
-
-/** How far a label clears the leader's end, in user units, in the direction it reads. */
-const LABEL_CLEARANCE = 3;
-
-/**
- * The extra band the drawing reserves top and bottom when a thin slice needs its label outside the ring.
- *
- * One label outside the ring reaches `LEADER_GAP + OUTSIDE_LABEL_GAP + 2 × OUTSIDE_LABEL_STEP` = 50 units past
- * it, and the label's own line needs room beyond that: 52 units added to the frame's top and bottom inset —
- * with the same 52 added to the drawing's height, so the ring's radius and centre are what they were — holds
- * the farthest label about ten units clear of the frame's top edge, which is more than a line of type's
- * leading leaves to a font metric or a browser zoom change. A drawing with no thin slice reserves nothing and
- * keeps the height it always had.
- */
-export const OUTSIDE_LABEL_BAND = 52;
+export const DONUT_RING_SHARE = 0.85;
 
 /** One endpoint pair of a leader line, as the attributes an SVG `<line>` takes. */
 export interface SliceLeader {
@@ -106,8 +76,8 @@ export interface SliceLabelMark {
   readonly x: number;
   /** Where the text's anchor sits vertically, in the frame's own coordinate system. */
   readonly y: number;
-  /** How the text hangs off its anchor: centred inside a wedge, and clear of a leader outside the ring. */
-  readonly textAnchor: "middle" | "start" | "end";
+  /** How the text hangs off its anchor: `start` reads rightward from its rail, `end` leftward. */
+  readonly textAnchor: LabelSide;
   /** The leader line, present only when the label was drawn outside the ring. */
   readonly leader?: SliceLeader;
 }
@@ -122,58 +92,25 @@ export interface SliceLabelInput {
   readonly centreX: number;
   /** The ring's centre, vertically, in the frame's own coordinate system. */
   readonly centreY: number;
-  /** The ring's outer radius, which an outside label is placed past. */
+  /** The ring's outer radius, which both rails stand past. */
   readonly outerRadius: number;
 }
 
-/** A style object that also carries the custom properties `src/styles/admin-reports.css` positions by. */
-export type ReadoutStyle = CSSProperties & Record<`--${string}`, string>;
-
-/**
- * The custom properties the donut's readout is placed by, in the frame's own box.
- *
- * The anchor is a point of the drawing, so it is mapped onto the box the drawing occupies rather than onto
- * the frame's padding box: a bare percentage of the frame would place the readout a padding-width away from
- * the slice it describes.
- *
- * The anchor is also the box's own top-left corner, not its centre. `src/styles/admin-reports.css` clamps the
- * readout's inline start between zero and the frame's width less the reserved width, and that clamp bounds a
- * left edge: an offset is what it holds inside the frame, and a box centred on its anchor would be pushed off
- * the slice by a reserve wider than the text and could still hang past the frame. That is why the width is
- * given as the text's own `ch` measure plus its horizontal padding — a reserve, deliberately on the generous
- * side — rather than measured, which would also take state written from an effect.
- *
- * @param anchorX - The anchor's horizontal position in the drawing's own units.
- * @param anchorY - The anchor's vertical position in the drawing's own units.
- * @param width - The drawing's width in those units.
- * @param height - The drawing's height in those units.
- * @param characters - The number of characters the readout's words take.
- * @returns The style object the readout element carries.
- */
-export function readoutPlacement(
-  anchorX: number,
-  anchorY: number,
-  width: number,
-  height: number,
-  characters: number,
-): ReadoutStyle {
-  const origin = "var(--space-4)";
-  const span = `(100% - 2 * ${origin})`;
-  const ratio = (value: number): string => Math.min(Math.max(value, 0), 1).toFixed(4);
-  return {
-    "--sp-chart-readout-x": `calc(${origin} + ${span} * ${ratio(anchorX / width)})`,
-    "--sp-chart-readout-y": `calc(${origin} + ${span} * ${ratio(anchorY / height)})`,
-    "--sp-chart-readout-w": `calc(${characters}ch + 2 * var(--space-3))`,
-  };
-}
 /**
  * Where each slice's percentage is written: one mark per arc, in ring order.
  *
- * A slice holding at least {@link INSIDE_LABEL_SHARE} of the ring keeps its label on itself, at the arc's own
- * label position and anchored in the middle of it. A thinner slice carries its label outside the ring: a leader
- * runs from just past the outer edge to that slice's own level at the slice's mid-angle, and the text sits three
- * units clear of the leader's end, reading outward — anchored `start` on the right half of the ring and `end` on
- * the left, so no text runs back across the ring it describes.
+ * Every figure stands outside the ring, on the surface the legend's shares are read on and at the digits the
+ * legend writes, because a wedge's own fill is too saturated a ground for any ink a figure could be read in and
+ * one share cannot be stated at two precisions on one page. A slice's rail is the side its mid-angle falls on —
+ * right of the ring reading `start`, left reading `end` — and its row its place in that side's own order down
+ * the ring, so a side's leaders run in the order its rows do and no two of them cross. Rows are held inside the
+ * drawing, whose own half-height the centred ring puts at `centreY`: a side carrying more rows than fit a line
+ * each shares what room there is.
+ *
+ * A mark carries the leader its figure hangs off — the line from the slice's own mid-angle point on the rim out
+ * to the rail — which is the only tie between a figure and its wedge once both are off the fill. A mark's
+ * leader therefore accounts for the hairline the drawing joins it back with, and its own rail accounts for the
+ * side it reads from.
  *
  * Every coordinate is written through the geometry module's own rounding, so a mark and the path it sits beside
  * state a coordinate at one precision.
@@ -183,39 +120,42 @@ export function readoutPlacement(
  */
 export function sliceLabelMarks(options: SliceLabelInput): readonly SliceLabelMark[] {
   const { arcs, total, centreX, centreY, outerRadius } = options;
-  let thin = 0;
-  return arcs.map((arc): SliceLabelMark => {
-    if (arc.share >= INSIDE_LABEL_SHARE) {
-      return {
-        id: arc.id,
-        text: formatShare(arc.value, total, INSIDE_LABEL_DIGITS),
-        x: roundCoordinate(arc.labelX),
-        y: roundCoordinate(arc.labelY),
-        textAnchor: "middle",
-      };
-    }
-    const level = thin % OUTSIDE_LABEL_LEVELS;
-    thin += 1;
-    const start = polarToCartesian(centreX, centreY, outerRadius + LEADER_GAP, arc.midAngle);
-    const end = polarToCartesian(
-      centreX,
-      centreY,
-      outerRadius + LEADER_GAP + OUTSIDE_LABEL_GAP + level * OUTSIDE_LABEL_STEP,
-      arc.midAngle,
-    );
-    const readsRight = end.x >= centreX;
-    return {
-      id: arc.id,
-      text: formatShare(arc.value, total, OUTSIDE_LABEL_DIGITS),
-      x: roundCoordinate(end.x + (readsRight ? LABEL_CLEARANCE : -LABEL_CLEARANCE)),
-      y: roundCoordinate(end.y),
-      textAnchor: readsRight ? "start" : "end",
-      leader: {
-        x1: roundCoordinate(start.x),
-        y1: roundCoordinate(start.y),
-        x2: roundCoordinate(end.x),
-        y2: roundCoordinate(end.y),
-      },
-    };
+  const onRing = arcs.map((arc) => ({
+    arc,
+    edge: polarToCartesian(centreX, centreY, outerRadius, arc.midAngle),
+  }));
+  const rails = LABEL_SIDES.map((side) =>
+    onRing
+      .filter((one) => (one.edge.x >= centreX ? "start" : "end") === side)
+      .sort((one, other) => one.edge.y - other.edge.y),
+  );
+  const rowCount = Math.max(...rails.map((rail) => rail.length));
+  const rowStep =
+    rowCount <= 1 ? 0 : Math.min(LABEL_ROW, Math.max(0, 2 * centreY - LABEL_ROW) / (rowCount - 1));
+  const marks: SliceLabelMark[] = [];
+  LABEL_SIDES.forEach((side, sideIndex) => {
+    const rail = rails[sideIndex];
+    const anchorX = centreX + (side === "start" ? 1 : -1) * (outerRadius + LABEL_GAP);
+    rail.forEach((one, row) => {
+      const anchorY = centreY + (row - (rail.length - 1) / 2) * rowStep;
+      marks.push({
+        id: one.arc.id,
+        text: formatShare(one.arc.value, total, LABEL_DIGITS),
+        x: roundCoordinate(anchorX),
+        y: roundCoordinate(anchorY),
+        textAnchor: side,
+        leader: {
+          x1: roundCoordinate(one.edge.x),
+          y1: roundCoordinate(one.edge.y),
+          x2: roundCoordinate(anchorX),
+          y2: roundCoordinate(anchorY),
+        },
+      });
+    });
   });
+  // Back into the ring's own order, so the drawing, its legend and its paired table all read the same way.
+  const ringOrder = new Map(arcs.map((arc, index) => [arc.id, index]));
+  return [...marks].sort(
+    (one, other) => (ringOrder.get(one.id) ?? 0) - (ringOrder.get(other.id) ?? 0),
+  );
 }

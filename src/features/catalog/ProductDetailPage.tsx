@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 536
+ * Lines: 538
  */
 
 import { useId, useState } from "react";
@@ -38,7 +38,7 @@ import { ProductReviews } from "@/features/catalog/ProductReviews";
 import { API_ERROR_CODES } from "@/lib/apiClient";
 import { flattenCategoryTree, getProductBySlug, listCategories } from "@/lib/catalogReads";
 import { getRelated } from "@/lib/catalogService";
-import { useCartDispatch } from "@/state/CartContext";
+import { useCartDispatch, useQuickAdd } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { CategoryNode, Product, ProductSpec, ProductStatus } from "@/types/catalog";
@@ -373,9 +373,11 @@ function RelatedPlaceholders(): ReactElement {
  *  The read belongs to this section, which is what keeps it from delaying the product — the strip settles on its own
  *  and the page around it is already readable when it does. Its heading row is rendered in every state, so the
  *  landmark is named whichever state the strip is in, and it carries the way into the full catalogue for a visitor
- *  who wants to keep browsing. */
+ *  who wants to keep browsing. Its tiles are handed the cart's add, read here through `useQuickAdd` from
+ *  `src/state/CartContext.tsx`, because a tile is shared presentation and may not read the cart itself. */
 function RelatedProducts({ productId }: { readonly productId: ProductId }): ReactElement {
   const headingId = useId();
+  const onAddToCart = useQuickAdd();
   const related = useAsync<Product[]>(
     (signal) => getRelated(productId, RELATED_PRODUCTS_LIMIT, { signal }),
     [productId],
@@ -401,7 +403,7 @@ function RelatedProducts({ productId }: { readonly productId: ProductId }): Reac
     strip = (
       <ul className={CLASSES.relatedGrid} role="list">
         {loaded.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />
         ))}
       </ul>
     );

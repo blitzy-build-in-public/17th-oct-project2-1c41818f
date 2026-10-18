@@ -1,21 +1,15 @@
 /* Path: src/styles/layout.css
  * Purpose: Page shell, containers, grid, and the header, footer and sidebar skeletons
- * Lines: 595
+ * Lines: 616
  */
-/* The application frame, the container and page rhythm, three layout primitives, and the skeletons of the
- * five layout components — AppLayout, Header, Footer, AdminSidebar and PageHeader, the fifth of which is
- * declared in src/styles/page-header.css and loaded from here with @import. Every class below is defined
- * here and nowhere else, and each component renders these names verbatim. Loaded third: it consumes
- * tokens.css properties and base.css's two utilities and declares no colour, length, radius, shadow,
- * z-index or duration itself. No component primitive (components.css) and no area style: the product grid,
- * the facet column, the dashboard grid and the checkout steps belong to catalog.css, commerce.css and
- * admin-reports.css; mobile-first throughout. Four parts of that contract carry no rule of their own —
- * `.sp-sidebar__nav`, `.sp-sidebar__item`, `.sp-footer__column` and `.sp-page-header__breadcrumbs` — each
- * being a plain wrapper the rules around it already cover; a fifth, `.sp-page-header__title`, carries no
- * rule either, because base.css paints the heading-1 role on the `h1` element itself, so the page's title
- * takes its type from the element and not from a class. All five are named here so a component rendering
- * them reads the contract complete.
- */
+/* The application frame, the container and page rhythm, three layout primitives and the skeletons of the five layout components — AppLayout,
+ * Header, Footer, AdminSidebar and PageHeader, the last declared in src/styles/page-header.css and loaded from here with @import. Every
+ * class below is defined here alone, and each component renders these names verbatim; loaded third, the sheet consumes tokens.css properties
+ * and base.css's two utilities, declaring no colour, length, radius, shadow, z-index or duration itself. No component primitive
+ * (components.css) and no area style: the product grid, the facet column, the dashboard grid and the checkout steps belong to catalog.css,
+ * commerce.css and admin-reports.css; mobile-first throughout. Five contract names carry no rule of their own — `.sp-sidebar__nav`,
+ * `.sp-sidebar__item`, `.sp-footer__column`, `.sp-page-header__breadcrumbs` (plain wrappers) and `.sp-page-header__title` (base.css types it
+ * through the heading-1 role on the `h1`) — named here so a component rendering them reads the contract complete. */
 
 @import "./page-header.css";
 
@@ -32,10 +26,8 @@
   min-height: 100dvh;
   background-color: var(--color-bg);
 }
-/* The skip link is base.css's `.sp-skip-link`; `.sp-app__skip-link` is this sheet's hook and takes no
- * rule of its own, because a second copy of that technique would be the duplication we forbid. */
-/* Sticky, not fixed, so the document scrolls normally and the header cannot swallow focus. Opaque on
- * purpose — a translucent header would let page content show through the moment it sticks. */
+/* The skip link is base.css's `.sp-skip-link`; `.sp-app__skip-link` is this sheet's hook and takes no rule, so the technique exists once. */
+/* Sticky, not fixed, so the document scrolls normally and focus stays reachable; opaque, so content cannot show through when it sticks. */
 .sp-app__header,
 .sp-header {
   position: sticky;
@@ -63,47 +55,72 @@
 .sp-app__footer > .sp-footer {
   border-block-start: 0;
 }
+/* The band's own vertical inset, so the first heading clears the rule above it and the legal row clears the
+ * band's bottom edge. The chrome sits on the region and the region carries no padding, so the inset is written
+ * on the footer itself: one 24px band at each end, the same the promotional band and the trust strip take. */
+.sp-footer {
+  padding-block: var(--space-6);
+}
 
-/* ==== Administrator branch ====
- * Below --breakpoint-md the sidebar is not part of the column: AppLayout renders it in the drawer
- * Modal.tsx provides, and a drawer's copy hangs off the document, so hiding this child is safe. */
+/* ==== Administrator branch ==== The sidebar belongs to the frame at every width — a rail of icons below --breakpoint-lg
+ * and the labelled column from there — so the administrator section is navigable from the page it is on. The shell renders
+ * a single copy of it, so no drawer holds a second one for a stylesheet to hide. All four regions are placed here: the
+ * sidebar in the first column's middle row, the content in the second, and the header and footer bands across both. */
+.sp-app--admin {
+  display: grid;
+  grid-template-columns: var(--layout-sidebar-rail) minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+}
+.sp-app--admin > .sp-app__header,
+.sp-app--admin > .sp-app__footer {
+  grid-column: 1 / -1;
+}
+/* The sidebar keeps its own height rather than stretching to the row, so it has something to stick with. */
 .sp-app--admin > .sp-sidebar {
-  display: none;
+  grid-column: 1;
+  grid-row: 2;
+}
+/* The content column takes the page geometry every other route gets from `.sp-container`: one measure for the whole application
+ * and the declared gutter at every width, so the administrator area is never wider than the storefront and its content is inset
+ * like it. The inline size is stated because a grid item with an auto inline size and auto margins is sized to fit its content,
+ * which would leave a narrow route — the reports screen — short of the measure and out of line with the header band above it. */
+.sp-app--admin > .sp-app__main {
+  grid-column: 2;
+  grid-row: 2;
+  inline-size: 100%;
+  max-inline-size: var(--layout-container-max);
+  margin-inline: auto;
+  padding-inline: var(--layout-gutter);
 }
 @media (min-width: 768px) {
   /* --breakpoint-md */
-  /* The sidebar keeps its own height rather than stretching to the row, so it has something to stick with. */
-  .sp-app--admin {
-    display: grid;
-    grid-template-columns: var(--layout-sidebar-rail) minmax(0, 1fr);
-    grid-template-rows: auto 1fr auto;
-    align-items: start;
-  }
+  /* The two bands take the body's own tracks, so the header and the footer align with the content column
+   * instead of centring on the viewport. Below this stop the header keeps the full width. */
   .sp-app--admin > .sp-app__header,
   .sp-app--admin > .sp-app__footer {
-    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: var(--layout-sidebar-rail) minmax(0, 1fr);
   }
-  .sp-app--admin > .sp-sidebar {
-    display: block;
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .sp-app--admin > .sp-app__main {
+  .sp-app--admin > .sp-app__header > .sp-header,
+  .sp-app--admin > .sp-app__footer > .sp-footer {
     grid-column: 2;
-    grid-row: 2;
   }
 }
 @media (min-width: 1024px) {
   /* --breakpoint-lg */
+  /* The body and both bands widen together, from the rail to the labelled sidebar's column. */
   .sp-app--admin {
+    grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+  }
+  .sp-app--admin > .sp-app__header,
+  .sp-app--admin > .sp-app__footer {
     grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
   }
 }
 
-/* ==== Containers and page rhythm ====
- * One geometry rule for the three elements that carry the page's width: the container, the header's inner
- * row and the footer's inner block, each band carrying its own `__inner`. --layout-gutter widens at
- * --breakpoint-md in tokens.css. */
+/* ==== Containers and page rhythm ==== One geometry rule for the three elements that carry the page's width: the container, the header's
+ * inner row and the footer's inner block, each band carrying its own `__inner`. --layout-gutter widens at --breakpoint-md in tokens.css. */
 .sp-container,
 .sp-header__inner,
 .sp-footer__inner {
@@ -120,8 +137,7 @@
 .sp-container--wide {
   max-inline-size: none;
 }
-/* A route is a column of blocks at one rhythm. The region above already pads the page, so this element
- * adds the gap between blocks and none of its own — two paddings of one token would double it. */
+/* A route is a column of blocks at one rhythm: the region above already pads the page, so this element adds the gap between blocks only. */
 .sp-page {
   display: grid;
   gap: var(--space-6);
@@ -130,18 +146,15 @@
 .sp-page__body {
   min-inline-size: 0;
 }
-/* For a page whose first band must meet the header — the landing hero — the region's opening padding is
- * cancelled by the token that set it, so the two move together. */
+/* Where a first band must meet the header — the landing hero — the region's opening padding is cancelled by the token that set it. */
 .sp-page--flush {
   margin-block-start: calc(var(--space-6) * -1);
 }
 
-/* ==== Shared layout primitives ====
- * Three, and only three: the product grid, the facet column, the dashboard grid and the checkout step
- * indicator belong to catalog.css, commerce.css and admin-reports.css. */
+/* ==== Shared layout primitives ==== Three, and only three: the product grid, the facet column, the dashboard
+ * grid and the checkout step indicator belong to catalog.css, commerce.css and admin-reports.css. */
 .sp-grid {
-  /* As many equal card columns as fit, each at least a small card wide. tokens.css declares no card-floor
-   * token, so the floor is named once, in the one grid that is not an area's own. */
+  /* As many equal card columns as fit, each at least a small card wide; tokens.css has no card-floor token, so this one grid names the floor. */
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
@@ -165,20 +178,21 @@
   gap: var(--space-4);
 }
 
-/* ==== Header skeleton ====
- * Header.tsx renders `.sp-header` and, inside it, `.sp-header__inner` — the row carrying the container's
- * max width and gutter. The chrome sits on the region rule in the shell section. */
-/* The row fills the band and centres its controls, so a badge overhanging its button stays inside. */
+/* ==== Header skeleton ==== Header.tsx renders `.sp-header` and, inside it, `.sp-header__inner` — the row
+ * carrying the container's max width and gutter. The chrome sits on the region rule in the shell section. */
+/* The row fills the band and centres its controls, so a badge overhanging its button stays inside. It also
+ * wraps: a scaled-up root font drops the search slot and the actions to a second line instead of letting their
+ * min-content set the width of the row. */
 .sp-header__inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   /* Below the medium stop the row holds five controls and the badge's column, so its own gap narrows. */
   gap: var(--space-2);
   min-block-size: var(--layout-header-height);
   min-inline-size: 0;
 }
-/* The wordmark yields before the controls do, so a tight header row can never widen the page: the
- * wrapper shrinks and the link clips its own text rather than spilling. */
+/* The wordmark yields before the controls, so a tight row cannot widen the page: the wrapper shrinks and the link clips its own text. */
 .sp-header__brand {
   flex: 0 1 auto;
   min-inline-size: 0;
@@ -198,11 +212,10 @@
   font-weight: var(--text-heading-3-weight);
   text-decoration-line: none;
 }
-/* The medium stop's overrides. The row is the compressed one below this stop — the menu button or the
- * navigation, the search trigger, the cart and the account share it with the badge's reserved column — so
- * the band's own gap and the trigger's padding widen back here; and from here the search slot holds the
- * field that takes a shortfall, so the link is released from its wrapper and the account control stops
- * shrinking rather than the wordmark's glyphs or the caret paying for the row. */
+/* The medium stop's overrides. The row is the compressed one below this stop — the menu button or the navigation, the search
+ * trigger, the cart and the account share it with the badge's reserved column — so the band's own gap and the trigger's
+ * padding widen back here; and from here the search slot holds the field that takes a shortfall, so the link is released from
+ * its wrapper and the account control stops shrinking rather than the wordmark's glyphs or the caret paying for the row. */
 @media (min-width: 768px) {
   /* --breakpoint-md */
   .sp-header__inner {
@@ -218,24 +231,28 @@
     flex: none;
   }
 }
-/* A desktop affordance: below --breakpoint-sm it is replaced by `.sp-nav-menu`, so it leaves the layout.
- * Where it is in the row its own width is not negotiable: a shortfall yields the search slot or the
- * wordmark, never a link's box, which would paint over the control beside it. */
+/* A desktop affordance: below --breakpoint-sm it is replaced by `.sp-nav-menu`, so it leaves the layout. Where it is in the row its own width
+ * is not negotiable: a shortfall yields the search slot or the wordmark, never a link's box, which would paint over the control beside it. */
 .sp-header__nav {
   display: none;
   flex: none;
 }
-/* The actions close the row, whatever the brand, the navigation and the search slot take. */
+/* The actions close the row, whatever the brand, the navigation and the search slot take. They wrap inside
+ * themselves as well as onto a row of their own, so a scaled-up root font moves the group's controls to a
+ * second line rather than letting their min-content widen the header past the viewport. */
 .sp-header__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
   margin-inline-start: auto;
 }
-/* Below --breakpoint-md the slot holds the icon-sized trigger Header renders in it, and is never narrower
- * than one touch target: a field beside the brand and the actions beside it would not fit. From
- * --breakpoint-md it holds the field itself, `.sp-input` from components.css. */
+/* Below --breakpoint-md it holds the icon-sized trigger Header renders in it, never narrower than one touch target, because a field
+ * beside the brand and the actions would not fit; from --breakpoint-md it holds the field itself, `.sp-input` from components.css.
+ * The slot is the row's yielding item, yielding before the navigation beside it: a navigation squeezed narrower than its links
+ * cannot shrink them, so its links spill over this slot and take the clicks meant for both. Here the slot only shrinks — its trigger
+ * is a fixed control — so this rule states the floor it yields to, and the block below is where its width starts following the row. */
 .sp-header__search {
-  flex: none;
+  flex: 0 1 auto;
   min-inline-size: var(--touch-target-min);
 }
 /* Below --breakpoint-sm only; display: none is also what removes it from the tab order and the a11y tree. */
@@ -315,8 +332,7 @@
   color: var(--color-text-on-accent);
   font-size: var(--font-size-xs);
 }
-/* A dropdown rather than a modal: the trigger keeps the focus, so no focus trap is needed and nothing
- * covers the page behind it. */
+/* A dropdown rather than a modal: the trigger keeps the focus, so no focus trap is needed and nothing covers the page behind it. */
 .sp-account-menu {
   position: relative;
 }
@@ -336,9 +352,8 @@
   box-shadow: var(--shadow-2);
 }
 
-/* ==== Mobile navigation ====
- * `.sp-nav-menu` replaces the header navigation below --breakpoint-sm, toggled by the `hidden` attribute
- * that base.css makes win here, and the whole block is removed at and above the stop. */
+/* ==== Mobile navigation ==== `.sp-nav-menu` replaces the header navigation below --breakpoint-sm, toggled by
+ * the `hidden` attribute that base.css makes win here, and the whole block is removed at and above the stop. */
 .sp-nav-menu {
   background-color: var(--color-surface);
   border-block-end: var(--border-width) solid var(--color-border-subtle);
@@ -350,8 +365,7 @@
   overflow-y: auto;
   padding-block: var(--space-2);
 }
-/* Inside the panel the shared navigation stacks, and every row becomes a full-width tap target: the
- * list fills the panel through align-items, and the block-level link fills the row it sits in. */
+/* Inside the panel the navigation stacks and every row becomes a full-width tap target: the list fills the panel and the link fills its row. */
 .sp-nav-menu .sp-nav__list {
   flex-direction: column;
   align-items: stretch;
@@ -377,21 +391,29 @@
 @media (min-width: 768px) {
   /* --breakpoint-md */
   /* The search slot, not the navigation, changes at this stop: the slot holds the field itself from here,
-   * and the actions take the room the brand and the navigation leave so that field can grow. */
+   * and the actions take the room the brand and the navigation leave so that field can grow. Their
+   * min-content basis is what decides when the row above breaks: the brand, the navigation and these
+   * controls at their narrowest still fit at 100%, so the row holds one line, and only a scaled-up root font
+   * pushes the group onto a row of its own. An auto basis would reserve the group's whole max-content
+   * instead — the field the slot holds included — and break the row on every viewport under roughly 830px. */
   .sp-header__actions {
-    flex: 1 1 auto;
+    flex: 1 1 min-content;
     min-inline-size: 0;
   }
+  /* The slot's width is the row's leftover, so it asks for none of its own: a zero inline size keeps the field — an input stands at
+   * its own character width — out of the row's arithmetic, which a zero flex basis cannot do, a nested flex container being sized from
+   * its content. The brand and the navigation are then never squeezed under what they hold, the links never spill over this slot, and
+   * it grows into every pixel the others leave, down to one touch target that keeps the field operable should the row be tighter. */
   .sp-header__search {
-    flex: 1 1 auto;
-    inline-size: auto;
-    min-inline-size: 0;
+    flex: 1 1 0;
+    inline-size: 0;
+    min-inline-size: var(--touch-target-min);
   }
 }
 
-/* ==== Footer skeleton ====
- * Footer.tsx renders `.sp-footer`, its `.sp-footer__inner` through the container rule above, the link
- * columns, the storefront description and the legal row; the chrome sits in the shell section. */
+/* ==== Footer skeleton ==== Footer.tsx renders `.sp-footer` — whose own block inset is declared with the shell
+ * chrome above — its `.sp-footer__inner` through the container rule above, the link columns, the storefront
+ * description and the legal row; the chrome sits in the shell section. */
 .sp-footer__columns {
   /* One column on a phone, two at --breakpoint-sm, four at --breakpoint-md. */
   display: grid;
@@ -472,9 +494,8 @@
   }
 }
 
-/* ==== Administrator sidebar ====
- * The column the administrator grid reserves; the shell section hides it below --breakpoint-md, and from
- * there it is a sticky rail that widens into a labelled sidebar at --breakpoint-lg. */
+/* ==== Administrator sidebar ==== The column the administrator grid reserves: a sticky rail of icons at every
+ * width below --breakpoint-lg, which widens into the labelled sidebar at --breakpoint-lg. */
 .sp-sidebar {
   position: sticky;
   inset-block-start: var(--layout-header-height);
@@ -549,24 +570,23 @@
   padding-block-start: var(--space-3);
   border-block-start: var(--border-width) solid var(--color-border-subtle);
 }
-@media (min-width: 768px) {
-  /* --breakpoint-md */
-  /* In the rail the label and the section title are hidden visually and kept for assistive technology: the
-   * <nav> is named by the title and each link by its label, so display: none would leave both nameless. */
-  .sp-sidebar__title,
-  .sp-sidebar__label {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .sp-sidebar__link {
-    justify-content: center;
-    padding-inline: 0;
-  }
+/* The rail, which is the sidebar's treatment at every width below --breakpoint-lg: the section title and each
+ * link's label are hidden visually and kept for assistive technology — the landmark and the <nav> are named by
+ * the title and each link by its label, so display: none would leave all three nameless — and the glyph stands
+ * centred in the column on its own. The block at --breakpoint-lg reveals these same elements in place. */
+.sp-sidebar__title,
+.sp-sidebar__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.sp-sidebar__link {
+  justify-content: center;
+  padding-inline: 0;
 }
 @media (min-width: 1024px) {
   /* --breakpoint-lg */
@@ -587,9 +607,10 @@
   }
 }
 
-/* ==== Responsive summary ====
- * Below --breakpoint-sm: one column, the compressed header with its menu button, a one-column footer. At
- * --breakpoint-sm: the row navigation replaces the menu. At --breakpoint-md: the search slot becomes a field,
- * the admin grid appears with a sidebar rail, the footer opens to four columns, and the page-header actions
- * move to the end. At --breakpoint-lg: the labelled sidebar and a two-column `.sp-split`.
- */
+/* ==== Responsive summary ==== At every width: the administrator frame is a grid whose first column is the sidebar's rail, with the
+ * content beside it carrying the page's own measure and gutter. Below --breakpoint-sm: one column, the compressed header with its menu
+ * button, a one-column footer. At --breakpoint-sm: the row navigation replaces the menu, and two footer columns. At --breakpoint-md:
+ * the search slot becomes a field, the header and footer bands take the sidebar's track so they align with the body, the footer opens
+ * to four columns, and the page-header actions move to the end. At --breakpoint-lg: the labelled sidebar and a two-column `.sp-split`.
+ * The header row wraps at every stop, so its own controls gain a line rather than a wider page when the browser's text scale grows
+ * the type. */

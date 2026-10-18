@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/FeaturedProducts.tsx
  * Purpose: The featured-products strip drawn from the seeded catalogue, with a link into the catalogue
- * Lines: 259
+ * Lines: 274
  */
 
 import type { ReactElement } from "react";
@@ -13,6 +13,7 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { COMMON_ACTIONS, FEEDBACK_COPY } from "@/constants/content";
 import { HOME_COPY } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
+import { useQuickAdd } from "@/state/CartContext";
 import type { Product } from "@/types/catalog";
 import type { AsyncStatus, ApiError } from "@/types/common";
 
@@ -21,14 +22,15 @@ import type { AsyncStatus, ApiError } from "@/types/common";
  *
  * No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every class
  * below is consumed by name. `src/styles/catalog-landing.css` owns the band's own rhythm: `sp-featured` is the
- * section, which stacks its heading row, its supporting line and its strip with the sheet's gap, and
- * `sp-featured__header` is the heading row that closes its action to the end — the same row the related strip
- * on a product's page wears. `src/styles/catalog.css` owns the strip: `sp-product-grid` is the result grid and
- * `sp-product-grid--strip` its strip modifier, which runs the row as a snapped horizontal scroller below
- * --breakpoint-md and up to four equal cards per row from there, so the band reflows with no breakpoint read
- * here and no width decided in JavaScript. `src/styles/controls.css` owns the family the view-all link
- * borrows: `sp-btn` with `sp-btn--secondary`, the spelling a page written from the primitives onward uses,
- * which states the absence of the underline an anchor would otherwise carry.
+ * section, which stacks its heading row, its supporting line and its strip with the sheet's gap,
+ * `sp-featured__subtitle` is that supporting line in the muted register the same role takes on every other
+ * surface, and `sp-featured__header` is the heading row that closes its action to the end — the same row the
+ * related strip on a product's page wears. `src/styles/catalog.css` owns the strip: `sp-product-grid` is the
+ * result grid and `sp-product-grid--strip` its strip modifier, which runs the row as a snapped horizontal
+ * scroller below --breakpoint-md and up to four equal cards per row from there, so the band reflows with no
+ * breakpoint read here and no width decided in JavaScript. `src/styles/controls.css` owns the family the
+ * view-all link borrows: `sp-btn` with `sp-btn--secondary`, the spelling a page written from the primitives
+ * onward uses, which states the absence of the underline an anchor would otherwise carry.
  *
  * The tile and the feedback primitives are the other two owners, and neither is restated here. `ProductCard`
  * wears `sp-card sp-card--interactive sp-product-card` and every region inside it, and it is the band's `<li>`:
@@ -133,14 +135,27 @@ interface FeaturedTilesProps {
  * own identity, never the position, so a re-render that reorders or replaces products keeps each tile's state
  * with its product.
  *
+ * The add a tile performs arrives from here. A tile is shared presentation and the cart lives above it, so the
+ * band reads the cart's own add through `useQuickAdd` in `src/state/CartContext.tsx` — the single home of that
+ * rule, the ceiling notice included — and hands the callback to each tile; the read sits in this component
+ * rather than in the section that renders it, so a change to the cart re-renders the strip and not the band's
+ * own heading and view-all row.
+ *
  * @param props - The products to feature, in the order to render them.
  * @returns The strip's list of tiles.
  */
 function FeaturedTiles({ products }: FeaturedTilesProps): ReactElement {
+  const onAddToCart = useQuickAdd();
+
   return (
     <ul className="sp-product-grid sp-product-grid--strip" role="list">
       {products.map((product, index) => (
-        <ProductCard key={product.id} product={product} priority={index < EAGER_TILE_COUNT} />
+        <ProductCard
+          key={product.id}
+          product={product}
+          onAddToCart={onAddToCart}
+          priority={index < EAGER_TILE_COUNT}
+        />
       ))}
     </ul>
   );
@@ -252,7 +267,7 @@ export function FeaturedProducts({
       {/* The supporting line is a sibling of the heading row rather than a child of it: that row is a flex line
           placing each child beside the last, so a paragraph inside it would sit next to the heading instead of
           under it. The section's own grid, from the sheet, spaces the heading row, this line and the band. */}
-      <p>{HOME_COPY.FEATURED_SUBTITLE}</p>
+      <p className="sp-featured__subtitle">{HOME_COPY.FEATURED_SUBTITLE}</p>
       {band}
     </section>
   );

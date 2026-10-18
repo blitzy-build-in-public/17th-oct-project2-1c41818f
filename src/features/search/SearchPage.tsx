@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 307
+ * Lines: 314
  */
 
 import { useId } from "react";
@@ -32,6 +32,7 @@ import { SearchBar } from "@/features/search/SearchBar";
 import { SortControl } from "@/features/search/SortControl";
 import { highlightSegments, isBlankQuery, tokenise } from "@/lib/searchService";
 import type { SearchSegment } from "@/lib/searchService";
+import { useQuickAdd } from "@/state/CartContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { useDocumentTitle } from "@/state/hooks";
 import { hasActiveFilters } from "@/utils/queryParams";
@@ -122,6 +123,10 @@ export interface SearchPageProps {
  * searched, filtered and paged address reloads to the identical result set and no filter value is mirrored
  * into React state. What it reads about the answer is `useCatalog()` alone: the page holds no state, issues no
  * request and recomputes no facet count, because the catalogue service answered with the facets it counted.
+ * The one other thing it reads is the cart's add, taken through `useQuickAdd` in `src/state/CartContext.tsx`
+ * and handed to the results' tiles: a tile is shared presentation and may not read the cart itself, and the
+ * read sits with the component that maps the results rather than higher up, so a change to the cart
+ * re-renders the results and not the toolbar, the facets or the summary above them.
  *
  * Its four data states are rendered in the order a load passes through them: the placeholder grid while a page
  * is on its way; the shaped failure with its retry when the request did not answer; the empty state with the
@@ -146,6 +151,7 @@ export interface SearchPageProps {
 export function SearchPage({ className }: SearchPageProps): ReactElement {
   const view = useCatalog();
   const catalog = useCatalogFilters();
+  const onAddToCart = useQuickAdd();
   const resultsHeadingId = useId();
 
   useDocumentTitle(documentTitle(PAGE_TITLES.SEARCH));
@@ -225,10 +231,11 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
     body = (
       <>
         {/* The tile is the list item — `ProductCard` renders its own `<li>` — so the grid is the list that
-            holds them and carries `role="list"` for the marker-less treatment base.css gives one. */}
+            holds them and carries `role="list"` for the marker-less treatment base.css gives one. Each tile
+            is handed the cart's add, which is read above rather than inside the tile. */}
         <ul className="sp-product-grid" role="list">
           {answer.items.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />
           ))}
         </ul>
         <Pagination

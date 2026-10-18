@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 546
+ * Lines: 536
  */
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Card";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { usePagination } from "@/components/ui/hooks";
 import { Input, TextArea } from "@/components/ui/Input";
 import { Pagination } from "@/components/ui/Pagination";
 import { Rating, RatingInput } from "@/components/ui/Rating";
@@ -32,7 +33,7 @@ import { FACET_DEFINITIONS } from "@/constants/taxonomy";
 import { listProductReviews, submitProductReview } from "@/lib/catalogReads";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { useAsync, usePagination } from "@/state/hooks";
+import { useAsync } from "@/state/hooks";
 import type { FacetId, RatingValue, Review, ReviewInput } from "@/types/catalog";
 import type {
   FieldErrors,
@@ -72,23 +73,10 @@ import type { ReviewDraft } from "@/utils/validation";
  * summary's count borrows `__date`, the family's caption treatment, because the sheet declares no rule of its
  * own for it and body type would outweigh the filter control beside it.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` holds no wording for three things this surface needs
- * — the rating filter's unfiltered choice, the mark a review carries when its reviewer bought the product, and
- * the outcome the submit reports — so the three labels below are held here until a plan amendment adds
- * `CATALOG_COPY.ANY_RATING_LABEL`, `CATALOG_COPY.VERIFIED_PURCHASE_LABEL` and
- * `FEEDBACK_COPY.TOAST_REVIEW_SUBMITTED` to it. Every other string is that module's own, the empty state's
- * included; the filter's five choices are the bare numerals, as the pagination control's size selector is,
- * because it holds no wording for a rating either.
+ * Every string on this surface is `src/constants/content.ts`'s own, the empty state's included; the filter's
+ * five choices are the bare numerals, as the pagination control's size selector is, because it holds no wording
+ * for a rating either.
  */
-
-/** The rating filter's unfiltered choice — see the copy gap above. */
-const ANY_RATING_LABEL = "All ratings";
-
-/** The mark on a review whose reviewer's order history held the product — see the copy gap above. */
-const VERIFIED_PURCHASE_LABEL = "Verified purchase";
-
-/** What the toast reports once a review has been published — see the copy gap above. */
-const REVIEW_SUBMITTED_MESSAGE = "Your review is published.";
 
 /** The field keys the review rule reports under, which are also the `name` each control carries, so a map
  *  keyed by a field lands on the control that owns it. */
@@ -97,7 +85,7 @@ const REVIEW_FIELDS = { RATING: "rating", TITLE: "title", BODY: "body" } as cons
 /** The filter's choices: every star, then the unfiltered one, so a cleared filter is a choice a reader can
  *  make rather than one only the empty state can restore. */
 const RATING_FILTER_OPTIONS: readonly SelectOption[] = [
-  { value: "", label: ANY_RATING_LABEL },
+  { value: "", label: CATALOG_COPY.ANY_RATING_LABEL },
   ...[5, 4, 3, 2, 1].map((star) => ({ value: String(star), label: String(star) })),
 ];
 
@@ -157,7 +145,9 @@ function ReviewRow({ review }: { readonly review: Review }): ReactElement {
         <Rating value={review.rating} showValue />
         <span className="sp-reviews__author">{review.customerName}</span>
         <span className="sp-reviews__date">{formatDate(review.createdAt)}</span>
-        {review.verifiedPurchase ? <Badge size="sm">{VERIFIED_PURCHASE_LABEL}</Badge> : null}
+        {review.verifiedPurchase ? (
+          <Badge size="sm">{CATALOG_COPY.VERIFIED_PURCHASE_LABEL}</Badge>
+        ) : null}
       </div>
       <h3 className="sp-reviews__title">{review.title}</h3>
       <p className="sp-reviews__body">{review.body}</p>
@@ -266,7 +256,7 @@ function ReviewForm({
     }
     setDraft(EMPTY_REVIEW_DRAFT);
     setFieldErrors({});
-    toasts.success(REVIEW_SUBMITTED_MESSAGE);
+    toasts.success(FEEDBACK_COPY.TOAST_REVIEW_SUBMITTED);
     onSubmitted();
   };
 

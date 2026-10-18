@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CartContext.tsx
  * Purpose: Cart lines, promo code, persistence, mini-cart visibility and the clear the checkout dispatches
- * Lines: 459
+ * Lines: 537
  */
 
 import {
@@ -17,6 +17,7 @@ import {
 import type { ReactElement, ReactNode } from "react";
 
 import { STORAGE_KEYS } from "@/constants/config";
+import { CATALOG_COPY, addedToCartMessage, lowStockLabel } from "@/constants/content";
 import {
   cartActions,
   cartReducer,
@@ -27,10 +28,20 @@ import {
   toCart,
 } from "@/state/cartReducer";
 import type { CartState } from "@/state/cartReducer";
-import type { Product } from "@/types/catalog";
+import { useToast } from "@/state/ToastContext";
+import type { Product, ProductStatus } from "@/types/catalog";
 import type { Cart, CartLine } from "@/types/commerce";
 import type { IsoDateTimeString, LineId } from "@/types/common";
+import { formatAvailability } from "@/utils/format";
 import { readStored, writeStored } from "@/utils/storage";
+
+/**
+ * The one catalogue status a tile sells, spelled the way `src/data/products.ts` spells it at the seeding end
+ * and as the tile and the product page spell it on their own surfaces: the three sites decide availability from
+ * the same pair of fields, so the rule is read from the status and the stock rather than restated as a second
+ * rule with a vocabulary of its own.
+ */
+const SELLABLE_STATUS: ProductStatus = "active";
 
 // Consumer surface -----------------------------------------------------------------------------
 
@@ -456,4 +467,71 @@ export function useCartDispatch(): CartActions {
     throw new Error("useCartDispatch must be called from a component within a CartProvider.");
   }
   return actions;
+}
+
+/**
+ * The add a product tile performs: one unit of a product, with the notice a line at its ceiling raises.
+ *
+ * It exists as a hook of its own so that this rule has one home. A tile is shared presentation and the cart
+ * lives in a layer above it, so no tile may read the cart; the surface that composes the tiles reads it here
+ * and hands the returned callback down as `onAddToCart`, which is how the catalogue, the search results, the
+ * landing band and the related-products strip all add through the same rule rather than each keeping a copy
+ * of it. The surfaces that call this are `src/features/home/FeaturedProducts.tsx`,
+ * `src/features/catalog/ProductList.tsx`, `src/features/search/SearchPage.tsx` and the related strip in
+ * `src/features/catalog/ProductDetailPage.tsx`; the product page's own purchase panel is not one of them,
+ * because it adds a chosen quantity and reports the success beside it.
+ *
+ * The add itself is the cart's own single call: `addItem` merges a repeat into the line the product already
+ * holds and clamps it to that line's ceiling, so nothing else is dispatched here. The one condition kept
+ * beside it is the ceiling, which is why the line the cart holds for the product is compared against the
+ * bound the reducer clamps to: a line already at its `maxQuantity` would otherwise absorb the add silently,
+ * where the shopper is owed the same notice the availability line shows — the words come from
+ * `lowStockLabel` in `src/constants/content.ts`, the copy module, so none is invented here. Every other
+ * outcome is stated in the toast register instead — `addedToCartMessage` names the product that was added —
+ * rather than by opening the drawer: an add is one action, and the drawer is a modal whose background is made
+ * inert, so opening it on the shopper's behalf would cost a dismissal before the next add. The header's cart
+ * trigger keeps the drawer reachable from the badge on every route, which is what the drawer is for.
+ *
+ * The returned callback is a `useCallback` over the values it reads, so it changes only when the cart or the
+ * notice it raises does.
+ *
+ * @returns The callback a composing surface hands to each tile as `onAddToCart`.
+ * @throws When called above every `CartProvider` — the tiles' surface is always composed inside one — naming
+ *   the missing provider.
+ */
+export function useQuickAdd(): (product: Product) => void {
+  // The action object is held rather than its members destructured: `CartActions` declares its members in
+  // method position, and a member separated from the object it belongs to is the shape the linter's
+  // `unbound-method` rule exists to catch.
+  const cart = useCartDispatch();
+  const { error, success } = useToast();
+
+  return useCallback(
+    (product: Product): void => {
+      // The line is read at activation rather than subscribed to during render, through the cart's own
+      // `readLines()`: nothing this callback returns depends on the lines, so a caller that only adds must not
+      // be re-rendered by a change to them — one quick add on a catalogue page would otherwise cost a pass over
+      // every tile's action row. `src/state/CartContext.tsx` offers that read for exactly this case.
+      // A product the tile cannot sell is refused first, in the words the tile's own availability line
+      // carries, because the control stays in the tab order and reports itself `aria-disabled` rather than
+      // disabled: a control a keyboard user can reach either acts or explains itself.
+      const availability = formatAvailability(product.stockOnHand, product.lowStockThreshold);
+      if (!availability.available || product.status !== SELLABLE_STATUS) {
+        error(CATALOG_COPY.OUT_OF_STOCK_LABEL);
+        return;
+      }
+
+      const line = cart.readLines().find((candidate) => candidate.productId === product.id);
+      if (line !== undefined && line.quantity >= line.maxQuantity) {
+        error(lowStockLabel(line.maxQuantity));
+        return;
+      }
+
+      cart.addItem(product);
+      // The outcome is stated rather than shown: the tile's add opens no drawer, and this is the one place
+      // that decides so for every surface that renders tiles.
+      success(addedToCartMessage(product.name));
+    },
+    [cart, error, success],
+  );
 }

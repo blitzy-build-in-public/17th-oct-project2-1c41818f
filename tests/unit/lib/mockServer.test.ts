@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
- * Purpose: Route matching, error mapping, idempotency replay, the unregistered-source failure and seed determinism
- * Lines: 612
+ * Purpose: Route matching, error mapping, catalogue filter reading, review scoping, idempotency replay, the unregistered-source failure, the transport's shaping and the seed's determinism.
+ * Lines: 593
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,9 +11,7 @@ import {
   DEFAULT_PAGE_SIZE,
   DEMO_ACCOUNTS,
   DEMO_CARD_NUMBERS,
-  FREE_SHIPPING_METHOD_ID,
 } from "@/constants/config";
-import { createSalesProDataSource } from "@/data/repositories";
 import {
   buildQueryString,
   clearInjectedFailures as clearThroughClient,
@@ -27,6 +25,7 @@ import {
   toApiError,
 } from "@/lib/apiClient";
 import {
+  API_ERROR_CODES,
   FALLBACK_FAILURE_MESSAGE,
   ORDER_TOKEN_HEADER,
   SESSION_TOKEN_HEADER,
@@ -41,24 +40,34 @@ import {
   type RequestFailureMatcher,
   type SalesProDataSource,
 } from "@/lib/mockServer";
-import type { Customer, Session } from "@/types/account";
+import type { Customer } from "@/types/account";
 import type { Category, Product, Review } from "@/types/catalog";
-import type { ApiError, LineId, PageResult, Result } from "@/types/common";
-import type { CartLine, Order, PricedCart } from "@/types/commerce";
+import type { ApiError, PageResult, Result } from "@/types/common";
+import type { Order } from "@/types/commerce";
 import { createAbortError, isAbortError } from "@/utils/async";
+import { compareIso } from "@/utils/dates";
 import { FILTER_PARAMS } from "@/utils/queryParams";
 
-import { FIXED_DATE_RANGE, FIXED_NOW, makeAddress } from "../../fixtures";
+import { FIXED_DATE_RANGE, FIXED_NOW, makeFilterState } from "../../fixtures";
+
+import {
+  ORDER_SAMPLE,
+  PAGE_SIZE,
+  expectRefusal,
+  firstOf,
+  orderBody,
+  refusalOf,
+  signInCustomer,
+  startSeam,
+  valueOf,
+} from "./mockServerHarness";
 
 // The seam's own contract, driven at the seam: no DOM, no provider and no rendering take part, so every
 // case runs in the node project, and the data source is bound per case because the seam reaches its data
 // through a binding rather than an import — the rule the unbound-seam cases prove.
 
-/** The catalogue page size the paging case reads at: the largest configured, so a total spans few pages. */
-const PAGE_SIZE = 48;
 /** A row limit past the seeded order count, so a count reads the whole collection it is about. */
 const ALL_ROWS = 10_000;
-/** The order rows a determinism pass samples: enough for the invariants that pass asserts. */
 
 /** The static paths the route table answers and the route each resolves to: the catalogue of report
  * definitions resolves as `reports.list` and a named report run as `reports.run`. */
@@ -90,88 +99,42 @@ const REGISTRATION = {
 /** The data source the case in progress is answered from, bound by the hook at the foot of this block. */
 let source: SalesProDataSource;
 
-/** The first entry of a collection a case reads, or a failure naming the empty collection. */
-function firstOf<TItem>(items: readonly TItem[]): TItem {
-  const [first] = items;
-  if (first === undefined) throw new Error("The collection the case reads is empty.");
-  return first;
-}
-
-/** The payload of a request the case expects to be answered. */
-async function valueOf<TValue>(pending: Promise<Result<TValue>>): Promise<TValue> {
-  const result = await pending;
-  if (!result.ok) throw new Error(`The request was refused with ${result.error.code}.`);
-  return result.value;
-}
-
-/** The failure of a request the case expects to be refused. */
-async function refusalOf<TValue>(pending: Promise<Result<TValue>>): Promise<ApiError> {
-  const result = await pending;
-  if (result.ok) throw new Error("The request was answered where the case expects a refusal.");
-  return result.error;
-}
-
-/** Asserts one refusal: the status and code the contract sets and the message every failure carries.
- * `label` names the case in a failure, because one case asserts five refusals in a row. */
-function expectRefusal(error: ApiError, status: number, code: string, label = "the refusal"): void {
-  expect(error.status, label).toBe(status);
-  expect(error.code, label).toBe(code);
-  expect(error.message.length, label).toBeGreaterThan(0);
-}
-
-/** Signs the seeded customer in, so a case carries a session the seam issued rather than one it built. */
-function signInCustomer(): Promise<Session> {
-  return valueOf(
-    postJson<Session>("/api/auth/login", {
-      email: DEMO_ACCOUNTS.CUSTOMER_EMAIL,
-      password: DEMO_ACCOUNTS.PASSWORD,
-    }),
+/** The product a bootstrap's review read is scoped by: the one the pass's own catalogue page holds with the
+ * most reviews, so the scoping the determinism case asserts is asserted over rows rather than over an empty
+ * list, and both passes pick the same product without a seeded identifier being written down here. */
+function mostReviewed(products: readonly Product[]): Product {
+  return products.reduce(
+    (best, one) => (one.ratingCount > best.ratingCount ? one : best),
+    firstOf(products),
   );
 }
 
-/** A submittable order: a line built from a product the catalogue serves, priced by the seam so the
- * snapshot is the one a cart would carry, and the demonstration card the case names. */
-async function orderBody(idempotencyKey: string, cardNumber: string): Promise<object> {
-  const query = { inStock: true, pageSize: PAGE_SIZE };
-  const served = await valueOf(getJson<PageResult<Product>>("/api/products", { query }));
-  const product = firstOf(served.items);
-  // The identifier is hand-built and branded by the cast, the visible signal a generator did not make it.
-  const line: CartLine = {
-    id: `line_${product.id}` as LineId,
-    productId: product.id,
-    sku: product.sku,
-    name: product.name,
-    unitPriceMinor: product.priceMinor,
-    quantity: 1,
-    maxQuantity: product.stockOnHand,
-    imageUrl: firstOf(product.images).url,
-    addedAt: FIXED_NOW,
-  };
-  const pricing = { lines: [line], promoCode: null, shippingMethodId: FREE_SHIPPING_METHOD_ID };
-  const snapshot = await valueOf(postJson<PricedCart>("/api/cart/price", pricing));
-  const card = {
-    number: cardNumber,
-    nameOnCard: "Dana Okafor",
-    expiryMonth: "12",
-    expiryYear: "2032",
-    cvc: "123",
-  };
+/** One independent bootstrap of the seeded data, read through the data source's own accessors. The module
+ * registry is reset first, so two passes share no module state and the second is not the first's store. */
+async function captureSeed() {
+  vi.resetModules();
+  const data = await import("@/data/repositories");
+  const booted = data.createSalesProDataSource();
+  const products = booted.listProducts(makeFilterState({ pageSize: PAGE_SIZE }));
+  const reviewed = mostReviewed(products.items);
   return {
-    snapshot,
-    email: DEMO_ACCOUNTS.CUSTOMER_EMAIL,
-    shippingAddress: makeAddress(),
-    billingAddress: makeAddress({ label: "Billing" }),
-    shippingMethodId: FREE_SHIPPING_METHOD_ID,
-    payment: { method: "card", card },
-    idempotencyKey,
+    categories: booted.listCategories(),
+    brands: booted.listBrands(),
+    products,
+    reviewed,
+    reviews: booted.listProductReviews({ productId: reviewed.id, page: 1, pageSize: PAGE_SIZE }),
+    orders: booted.getRecentOrders(ORDER_SAMPLE),
+    credential: booted.findSignInCredential(DEMO_ACCOUNTS.CUSTOMER_EMAIL),
+    // The two analytics reads answer with a promise of a `Result`, because the modules they aggregate with
+    // are fetched on first use, so a pass unwraps the value the equality below compares.
+    kpis: await valueOf(booted.getKpis(FIXED_DATE_RANGE)),
+    revenue: await valueOf(booted.getRevenueSeries(FIXED_DATE_RANGE)),
+    reports: booted.listReportDefinitions(),
   };
 }
 
 beforeEach(() => {
-  vi.stubEnv("VITE_API_LATENCY_MS", "0");
-  resetMockServer();
-  source = createSalesProDataSource();
-  registerDataSource(source);
+  source = startSeam();
 });
 
 describe("route matching", () => {
@@ -330,8 +293,13 @@ describe("answered reads", () => {
       ),
     );
     const after = await valueOf(getJson<PageResult<Review>>(path, { query: page }));
+    // The seeded corpus draws the anchor day as a whole day — one of this product's rows is dated later
+    // today than this write — so a submitted row is not guaranteed the first slot. The endpoint's contract
+    // is a page ordered newest first, with the write visible in it.
     expect(after.total).toBe(first.total + 1);
-    expect(firstOf(after.items).id).toBe(written.id);
+    expect(after.items.some((review) => review.id === written.id)).toBe(true);
+    const afterInstants = after.items.map((review) => review.createdAt);
+    expect([...afterInstants].sort().reverse()).toEqual(afterInstants);
   });
 });
 
@@ -399,51 +367,6 @@ describe("idempotency", () => {
   });
 });
 
-describe("order-detail authorisation", () => {
-  it("answers an account-less order to its placement credential alone, and serves an administrator", async () => {
-    // A seeded order that names no account is the case the exposure was reported on: an administrator is
-    // served, a caller that sent no session is refused, and a signed-in customer is refused with the same
-    // `404` a foreign account-owned order answers, so a response cannot be read to learn whether an
-    // identifier exists.
-    const seeded = source.getRecentOrders(ALL_ROWS).find((order) => order.customerId === null);
-    if (seeded === undefined) throw new Error("The seeded orders hold no account-less order.");
-    const seededPath = `/api/orders/${seeded.id}`;
-    expectRefusal(await refusalOf(getJson(seededPath)), 401, "unauthenticated");
-    const shopper = await signInCustomer();
-    expectRefusal(
-      await refusalOf(getJson(seededPath, { sessionToken: shopper.token })),
-      404,
-      "order-not-found",
-    );
-    const admin = await valueOf(
-      postJson<Session>("/api/auth/login", {
-        email: DEMO_ACCOUNTS.ADMIN_EMAIL,
-        password: DEMO_ACCOUNTS.PASSWORD,
-      }),
-    );
-    expect((await valueOf(getJson<Order>(seededPath, { sessionToken: admin.token }))).id).toBe(
-      seeded.id,
-    );
-
-    // An order created with no session answers the key its submission carried, and nothing else: the
-    // identifier on its own is refused, which is what its confirmation route presents the credential for.
-    const key = "key-placement-credential";
-    const created = await valueOf(
-      postJson<Order>("/api/orders", await orderBody(key, DEMO_CARD_NUMBERS.APPROVED)),
-    );
-    expect(created.customerId).toBeNull();
-    const createdPath = `/api/orders/${created.id}`;
-    expectRefusal(await refusalOf(getJson(createdPath)), 401, "unauthenticated");
-    expect((await valueOf(getJson<Order>(createdPath, { orderToken: key }))).id).toBe(created.id);
-    // The credential is held against the order it placed, not as a key to every account-less order.
-    expectRefusal(
-      await refusalOf(getJson(seededPath, { orderToken: key })),
-      401,
-      "unauthenticated",
-    );
-  });
-});
-
 describe("the transport", () => {
   it("waits the configured latency out and falls back to the default", async () => {
     expect(getApiLatencyMs()).toBe(0);
@@ -484,19 +407,6 @@ describe("the transport", () => {
       }
     },
   );
-
-  it("serialises a query deterministically", () => {
-    const query = {
-      sort: "price-asc",
-      page: 2,
-      brandIds: ["brd_b", "brd_a"],
-      q: "",
-      none: undefined,
-    };
-    expect(buildQueryString(query)).toBe("brandIds=brd_b&brandIds=brd_a&page=2&q=&sort=price-asc");
-    expect(buildQueryString({ q: "oak & ash" })).toBe("q=oak%20%26%20ash");
-    expect(buildQueryString({})).toBe("");
-  });
 
   it("extends a target that already carries a query rather than breaking it", async () => {
     // A caller may hand the transport a path it built complete. The query passed beside it joins that
@@ -560,6 +470,19 @@ describe("the transport", () => {
     }
   });
 
+  it("serialises a query deterministically", () => {
+    const query = {
+      sort: "price-asc",
+      page: 2,
+      brandIds: ["brd_b", "brd_a"],
+      q: "",
+      none: undefined,
+    };
+    expect(buildQueryString(query)).toBe("brandIds=brd_b&brandIds=brd_a&page=2&q=&sort=price-asc");
+    expect(buildQueryString({ q: "oak & ash" })).toBe("q=oak%20%26%20ash");
+    expect(buildQueryString({})).toBe("");
+  });
+
   it("shapes anything a request goes wrong with", () => {
     const reported: ApiError = { status: 404, code: "route-not-found", message: "No endpoint." };
     const boom = new Error("boom");
@@ -608,5 +531,63 @@ describe("the transport", () => {
       patchJson<Customer>(`/api/customers/${session.customerId}`, profile, headers),
     );
     expect(updated.id).toBe(session.customerId);
+  });
+});
+
+describe("seed determinism", () => {
+  it("boots the same seeded collections twice from a fresh module registry", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(FIXED_NOW));
+    const first = await captureSeed();
+    const second = await captureSeed();
+    vi.useRealTimers();
+    // The equality alone would also hold for two reads of one already-loaded module, so what proves each
+    // pass is a fresh bootstrap is that the range-keyed reads below are non-empty: they only are when the
+    // module re-ran its seed under the pinned clock rather than serving the copy loaded at file scope.
+    expect(first).toEqual(second);
+    expect(first.categories.length).toBeGreaterThan(0);
+    expect(first.brands.length).toBeGreaterThan(0);
+    expect(first.products.items.length).toBeGreaterThan(0);
+    expect(first.reviews.items.length).toBeGreaterThan(0);
+    expect(first.orders.length).toBeGreaterThan(0);
+    expect(first.reports.length).toBeGreaterThan(0);
+    expect(first.revenue.length).toBeGreaterThan(0);
+    expect(first.kpis.orders).toBeGreaterThan(0);
+    expect(first.credential?.digest.hash).toBe(second.credential?.digest.hash);
+    // The reviews read is scoped to the product it names: its rows are that product's own, its total is that
+    // product's own review count from the same bootstrap, and they lead with the newest first.
+    expect(first.reviews.items.length).toBeGreaterThan(0);
+    const own = first.reviewed.id;
+    expect(first.reviews.items.every((review) => review.productId === own)).toBe(true);
+    expect(first.reviews.total).toBe(first.reviewed.ratingCount);
+    const stamps = first.reviews.items.map((review) => review.createdAt);
+    expect([...stamps].sort(compareIso).reverse()).toEqual(stamps);
+    // An identifier the catalogue does not hold is refused, as the write route on the same path refuses it,
+    // rather than answered with the collection.
+    expectRefusal(
+      await refusalOf(getJson("/api/products/prod_not-in-the-catalogue/reviews")),
+      404,
+      API_ERROR_CODES.PRODUCT_NOT_FOUND,
+      "the reviews of an unknown product",
+    );
+    for (const order of first.orders) {
+      const priced = order.pricedCart;
+      for (const line of priced.lines) {
+        expect(line.lineSubtotalMinor).toBe(line.unitPriceMinor * line.quantity);
+        expect(line.lineTotalMinor).toBe(line.lineSubtotalMinor - line.discountMinor);
+      }
+      const orderTotal = order.lines.reduce((sum, line) => sum + line.lineTotalMinor, 0);
+      const pricedTotal = priced.lines.reduce((sum, line) => sum + line.lineTotalMinor, 0);
+      expect(orderTotal).toBe(pricedTotal);
+      expect(priced.subtotalMinor).toBe(
+        priced.lines.reduce((sum, line) => sum + line.lineSubtotalMinor, 0),
+      );
+      expect(priced.discountTotalMinor).toBe(
+        priced.lines.reduce((sum, line) => sum + line.discountMinor, 0),
+      );
+      expect(priced.grandTotalMinor).toBe(
+        priced.subtotalMinor - priced.discountTotalMinor + priced.shippingMinor + priced.taxMinor,
+      );
+    }
   });
 });

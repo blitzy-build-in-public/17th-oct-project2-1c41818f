@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Rating.tsx
  * Purpose: Rating display and input, the price tag with discount, and the quantity stepper
- * Lines: 536
+ * Lines: 585
  */
 
 import { useId, useState } from "react";
@@ -117,6 +117,24 @@ function joinClassNames(...values: readonly (string | false | undefined)[]): str
  *  nothing, so it is never the accessible text of a rating. */
 function textOr(candidate: string | undefined, fallback: string): string {
   return candidate !== undefined && candidate.trim() !== "" ? candidate : fallback;
+}
+
+/** The whole units a ceiling holds, or `null` when it holds nothing purchasable.
+ *
+ * A bound below the floor is not a ceiling: flooring one to a single unit is what made the quantity control
+ * announce a quantity the data never held, so a ceiling that is not a finite number and one that truncates to
+ * less than {@link MIN_QUANTITY} both read as no ceiling here — the same "nothing on hand means nothing to
+ * choose" answer `src/state/cartReducer.ts#stockCeilingOf` and
+ * `src/features/cart/cartSelectors.ts#selectAvailability` give a count of zero, restated privately because
+ * shared presentation never imports a feature slice. A caller that has nothing to bound renders nothing.
+ *
+ * @param max - The ceiling the caller supplies, as a line's `maxQuantity` or a product's `stockOnHand`.
+ * @returns The whole units that may be held, or `null` when none may be.
+ */
+function purchasableCeiling(max: number): number | null {
+  if (!Number.isFinite(max)) return null;
+  const whole = Math.trunc(max);
+  return whole < MIN_QUANTITY ? null : whole;
 }
 
 /** The star a radio option's value stands for, or `null` when the value names none of the five. */
@@ -403,7 +421,8 @@ export interface QuantityStepperProps {
   /** Called with the quantity to hold, which is always between one and {@link QuantityStepperProps.max}. */
   readonly onChange: (value: number) => void;
   /** The most that may be held: the line's `maxQuantity`, copied from stock when the line was created. The
-   *  control refuses to go past it, which is the visible half of the bound the cart reducer enforces. */
+   *  control refuses to go past it, which is the visible half of the bound the cart reducer enforces; a ceiling
+   *  holding nothing purchasable — a count of none — renders no control at all. */
   readonly max: number;
   /** The field's label, which is also the name assistive technology gives it. */
   readonly label: string;
@@ -419,9 +438,9 @@ export interface QuantityStepperProps {
  * The value is text first, so the quantity is readable, typeable and correctable, and both buttons are real
  * buttons with names of their own, so the field is usable from the keyboard and by touch. Every path — either
  * button, a typed figure and a pasted one — is confined by the same bounds through `src/utils/collections.ts`,
- * so the control cannot report a quantity outside the range it announces; and the two controls that would
- * leave that range report themselves unavailable and do nothing, which is what makes the bound visible without
- * taking the keyboard user's focus away from the field they were stepping.
+ * so the control cannot report a quantity outside the range it announces; and a step that would leave that
+ * range keeps the value it holds and states the bound, which is what makes the bound perceivable without taking
+ * the keyboard user's focus away from the field they were stepping.
  *
  * A typed entry is committed as it is typed and normalised when the field is left or Enter is pressed: text
  * holding no whole number — an empty field, letters, a fraction, a sign — commits nothing and the field falls
@@ -433,9 +452,17 @@ export interface QuantityStepperProps {
  * states no quantity of its own beyond what it is given: line totals, discounts and every other figure belong to
  * `src/lib/pricingService.ts`, and what a quantity does to the cart belongs to `CartContext`.
  *
+ * The announced range always agrees with the data. A ceiling that holds nothing purchasable renders no control
+ * at all: there is no quantity to choose, and the surface's own availability copy — the cart line's warning, the
+ * product detail's stock line — is what carries the state, so nothing offers a range of one unit beside two
+ * controls that cannot move it, and nothing is announced about a quantity the data does not have. A refused step
+ * leaves the value as it was and writes the bound into a polite status region, so the press is stated rather
+ * than dropped in silence; a step the control accepts withdraws that sentence.
+ *
  * @param props - The current quantity and its change handler, the ceiling stock sets, the field's label, the
  *   disabled state and the control's extra classes.
- * @returns The stepper, with its two controls, its labelled field and its announced bound.
+ * @returns The stepper, with its two controls, its labelled field, its announced bound and its refusal status;
+ *   `null` when the ceiling holds nothing purchasable.
  */
 export function QuantityStepper({
   value,
@@ -444,26 +471,43 @@ export function QuantityStepper({
   label,
   isDisabled = false,
   className,
-}: QuantityStepperProps): ReactElement {
+}: QuantityStepperProps): ReactElement | null {
   const inputId = useId();
   const boundsId = `${inputId}-bounds`;
   const [draft, setDraft] = useState<string | null>(null);
-  // A ceiling that is not a finite number, or is below the floor, leaves the control offering the single unit
-  // the rule's floor allows rather than an inverted range.
-  const ceiling = Number.isFinite(max) ? Math.max(MIN_QUANTITY, Math.trunc(max)) : MIN_QUANTITY;
+  // What a refused step states, empty at rest so the status region below is present from the first render and a
+  // sentence written into it is a change to a live region rather than a region arriving with text already in it.
+  const [refusal, setRefusal] = useState("");
+  const ceiling = purchasableCeiling(max);
+  // Every hook has run by here, so the control is rendered or omitted without the order of the calls changing.
+  // Nothing is rendered when the ceiling holds nothing purchasable: there is no quantity to choose, and the
+  // surface's own availability copy — the cart row's warning, the detail page's stock line — carries the state,
+  // so no range of one unit and no two inert controls are announced in place of "nothing here is buyable".
+  if (ceiling === null) return null;
+
+  const boundsSentence = quantityRangeMessage(ceiling);
   const current = clampNumber(value, MIN_QUANTITY, ceiling);
   const shown = draft ?? formatQuantity(current);
 
   /** Reports the quantity a control asked for, confined to the bounds, and only when it is a change. */
   const commit = (next: number): void => {
     const clamped = clampNumber(next, MIN_QUANTITY, ceiling);
-    if (clamped !== current) onChange(clamped);
+    if (clamped !== current) {
+      setRefusal("");
+      onChange(clamped);
+    }
   };
 
-  /** Moves the quantity one step, clearing whatever was typed so the field shows the committed figure. */
+  /** Moves the quantity one step, clearing whatever was typed so the field shows the committed figure, and
+   *  stating the bound rather than committing nothing when the step would leave the range. */
   const stepBy = (direction: number): void => {
     setDraft(null);
-    commit(current + direction * QUANTITY_STEP);
+    const next = current + direction * QUANTITY_STEP;
+    if (next < MIN_QUANTITY || next > ceiling) {
+      setRefusal(boundsSentence);
+      return;
+    }
+    commit(next);
   };
 
   /** Keeps what was typed, and commits it when it is a whole number: anything else falls back to the value. */
@@ -529,7 +573,12 @@ export function QuantityStepper({
         aria-disabled={isDisabled || current === ceiling ? true : undefined}
       />
       <span className={VISUALLY_HIDDEN} id={boundsId}>
-        {quantityRangeMessage(ceiling)}
+        {boundsSentence}
+      </span>
+      {/* A refused step is stated here: the region is polite, and it is present from the first render (empty)
+       * so a sentence written into it is announced as a change. An accepted change clears it. */}
+      <span className={VISUALLY_HIDDEN} role="status">
+        {refusal}
       </span>
     </span>
   );

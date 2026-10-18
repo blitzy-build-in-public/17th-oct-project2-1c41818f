@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchBar.tsx
  * Purpose: The search input with debounced suggestions, keyboard selection and recent history
- * Lines: 492
+ * Lines: 493
  */
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import type { ChangeEvent, FormEvent, KeyboardEvent, ReactElement } from "react"
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { Button, IconButton } from "@/components/ui/Button";
+import { useOnClickOutside } from "@/components/ui/hooks";
 import { Input } from "@/components/ui/Input";
 import { SEARCH_SUGGESTION_DEBOUNCE_MS, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
 import { COMMON_ACTIONS, SEARCH_COPY, suggestionsUpdatedAnnouncement } from "@/constants/content";
@@ -17,7 +18,7 @@ import { SearchSuggestions, suggestionOptionId } from "@/features/search/SearchS
 import { isBlankQuery, suggest } from "@/lib/searchService";
 import type { SearchLookup } from "@/lib/searchService";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
-import { useAsync, useDebouncedValue, useOnClickOutside } from "@/state/hooks";
+import { useAsync, useDebouncedValue } from "@/state/hooks";
 import type { Facet, FacetId, SearchSuggestion } from "@/types/catalog";
 import { filtersToPath, setQuery as withQueryTerm } from "@/utils/queryParams";
 
@@ -172,10 +173,10 @@ export interface SearchBarProps {
  * `src/lib/searchService.ts`'s; filtering and faceting are `src/lib/catalogService.ts`'s.
  *
  * The recent terms live in React state for as long as the application is mounted and are deliberately
- * never written to `localStorage`: `STORAGE_KEYS` declares an entry for the cart, the session
- * token, the demonstration account store's session table, the last-used report range and the
- * placement credentials of this browser's own orders only, and `src/utils/storage.ts` is the
- * product's only durable store, so a reload starts with an empty history.
+ * never written to `localStorage`: `STORAGE_KEYS` declares entries for the cart, the session token, the
+ * account store's session table, this browser's own writes to the seeded collections, the placement
+ * credential of each order it placed without an account and the last-used report range only, and
+ * `src/utils/storage.ts` is the product's only durable store, so a reload starts with an empty history.
  *
  * @param props - The opening term, the autofocus flag, the submission callback and extra classes.
  * @returns The bar: the field, its clear and search actions, the panel and the announced option count.

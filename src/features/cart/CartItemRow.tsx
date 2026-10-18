@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartItemRow.tsx
  * Purpose: A single cart line with thumbnail, quantity stepper, removal and an availability warning
- * Lines: 353
+ * Lines: 356
  */
 
 import type { ReactElement } from "react";
@@ -70,11 +70,12 @@ import { formatMoney } from "@/utils/format";
  * one existing sentence that names the remaining count. One added key in that module is all this row needs to
  * speak the cart's own register.
  *
- * BLITZY [A11Y]: a line whose product nothing can be bought of renders the stepper the availability rule calls
- * for, and that stepper's described-by sentence is derived from its ceiling, which floors at one — so such a
- * line announces "Only one is in stock" beside a warning that says the product is out of stock. The state is
- * transitional: `src/state/cartReducer.ts` drops a line with nothing on hand as the cart rereads itself, and
- * `selectAvailability` documents that as the answer for a line handed here before that repair.
+ * The quantity control's bounds are the primitive's own contract, and this row passes it nothing but the ceiling:
+ * a ceiling that holds nothing purchasable renders no quantity control at all, so a line that cannot be bought
+ * shows the availability warning alone and never announces "Only one is in stock" beside an out-of-stock
+ * sentence. Both of that control's bounds carry the same `aria-disabled` spelling, so a keyboard user keeps
+ * their place in the row, and a step it refuses states the bound in a polite status region rather than doing
+ * nothing in silence.
  */
 
 /** The glyph the removal control draws: U+2715, sized and coloured by the row's own class. */
@@ -206,7 +207,9 @@ function availabilityWarning(availability: LineAvailability): ReactElement | nul
  * the ceiling `selectAvailability` read off the line, so its controls and its field refuse to leave the range
  * the shopper can see, while the reducer clamps the same figure again so a stale ceiling — the stock the product
  * carried when the line was built — cannot let an unpurchasable quantity into the cart. A clamp written here
- * would be the third implementation of a rule that already has one home.
+ * would be the third implementation of a rule that already has one home. A ceiling that holds nothing
+ * purchasable is answered by the primitive with no control at all, so such a line renders the availability
+ * warning alone rather than a stepper beside it, and the row disables nothing of its own for that state.
  *
  * Money is read, never computed. The unit price is the line's own `unitPriceMinor` through `PriceTag`, the
  * per-line discount is `selectLineDiscountMinor` of the priced line, and the line total is that priced line's
@@ -238,7 +241,6 @@ export function CartItemRow({
   const toast = useToast();
 
   const availability = selectAvailability(line);
-  const isUnavailable = availability.status === "unavailable";
   const discountMinor = pricedLine === undefined ? 0 : selectLineDiscountMinor(pricedLine);
 
   /** What the line is: its name, which is also the word its controls are named by, and its sku. */
@@ -269,9 +271,11 @@ export function CartItemRow({
   const warning = availabilityWarning(availability);
 
   /**
-   * How many of the line the shopper holds, bounded by the line's own ceiling and disabled outright while nothing
-   * of the product can be bought. The label names the product, so assistive technology announces which line the
-   * field belongs to rather than a bare figure.
+   * How many of the line the shopper holds, bounded by the line's own ceiling. The label names the product, so
+   * assistive technology announces which line the field belongs to rather than a bare figure, and the ceiling is
+   * the only bound the control is given: a line whose ceiling holds nothing purchasable is answered by the
+   * primitive with no control at all, so the availability warning stands alone rather than beside two controls
+   * that could not move it.
    */
   const stepper = (
     <QuantityStepper
@@ -279,7 +283,6 @@ export function CartItemRow({
       value={line.quantity}
       max={availability.maxQuantity}
       label={quantityLabel(line.name)}
-      isDisabled={isUnavailable}
       onChange={(next: number) => {
         cart.updateQuantity(line.id, next);
       }}

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/RecentOrdersTable.tsx
  * Purpose: The dashboard's most-recent-orders table with status badges
- * Lines: 240
+ * Lines: 279
  */
 
 import { useId } from "react";
@@ -14,8 +14,11 @@ import {
   OrderStatusBadge,
   type CardHeaderProps,
 } from "@/components/ui/Card";
+import { Alert } from "@/components/ui/Feedback";
 import { DataTable, type DataTableColumn, type DataTableSort } from "@/components/ui/Table";
-import { ACCOUNT_COPY, ADMIN_COPY, EMPTY_STATES } from "@/constants/content";
+import { ACCOUNT_COPY, COMMON_ACTIONS, EMPTY_STATES } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
+import type { ApiError } from "@/types/common";
 import type { Order } from "@/types/commerce";
 import { sumQuantities } from "@/utils/collections";
 import { formatDateTime } from "@/utils/dates";
@@ -28,10 +31,13 @@ import { formatDateTime } from "@/utils/dates";
  * that sheet's badge family (`sp-badge`, its variant modifiers and `sp-badge--sm` for a dense cell), the table
  * is its `sp-table` family (`sp-table`, `sp-table--compact` for the row the back office uses, `sp-table__num`
  * for a column of figures and `sp-table__empty` for the single row a table with nothing to show renders), and
- * `sp-visually-hidden` in `src/styles/base.css` carries the caption. The scroll frame handed to the table
- * through `TABLE_FRAME_CLASS` is `src/styles/admin-reports.css`'s report-style shell, and its floor under the
- * table is what makes a six-column back office table travel sideways inside the card rather than compressing
- * its columns below legibility. No colour, radius, shadow or pixel media query is written in this file.
+ * `sp-visually-hidden` in `src/styles/base.css` carries the caption. The failure the page hands in is rendered
+ * by the alert primitive, whose `sp-alert` family `src/styles/components.css` declares with the other
+ * primitives and which this file adopts by mounting it rather than by restating any of it. The scroll frame
+ * handed to the table through `TABLE_FRAME_CLASS` is `src/styles/admin-reports.css`'s report-style shell, and
+ * its floor under the table is what makes a six-column back office table travel sideways inside the card
+ * rather than compressing its columns below legibility. No colour, radius, shadow or pixel media query is
+ * written in this file.
  *
  * The table is the shared primitive, configured rather than re-implemented. Sorting, the `<caption>`,
  * `aria-sort` on the sorted header, the sticky header, the scroll container, the empty row, the numeric
@@ -53,7 +59,7 @@ import { formatDateTime } from "@/utils/dates";
  * administrator reading another customer's order. The order number is plain text, and no route string is
  * written in this file.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` declares no administrator table column vocabulary.
+ * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content-reports.ts` declares no administrator table column vocabulary.
  * The dashboard's own block names the table and nothing else — `ADMIN_COPY.RECENT_ORDERS_HEADING` is its card
  * title and its caption — so the four column labels that read the same in both registers are adopted from the
  * order-history block that already words them (`ACCOUNT_COPY.ORDERS_COLUMN_ORDER`, `_PLACED`, `_ITEMS`,
@@ -177,8 +183,8 @@ const EMPTY_ROW: ReactElement = (
 export interface RecentOrdersTableProps {
   /**
    * The orders to show, in the order the page received them: the dashboard's `getRecentOrders` read, at most
-   * as many as the limit it asked for. This table fetches nothing, so these rows and the loading flag are its
-   * whole state.
+   * as many as the limit it asked for. This table fetches nothing, so these rows, the loading flag and the
+   * failure below are its whole state.
    */
   readonly orders: readonly Order[];
   /**
@@ -187,6 +193,20 @@ export interface RecentOrdersTableProps {
    * header and no rows rather than claiming the period held no orders.
    */
   readonly isLoading?: boolean;
+  /**
+   * The failure the page's own read reported, or `null` when it answered. While a failure is handed in the
+   * card keeps its frame and its title and its body states the failure, with {@link onRetry} beside it, in
+   * place of the table — the four-state contract is each surface's own, so a failed orders read leaves the
+   * dashboard's figures, chart and ranking exactly as they are. A failure takes precedence over `isLoading`,
+   * because a read that did not answer is not still in flight.
+   */
+  readonly error?: ApiError | null;
+  /**
+   * Called when the reader asks for the orders again: the page's `reload` for the read behind this table, so
+   * the retry re-runs that one request and no other. It renders no control of its own, being the alert's
+   * action alone, and is passed through untouched.
+   */
+  readonly onRetry?: () => void;
   /** The card's title, and the table's accessible name beside it; the dashboard's own wording by default. */
   readonly title?: string;
   /**
@@ -206,34 +226,53 @@ export interface RecentOrdersTableProps {
  * action either — the dashboard reads and the reports export — and no filter of its own, because the period is
  * the page's control and every table under it answers the same range.
  *
- * @param props - The orders to show, the page's loading state, the card's title and its heading level.
+ * A failure the page hands in is this card's own body rather than the page's: the title and the frame stay, so
+ * the reader sees which read failed, and the retry re-runs that one read. Nothing is fetched here either way,
+ * so the failure is rendered and the reloading is the page's.
+ *
+ * @param props - The orders to show, the page's loading state, the failure with its retry, the card's title
+ *   and its heading level; see {@link RecentOrdersTableProps}.
  * @returns The card holding the shared table, configured with this surface's columns.
  */
 export function RecentOrdersTable({
   orders,
   isLoading = false,
+  error,
+  onRetry,
   title = ADMIN_COPY.RECENT_ORDERS_HEADING,
   headingLevel = 3,
 }: RecentOrdersTableProps): ReactElement {
   // The card is a section named by its own title, so the region a screen reader lands on is announced with
   // the words the heading shows rather than by the table's caption alone.
   const headingId = useId();
+  const failure = error ?? null;
 
   return (
     <Card as="section" aria-labelledby={headingId}>
       <CardHeader title={<span id={headingId}>{title}</span>} headingLevel={headingLevel} />
-      <CardBody isFlush>
-        <DataTable
-          columns={COLUMNS}
-          rows={orders}
-          rowKey={rowKeyOf}
-          caption={title}
-          defaultSort={DEFAULT_SORT}
-          emptyState={EMPTY_ROW}
-          isLoading={isLoading}
-          density="compact"
-          className={TABLE_FRAME_CLASS}
-        />
+      {/* The body loses its flush edge only while the alert stands in for the table: a table meets the frame
+          with no padding of its own, while the alert brings the padding the card's other bodies carry. */}
+      <CardBody isFlush={failure === null}>
+        {failure === null ? (
+          <DataTable
+            columns={COLUMNS}
+            rows={orders}
+            rowKey={rowKeyOf}
+            caption={title}
+            defaultSort={DEFAULT_SORT}
+            emptyState={EMPTY_ROW}
+            isLoading={isLoading}
+            density="compact"
+            className={TABLE_FRAME_CLASS}
+          />
+        ) : (
+          <Alert
+            actionLabel={COMMON_ACTIONS.RETRY}
+            error={failure}
+            onAction={onRetry}
+            tone="danger"
+          />
+        )}
       </CardBody>
     </Card>
   );

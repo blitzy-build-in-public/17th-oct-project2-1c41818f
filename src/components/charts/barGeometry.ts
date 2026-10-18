@@ -1,10 +1,11 @@
 /**
  * Path: src/components/charts/barGeometry.ts
  * Purpose: The bar renderer's own geometry: its scales, its marks, its value labels and its readout placement
- * Lines: 446
+ * Lines: 455
  */
 
-import type { CSSProperties } from "react";
+import { readoutPlacement } from "@/components/charts/readoutPlacement";
+import type { ReadoutStyle } from "@/components/charts/readoutPlacement";
 
 import {
   CHART_VIEWBOX_WIDTH,
@@ -27,9 +28,9 @@ import {
   gridLineFor,
   hasWholeValues,
   seriesClassName,
-  stackValues,
   zeroCoordinate,
 } from "@/components/charts/chartScales";
+import { indexSeriesPoints, stackedValuesAt } from "@/components/charts/chartGeometry";
 import type {
   AxisLabelTransform,
   AxisValueFormatter,
@@ -114,13 +115,9 @@ const HORIZONTAL_PADDING: Padding = {
 /** A value this close to nothing is nothing: no extent, and so no label to write. */
 const VALUE_EPSILON = 1e-9;
 
-/** The decimals a readout's offset carries, so the custom properties it sets are identical every render. */
-const PERCENT_DECIMALS = 2;
-
 // Types -------------------------------------------------------------------------------------------
 
 /** The placement a readout takes, in the custom properties `src/styles/admin-reports.css` substitutes. */
-type ReadoutStyle = CSSProperties & Record<`--${string}`, string>;
 
 /** The four sides of a mark's rectangle. */
 type MarkArea = Pick<BarRect, "x" | "y" | "width" | "height">;
@@ -259,7 +256,12 @@ function plottedValues(
   bandKeys: readonly string[],
   mode: BarMode,
 ): number[] {
-  if (mode === "stacked") return bandKeys.flatMap((key) => stackValues(series, key));
+  // The stacked mode resolves every band of every series, so the indexes are built once for the call rather
+  // than once per band: the same reason the paired table indexes a series before reading its cells.
+  if (mode === "stacked") {
+    const indexes = series.map(indexSeriesPoints);
+    return bandKeys.flatMap((key) => stackedValuesAt(indexes, key));
+  }
   return series.flatMap((one) =>
     one.points.filter((point) => Number.isFinite(point.y)).map((point) => point.y),
   );
@@ -402,29 +404,31 @@ export function buildGeometry(options: BarGeometryOptions): BarGeometry {
   };
 }
 
-/** A frame-relative offset as the percentage a readout's custom properties are set in, held inside the frame. */
-function percentOf(value: number, total: number): number {
-  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) return 0;
-  return Number(Math.min(Math.max((value / total) * 100, 0), 100).toFixed(PERCENT_DECIMALS));
-}
-
 /**
- * Where the readout sits over the active band: its inline offset at the band's centre and its block offset at
- * the outer end of that band's bars, both as percentages of the frame — the box the stylesheet clamps them
- * inside. Percentages keep the placement free of any measured pixel, so it is the same wherever the chart is
- * rendered and however wide its container turns out to be.
+ * Where the readout sits over the active band: the band's centre across the chart and the outer end of its
+ * bars down it, in the drawing's own user units. The anchor is pulled back by a value label's own room where
+ * the bars stand upright, so the box clears the figure written past the outermost bar's end rather than
+ * covering it.
+ *
+ * Both offsets are handed to {@link readoutPlacement}, which owns the arithmetic, the drawing's own
+ * percentage basis, the side the box grows from, the room it is capped by and the bounds that hold it inside
+ * the plot area; this function only reads the band's geometry out of the marks it was drawn with. Publishing
+ * the placement from one shared module is what stops this renderer's copy from drifting out of step with the
+ * other two — and it is why the box can neither reach the value axis' gutter nor the label row under it.
  *
  * @param geometry - The geometry the active band was drawn from.
  * @param bandKey - The band the readout is reporting.
  * @param height - The frame's height in user units, the readout's own percentage basis.
  * @param horizontal - Whether the bars run sideways, which swaps the two offsets.
- * @returns The readout's placement, as the two custom properties it is set with.
+ * @param characters - The readout's words as a character count, which its reserved width is measured from.
+ * @returns The readout's placement, as the custom properties it is positioned and bounded by.
  */
 export function readoutStyle(
   geometry: BarGeometry,
   bandKey: string,
   height: number,
   horizontal: boolean,
+  characters: number,
 ): ReadoutStyle {
   const centre = geometry.bandScale.scale(bandKey) + geometry.bandScale.bandwidth / 2;
   const edges = geometry.bars
@@ -432,12 +436,17 @@ export function readoutStyle(
     .map((mark) => (horizontal ? mark.area.x + mark.area.width : mark.area.y));
   const spans = edges.length === 0 ? [centre] : edges;
   const outer = horizontal ? Math.max(...spans) : Math.min(...spans);
+  const reserve = VALUE_LABEL_GAP + LABEL_FONT_SIZE;
   const inline = horizontal ? outer : centre;
-  const block = horizontal ? centre : outer;
-  return {
-    "--sp-chart-readout-x": `${percentOf(inline, CHART_VIEWBOX_WIDTH)}%`,
-    "--sp-chart-readout-y": `${percentOf(block, height)}%`,
-  };
+  const block = horizontal ? centre : outer - reserve;
+  return readoutPlacement({
+    anchorX: inline,
+    anchorY: block,
+    plotArea: geometry.plotArea,
+    width: CHART_VIEWBOX_WIDTH,
+    height,
+    characters,
+  });
 }
 
 /** The frame height a render uses: the caller's value where it is a usable number of units, else the default. */

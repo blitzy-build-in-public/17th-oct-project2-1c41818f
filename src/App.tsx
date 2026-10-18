@@ -1,22 +1,24 @@
 /**
  * Path: src/App.tsx
  * Purpose: Provider composition in its required order, the error boundary and the layout around the routed content
- * Lines: 267
+ * Lines: 338
  */
 
-import { Component, Suspense, lazy } from "react";
+import { Component, Suspense, lazy, useCallback, useMemo } from "react";
 import type { ErrorInfo, ReactElement, ReactNode } from "react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import type { HeaderAccount } from "@/components/layout/Header";
 import { Alert, EmptyState } from "@/components/ui/Feedback";
 import { ToastViewport } from "@/components/ui/Toast";
 import { COMMON_ACTIONS, FEEDBACK_COPY } from "@/constants/content";
+import { HeaderCartButton } from "@/features/cart/HeaderCartButton";
 import { AppRoutes } from "@/Router";
-import { AuthProvider } from "@/state/AuthContext";
+import { AuthProvider, useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { CartProvider } from "@/state/CartContext";
 import { CatalogProvider } from "@/state/CatalogContext";
 import { CheckoutProvider } from "@/state/CheckoutContext";
-import { ToastProvider } from "@/state/ToastContext";
+import { ToastProvider, useToast } from "@/state/ToastContext";
 
 /*
  * What this file owns, and what it deliberately leaves out.
@@ -214,19 +216,96 @@ class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, RouteErrorBo
   }
 }
 
+/** Everything {@link AppFrame} accepts. */
+interface AppFrameProps {
+  /** The routed subtree, composed by `App` so that a re-render of this frame never reaches it. */
+  readonly children: ReactNode;
+}
+
 /**
- * The application: the provider chain, the shell, the boundary and the two surfaces mounted outside the
- * routed region.
+ * The composition root's reader: it reads the session and the toast queue, and hands the shell and the two
+ * surfaces beside it the facts and the callbacks each one renders.
+ *
+ * Why a component of its own. A context may only be read from inside the provider that holds it, and this is
+ * the layer that stands in all five; reading here is what lets every file below stay free of a reader that
+ * would have to import `src/state` — the shell, the header, the product tile and the toast viewport all sit
+ * under the state layer and receive what they need as props, elements or callbacks instead. Nothing is mirrored
+ * into state and no value is derived twice: the account is the four session facts the context already
+ * publishes, and the queue and its `dismiss` are handed on exactly as the toast context publishes them —
+ * `dismiss` is stable for the life of its provider, which is what the viewport needs of it.
+ *
+ * The cart is composed rather than read. Its trigger is the cart slice's own component, created once here and
+ * handed to the shell as an element, so this frame subscribes to no cart value: a change to the lines or a
+ * toggle of the drawer re-renders that button alone — the header, the footer, the routed page and this frame
+ * are not re-rendered for it, and the element's identity never changes, so React bails out of the subtree it
+ * sits in.
+ *
+ * The callback is wrapped rather than passed on as it arrives: `onSignOut` returns the request's promise while
+ * the header's control raises a command and waits on nothing, so the prop's shape is `() => void` and the
+ * wrapper is a `useCallback` over a stable input.
+ *
+ * @param props.children - The routed subtree, passed through untouched; see {@link AppFrameProps}.
+ * @returns The shell around the routed subtree, with the mini-cart drawer and the toast viewport beside it.
+ */
+function AppFrame({ children }: AppFrameProps): ReactElement {
+  const { displayName, email, isAuthenticated, isAdministrator } = useAuth();
+  const { signOut } = useAuthDispatch();
+  const { toasts, dismiss } = useToast();
+
+  const account = useMemo<HeaderAccount>(
+    () => ({ displayName, email, isAuthenticated, isAdministrator }),
+    [displayName, email, isAdministrator, isAuthenticated],
+  );
+
+  // Created once and never rebuilt: the trigger reads the cart itself, so a stable element here is what keeps
+  // a cart change out of this frame's render and out of every component above the button.
+  const cartTrigger = useMemo(() => <HeaderCartButton />, []);
+
+  const handleSignOut = useCallback((): void => {
+    // The session ends whether or not the store answers, so nothing waits on it here. A page a signed-out
+    // visitor may no longer see is the route guard's business in `src/Router.tsx`, and the authoritative
+    // check stays in `src/lib/mockServer.ts`.
+    void signOut();
+  }, [signOut]);
+
+  return (
+    <>
+      <AppLayout account={account} cartTrigger={cartTrigger} onSignOut={handleSignOut}>
+        {children}
+      </AppLayout>
+      {/* Beside the shell, and therefore outside the routed region, for the reason `App` states: the drawer
+          reads the cart context and the viewport renders the queue the toast context holds, which is read
+          here because the viewport itself sits below the state layer and may not read it. Both have to
+          outlive a route change. The drawer is the lazily bound one, so its boundary renders nothing while
+          its chunk arrives — the drawer is shut until the header's cart trigger opens it, which is why no
+          fallback is drawn in its place. */}
+      <Suspense fallback={null}>
+        <MiniCart />
+      </Suspense>
+      <ToastViewport toasts={toasts} onDismiss={dismiss} />
+    </>
+  );
+}
+
+/**
+ * The application: the provider chain, the frame that reads them, the boundary and the two surfaces mounted
+ * outside the routed region.
  *
  * What it renders, and why in this shape. The five providers, nested in the order the rest of the product
- * assumes. Inside them the application shell, so every route renders within one header, one footer and one
- * navigation. Inside the shell's content region the boundary, and inside the boundary the route table — the
+ * assumes. Inside them the frame above, so every route renders within one header, one footer and one
+ * navigation. Inside the frame's content region the boundary, and inside the boundary the route table — the
  * boundary is inside the shell on purpose, because that is what leaves the navigation usable when a screen
  * fails. Beside the shell, and therefore outside the routed region, the mini-cart drawer — this file's one
  * lazily bound component, wrapped in the `Suspense` boundary its chunk is fetched behind — and the toast
  * viewport: both have to outlive a route change — a notification raised on the catalogue is still there after
  * a move to the cart, and the cart the header's badge opened stays open through one — which is only true of a
  * subtree the router does not unmount.
+ *
+ * The routed subtree is composed here and passed to the frame as a child, which is the whole reason the frame
+ * exists as a component of its own: the frame re-renders when the cart, the session or the queue changes, and
+ * the child element it is handed is the same element it had, so React bails out of the routing tree rather
+ * than repainting the page in front of the shopper. This component therefore reads no context itself; the
+ * frame is the only reader, and it sits inside every provider that has to serve it.
  *
  * No props and no state of its own: every value below belongs to the provider that owns it, and this file
  * supplies no option to any of them. Mount it inside a router — `src/main.tsx` mounts it in the application's
@@ -242,22 +321,14 @@ export function App(): ReactElement {
         <CatalogProvider>
           <CartProvider>
             <CheckoutProvider>
-              {/* The shell wraps the boundary rather than the other way round, so a failed screen keeps the
-                  header, the footer and the navigation it is recovered from. `AppLayout` owns the
-                  administrator sidebar branch, the skip link and the document's one `<main>` region. */}
-              <AppLayout>
+              <AppFrame>
+                {/* The shell wraps the boundary rather than the other way round, so a failed screen keeps the
+                    header, the footer and the navigation it is recovered from. `AppLayout` owns the
+                    administrator sidebar branch, the skip link and the document's one `<main>` region. */}
                 <RouteErrorBoundary>
                   <AppRoutes />
                 </RouteErrorBoundary>
-              </AppLayout>
-              {/* Beside the shell for the reason stated above, and inside every provider that has to serve
-                  them: the drawer reads the cart context and the viewport the toast context. The drawer is the
-                  lazily bound one, so its boundary renders nothing while its chunk arrives — the drawer is
-                  shut until the header's badge opens it, which is why no fallback is drawn in its place. */}
-              <Suspense fallback={null}>
-                <MiniCart />
-              </Suspense>
-              <ToastViewport />
+              </AppFrame>
             </CheckoutProvider>
           </CartProvider>
         </CatalogProvider>

@@ -1,15 +1,14 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 616
+ * Lines: 602
  */
 
 @import "./tabs-accordion.css";
 
 /* ==== Cards and badges ==== */
-/* A card can hold a table wider than the column it is placed in, because a back-office table's legible floor
- * is --layout-table-min-width. The card is a grid and the body below is one of its items, so a content-based
- * minimum on either would size the card's own track from that floor and draw the table past the frame — and,
- * in a narrow column, past the page — instead of letting the table's scroll container scroll it. */
+/* A card can hold a table wider than its column: a back-office table's legible floor is --layout-table-min-width,
+ * and a content-based minimum on either the grid card or its body item sizes the track from that floor, drawing the
+ * table past the frame — or the page, in a narrow column — instead of letting the scroll container scroll it. */
 .sp-card,
 .sp-card__body {
   min-inline-size: 0;
@@ -21,8 +20,13 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-1);
 }
+/* The header row is a wrapping flex line: the title block and the card-level control sit beside each other
+ * while both fit, and at a scaled-up root font the control drops to its own line instead of setting the width
+ * of the card's track from its min-content. */
 .sp-card__header {
   display: flex;
+  /* The action cannot shrink and a phone column cannot hold both, so it wraps below the title. */
+  flex-wrap: wrap;
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-5);
@@ -45,7 +49,8 @@
   color: var(--color-text-muted);
   font-size: var(--text-body-sm-size);
 }
-/* The card-level control closes the header row whatever the title beside it takes. */
+/* The card-level control closes the header row whatever the title beside it takes, and keeps its content width:
+ * it neither shrinks nor is the reason the row cannot wrap. */
 .sp-card__action {
   display: flex;
   flex: none;
@@ -74,12 +79,11 @@
 .sp-card__footer--undivided {
   border-block-start: 0;
 }
-/* The selected card of a set: the heavier accent frame, the raised surface and the bolder title say which
- * one is chosen, and the words the card carries name the choice beside them, so the state never rests on
- * the hue alone. The attribute is the state, and which attribute carries it is the element's role:
- * `src/components/ui/Card.tsx` writes `aria-selected` on the six roles ARIA allows it on — `option`, `row`,
- * `gridcell`, `tab`, `columnheader` and `rowheader` — and the global `aria-current` on every other element,
- * so both are selected on here and the frame is painted whichever of the two the role produced. */
+/* The selected card of a set: the heavier accent frame, the raised surface and the bolder title say which one is
+ * chosen, and the words beside them name the choice, so the state never rests on the hue alone. Which attribute
+ * carries the state is the element's role: `src/components/ui/Card.tsx` writes `aria-selected` on the six roles
+ * ARIA allows it — `option`, `row`, `gridcell`, `tab`, `columnheader` and `rowheader` — and `aria-current` on every
+ * other element, so both are selected on here and the frame is painted whichever of the two the role produced. */
 .sp-card[aria-selected="true"],
 .sp-card[aria-current="true"] {
   border-color: var(--color-accent);
@@ -137,9 +141,8 @@
   background-color: var(--color-danger-surface);
   color: var(--color-danger-text);
 }
-/* The brand register: the sixth badge treatment, which a status takes when it means neither a success
- * nor a failure. Its surface sits beside the info tint, so it is named by the accent tokens the rest of
- * the product paints its primary action with, and the pair is documented at 10.22:1 in tokens.css. */
+/* The brand register: the sixth badge treatment, for a status neither a success nor a failure. It sits beside the info
+ * tint, takes the accent tokens the primary action is painted with, and is documented at 10.22:1 in tokens.css. */
 .sp-badge--accent {
   background-color: var(--color-accent-subtle);
   color: var(--color-accent-contrast);
@@ -148,21 +151,19 @@
 .sp-badge--sm {
   padding: var(--space-0) var(--space-2);
 }
-/* The outline badge: the variant's own ink on whatever surface it sits on, for a badge on a tinted band
- * where a tinted pill would not separate from it. Declared after the variants, so the transparent surface
- * wins over the variant's tint at equal specificity. */
+/* The outline badge: the variant's own ink on whatever surface it sits on, for a badge on a tinted band the tinted
+ * pill cannot separate from. Declared after the variants so the transparent surface wins at equal specificity. */
 .sp-badge--outline {
   background-color: transparent;
   border: var(--border-width) solid currentColor;
 }
 
 /* ==== Data table ==== */
-/* The table's own scroll container, and its only one. It scrolls on the inline axis, so the block axis is
- * declared hidden rather than left to compute to auto, and no scrollbar gutter is reserved: an axis that is
- * not visible makes the other compute to auto, and a reserved vertical gutter beside a table that never
- * scrolls vertically costs the table 15px of its inline size and leaves the last column short of the
- * container's own inline-end edge. With the block axis declared and the gutter gone, one scroll to the
- * container's true maximum brings the final column's header cell and its cells fully inside the visible box. */
+/* The table's own scroll container, and its only one: it scrolls on the inline axis, so the block axis is declared
+ * hidden rather than left to compute to auto and no scrollbar gutter is reserved — an axis that is not visible makes
+ * the other compute to auto, and a reserved vertical gutter beside a table that never scrolls vertically costs 15px of
+ * inline size and leaves the last column short of the container's edge. With the block axis declared and the gutter
+ * gone, one scroll to the container's true maximum brings the final column's cells fully inside the visible box. */
 .sp-table-wrap {
   overflow-x: auto;
   overflow-y: hidden;
@@ -170,10 +171,9 @@
   border: var(--border-width) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
-/* A table frame the flush body of an already-elevated card renders does not repeat the card's elevation: the
- * shadow belongs to the panel, and two siblings in one card — the dashboard's recent-orders and top-products
- * tables — would otherwise differ, one framed by a second shadow and the other not. The frame the reports
- * screen renders stands on its own surface and keeps the elevation its own sheet gives it. */
+/* A table frame in the flush body of an already-elevated card does not repeat the card's elevation — the shadow
+ * belongs to the panel — or the dashboard's recent-orders and top-products tables would differ, one framed by a
+ * second shadow. The reports screen's frame stands on its own surface with the elevation its own sheet gives it. */
 .sp-card .sp-table-wrap {
   box-shadow: none;
 }
@@ -192,8 +192,7 @@
 /* The header stays over the rows it labels, one rung below every overlay, and the frame scrolls sideways
  * rather than compressing a report's columns. The cell is pinned to the header's own token and carries no
  * block padding, because the UA's 1px block padding sits under a declared height: with it, a cell holding a
- * sort control grew to 46.5px while a plain one stayed at 44, so the height was the content's and not the
- * token's. */
+ * sort control grew to 46.5px while a plain one stayed at 44. */
 .sp-table thead th {
   position: sticky;
   inset-block-start: 0;
@@ -209,9 +208,8 @@
   text-align: start;
   white-space: nowrap;
 }
-/* `isStickyHeader={false}` on the primitive: the header travels with the rows instead of staying over them.
- * The attribute `src/components/ui/Table.tsx` writes is the state, as the sheets' shared contract requires,
- * and the selector is qualified by `.sp-table` so it out-specifies the sticky default above. */
+/* `isStickyHeader={false}`: the header travels with the rows, not over them; `src/components/ui/Table.tsx`
+ * writes the state attribute, and `.sp-table` qualifies it to out-specify the sticky default above. */
 .sp-table[data-sticky-header="false"] thead th {
   position: static;
 }
@@ -239,17 +237,15 @@
     background-color: var(--color-surface-sunken);
   }
 }
-/* The dense row every back-office, report and paired chart table wears, against the comfortable one the
- * shopper's own order list keeps: `density` is a declared difference between the two registers of the
- * product rather than an inconsistency, and the two differ only in the token they take their block padding
- * from — --space-2 here, --space-3 above — with --space-4 inline in both, so neither is a per-page literal. */
+/* The dense row every back-office, report and paired chart table wears, against the comfortable one the shopper's order
+ * list keeps: `density` is a declared difference between the two registers, and they differ only in the block-padding
+ * token — --space-2 here, --space-3 above — with --space-4 inline in both, so neither is a per-page literal. */
 .sp-table--compact td,
 .sp-table--compact th[scope="row"] {
   padding-block: var(--space-2);
 }
-/* The money column: figures line up on their digits. The class is qualified by .sp-table so that it also
- * overrides the header cell's own text-align in the sticky-header rule above, which would otherwise leave a
- * numeric column's label on the left while its figures sit on the right. */
+/* The money column: figures line up on their digits, and `.sp-table` qualifies the class so it overrides the header
+ * cell's text-align in the sticky-header rule above — or the label would sit left of the figures it labels. */
 .sp-table .sp-table__num {
   text-align: end;
   font-variant-numeric: tabular-nums;
@@ -311,10 +307,9 @@
 }
 .sp-pagination__pages {
   display: flex;
-  /* Wraps as well as the control around it. Measured in Chrome at a 375px viewport: eight
-   * `--touch-target-min` targets with the gap above total 405px, so a nowrap row overran the
-   * viewport by 30px and put the next control entirely off screen. The floor and the gap are the
-   * sheet's own, so the run wraps onto a second line instead of clipping a control. */
+  /* Wraps as well as the control around it. Measured in Chrome at a 375px viewport: eight `--touch-target-min` targets
+   * with the gap above total 405px, so a nowrap row overran the viewport by 30px, putting the next control off screen.
+   * The floor and the gap are the sheet's own, so the run wraps to a second line rather than clip a control. */
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
@@ -357,28 +352,25 @@
     background-color: var(--color-surface-sunken);
   }
 }
-/* Press, outside the query, because press feedback matters most where there is no pointer: the family's own rule,
- * where before it the page control carried a press only through the button family's ghost variant. The current
- * page and a disabled control answer no press, exactly as the hover rule above excludes them. */
+/* Press, outside the hover query, because press feedback matters most where there is no pointer: the
+ * current page and a disabled control answer none, exactly as the hover rule above excludes them. */
 .sp-pagination__page:active:not([aria-current="page"]):not([disabled]) {
   background-color: var(--color-surface-sunken);
 }
-/* The button family's ghost variant restates a hover and a press fill at a weight the current-page rule above does
- * not reach, so hovering or pressing the page the reader is on repainted it: the accent fill went, and the white
- * number sat on the pale surface at 1.1:1. The current page's fill is therefore declared again for those two
- * states, at the weight that wins — the two guards the variant itself carries — so the family's own intent holds:
- * the hover and press rules above exclude this page precisely so that the fill saying where the reader is stays
- * put while the pointer is on it. */
+/* The button family's ghost variant restates a hover and a press fill at a weight the current-page rule
+ * above does not reach, so hovering or pressing the page the reader is on repainted it: the accent fill
+ * went, and the white number sat on the pale surface at 1.1:1. The current page's fill is therefore
+ * declared again for those two states, at the weight that wins — the two guards the variant itself carries
+ * — so the fill saying where the reader is stays put while the pointer is on it. */
 .sp-pagination__page[aria-current="page"]:hover:not([disabled]):not([aria-disabled="true"]),
 .sp-pagination__page[aria-current="page"]:active:not([disabled]):not([aria-disabled="true"]) {
   background-color: var(--color-accent);
 }
-/* In this mode the user agent paints the current page's accent fill, its boundary and the transparent boundary of
- * every other page with the same two system colours, so the page the reader is on was told apart by its font weight
- * alone. The boundary carries the state instead: the current page's box takes a boundary twice as thick, in the one
- * colour a sheet may name in this block — the environment and not the design decides it, as components.css states
- * over its own — so the cue is a shape the mode preserves and not a hue it discards. The control's size does not
- * move, because the 44px minimum is its border box and the number keeps its line. */
+/* In this mode the UA paints the current page's accent fill, its boundary and every other page's transparent boundary
+ * with the same two system colours, so the current page was told apart by font weight alone. The boundary carries the
+ * state instead: the current page's box takes a boundary twice as thick, in the one colour a sheet may name in this
+ * block — the environment, not the design, decides it, as components.css states over its own — so the cue is a shape
+ * the mode preserves, not a hue it discards. The control's size does not move: the 44px minimum is its border box. */
 @media (forced-colors: active) {
   .sp-pagination__page[aria-current="page"] {
     border-color: CanvasText;
@@ -392,10 +384,8 @@
   }
 }
 
-/* ==== Overlays ====
- * Modal, Drawer, ConfirmDialog and the backdrop under them. Containment, restore, Escape-to-close and the
- * inert background are Modal.tsx's behaviour; this sheet styles the states they produce.
- */
+/* ==== Overlays ==== Modal, Drawer, ConfirmDialog and the backdrop under them: containment, restore,
+ * Escape-to-close and the inert background are Modal.tsx's behaviour; this sheet styles the states they produce. */
 .sp-backdrop {
   position: fixed;
   inset: 0;
@@ -479,15 +469,13 @@
   padding: var(--space-5);
   border-block-start: var(--border-width) solid var(--color-border-subtle);
 }
-/* Only the drawer travels: it is fixed to the viewport edge and slides in when the component adds .is-open,
- * which is the state that also resolves a Popover and a Tooltip. The global reduced-motion rule in base.css
- * removes the travel, and the panel is then simply present. */
-/* A fixed element makes no scrollable overflow, so the panel is clamped to the viewport the way the modal
- * widths are: at the raw 380px token a 360px phone loses the strip past its inline-start edge for good. Its
- * block size is the viewport's instead, because the panel is fixed to both block edges: the shared register's
- * 90dvh clamp won over that `inset-block: 0` and stopped the panel 90px short of the bottom edge at every width
- * — measured, a 380x810 panel in a 900px viewport over a band of dimmed backdrop — where the centred cards above
- * keep the clamp and this panel's own body scrolls inside it. */
+/* Only the drawer travels: it slides in when .is-open is added — the state that also resolves a Popover and
+ * a Tooltip. base.css's reduced-motion rule removes the travel, leaving the panel present. */
+/* A fixed element makes no scrollable overflow, so the panel is clamped to the viewport as the modal widths are:
+ * at the raw 380px token a 360px phone loses the strip past its inline-start edge. Its block size is the
+ * viewport's instead: the panel is fixed to both block edges, and the shared register's 90dvh clamp would win
+ * over `inset-block: 0` and stop it 90px short of the bottom edge — measured, 380x810 in a 900px viewport over a
+ * band of dimmed backdrop — where the centred cards keep the clamp and this panel's body scrolls inside it. */
 .sp-drawer {
   position: fixed;
   inset-block: 0;
@@ -558,14 +546,12 @@
   max-inline-size: var(--tooltip-max-width);
   pointer-events: none;
 }
-/* The viewport never takes a click, so only a toast itself is interactive, and it is deliberately not a live
- * region: each message element carries its own live role — `status` for a note or a confirmation, `alert` for
- * a failure — so the words a screen reader reads are the message's and not the column's. A live region on the
- * container as well would read that column again whenever one message joined or left it, announcing every
- * message twice. Entry is the transition from the values the component mounts the item with; auto-dismiss
- * pauses on hover or focus, which is the viewport's timer. The leading border is drawn in the text colour of
- * the variant, so the icon, the words and the rule all say the same thing and the hue is never the only
- * carrier. */
+/* The viewport takes no click, so only a toast is interactive, and it is deliberately not a live region: each
+ * message carries its own live role — `status` for a note or confirmation, `alert` for a failure — so what a
+ * screen reader reads is the message's, not the column's. A live region on the container would read that column
+ * again whenever a message joined or left, announcing every message twice. Entry is the transition from the
+ * values the item is mounted with; auto-dismiss pauses on hover or focus, the viewport's timer. The leading
+ * border takes the variant's text colour, so icon, words and rule agree: the hue is never the only carrier. */
 .sp-toast {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/TopProductsTable.tsx
  * Purpose: The dashboard's best-performing-products table by revenue or units
- * Lines: 259
+ * Lines: 281
  */
 
 import { useMemo, type ReactElement } from "react";
@@ -9,11 +9,14 @@ import { Link } from "react-router-dom";
 
 import { Button, ButtonGroup } from "@/components/ui/Button";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Alert } from "@/components/ui/Feedback";
 import { DataTable, type DataTableColumn } from "@/components/ui/Table";
-import { ADMIN_COPY, EMPTY_STATES } from "@/constants/content";
+import { COMMON_ACTIONS, EMPTY_STATES } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import { productPath } from "@/constants/routes";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import type { Metric, ProductPerformance, ReportColumn, ReportDefinition } from "@/types/analytics";
+import type { ApiError } from "@/types/common";
 import { formatOrdinal, formatScaledPercent } from "@/utils/format";
 
 /*
@@ -40,8 +43,10 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
  * state a different claim than the ranking asked for. That order is still stated rather than left to be
  * inferred: the column the read ranked by declares it through `orderInForce`, so its header announces the
  * direction to assistive technology while no header is a control — the toggle above the table is what changes
- * the ranking, and the table itself cannot. There is no `error` prop, because the page owns the one error
- * surface for the range it requested, and no paging, because the read is a `limit`-bounded ranking.
+ * the ranking, and the table itself cannot. There is no paging, because the read is a `limit`-bounded ranking.
+ * And no state is fetched or held here: the four-state contract of §0.6.4 belongs to each dashboard surface,
+ * so the page hands the ranking read's own failure in and this card renders it in its body, beside the retry,
+ * with the metric control left live above it.
  *
  * The row's link is built from the product the row names rather than from a slug it does not carry:
  * `ProductPerformance` holds the product's id, name and sku and no slug, the product read behind the detail
@@ -52,18 +57,6 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
 /** The heading level the card's title renders at when the page names none: the level a block inside a
  *  dashboard section sits at. The card's title is the heading-3 type at every level. */
 const DEFAULT_HEADING_LEVEL: 2 | 3 | 4 = 3;
-
-/**
- * The word the ranking column is headed with.
- *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` words the control above the table
- * (`TOP_PRODUCTS_RANK_CONTROL_LABEL`) and `src/constants/taxonomy.ts` names the figures a ranking sells, but
- * neither module declares a word for the position itself, so the one below is this file's rather than a
- * control's label reused where a column heading belongs. It is the product's own word for the value —
- * `ProductPerformance.rank`, and `formatOrdinal`'s note that it renders "the rank a top-products table
- * shows" — and one added key in content.ts is all this column needs to speak the dashboard's register.
- */
-const RANK_COLUMN_HEADING = "Rank";
 
 /**
  * The two ways the ranking is ordered, in the order the toggle shows them: the closed set `Metric` declares,
@@ -152,6 +145,20 @@ export interface TopProductsTableProps {
    *  rows it already holds, so a change of metric leaves the previous ranking in place until the new one
    *  arrives. Defaults to false. */
   readonly isLoading?: boolean;
+  /**
+   * The failure the page's own ranking read reported, or `null` when it answered. While a failure is handed
+   * in the card keeps its frame, its title and the metric control — a change of metric re-runs the read and is
+   * therefore a legitimate way out — and its body states the failure with {@link onRetry} in place of the
+   * table, so a failed ranking read leaves the dashboard's figures, chart and orders table as they are. A
+   * failure takes precedence over `isLoading`, because a read that did not answer is not still in flight.
+   */
+  readonly error?: ApiError | null;
+  /**
+   * Called when the reader asks for the ranking again: the page's `reload` for the read behind this table, so
+   * the retry re-runs that one request and no other. It renders no control of its own, being the alert's
+   * action alone, and is passed through untouched.
+   */
+  readonly onRetry?: () => void;
   /** The card's heading and the table's accessible name. Omitted or blank, the dashboard's own words for this
    *  block are used, so the heading and the caption always agree. */
   readonly title?: string;
@@ -173,10 +180,11 @@ export interface TopProductsTableProps {
  * The only control is the metric toggle, and it is the page's: this component neither fetches nor holds the
  * ranking, so pressing it reports the choice upward and renders whatever comes back. A period with no sales
  * legitimately has no products, and the table then shows its empty row with the dashboard's own sentence rather
- * than a blank body.
+ * than a blank body. A read the page could not answer is the card's own body too: the title and the toggle stay
+ * live, so the ranking can be re-asked for while the failure is on screen, and the alert carries the one retry.
  *
- * @param props - The ranked products, the metric in force with its callback, the loading flag, the heading and
- *   its level; see {@link TopProductsTableProps}.
+ * @param props - The ranked products, the metric in force with its callback, the loading flag, the failure
+ *   with its retry, the heading and its level; see {@link TopProductsTableProps}.
  * @returns The card holding the ranking control and the ranked table.
  */
 export function TopProductsTable({
@@ -184,11 +192,14 @@ export function TopProductsTable({
   metric,
   onMetricChange,
   isLoading = false,
+  error,
+  onRetry,
   title,
   headingLevel = DEFAULT_HEADING_LEVEL,
 }: TopProductsTableProps): ReactElement {
   const heading =
     title !== undefined && title.trim() !== "" ? title.trim() : ADMIN_COPY.TOP_PRODUCTS_HEADING;
+  const failure = error ?? null;
 
   // Derived during render and never mirrored into state. The array is memoised because the table memoises the
   // presentation it builds from the columns on their identity, so a fresh array each render would defeat that,
@@ -197,7 +208,7 @@ export function TopProductsTable({
     () => [
       {
         id: "rank",
-        header: RANK_COLUMN_HEADING,
+        header: ADMIN_COPY.TOP_PRODUCTS_RANK_COLUMN_LABEL,
         // The ranking's own position as the read reported it, never this file's index over the rows on show:
         // an index would be a second ranking, and it would shift with any later slice of the same list.
         cell: (row) => formatOrdinal(row.rank),
@@ -243,16 +254,27 @@ export function TopProductsTable({
         action={<RankControl metric={metric} onMetricChange={onMetricChange} />}
         headingLevel={headingLevel}
       />
-      <CardBody isFlush>
-        <DataTable<ProductPerformance>
-          columns={columns}
-          rows={products}
-          rowKey={(row) => row.productId}
-          caption={heading}
-          emptyState={<p>{EMPTY_STATES.dashboardRange.title}</p>}
-          isLoading={isLoading}
-          density="compact"
-        />
+      {/* The body loses its flush edge only while the alert stands in for the table: a table meets the frame
+          with no padding of its own, while the alert brings the padding the card's other bodies carry. */}
+      <CardBody isFlush={failure === null}>
+        {failure === null ? (
+          <DataTable<ProductPerformance>
+            columns={columns}
+            rows={products}
+            rowKey={(row) => row.productId}
+            caption={heading}
+            emptyState={<p>{EMPTY_STATES.dashboardRange.title}</p>}
+            isLoading={isLoading}
+            density="compact"
+          />
+        ) : (
+          <Alert
+            actionLabel={COMMON_ACTIONS.RETRY}
+            error={failure}
+            onAction={onRetry}
+            tone="danger"
+          />
+        )}
       </CardBody>
     </Card>
   );

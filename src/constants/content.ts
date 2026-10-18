@@ -1,6 +1,7 @@
 /**
  * Path: src/constants/content.ts
- * Lines: 556
+ * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
+ * Lines: 446
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -142,6 +143,8 @@ export const CATALOG_COPY = {
   REVIEW_FORM_SUBMIT_LABEL: "Submit review",
   WRITE_REVIEW_LABEL: "Write a review",
   SIGN_IN_TO_REVIEW_LABEL: "Sign in to write a review",
+  ANY_RATING_LABEL: "Any rating",
+  VERIFIED_PURCHASE_LABEL: "Verified purchase",
 } as const;
 /**
  * Names one tile's quick add from the product it adds, so that no two controls in the same grid share a
@@ -156,13 +159,24 @@ export const quickAddLabel = (productName: string): string =>
   `${CATALOG_COPY.QUICK_ADD_LABEL} ${productName}`;
 /** Builds the heading of a category listing from the category's name. */
 export const categoryPageHeading = (name: string): string => `Products in ${name}`;
-/** Result-set, live-region and stock labels. Consumers: `src/features/catalog/ProductList.tsx`. */
+/**
+ * Counts the products a result set holds, singular and plural handled.
+ * Consumer: `src/features/catalog/ProductList.tsx`.
+ */
 export const productCountLabel = (count: number): string =>
   `${count} ${countNoun(count, "product", "products")}`;
+/**
+ * Announces a result set in the results live region, or that the filters matched nothing.
+ * Consumer: `src/features/catalog/ProductList.tsx`.
+ */
 export const productCountAnnouncement = (count: number): string =>
   count === 0
     ? "No products match the current filters."
     : `Now showing ${productCountLabel(count)}.`;
+/**
+ * States how much stock a product has left, from the count still available.
+ * Consumer: `src/features/catalog/ProductList.tsx`.
+ */
 export const lowStockLabel = (count: number): string => `Only ${count} left in stock`;
 
 // Search and filters ----------------------------------------------------------------------------
@@ -189,8 +203,15 @@ export const searchSummaryLabel = (query: string, count: number): string =>
   count === 0
     ? `No results for "${query}"`
     : `${count} ${countNoun(count, "result", "results")} for "${query}"`;
-/** Filter-chip, live-region and paging labels. Consumers: `src/features/search/*` and `Pagination.tsx`. */
+/**
+ * Names the control that clears one facet, from that facet's own label.
+ * Consumers: `src/features/search/*`.
+ */
 export const clearFacetLabel = (facetLabel: string): string => `Clear ${facetLabel}`;
+/**
+ * Names the control that removes one active filter, from that filter's own label.
+ * Consumers: `src/features/search/*`.
+ */
 export const removeFilterLabel = (filterLabel: string): string => `Remove filter: ${filterLabel}`;
 /** A facet whose values are chosen one at a time, and which therefore opens with an "any" choice. */
 export type SingleChoiceFacetId = "price" | "rating";
@@ -199,19 +220,34 @@ export type SingleChoiceFacetId = "price" | "rating";
  * a group holds when the facet applies nothing, worded as that state and never with the clearing verb, which
  * belongs to the facet's own clear action beside the group. Consumers:
  * `src/features/search/FilterPanel.tsx` and `src/features/catalog/CatalogPage.tsx`, each of which renders the
- * price bands and the rating floors as one radio group.
+ * price bands and the rating floors as one radio group. The rating member reads the catalog register's own
+ * wording for it rather than repeating the sentence, so "Any rating" is declared once in this file.
  */
 export const FACET_ANY_LABELS: Readonly<Record<SingleChoiceFacetId, string>> = {
   price: "Any price",
-  rating: "Any rating",
+  rating: CATALOG_COPY.ANY_RATING_LABEL,
 };
+/**
+ * Announces a changed result count in the results live region, reading the count as
+ * {@link productCountAnnouncement} does. Consumers: `src/features/search/*`.
+ */
 export const resultsUpdatedAnnouncement = (count: number): string =>
   productCountAnnouncement(count);
-export const suggestionsUpdatedAnnouncement = (count: number): string =>
-  `Now showing ${count} ${countNoun(count, "suggestion", "suggestions")}.`;
+/**
+ * Announces which page of the result set is on show, for the paging live region.
+ * Consumers: `src/features/search/*`.
+ */
 export const pageAnnouncement = (page: number, pageCount: number): string =>
   `Page ${page} of ${pageCount}`;
 
+/**
+ * Announces how many suggestions a type-ahead list is offering, for the listbox's own live region.
+ *
+ * @param count - How many suggestions are on show.
+ * @returns The sentence the search bar announces.
+ */
+export const suggestionsUpdatedAnnouncement = (count: number): string =>
+  `Now showing ${count} ${countNoun(count, "suggestion", "suggestions")}.`;
 /** The collection a paging control counts, so its caption can name orders, reviews or periods. */
 export interface PagingNoun {
   /** The noun a count of one takes. */
@@ -262,96 +298,39 @@ export const CART_COPY = {
   AVAILABILITY_WARNING: "This product is out of stock. Remove the line or check back later.",
   QUANTITY_CLAMPED_NOTICE: "Your quantity was reduced to what is still in stock.",
 } as const;
-/** Cart line, promo and count labels. Consumers: `src/features/cart/*` and `MiniCart.tsx`. */
+/**
+ * Names the control that removes one cart line, from the product on it.
+ * Consumers: `src/features/cart/*` and `MiniCart.tsx`.
+ */
 export const removeLineLabel = (productName: string): string => `Remove ${productName}`;
+/**
+ * Labels one line's quantity control, from the product on that line.
+ * Consumers: `src/features/cart/*` and `MiniCart.tsx`.
+ */
 export const quantityLabel = (productName: string): string => `Quantity for ${productName}`;
+/**
+ * Confirms which promo code the basket carries, from the code itself.
+ * Consumers: `src/features/cart/*` and `MiniCart.tsx`.
+ */
 export const appliedPromoLabel = (code: string): string => `Promo code ${code} applied`;
 export const removePromoLabel = (code: string): string => `Remove promo code ${code}`;
+/**
+ * States how much more the basket needs for free delivery, from a formatted amount.
+ * Consumers: `src/features/cart/*` and `MiniCart.tsx`.
+ */
 export const freeShippingProgressLabel = (formattedRemaining: string): string =>
   `Add ${formattedRemaining} more to unlock free delivery.`;
+/**
+ * Counts the basket's lines, singular and plural handled.
+ * Consumers: `src/features/cart/*` and `MiniCart.tsx`.
+ */
 export const cartItemCountLabel = (count: number): string =>
   count === 0
     ? "Nothing in your cart yet"
     : `${count} ${countNoun(count, "item", "items")} in your cart`;
 
-// Checkout and confirmation ---------------------------------------------------------------------
-/** The checkout's steps in order. Consumers: `CheckoutSteps.tsx` and `CheckoutPage.tsx`. */
-export const CHECKOUT_STEP_TITLES = ["Shipping", "Payment", "Review"] as const;
-/** One of the three states a step can hold while the shopper works through the flow. */
-export type StepIndicatorStatus = "current" | "completed" | "upcoming";
-const STEP_STATUS_LABELS: Readonly<Record<StepIndicatorStatus, string>> = {
-  current: "Current step",
-  completed: "Completed step",
-  upcoming: "Upcoming step",
-};
-/** Names one step's state, for the visually hidden text of the ordered step list. */
-export const stepIndicatorStatusLabel = (status: StepIndicatorStatus): string =>
-  STEP_STATUS_LABELS[status];
-/** Checkout copy. Consumers: `src/features/checkout/*`. */
-export const CHECKOUT_COPY = {
-  SHIPPING_STEP_HEADING: "Where should this order go?",
-  SHIPPING_STEP_SUPPORTING: "Enter a delivery address, or reuse one saved to your account.",
-  PAYMENT_STEP_HEADING: "How would you like to pay?",
-  PAYMENT_STEP_SUPPORTING: "Some card numbers are approved and some declined. Nothing is charged.",
-  REVIEW_STEP_HEADING: "Check your order before placing it",
-  REVIEW_STEP_SUPPORTING: "This is exactly what the order will record and what it will cost.",
-  ERROR_SUMMARY_HEADING: "There is a problem",
-  SAVED_ADDRESS_LABEL: "Use a saved address",
-  USE_NEW_ADDRESS_LABEL: "Enter a new address",
-  SHIPPING_METHOD_LEGEND: "Choose a delivery method",
-  FULL_NAME_LABEL: "Full name",
-  ADDRESS_LINE_1_LABEL: "Address line 1",
-  ADDRESS_LINE_2_LABEL: "Address line 2",
-  ADDRESS_LINE_2_HINT: "Apartment, suite or building, if it applies",
-  CITY_LABEL: "City",
-  REGION_LABEL: "State or region",
-  POSTAL_CODE_LABEL: "Postal code",
-  COUNTRY_LABEL: "Country",
-  PHONE_LABEL: "Phone",
-  PHONE_HINT: "Used only to reach you about this delivery",
-  NAME_ON_CARD_LABEL: "Name on card",
-  CARD_NUMBER_LABEL: "Card number",
-  CARD_NUMBER_HINT: "Validated in the browser, then discarded",
-  CARD_EXPIRY_LABEL: "Expiry date",
-  CARD_SECURITY_CODE_LABEL: "Security code",
-  CARD_SECURITY_CODE_HINT: "The digits printed on the back of the card",
-  BACK_TO_CART_LABEL: "Back to your cart",
-  CONTINUE_TO_PAYMENT_LABEL: "Continue to payment",
-  CONTINUE_TO_REVIEW_LABEL: "Continue to review",
-  PLACE_ORDER_LABEL: "Place order",
-  SUBMITTING_LABEL: "Placing your order…",
-  DUPLICATE_SUBMISSION_NOTICE: "This button stays disabled until the order finishes.",
-  REVIEW_ITEMS_HEADING: "Items",
-  REVIEW_SHIPPING_HEADING: "Shipping address",
-  REVIEW_DELIVERY_METHOD_HEADING: "Delivery method",
-  REVIEW_PAYMENT_HEADING: "Payment",
-  CONFIRMATION_THANK_YOU: "Your demonstration order is recorded and the cart is empty again.",
-  CONFIRMATION_ORDER_NUMBER_LABEL: "Order number",
-  CONFIRMATION_PLACED_DATE_LABEL: "Placed on",
-  CONFIRMATION_ESTIMATE_LABEL: "Estimated delivery",
-  CONFIRMATION_ITEMS_HEADING: "What you ordered",
-  CONFIRMATION_TOTALS_HEADING: "Order totals",
-  CONFIRMATION_ADDRESS_HEADING: "Delivered to",
-  CONFIRMATION_PAYMENT_HEADING: "Payment summary",
-  CONFIRMATION_CONTINUE_SHOPPING_LABEL: "Continue shopping",
-  CONFIRMATION_ORDER_HISTORY_LABEL: "View your order history",
-  CONFIRMATION_HOME_LABEL: "Back to the home page",
-} as const;
-/** States the step inside the flow; `CheckoutPage.tsx` composes it into the page title. */
-export const stepProgressLabel = (step: number, total: number): string =>
-  `Step ${step} of ${total}`;
-/** Field, estimate and section controls. Consumers: `src/features/checkout/*`. */
-export const errorSummaryFieldAnchor = (fieldId: string): string => `#${fieldId}`;
-export const deliveryEstimateLabel = (formattedEstimate: string): string =>
-  `Estimated delivery: ${formattedEstimate}`;
-export const optionalFieldLabel = (label: string): string => `${label} (optional)`;
-export const editSectionLabel = (sectionLabel: string): string => `Edit ${sectionLabel}`;
-/** Builds the confirmation heading from the order number the order was created with. */
-export const orderConfirmationHeading = (orderNumber: string): string =>
-  `Order ${orderNumber} is placed`;
-/** States that no payment is processed, naming the two demonstration card numbers. */
-export const demoPaymentNote = (approved: string, declined: string): string =>
-  `No payment is processed and no card number is stored. Use ${approved} for an approved card, or ${declined} for a declined one; both outcomes are decided in your browser.`;
+// Checkout and confirmation: §0.5.5 split into checkoutCopy.ts ----------------------------------
+export * from "./checkoutCopy";
 
 // Accounts: §0.5.5 split into content-account.ts ------------------------------------------------
 export * from "./content-account";
@@ -384,100 +363,6 @@ export const COMMON_ACTIONS = {
   CREATE_ACCOUNT: "Create account",
   VIEW_DETAILS: "View details",
   VIEW_ALL: "View all",
-} as const;
-
-// Feedback, empty states and the error boundary -------------------------------------------------
-/** Loading, failure and outcome copy. Consumers: `Feedback.tsx`, `Toast.tsx` and the error boundary. */
-/** The retry action's label is {@link COMMON_ACTIONS}.RETRY, so the verb has a single home. */
-export const FEEDBACK_COPY = {
-  LOADING: "Loading…",
-  ERROR_STATE_TITLE: "This part of the page could not load",
-  ERROR_STATE_BODY: "The request failed, so there is nothing to show here.",
-  ERROR_STATE_HINT: "Try again, or go back and return to this page.",
-  ERROR_BOUNDARY_TITLE: "This page ran into a problem",
-  ERROR_BOUNDARY_BODY: "The screen stopped rendering. Reloading usually clears it.",
-  ERROR_BOUNDARY_RELOAD_LABEL: "Reload the page",
-  ERROR_BOUNDARY_HOME_LABEL: "Go to the home page",
-  TOAST_REMOVED_FROM_CART: "That item was removed from your cart.",
-  TOAST_CART_CLEARED: "Your cart is now empty.",
-  TOAST_PROMO_APPLIED: "Your promo code was applied and the total recalculated.",
-  TOAST_PROFILE_SAVED: "Your profile changes were saved.",
-  TOAST_ADDRESS_SAVED: "Your address was saved.",
-  TOAST_ADDRESS_REMOVED: "That address was removed from your address book.",
-  TOAST_SIGNED_OUT: "You are signed out.",
-  TOAST_EXPORT_READY: "The export is ready and the download has started.",
-  TOAST_EXPORT_FAILED: "The export could not be prepared. Try downloading it again.",
-  TOAST_SESSION_EXPIRED: "Your session has expired. Sign in again to reach your account.",
-  SIGN_IN_REQUIRED: "Sign in to your account to continue.",
-} as const;
-/** Outcome messages that name what they acted on. Consumers: the feature that reports them. */
-export const addedToCartMessage = (productName: string): string =>
-  `${productName} was added to your cart.`;
-export const signedInMessage = (name: string): string => `Welcome back, ${name}.`;
-/** The greeting a registration raises: the account was created by this visit rather than returned to. */
-export const registeredMessage = (name: string): string => `Welcome to SalesPro, ${name}.`;
-export const orderPlacedMessage = (orderNumber: string): string =>
-  `Order ${orderNumber} is placed.`;
-/** One empty state: what is empty, why, and the single action that helps. */
-export interface EmptyStateCopy {
-  readonly title: string;
-  readonly description: string;
-  readonly actionLabel?: string;
-}
-/** The empty state of every surface that can hold nothing. Consumers: the pages that render them. */
-export const EMPTY_STATES = {
-  catalogue: {
-    title: "No products to show",
-    description: "Nothing matches these filters.",
-    actionLabel: "Clear all filters",
-  },
-  searchResults: {
-    title: "No products match your search",
-    description: "Try a broader word or browse by category.",
-    actionLabel: "Browse the full catalogue",
-  },
-  cart: {
-    title: "Your cart is empty",
-    description: "Nothing has been added yet.",
-    actionLabel: "Start shopping",
-  },
-  orders: {
-    title: "No orders yet",
-    description: "Orders placed while signed in appear here.",
-    actionLabel: "Browse the catalogue",
-  },
-  addresses: {
-    title: "No addresses saved",
-    description: "Save one to reuse it at checkout.",
-    actionLabel: "Add an address",
-  },
-  reviews: {
-    title: "No reviews yet",
-    description: "Nobody has reviewed this product.",
-    actionLabel: "Write a review",
-  },
-  relatedProducts: {
-    title: "Nothing else in this category",
-    description: "This product stands alone, so there is nothing to compare it with.",
-  },
-  dashboardRange: {
-    title: "No sales in this period",
-    description: "Widen the period to see earlier activity.",
-    actionLabel: "Widen the period",
-  },
-  reportRange: {
-    title: "Nothing to report for these dates",
-    description: "No orders were placed in the period you chose.",
-    actionLabel: "Choose another period",
-  },
-} as const;
-/** One surface that can hold nothing, derived from {@link EMPTY_STATES}. */
-export type EmptyStateKey = keyof typeof EMPTY_STATES;
-/** The not-found view, composed by `src/components/ui/NotFoundView.tsx` from the shared primitives. */
-export const NOT_FOUND_COPY = {
-  TITLE: "Page not found",
-  BODY: "That address does not match a page in SalesPro. It may have been mistyped.",
-  ACTION_LABEL: "Go to the catalogue",
 } as const;
 
 // Accessibility, validation and promo-code messages ---------------------------------------------
@@ -528,13 +413,16 @@ export const VALIDATION_MESSAGES = {
 export type ValidationMessageKey = keyof typeof VALIDATION_MESSAGES;
 /** States the password rule as the field hint does, so both read identically. */
 export const passwordPolicyMessage = (minLength: number): string => passwordHintLabel(minLength);
-/** The parameterised rule messages, each taking the limit `src/constants/config.ts` owns. */
+/** States the postal-code rule, naming the country whose format it expects. */
 export const postalCodeFormatMessage = (countryLabel: string): string =>
   `Enter the postal code in the format ${countryLabel} uses.`;
+/** States the quantity rule against the stock on hand, singular handled. */
 export const quantityRangeMessage = (max: number): string =>
   max === 1 ? "Only one is in stock." : `Choose a quantity between 1 and ${max}.`;
+/** States the length a review title must fall between, from both bounds. */
 export const reviewTitleLengthMessage = (minValue: number, maxValue: number): string =>
   `Use between ${minValue} and ${maxValue} characters for the title.`;
+/** States the length a review body must fall between, from both bounds. */
 export const reviewBodyLengthMessage = (minValue: number, maxValue: number): string =>
   `Write between ${minValue} and ${maxValue} characters.`;
 /** States the ceiling a name may not pass, from the bound `src/utils/validation.ts` owns. */
@@ -554,3 +442,5 @@ export const PROMO_REJECTION_MESSAGES: Readonly<Record<PromoRejectionReason, str
 /** Says how much more the basket needs before a code applies, from a formatted amount. */
 export const promoMinimumShortfallMessage = (formattedShortfall: string): string =>
   `Add ${formattedShortfall} more to your basket to use this code.`;
+// Feedback and empty states: §0.5.5 split into content-feedback.ts ---------------------------------
+export * from "./content-feedback";

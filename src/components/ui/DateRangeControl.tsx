@@ -12,14 +12,14 @@ import { Alert } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
+import { VALIDATION_MESSAGES } from "@/constants/content";
 import {
   ADMIN_COPY,
   DATE_RANGE_COPY,
-  VALIDATION_MESSAGES,
   lastDaysLabel,
   rangeTooLongMessage,
   resolvedRangeLabel,
-} from "@/constants/content";
+} from "@/constants/content-reports";
 import { BASELINE_OPTIONS } from "@/constants/taxonomy";
 import type { BaselineKind } from "@/types/analytics";
 import type { DateRange, FieldErrors } from "@/types/common";

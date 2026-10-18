@@ -1,11 +1,19 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
  * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart
- * Lines: 611
+ * Lines: 587
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  CHECKOUT_COPY,
+  CHECKOUT_STEP_TITLES,
+  demoPaymentNote,
+  editSectionLabel,
+  paymentDeclinedNote,
+  stepProgressLabel,
+} from "@/constants/checkoutCopy";
 import {
   DEMO_ACCOUNTS,
   DEMO_CARD_NUMBERS,
@@ -16,37 +24,31 @@ import {
   ACCOUNT_COPY,
   CART_COPY,
   CATALOG_COPY,
-  CHECKOUT_COPY,
-  CHECKOUT_STEP_TITLES,
   COMMON_ACTIONS,
   EMPTY_STATES,
-  FEEDBACK_COPY,
   PROMO_REJECTION_MESSAGES,
   VALIDATION_MESSAGES,
   cartButtonLabel,
   cartItemCountLabel,
-  demoPaymentNote,
-  editSectionLabel,
   freeShippingProgressLabel,
   lowStockLabel,
   quantityLabel,
   removeLineLabel,
   removePromoLabel,
-  stepProgressLabel,
 } from "@/constants/content";
 import { ROUTES, accountOrderPath, orderConfirmationPath, productPath } from "@/constants/routes";
 import { PROMO_KIND_LABELS, SORT_OPTIONS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { PROMO_CODES } from "@/data/orders";
-import { API_PATHS, FALLBACK_FAILURE_MESSAGE } from "@/lib/mockServer";
 import { CHECKOUT_FORM_STEPS } from "@/state/checkoutReducer";
 import type { MinorUnits } from "@/types/common";
 import type { PromoCode } from "@/types/commerce";
 import { formatMoney, parseMoneyToMinor } from "@/utils/format";
 
-import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
+import { renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
 import type { UserEvent } from "../testUtils";
 
-/* The real application throughout: every figure is read back off the screen in integer minor units. */
+/* The real application throughout, nothing stubbed but the transport's failure switch: every figure is read
+   back off the screen as integer minor units, and no money is typed. */
 
 /** The contact address a guest's checkout is filled with, and the name its delivery address is under. */
 const CONTACT_EMAIL = DEMO_ACCOUNTS.CUSTOMER_EMAIL;
@@ -74,7 +76,10 @@ const PRODUCT_PATH_PREFIX = productPath("");
 const UNKNOWN_PROMO_CODE = `${PROMO_CODES[0].code}9`;
 
 /** What the seam answers a declined demonstration card with, worded by the copy module that owns it. */
-const DECLINED_MESSAGE = demoPaymentNote(DEMO_CARD_NUMBERS.APPROVED, DEMO_CARD_NUMBERS.DECLINED);
+const DECLINED_MESSAGE = paymentDeclinedNote(DEMO_CARD_NUMBERS.APPROVED);
+
+/** What the payment step states about the demonstration, which a refusal must not be mistaken for. */
+const DEMO_NOTICE = demoPaymentNote(DEMO_CARD_NUMBERS.APPROVED, DEMO_CARD_NUMBERS.DECLINED);
 
 // Reading what a surface states in money ---------------------------------------------------------
 
@@ -432,8 +437,15 @@ describe("the checkout steps", () => {
     expect(document.title).toContain(stepProgressLabel(1, CHECKOUT_FORM_STEPS.length));
 
     await user.click(screen.getByRole("button", { name: CHECKOUT_COPY.CONTINUE_TO_PAYMENT_LABEL }));
-    expect(screen.getByText(CHECKOUT_COPY.ERROR_SUMMARY_HEADING)).toBeInTheDocument();
+    const summary = screen.getByRole("alert", { name: CHECKOUT_COPY.ERROR_SUMMARY_HEADING });
+    const entries = within(summary).getAllByRole<HTMLAnchorElement>("link");
     expect(screen.getAllByText(VALIDATION_MESSAGES.REQUIRED).length).toBeGreaterThan(0);
+    expect(summary).toHaveTextContent(CHECKOUT_COPY.FULL_NAME_LABEL);
+    for (const { hash } of entries) expect(document.getElementById(hash.slice(1))).not.toBeNull();
+    expect(summary.parentElement).toHaveFocus();
+    // A second press of the same control refuses again, and the summary takes the keyboard back.
+    await user.click(screen.getByRole("button", { name: CHECKOUT_COPY.CONTINUE_TO_PAYMENT_LABEL }));
+    expect(summary.parentElement).toHaveFocus();
     expect(screen.queryByText(CHECKOUT_COPY.PAYMENT_STEP_HEADING)).not.toBeInTheDocument();
 
     await fillShippingAddress(user);
@@ -521,9 +533,11 @@ describe("placing the order", () => {
     // The review restates the card as typed, behind the mask only its last four digits survive.
     expect(screen.getByText(new RegExp(DEMO_CARD_NUMBERS.DECLINED.slice(-4)))).toBeInTheDocument();
 
-    // The demonstration card the seam declines places nothing, and says so where it can be corrected.
+    // The declined card places nothing and states the decline itself: once, and not the demo note.
     await user.click(screen.getByRole("button", { name: CHECKOUT_COPY.PLACE_ORDER_LABEL }));
     expect(await screen.findByText(DECLINED_MESSAGE)).toBeInTheDocument();
+    expect(screen.getAllByText(DECLINED_MESSAGE)).toHaveLength(1);
+    expect(screen.queryByText(DEMO_NOTICE)).not.toBeInTheDocument();
     expect(screen.queryByText(CHECKOUT_COPY.CONFIRMATION_THANK_YOU)).not.toBeInTheDocument();
 
     // The edit control beside a section returns to the step that wrote it, keeping what it holds.
@@ -537,6 +551,8 @@ describe("placing the order", () => {
       CHECKOUT_COPY.CONTINUE_TO_REVIEW_LABEL,
       CHECKOUT_COPY.REVIEW_STEP_HEADING,
     );
+    // The corrected card makes the refusal stale, so it is not stated above a placeable review.
+    expect(screen.queryByText(DECLINED_MESSAGE)).not.toBeInTheDocument();
     const reviewed = await summaryFigures(summaryPanel());
 
     // The single submission: the control is disabled and busy as the attempt stands, so a second press lands nowhere.
@@ -567,45 +583,5 @@ describe("placing the order", () => {
     await reloaded.user.click(screen.getByRole("button", { name: cartButtonLabel(0) }));
     const cleared = await screen.findByRole("dialog", { name: CART_COPY.MINI_CART_HEADING });
     expect(within(cleared).getByText(EMPTY_STATES.cart.title)).toBeInTheDocument();
-  });
-});
-
-describe("a refused price request", () => {
-  it("reports the seam's failure with a retry, then prices the basket again", async () => {
-    // The failure is armed with nothing else in flight, so the checkout's own price request meets it.
-    const cart = renderApp({ route: ROUTES.CATALOG });
-    await addItemToCart(cart.user);
-    cart.unmount();
-    const armed = failNext({ method: "POST", path: API_PATHS.CART_PRICE });
-    const { user } = renderApp({ route: ROUTES.CHECKOUT });
-
-    const failure = await screen.findByRole("alert");
-    expect(failure).toHaveTextContent(FALLBACK_FAILURE_MESSAGE);
-    await user.click(within(failure).getByRole("button", { name: COMMON_ACTIONS.RETRY }));
-
-    const figures = await summaryFigures(summaryPanel());
-    expect(figures.total).toBe(
-      figures.subtotal - figures.discount + figures.shipping + figures.tax,
-    );
-    armed.disarm();
-
-    await fillShippingAddress(user);
-    await chooseShippingMethod(user);
-    await advanceTo(
-      user,
-      CHECKOUT_COPY.CONTINUE_TO_PAYMENT_LABEL,
-      CHECKOUT_COPY.PAYMENT_STEP_HEADING,
-    );
-  });
-});
-
-describe("an order read refused for want of a session", () => {
-  it("offers the sign-in that resolves it instead of a retry that cannot", async () => {
-    const route = orderConfirmationPath("ord_999999");
-    renderApp({ route });
-    expect(await screen.findByRole("alert")).toHaveTextContent(FEEDBACK_COPY.SIGN_IN_REQUIRED);
-    expect(screen.queryByRole("button", { name: COMMON_ACTIONS.RETRY })).toBeNull();
-    const signIn = screen.getByRole("link", { name: COMMON_ACTIONS.SIGN_IN });
-    expect(signIn).toHaveAttribute("href", `${ROUTES.LOGIN}?returnTo=${encodeURIComponent(route)}`);
   });
 });

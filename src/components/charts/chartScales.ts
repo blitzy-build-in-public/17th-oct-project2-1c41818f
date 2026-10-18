@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartScales.ts
  * Purpose: Linear and band scales, nice domains, tick generation and path helpers shared by the charts
- * Lines: 509
+ * Lines: 512
  */
 
 import {
@@ -451,9 +451,12 @@ const tickOf = (scale: BandScale, formatter: LabelFormatter, key: string): BandT
   label: formatter(key),
 });
 
-// The geometry half of the charts' maths, re-exported so a renderer, a chart test or another component
-// reaches the whole contract at this one path. The implementations live in chartGeometry.ts, which imports
-// nothing from this file, so the dependency runs one way: types first, then the paths and marks they place.
+/**
+ * Republishes `chartGeometry.ts`'s contract — the scale, axis and path shapes, and the marks built from
+ * them — so the path the chart renderers, their paired-data models and the chart tests import carries the
+ * whole chart-maths contract. `chartGeometry.ts` imports nothing from this file, so the dependency runs
+ * one way: types first, then the paths and marks they place.
+ */
 export type {
   ArcDatum,
   ArcOptions,
@@ -478,11 +481,13 @@ export type {
   ValueFormatterKind,
 } from "@/components/charts/chartGeometry";
 
+/** Republishes the same module's runtime contract — the axis formatters, the mark and path builders, the
+ *  band and series helpers and the constants they share — so a renderer reaches the values and the types
+ *  above at this one path rather than at two. */
 export {
   AXIS_NUMBER_FORMAT,
   DEFAULT_INNER_RADIUS_RATIO,
   LABEL_FONT_SIZE,
-  MIN_SLICE_LABEL_SHARE,
   SERIES_COUNT,
   arcPath,
   buildAreaPath,
@@ -498,10 +503,8 @@ export {
   defaultValueFormatter,
   estimateLabelWidth,
   hasChartData,
-  hasThinSlice,
   hasWholeValues,
   polarToCartesian,
-  ringShares,
   roundCoordinate,
   seriesClassName,
   stackValues,

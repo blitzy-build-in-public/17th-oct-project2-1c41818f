@@ -1,7 +1,7 @@
 <!--
 Path: docs/contributing.md
 Purpose: Naming, file-size, no-duplication and formatting conventions for anyone adding a file
-Lines: 154
+Lines: 155
 -->
 
 # Contributing to SalesPro
@@ -10,18 +10,18 @@ How a file in this repository is named, placed, sized, formatted and verified be
 
 ## 1. Naming and placement
 
-| Artefact             | Convention                                                                                                                  |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Components and pages | `PascalCase.tsx`, one component family per file, named exports and no default export                                        |
-| Every other module   | `camelCase.ts` with named exports                                                                                           |
-| Hooks                | `useX`, in `src/state/hooks.ts` unless the hook is a context's own consumer hook                                            |
-| Reducers             | `camelCase.ts` named for the state they own: `cartReducer.ts`, `checkoutReducer.ts`, `catalogReducer.ts`                    |
-| Contexts             | `PascalCase.tsx`, one provider family per file                                                                              |
-| Stylesheets          | `kebab-case.css`, one per concern; `tokens.css` is the only place a design value is declared                                |
-| Tests                | Named after their subject: `.test.tsx` when they render, `.test.ts` when they do not, under the matching `tests/` subfolder |
-| Constants            | `SCREAMING_SNAKE_CASE` for exported constant objects and, where those act as enumerations, their keys                       |
-| Types and interfaces | `PascalCase`, no `I` prefix; a type-only import is written `import type`                                                    |
-| Documentation        | `kebab-case.md` under `docs/`; `README.md` and `generation-manifest.md` are the exceptions by path                          |
+| Artefact             | Convention                                                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Components and pages | `PascalCase.tsx`, one component family per file, named exports and no default export                                                                                                                  |
+| Every other module   | `camelCase.ts` with named exports                                                                                                                                                                     |
+| Hooks                | `useX`, in `src/state/hooks.ts` when the contexts and the pages read it, or in `src/components/ui/hooks.ts` when a shared primitive reads it — a primitive sits below State and may not import upward |
+| Reducers             | `camelCase.ts` named for the state they own: `cartReducer.ts`, `checkoutReducer.ts`, `catalogReducer.ts`                                                                                              |
+| Contexts             | `PascalCase.tsx`, one provider family per file                                                                                                                                                        |
+| Stylesheets          | `kebab-case.css`, one per concern; `tokens.css` is the only place a design value is declared                                                                                                          |
+| Tests                | Named after their subject: `.test.tsx` when they render, `.test.ts` when they do not, under the matching `tests/` subfolder                                                                           |
+| Constants            | `SCREAMING_SNAKE_CASE` for exported constant objects and, where those act as enumerations, their keys                                                                                                 |
+| Types and interfaces | `PascalCase`, no `I` prefix; a type-only import is written `import type`                                                                                                                              |
+| Documentation        | `kebab-case.md` under `docs/`; `README.md` and `generation-manifest.md` are the exceptions by path                                                                                                    |
 
 Where a new file lands, by the concern it owns:
 
@@ -64,7 +64,8 @@ A file that needs one of these imports it. A second implementation of anything i
 | `src/lib/*Service.ts`                                                 | One domain rule each: filtering and faceting, search, pricing, orders, authentication, customers, aggregation and reports                                             |
 | `src/data/repositories.ts`                                            | The only data-access surface over the seeded collections                                                                                                              |
 | `src/state/cartReducer.ts`, `checkoutReducer.ts`, `catalogReducer.ts` | The cart, checkout and catalogue transitions, exhaustively typed                                                                                                      |
-| `src/state/hooks.ts`                                                  | The shared hooks: storage-backed state, debounced value, pagination, media query, async data, document title, outside click                                           |
+| `src/state/hooks.ts`                                                  | The hooks the contexts and the pages read: storage-backed state, debounced value, async data and document title                                                       |
+| `src/components/ui/hooks.ts`                                          | The view-facing hooks the shared primitives read: pagination, media query, breakpoint and outside click                                                               |
 | `src/components/ui/*`                                                 | One implementation per control, which features compose instead of a raw `<button>`, `<input>`, `<select>` or `<table>`                                                |
 | `src/components/layout/*`, `src/components/product/*`                 | The page shell, and the product presentation catalog, search, cart and home share                                                                                     |
 | `src/components/charts/*`                                             | The chart scale and geometry mathematics first, then the three renderers over it                                                                                      |

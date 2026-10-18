@@ -4,7 +4,7 @@
  * Lines: 535
  */
 
-import { CHECKOUT_COPY } from "@/constants/content";
+import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
 import type { AddressInput } from "@/types/account";
 import type {
   BaselineKind,

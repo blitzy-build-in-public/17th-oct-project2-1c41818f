@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useId, useRef } from "react";
 import type { KeyboardEventHandler, RefObject } from "react";
 
-import { useOnClickOutside } from "@/state/hooks";
+import { useOnClickOutside } from "@/components/ui/hooks";
 
 /**
  * Why this file exists beside `Modal.tsx`: one concern — the dialog behaviour every overlay shares — is

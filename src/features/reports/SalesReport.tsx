@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/SalesReport.tsx
  * Purpose: The sales report: bucketed table, totals row, summary metrics and paired chart
- * Lines: 276
+ * Lines: 280
  */
 
 import { useCallback } from "react";
@@ -9,7 +9,8 @@ import type { ReactElement, ReactNode } from "react";
 
 import { LineChart } from "@/components/charts/LineChart";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { COMMON_ACTIONS, DATE_RANGE_COPY, EMPTY_STATES, REPORTS_COPY } from "@/constants/content";
+import { COMMON_ACTIONS, EMPTY_STATES, PAGING_NOUNS } from "@/constants/content";
+import { DATE_RANGE_COPY, REPORTS_COPY } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { findDefinition, runReport, summarisePeriodLabel } from "@/lib/reportService";
 import { useAuth } from "@/state/AuthContext";
@@ -45,7 +46,7 @@ import { ReportTable } from "./ReportTable";
  * `src/components/ui/Feedback.tsx`, each carrying its own class. No colour, radius or shadow literal, and no
  * pixel media query, is written here.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` words no heading for the figures block, so the
+ * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content-reports.ts` words no heading for the figures block, so the
  * summary is a definition list of labelled figures with no heading of its own — a labelled figure describes
  * itself, and a sentence invented here would put user-facing copy outside its one home.
  */
@@ -250,10 +251,13 @@ export function SalesReport({ range, granularity, onWidenRange }: SalesReportPro
             </div>
           ))}
         </dl>
+        {/* The chart's bands are the periods the run holds, one row each in its paired table, so the pager
+            under that table counts periods — the same collection the report table below it counts. */}
         <LineChart
           series={report.series}
           title={REPORTS_COPY.SALES_CHART_HEADING}
           formatLabel={formatLabel}
+          countNoun={PAGING_NOUNS.PERIODS}
         />
         <ReportTable
           kind={DEFINITION.kind}

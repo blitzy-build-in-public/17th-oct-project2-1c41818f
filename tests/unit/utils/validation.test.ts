@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/validation.test.ts
  * Purpose: Each validator's accept and reject cases, and the form-level error maps
- * Lines: 583
+ * Lines: 595
  */
 
 // A pure-function suite: it runs in the node project, reaches no DOM, mocks no module and touches no
@@ -55,6 +55,7 @@ import {
   validateReviewTitle,
   validateShippingSubmission,
   validateSignIn,
+  type CardExpiryInput,
   type CardValidationInput,
 } from "@/utils/validation";
 import { FIXED_DATE, FIXED_LATER_DATE, FIXED_NOW, makeApiError } from "../../fixtures";
@@ -99,7 +100,7 @@ const CARD_FAILURES: readonly (readonly [string, Partial<CardValidationInput>, s
   ["number", { number: "4242424242424241" }, VALIDATION_MESSAGES.CARD_NUMBER],
   ["nameOnCard", { nameOnCard: "" }, VALIDATION_MESSAGES.REQUIRED],
   ["expiryMonth", { expiryMonth: 13 }, VALIDATION_MESSAGES.CARD_EXPIRY],
-  ["expiryYear", { expiryYear: "" }, VALIDATION_MESSAGES.CARD_EXPIRY],
+  ["expiryYear", { expiryYear: "" }, VALIDATION_MESSAGES.REQUIRED],
   ["cvc", { cvc: "12" }, VALIDATION_MESSAGES.CARD_SECURITY_CODE],
 ];
 
@@ -305,39 +306,50 @@ describe("card rules", () => {
     );
   });
 
-  it("rejects a card whose expiry month has passed, on the year a correction changes", () => {
-    const expiry = {
-      expiryMonth: PREVIOUS_MONTH.getMonth() + 1,
-      expiryYear: PREVIOUS_MONTH.getFullYear(),
-    };
-    expect(validateCardExpiry(expiry, NOW)).toEqual({
-      expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY,
-    });
-  });
-
-  it("rejects an absent, impossible or unreadable month on the month control", () => {
-    for (const rejected of [
-      undefined,
-      {},
-      { expiryMonth: 0, expiryYear: CURRENT_YEAR },
-      { expiryMonth: 13, expiryYear: CURRENT_YEAR },
-      { expiryMonth: "x", expiryYear: NEXT_YEAR },
-      { expiryMonth: "", expiryYear: "" },
-    ]) {
-      expect(validateCardExpiry(rejected, NOW)).toEqual({
-        expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY,
-      });
-    }
-  });
-
-  it("rejects an absent or unreadable year on the year control", () => {
-    for (const rejected of [
-      { expiryMonth: CURRENT_MONTH, expiryYear: 1999 },
-      { expiryMonth: CURRENT_MONTH, expiryYear: "x" },
-    ]) {
-      expect(validateCardExpiry(rejected, NOW)).toEqual({
-        expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY,
-      });
+  it("files each expiry half on its own control, and both when neither holds a value", () => {
+    const rejected: readonly (readonly [Partial<CardExpiryInput> | undefined, FieldErrors])[] = [
+      // Nothing entered in either half: both are missing, so both are named.
+      [
+        undefined,
+        { expiryMonth: VALIDATION_MESSAGES.REQUIRED, expiryYear: VALIDATION_MESSAGES.REQUIRED },
+      ],
+      [{}, { expiryMonth: VALIDATION_MESSAGES.REQUIRED, expiryYear: VALIDATION_MESSAGES.REQUIRED }],
+      [
+        { expiryMonth: "", expiryYear: "" },
+        { expiryMonth: VALIDATION_MESSAGES.REQUIRED, expiryYear: VALIDATION_MESSAGES.REQUIRED },
+      ],
+      // One half blank while the other is acceptable: the blank one is the fault.
+      [{ expiryYear: NEXT_YEAR }, { expiryMonth: VALIDATION_MESSAGES.REQUIRED }],
+      [{ expiryMonth: CURRENT_MONTH }, { expiryYear: VALIDATION_MESSAGES.REQUIRED }],
+      // A half holding something the rule cannot read: impossible, or not a number at all.
+      [
+        { expiryMonth: 0, expiryYear: CURRENT_YEAR },
+        { expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY },
+      ],
+      [
+        { expiryMonth: 13, expiryYear: CURRENT_YEAR },
+        { expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY },
+      ],
+      [
+        { expiryMonth: "x", expiryYear: NEXT_YEAR },
+        { expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY },
+      ],
+      [
+        { expiryMonth: CURRENT_MONTH, expiryYear: 1999 },
+        { expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY },
+      ],
+      [
+        { expiryMonth: CURRENT_MONTH, expiryYear: "x" },
+        { expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY },
+      ],
+      // Readable but passed: the year's complaint, the coarser half a correction changes.
+      [
+        { expiryMonth: PREVIOUS_MONTH.getMonth() + 1, expiryYear: PREVIOUS_MONTH.getFullYear() },
+        { expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY },
+      ],
+    ];
+    for (const [pair, expected] of rejected) {
+      expect(validateCardExpiry(pair, NOW)).toEqual(expected);
     }
   });
 

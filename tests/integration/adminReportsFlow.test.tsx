@@ -8,20 +8,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   ACCOUNT_COPY,
-  ADMIN_COPY,
-  CHANNEL_LABELS,
   COMMON_ACTIONS,
-  DATE_RANGE_COPY,
   EMPTY_STATES,
   FEEDBACK_COPY,
   PAGE_TITLES,
-  REPORTS_COPY,
   chartDataTableCaption,
   documentTitle,
+} from "@/constants/content";
+import {
+  ADMIN_COPY,
+  CHANNEL_LABELS,
+  DATE_RANGE_COPY,
+  REPORTS_COPY,
   exportNote,
   exportRowCountNote,
   lastDaysLabel,
-} from "@/constants/content";
+} from "@/constants/content-reports";
 import {
   CSV_MAX_CELL_LENGTH,
   CSV_MAX_ROWS,
@@ -56,8 +58,7 @@ import { COUNT_TEXT, KPI_DELTA_TEXT, MONEY_TEXT, PERCENT_TEXT } from "./figureRe
 import type { RenderHarness, UserEvent } from "../testUtils";
 
 // The real application over its seeded data, with the seam's failure switch a case's only other lever. Both
-// acceptance signals are here: the guard with the endpoint's own role check, and the CSV a report exports
-// against the table it was taken from.
+// acceptance signals are here: the guard's own role check, and the CSV a report exports against its table.
 
 /** The sign-in form's controls; a required field's label also carries the hidden requirement text. */
 const EMAIL_FIELD = new RegExp(`^${ACCOUNT_COPY.EMAIL_LABEL}`);
@@ -496,8 +497,7 @@ describe("the export a report offers", () => {
     await user.click(screen.getByRole("button", { name: EXPORT_ACTION }));
     const csv = await capturedCsvRows();
     // The download is the table: the same headings, the same rows, the same totals row.
-    expect(csv[0]).toEqual(grid[0]);
-    expect(csv.length).toBe(grid.length);
+    expect([csv.length, csv[0]]).toEqual([grid.length, grid[0]]);
     const exportedTotals = csv.at(-1) ?? [];
     const renderedTotals = grid.at(-1) ?? [];
     for (const [index, column] of sales.columns.entries()) {

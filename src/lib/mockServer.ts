@@ -1,11 +1,12 @@
 /**
  * Path: src/lib/mockServer.ts
  * Purpose: The in-process API: route table, parsing, sessions, cards, idempotency and failure injection over a registered data source
- * Lines: 549
+ * Lines: 550
  */
 
 import { DEFAULT_API_LATENCY_MS } from "@/constants/config";
-import { ADMIN_COPY, FEEDBACK_COPY, NOT_FOUND_COPY } from "@/constants/content";
+import { FEEDBACK_COPY, NOT_FOUND_COPY } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import type * as Account from "@/types/account";
 import type * as Common from "@/types/common";
 import { createAbortError, delay, isAbortError } from "@/utils/async";

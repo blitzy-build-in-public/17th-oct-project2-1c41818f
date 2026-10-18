@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 584
+ * Lines: 585
  */
 
 import { useId, useState } from "react";
@@ -12,6 +12,7 @@ import type { BreadcrumbItem } from "@/components/layout/PageHeader";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { useMediaQuery } from "@/components/ui/hooks";
 import { Drawer } from "@/components/ui/Modal";
 import { NotFoundView } from "@/components/ui/NotFoundView";
 import { Pagination } from "@/components/ui/Pagination";
@@ -39,7 +40,7 @@ import { ProductList } from "@/features/catalog/ProductList";
 import { flattenCategoryTree, listCategories } from "@/lib/catalogReads";
 import type { CatalogFilters } from "@/state/CatalogContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
-import { useAsync, useDocumentTitle, useMediaQuery } from "@/state/hooks";
+import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { CategoryNode, Facet, FilterState } from "@/types/catalog";
 import type { ApiError, AsyncStatus, CategoryId } from "@/types/common";
 import { indexBy } from "@/utils/collections";

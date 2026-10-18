@@ -1,13 +1,14 @@
 /**
  * Path: tests/unit/lib/authService.test.ts
  * Purpose: Registration, duplicate email, sign-in, session expiry and role checks
- * Lines: 529
+ * Lines: 530
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEMO_ACCOUNTS, SESSION_TTL_MS } from "@/constants/config";
-import { ACCOUNT_COPY, ADMIN_COPY, FEEDBACK_COPY } from "@/constants/content";
+import { ACCOUNT_COPY, FEEDBACK_COPY } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
 import { createSalesProDataSource, salesProDataSource } from "@/data/repositories";
 import {

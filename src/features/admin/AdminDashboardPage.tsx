@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/AdminDashboardPage.tsx
  * Purpose: The administrator dashboard: dated range, KPI cards, revenue chart, breakdown and tables
- * Lines: 342
+ * Lines: 348
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -13,7 +13,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { DateRangeControl } from "@/components/ui/DateRangeControl";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { STORAGE_KEYS } from "@/constants/config";
-import { ADMIN_COPY, COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
+import { COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
+import { ADMIN_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
 import { KpiCard, type KpiKind } from "@/features/admin/KpiCard";
 import { RecentOrdersTable } from "@/features/admin/RecentOrdersTable";
@@ -31,7 +32,7 @@ import {
   getTopProducts,
 } from "@/lib/analyticsService";
 import { useAuth } from "@/state/AuthContext";
-import { useAsync, useBreakpoint, useDocumentTitle, useLocalStorage } from "@/state/hooks";
+import { useAsync, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import type {
   BaselineKind,
   BucketGranularity,
@@ -41,7 +42,7 @@ import type {
   ProductPerformance,
   RevenueGroupBy,
 } from "@/types/analytics";
-import type { DateRange } from "@/types/common";
+import type { ApiError, DateRange } from "@/types/common";
 import type { Order } from "@/types/commerce";
 import { defaultReportRange, maxReportRange, resolveBaselineRange } from "@/utils/dates";
 import { storedRangeOr } from "@/utils/storage";
@@ -92,16 +93,35 @@ function kpiValue(kind: KpiKind, summary: KpiSummary): number {
   }
 }
 
+/** Everything {@link KpiGrid} renders with. */
+interface KpiGridProps {
+  /** The summary as the read reported it: `null` while it is in flight, and after a run that failed. */
+  readonly summary: KpiSummary | null;
+  /** The failure the read reported, or `null` when it answered. A failure takes the grid's place. */
+  readonly error: ApiError | null;
+  /** Called when the reader asks for the four figures again: the KPI read's own `reload`. */
+  readonly onRetry: () => void;
+}
+
 /**
  * The four headline figures of the applied range, or the placeholders that stand in for them while the summary
  * is read: one card per entry of {@link KPI_ORDER}, each stating the figure and the comparison the summary
  * carries. Nothing is computed or formatted here — the value is the service's.
  *
- * @param props - The summary as the read reported it, or `null` while it is in flight.
- * @returns The KPI grid.
+ * A read the page could not answer is this block's own failure rather than the page's: the alert stands where
+ * the cards would, carrying the seam's message and the one retry that re-runs the KPI read alone, so the chart,
+ * the breakdown and both tables are left exactly as they are.
+ *
+ * @param props - The summary, the failure the read reported, and the retry that re-runs it.
+ * @returns The four cards as one grid, or the alert that stands in for them.
  */
+function KpiGrid({ summary, error, onRetry }: KpiGridProps): ReactElement {
+  if (error !== null) {
+    return (
+      <Alert actionLabel={COMMON_ACTIONS.RETRY} error={error} onAction={onRetry} tone="danger" />
+    );
+  }
 
-function KpiGrid({ summary }: { readonly summary: KpiSummary | null }): ReactElement {
   return (
     <div className="sp-kpi-grid">
       {KPI_ORDER.map((kind) =>
@@ -136,10 +156,8 @@ function RevenueBreakdown({
   readonly series: readonly ChartSeries[] | null;
 }): ReactElement {
   const headingId = useId();
-  // A wedge's percentage needs room the frame only has from the medium stop: below it the drawing is small
-  // enough that the labels collide with the centre total. The legend and the paired data table state the same
-  // shares, so hiding them there leaves no figure reachable through the drawing alone.
-  const hasRoomForSliceLabels = useBreakpoint().current !== "sm";
+  // Every wedge carries its percentage at every width: the figures stand on the surface beside the ring, so
+  // they need no room on the fill itself and none of them can collide with the centre total's hole.
 
   return (
     <section className="sp-dashboard__section" aria-labelledby={headingId}>
@@ -151,11 +169,7 @@ function RevenueBreakdown({
           <Skeleton variant="card" />
         </div>
       ) : (
-        <DonutChart
-          ariaLabel={ADMIN_COPY.BREAKDOWN_HEADING}
-          series={series}
-          showPercentages={hasRoomForSliceLabels}
-        />
+        <DonutChart ariaLabel={ADMIN_COPY.BREAKDOWN_HEADING} series={series} />
       )}
     </section>
   );
@@ -176,14 +190,15 @@ function RevenueBreakdown({
  * `STORAGE_KEYS.REPORT_RANGE` and written back by the one handler below — so a range applied on either
  * administrator surface is what the next visit to either opens on.
  *
- * The four states every data page renders are explicit. A pending read is each block's own skeleton, driven by
- * the flag passed down; a failure is the single page-level alert this view owns, whose retry re-runs every read
- * that failed — and that alert is the failure's only announcement, because a notice raised beside a region that
- * already states the message in full would report one failed read twice; a range that recorded nothing is the
- * dashboard's empty state with the one action that helps; a filled period is the dashboard itself. Authorisation
- * is the session's, not this page's: `src/Router.tsx` guards the route and `src/lib/mockServer.ts` re-checks the
- * administrator role on every analytics endpoint, answering `403` without one, so the session token travels with
- * each read.
+ * The four states every data page renders are explicit, and each belongs to the surface that owns the read. A
+ * pending read is that block's own skeleton, driven by the flag passed down; a failure is that block's own
+ * alert, holding the seam's message and the one retry that re-runs that read alone, so a read that could not be
+ * answered takes its own place on the page and leaves the others — the four figures, the chart and both tables —
+ * exactly as they were, and that alert is the failure's only announcement rather than a notice raised beside a
+ * region already stating the message in full; a range that recorded nothing is the dashboard's empty state with
+ * the one action that helps; a filled period is the dashboard itself. Authorisation is the session's, not this
+ * page's: `src/Router.tsx` guards the route and `src/lib/mockServer.ts` re-checks the administrator role on every
+ * analytics endpoint, answering `403` without one, so the session token travels with each read.
  *
  * @returns The dashboard.
  */
@@ -238,19 +253,9 @@ export function AdminDashboardPage(): ReactElement {
     [sessionToken],
   );
 
-  const reads = [kpis, revenue, topProducts, recentOrders];
-  const anyPending = reads.some((read) => read.status === "idle" || read.status === "loading");
-  const firstError = kpis.error ?? revenue.error ?? topProducts.error ?? recentOrders.error;
   const summary = kpis.data;
   const series = revenue.data ?? [];
   const baselineSentence = describeBaseline(baseline, resolveBaselineRange(range, baseline));
-
-  /** Re-runs only the reads that failed, so the alert's one action restores the whole dashboard. */
-  const retryFailedReads = useCallback((): void => {
-    for (const read of [kpis, revenue, topProducts, recentOrders]) {
-      if (read.status === "error") read.reload();
-    }
-  }, [kpis, revenue, topProducts, recentOrders]);
 
   /** Applies a range: the page's own range and the stored last-used one together, so the two can never
    *  disagree about what was last read and the next visit to either administrator surface opens on it. */
@@ -267,9 +272,13 @@ export function AdminDashboardPage(): ReactElement {
     applyRange(maxReportRange());
   }, [applyRange]);
 
+  // Each block is handed its own read's state — the payload, the failure and that read's own reload — and no
+  // block ever sees another read's failure, so the page decides nothing on a surface's behalf. The ring draws
+  // the chart's read, so that read's one failure is stated in the chart's block and the ring stands down while
+  // that read has no answer rather than wording the same failure a second time.
   const renderBlocks = (): ReactElement => (
     <>
-      <KpiGrid summary={summary} />
+      <KpiGrid summary={summary} error={kpis.error} onRetry={kpis.reload} />
       <SalesChart
         series={series}
         bucket={bucket}
@@ -282,13 +291,17 @@ export function AdminDashboardPage(): ReactElement {
         title={ADMIN_COPY.CHART_HEADING}
         headingLevel={2}
         isLoading={revenue.status !== "success"}
+        error={revenue.error}
+        onRetry={revenue.reload}
       />
-      <RevenueBreakdown series={revenue.status === "success" ? series : null} />
+      {revenue.error === null ? <RevenueBreakdown series={revenue.data} /> : null}
       <div className="sp-dashboard__row">
         <RecentOrdersTable
           orders={recentOrders.data ?? []}
           headingLevel={2}
           isLoading={recentOrders.status !== "success"}
+          error={recentOrders.error}
+          onRetry={recentOrders.reload}
         />
         <TopProductsTable
           products={topProducts.data ?? []}
@@ -296,23 +309,16 @@ export function AdminDashboardPage(): ReactElement {
           onMetricChange={setMetric}
           headingLevel={2}
           isLoading={topProducts.status !== "success"}
+          error={topProducts.error}
+          onRetry={topProducts.reload}
         />
       </div>
     </>
   );
 
   const renderBody = (): ReactElement => {
-    if (anyPending) return renderBlocks();
-    if (firstError !== null) {
-      return (
-        <Alert
-          actionLabel={COMMON_ACTIONS.RETRY}
-          error={firstError}
-          onAction={retryFailedReads}
-          tone="danger"
-        />
-      );
-    }
+    // A range that recorded nothing is the dashboard's own empty state, with the one action that helps; every
+    // other state belongs to the surface that owns the read.
     if (summary !== null && summary.orders === 0 && summary.revenueMinor === 0) {
       return <EmptyState headingLevel={2} onAction={widenPeriod} surface="dashboardRange" />;
     }

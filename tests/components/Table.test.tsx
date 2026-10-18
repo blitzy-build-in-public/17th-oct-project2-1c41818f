@@ -20,10 +20,10 @@ import {
   EMPTY_STATES,
   PAGE_SIZE_LABEL,
   PAGING_NOUNS,
-  REPORTS_COPY,
   pageAnnouncement,
   pagingCountLabel,
 } from "@/constants/content";
+import { REPORTS_COPY } from "@/constants/content-reports";
 import type { Product } from "@/types/catalog";
 import { pageWindow } from "@/utils/collections";
 import { formatMoney, formatNumber } from "@/utils/format";

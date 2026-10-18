@@ -1,10 +1,10 @@
 /**
  * Path: src/features/account/RegisterPage.tsx
  * Purpose: Registration form with field validation and duplicate-email handling
- * Lines: 375
+ * Lines: 385
  */
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -29,6 +29,7 @@ import { RETURN_TO_QUERY_KEY, ROUTES, loginPath } from "@/constants/routes";
 import { toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
+import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
 import type { RegistrationInput } from "@/types/account";
 import type { FieldErrors } from "@/types/common";
@@ -190,6 +191,11 @@ export function RegisterPage(): ReactElement {
   // the sign-in screen keeps for a visitor who returned.
   const [registeredGreeting, setRegisteredGreeting] = useState<string | null>(null);
 
+  /** The region the request's own failure is stated in and the form it was raised from: what a refused
+   *  registration hands the keyboard to, whether the store named a control or answered about the form itself. */
+  const alertRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+
   const preservedPath = returnPathOf(searchParams.get(RETURN_TO_QUERY_KEY));
   const destination = preservedPath ?? ROUTES.ACCOUNT;
   const formError: string | undefined = errors[FORM_ERROR_KEY];
@@ -203,6 +209,10 @@ export function RegisterPage(): ReactElement {
   // `LoginPage` applies to the same panel.
   const signedInLede =
     registeredGreeting ?? (displayName.trim().length > 0 ? signedInMessage(displayName) : null);
+
+  // A refused registration is answered with the alert when the failure names no control, and otherwise on the
+  // first control it did name: one move, through the hook every other refusal uses.
+  useRefusalFocus(hasErrors(errors), alertRef, formRef);
 
   /**
    * Writes one control's value into the draft and clears that control's message, so a corrected field stops
@@ -325,9 +335,9 @@ export function RegisterPage(): ReactElement {
 
           {/* `noValidate` leaves the judging to `src/utils/validation.ts` rather than to the browser, so a
               refusal is worded once and the field keeps the `required` markup assistive technology reads. */}
-          <form className="sp-auth__form" onSubmit={handleSubmit} noValidate>
+          <form className="sp-auth__form" onSubmit={handleSubmit} noValidate ref={formRef}>
             {formError === undefined ? null : (
-              <div className="sp-auth__alert">
+              <div className="sp-auth__alert" ref={alertRef} tabIndex={-1}>
                 <Alert tone="danger" title={FEEDBACK_COPY.ERROR_STATE_TITLE}>
                   {formError}
                 </Alert>

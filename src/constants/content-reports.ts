@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content-reports.ts
  * Purpose: The back-office register of the user-facing copy: the refusal a signed-in visitor whose role cannot reach an admin path is told, the shared range control's labels, presets and messages, the dashboard's labels and the reports' headings and export note, split out of src/constants/content.ts, which re-exports them
- * Lines: 112
+ * Lines: 122
  */
 
 /*
@@ -67,6 +67,7 @@ export const ADMIN_COPY = {
   BREAKDOWN_HEADING: "Where the revenue came from",
   TOP_PRODUCTS_HEADING: "Top products",
   TOP_PRODUCTS_RANK_CONTROL_LABEL: "Rank by",
+  TOP_PRODUCTS_RANK_COLUMN_LABEL: "Rank",
   RECENT_ORDERS_HEADING: "Recent orders",
   NOT_AUTHORIZED_TITLE: "This area is for administrators",
   NOT_AUTHORIZED_BODY: "The signed-in account does not hold the administrator role.",
@@ -110,3 +111,12 @@ export const exportRowCountNote = (rowCount: number): string =>
 /** Describes the export's row cap and cell limit, and whose clock its dates use. */
 export const exportNote = (rowCap: number, cellLimit: number): string =>
   `The export holds up to ${rowCap} rows and clips each cell at ${cellLimit} characters, so it opens in a spreadsheet. Dates and times are yours, not the server's.`;
+/**
+ * States the bound the product-performance chart plots to, so the leading products are not read as the
+ * whole ranking: the chart draws the N products with the highest revenue, the table lists every product.
+ *
+ * @param limit - How many products the chart plots.
+ * @returns The note that sits under the chart.
+ */
+export const productChartBoundNote = (limit: number): string =>
+  `The chart plots the ${String(limit)} products with the highest revenue; the table below lists every product that sold.`;

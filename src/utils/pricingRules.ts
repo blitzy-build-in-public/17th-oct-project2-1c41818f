@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/pricingRules.ts
  * Purpose: The pricing rules the cart and the checkout read and the seeded repositories compose: line and order totals, the promo decision, shipping and tax
- * Lines: 461
+ * Lines: 482
  */
 
 import {
@@ -325,6 +325,27 @@ export function resolveShipping(
   const waived =
     method.id === FREE_SHIPPING_METHOD_ID && subtotalMinor >= FREE_SHIPPING_THRESHOLD_MINOR;
   return waived ? { ...method, priceMinor: 0 } : method;
+}
+
+/**
+ * The charge *this basket* pays for one delivery method, whether or not it is the method the buyer chose, so a
+ * delivery row states a waiver the buyer has not selected yet where it would apply. The answer is
+ * {@link resolveShipping}'s for the discounted subtotal, and `0` for every method once the basket carries an
+ * applied `free_shipping` code, whose whole effect {@link priceCartLines} waives.
+ *
+ * @param priced - The priced basket; its lines and its applied promos decide the charge.
+ * @param methodId - The method to price, chosen by the buyer or not.
+ * @param methods - The methods the basket was priced against; the configured set when omitted.
+ * @returns The charge in whole minor units, `0` for a method this basket pays nothing for.
+ */
+export function chargeForMethod(
+  priced: PricedCart,
+  methodId: string,
+  methods: readonly ShippingMethod[] = SHIPPING_METHODS,
+): MinorUnits {
+  if (priced.appliedPromos.some((promo) => promo.kind === "free_shipping")) return 0;
+  const discountedSubtotalMinor = Math.max(0, priced.subtotalMinor - priced.discountTotalMinor);
+  return resolveShipping(discountedSubtotalMinor, methodId, methods).priceMinor;
 }
 
 /**

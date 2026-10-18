@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/BarChart.tsx
  * Purpose: Vertical, horizontal, grouped and stacked bars with value labels
- * Lines: 401
+ * Lines: 423
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -13,6 +13,7 @@ import type {
 } from "react";
 
 import { buildGeometry, readoutStyle, resolveHeight } from "@/components/charts/barGeometry";
+import { ChartDataTable } from "@/components/charts/ChartDataTable";
 import {
   CHART_VIEWBOX_WIDTH,
   DEFAULT_CHART_HEIGHT,
@@ -31,6 +32,7 @@ import type {
 } from "@/components/charts/chartScales";
 import { EmptyState } from "@/components/ui/Feedback";
 import { CHART_COLUMN_LABELS, EMPTY_STATES, chartDataTableCaption } from "@/constants/content";
+import type { PagingNoun } from "@/constants/content";
 import type { ChartSeries } from "@/types/analytics";
 import { formatMoney, formatMoneyAxis } from "@/utils/format";
 
@@ -59,6 +61,9 @@ const READOUT_SEPARATOR = " · ";
  * because an object built at every render would recompute the legend items with it.
  */
 const DEFAULT_LEGEND_TOTALS: Readonly<Record<string, boolean>> = {};
+
+/** The React key the paired table's leading column renders under, whatever word the caller gives the column. */
+const LABEL_COLUMN_KEY = "label";
 
 /** The one line a readout shows: the band's label, then every series' reading of it, so both inputs read alike. */
 function readoutText(
@@ -123,6 +128,12 @@ export interface BarChartProps {
    * own statement of its figures and a column of them must say what it holds.
    */
   readonly labelHeader?: string;
+  /**
+   * The collection the paired table's paging caption counts, named by the surface that knows what its rows
+   * are: `PAGING_NOUNS.PERIODS` for one banded by reporting periods, and `PAGING_NOUNS.PRODUCTS` for one
+   * banded by products. Defaults to the paired table's own default, `PAGING_NOUNS.PRODUCTS`.
+   */
+  readonly countNoun?: PagingNoun;
 }
 
 /**
@@ -160,6 +171,7 @@ export function BarChart({
   ariaLabel,
   emptyMessage,
   labelHeader = CHART_COLUMN_LABELS.GROUP_LABEL,
+  countNoun,
 }: BarChartProps): ReactElement {
   const titleId = useId();
   const captionId = useId();
@@ -200,6 +212,16 @@ export function BarChart({
     () => buildSeriesDataTable(series, formatValue, { labelHeader }),
     [series, formatValue, labelHeader],
   );
+  // The headings and keys the paired table renders, one column per series after the leading one. Memoised on
+  // the same inputs the model is, so the memoised table receives arrays whose identity survives a hover.
+  const tableColumns = useMemo(
+    () => [table.columns[0], ...series.map((one) => one.label)],
+    [table, series],
+  );
+  const tableColumnKeys = useMemo(
+    () => [LABEL_COLUMN_KEY, ...series.map((one) => one.id)],
+    [series],
+  );
   // A legend entry's figure is the series' own total, except where the caller named the series in
   // `legendTotals` as one whose bands must not be summed: that entry states no value rather than one the
   // paired table below it does not state.
@@ -216,6 +238,13 @@ export function BarChart({
   const activeRow = useMemo(
     () => (activeBand === null ? undefined : table.rows.find((row) => row.key === activeBand)),
     [table, activeBand],
+  );
+  // The readout's one line, held so its placement and its words are the same sentence: the box reserves the
+  // width of the text it will hold, and that length is taken from here rather than measured off the rendered
+  // box, which this renderer never reads.
+  const activeRowText = useMemo(
+    () => (activeRow === undefined ? null : readoutText(activeRow.label, series, activeRow.cells)),
+    [activeRow, series],
   );
 
   // The pointer names its band through the region it entered rather than through the mark it landed on, so
@@ -299,48 +328,60 @@ export function BarChart({
         onFocus={handlePlotFocus}
         onBlur={handlePlotBlur}
       >
-        <svg
-          className="sp-chart__svg"
-          viewBox={`0 0 ${CHART_VIEWBOX_WIDTH} ${plotHeight}`}
-          role="img"
-          aria-label={chartName}
-          aria-describedby={captionId}
-        >
-          <g>
-            {geometry.gridLines.map((mark) => (
-              <line key={mark.tick.value} className="sp-chart__grid-line" {...mark.line} />
-            ))}
-            <line className="sp-chart__axis-line" {...geometry.axisLine} />
-            {geometry.bars.map((mark) => (
-              <rect key={mark.id} className={mark.className} {...mark.area} />
-            ))}
-            {geometry.textMarks.map((mark) => (
-              <text key={mark.id} className={mark.className} {...mark.transform}>
-                {mark.text}
-              </text>
-            ))}
-            {geometry.hitRects.map((hit) => (
-              <rect
-                key={hit.id}
-                className="sp-chart__hit"
-                data-band={hit.id}
-                {...hit.area}
-                onPointerEnter={handleBandEnter}
-                onPointerLeave={handleBandLeave}
-              />
-            ))}
-          </g>
-        </svg>
-        {activeRow === undefined ? null : (
-          <div
-            className="sp-chart__readout"
-            role="status"
-            aria-live="polite"
-            style={readoutStyle(geometry, activeRow.key, plotHeight, horizontal)}
+        {/* The drawing and its readout share one positioned box, so the readout's percentages and
+              the bounds holding them resolve against the box the drawing occupies rather than the
+              frame's padding box — which is what keeps the readout, and the width the geometry
+              reserves for it, inside the plot on every screen. */}
+        <div className="sp-chart__plot">
+          <svg
+            className="sp-chart__svg"
+            viewBox={`0 0 ${CHART_VIEWBOX_WIDTH} ${plotHeight}`}
+            role="img"
+            aria-label={chartName}
+            aria-describedby={captionId}
           >
-            {readoutText(activeRow.label, series, activeRow.cells)}
-          </div>
-        )}
+            <g>
+              {geometry.gridLines.map((mark) => (
+                <line key={mark.tick.value} className="sp-chart__grid-line" {...mark.line} />
+              ))}
+              <line className="sp-chart__axis-line" {...geometry.axisLine} />
+              {geometry.bars.map((mark) => (
+                <rect key={mark.id} className={mark.className} {...mark.area} />
+              ))}
+              {geometry.textMarks.map((mark) => (
+                <text key={mark.id} className={mark.className} {...mark.transform}>
+                  {mark.text}
+                </text>
+              ))}
+              {geometry.hitRects.map((hit) => (
+                <rect
+                  key={hit.id}
+                  className="sp-chart__hit"
+                  data-band={hit.id}
+                  {...hit.area}
+                  onPointerEnter={handleBandEnter}
+                  onPointerLeave={handleBandLeave}
+                />
+              ))}
+            </g>
+          </svg>
+          {activeRow === undefined || activeRowText === null ? null : (
+            <div
+              className="sp-chart__readout"
+              role="status"
+              aria-live="polite"
+              style={readoutStyle(
+                geometry,
+                activeRow.key,
+                plotHeight,
+                horizontal,
+                activeRowText.length,
+              )}
+            >
+              {activeRowText}
+            </div>
+          )}
+        </div>
       </div>
       {legendVisible ? (
         <ul className="sp-chart__legend" role="list">
@@ -366,33 +407,14 @@ export function BarChart({
           aria-label={chartDataTableCaption(captionSubject)}
           tabIndex={0}
         >
-          <table className="sp-table sp-table--compact">
-            <caption className="sp-table__caption" id={captionId}>
-              {chartDataTableCaption(captionSubject)}
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">{table.columns[0]}</th>
-                {series.map((one) => (
-                  <th key={one.id} scope="col">
-                    {one.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((row) => (
-                <tr key={row.key}>
-                  <th scope="row">{row.label}</th>
-                  {series.map((one, index) => (
-                    <td className="sp-table__num" key={one.id}>
-                      {row.cells[index]}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ChartDataTable
+            caption={chartDataTableCaption(captionSubject)}
+            captionId={captionId}
+            columns={tableColumns}
+            columnKeys={tableColumnKeys}
+            rows={table.rows}
+            countNoun={countNoun}
+          />
         </div>
       </div>
       {trailing}

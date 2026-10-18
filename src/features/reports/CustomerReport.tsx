@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 307
+ * Lines: 304
  */
 
 import { useCallback } from "react";
@@ -9,13 +9,8 @@ import type { ReactElement } from "react";
 
 import { BarChart } from "@/components/charts/BarChart";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
-import {
-  COMMON_ACTIONS,
-  DATE_RANGE_COPY,
-  EMPTY_STATES,
-  FEEDBACK_COPY,
-  REPORTS_COPY,
-} from "@/constants/content";
+import { COMMON_ACTIONS, EMPTY_STATES, FEEDBACK_COPY, PAGING_NOUNS } from "@/constants/content";
+import { DATE_RANGE_COPY, REPORTS_COPY } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { ReportTable } from "@/features/reports/ReportTable";
 import { findDefinition, runReport, summarisePeriodLabel } from "@/lib/reportService";
@@ -61,9 +56,9 @@ import { formatCellValue, formatCompactNumber, formatInteger } from "@/utils/for
  * bound to the cut the run actually used and to the band's own wording — the chart's own label default reads
  * every key as a day, which would label a monthly run "Sep 1" rather than "Sep 2025".
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` holds no wording for a summary-metrics block, so the
+ * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content-reports.ts` holds no wording for a summary-metrics block, so the
  * figures this report states are rendered as a description list with no heading of its own rather than under a
- * title this file would have to invent; one key in content.ts is all that block needs to be titled.
+ * title this file would have to invent; one key in content-reports.ts is all that block needs to be titled.
  */
 
 /** Every class this file puts on the page, each taken by name from the sheet that declares it. */
@@ -281,12 +276,14 @@ export function CustomerReport({
         ))}
       </dl>
       {/* The bands are periods, which is what the definition's first column holds, so the chart's paired
-          table names that column with the report's own word for it rather than an empty heading. */}
+          table names that column with the report's own word for it rather than an empty heading, and the
+          pager beneath it counts those periods rather than products. */}
       <BarChart
         series={result.series}
         title={REPORTS_COPY.CUSTOMER_CHART_HEADING}
         description={definition.description}
         labelHeader={definition.columns[0].label}
+        countNoun={PAGING_NOUNS.PERIODS}
         footer={<p className={CLASSES.rangeNote}>{periodNote(from, to)}</p>}
         formatValue={formatInteger}
         formatAxisValue={formatCompactNumber}

@@ -1,7 +1,7 @@
 /**
  * Path: src/data/orders.ts
  * Purpose: The generated 365-day order history, with 60 orders attributed to the seeded customers
- * Lines: 598
+ * Lines: 599
  */
 
 import { DEMO_ACCOUNTS, DEMO_CARD_NUMBERS, SHIPPING_METHODS } from "@/constants/config";
@@ -574,7 +574,8 @@ function buildOrder(
  * sixty attributed to seeded accounts and the rest placed by guests.
  *
  * Pure and re-callable: one seed stream and one reading of the clock reduced to a day, nothing else, so two calls
- * on the same day return deeply equal collections. Because every amount came from the product's one pricing
+ * on the same day return deeply equal collections. Each basket is drawn with a bounded number of stream steps
+ * rather than by shuffling the sellable catalogue. Because every amount came from the product's one pricing
  * implementation, a seeded order's total agrees with what `POST /api/cart/price` answers for the same lines.
  *
  * @returns The whole history, oldest order first.

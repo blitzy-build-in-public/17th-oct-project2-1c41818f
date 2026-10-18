@@ -1,7 +1,7 @@
 /**
  * Path: src/data/products.ts
  * Purpose: The seeded catalogue: hand-authored anchor products expanded deterministically, with specs and generated imagery
- * Lines: 595
+ * Lines: 600
  */
 
 import { DEFAULT_CURRENCY } from "@/constants/config";
@@ -36,7 +36,7 @@ export interface SeededRandom {
   int(min: number, max: number): number;
   /** One item of a non-empty list. */
   pick<TItem>(items: readonly TItem[]): TItem;
-  /** Distinct items of a list, or the whole list when it holds no more than `count`. */
+  /** Distinct items of a list drawn one stream step at a time, or the whole list when it holds no more than `count`. */
   pickMany<TItem>(items: readonly TItem[], count: number): TItem[];
   /** True for the share of draws `probability` names. */
   chance(probability: number): boolean;
@@ -75,7 +75,12 @@ export function createSeededRandom(seed: number): SeededRandom {
   return {
     next, pick, shuffle,
     int: (min, max) => min + Math.floor(next() * (max - min + 1)),
-    pickMany: (items, count) => shuffle(items).slice(0, count),
+    pickMany: (items, count) => {
+      const size = Math.min(count, items.length);
+      const drawn = new Set<number>();
+      while (drawn.size < size) drawn.add(Math.floor(next() * items.length));
+      return [...drawn].map((index) => items[index]);
+    },
     chance: (probability) => next() < probability,
   };
 }

@@ -1,6 +1,6 @@
 /* Path: src/styles/components.css
  * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded through controls.css and data-display.css
- * Lines: 507
+ * Lines: 512
  */
 
 /* The twelve primitive families every page composes are defined across the four sheets this chain loads:
@@ -413,6 +413,11 @@ button.sp-rating__star {
   flex-wrap: wrap;
   gap: var(--space-2);
   justify-content: center;
+}
+/* The slot wraps its controls and the page's own column is what they are given, so at a scaled-up root font a
+ * label wider than that column breaks inside the control instead of widening the page. */
+.sp-empty__action > .sp-btn {
+  white-space: normal;
 }
 /* The danger pair is declared with the form summary above, so the two surfaces cannot drift apart. */
 .sp-alert {

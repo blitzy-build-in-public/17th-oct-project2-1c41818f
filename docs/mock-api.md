@@ -1,7 +1,7 @@
 <!--
   Path: docs/mock-api.md
   Purpose: The endpoint contract with the demonstration credentials and the latency and failure switches
-  Lines: 225
+  Lines: 211
 -->
 
 # The SalesPro mock API
@@ -133,25 +133,11 @@ identical repeat, so a double submission cannot create a second order. The same 
 `idempotency-key-conflict`. The client holds a submitting state that disables the control as well, because a front-end-only guard is not sufficient on its own —
 and a successful call is a created order, not proof of payment. The store and the card decision live in `src/lib/apiOrders.ts`.
 
-The same submission also leaves the seam holding the **placement credential** of an account-less order: the idempotency key that created it is recorded against the
-order it created, and `GET /api/orders/:id` answers such an order to the caller that presents that value in the `x-order-token` header. That record is **durable**
-(`STORAGE_KEYS.ORDER_CREDENTIALS`, `salespro.order-credentials`): `src/lib/apiOrders.ts` writes the pair where the order is created, bounds it to the most recent
-`KEPT_CREDENTIALS`, and reads it whenever it decides whether a read may be answered, so a credential minted in an earlier document still verifies after a reload.
-The credential is compared against that record and **never against the order's own `idempotencyKey` member**, so an order payload a caller already legitimately
-holds — its own order, or one an administrator read — cannot be replayed as the credential of an order that caller was refused. The client keeps the same pair in
-the storage entry `salespro.order-tokens` (`STORAGE_KEYS.ORDER_TOKENS`), so the buyer's own confirmation can be reopened after a reload by the browser that placed
-the order, and a shared link opens nothing.
-
-Two durable records are what make that read work after a reload, and each belongs to the layer that owns the fact. The **order itself** is durable state of the
-data layer (`STORAGE_KEYS.PLACED_ORDERS`, `salespro.placed-orders`): a created order exists nowhere but the store a request was answered from, because the seeded
-history is rebuilt from its generator on every load, so `src/data/placedOrders.ts` writes an order where `createOrderIn` creates one and reads the record back into
-the store `createSalesProDataSource` builds — its identifier, its number, the instant it was placed, its status and its status history included, with the numbering
-counters lifted so the next order placed cannot collide with a restored one. The **credential** is durable state of the seam, for the reason above. A reload
-therefore answers `GET /api/orders/:id` for the order the URL names and verifies the header the client presents against the seam's own record; the same request
-without that header still meets the `401`/`404` ladder of §4, which is the whole of what makes a shared link open nothing.
-
-This is a **demonstration-grade capability, not a production credential**: a real deployment would return an unguessable confirmation reference from its server
-rather than have the client present the key it minted.
+The same submission also leaves the seam holding the **placement credential** of an account-less order: the idempotency key that created it is remembered against
+the order it created, and `GET /api/orders/:id` answers such an order to the caller that presents that value in the `x-order-token` header. The client keeps the
+same pair in the storage entry `salespro.order-tokens` (`STORAGE_KEYS.ORDER_TOKENS`), so the buyer's own confirmation can be reopened after a reload by the
+browser that placed the order, and a shared link opens nothing. This is a **demonstration-grade capability, not a production credential**: a real deployment would
+return an unguessable confirmation reference from its server rather than have the client present the key it minted.
 
 ## 8. Protections that stand in for rate limiting
 

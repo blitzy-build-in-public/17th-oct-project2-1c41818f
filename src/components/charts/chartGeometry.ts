@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartGeometry.ts
  * Purpose: Mark, path and data-table geometry for the charts, with the formatting hooks and label widths its scales share
- * Lines: 515
+ * Lines: 525
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -12,7 +12,7 @@ import { formatCompactNumber, formatPercent } from "@/utils/format";
 // The label-width rule this module used to hold lives in `labelMetrics.ts`; it is published here so the
 // scales and renderers that read it keep the import path they have always used.
 export { LABEL_FONT_SIZE, estimateLabelWidth } from "@/components/charts/labelMetrics";
-import { FULL_TURN_DEGREES, arcPath, polarToCartesian } from "@/components/charts/svgPaths";
+import { FULL_TURN_DEGREES, arcPath } from "@/components/charts/svgPaths";
 
 // The path builders this module used to hold live in `svgPaths.ts`; they are published here so the scales
 // and renderers keep the import path they have always used.
@@ -159,8 +159,6 @@ export interface ArcDatum {
   readonly share: number;
   readonly path: string;
   readonly midAngle: number;
-  readonly labelX: number;
-  readonly labelY: number;
   readonly seriesIndex: number;
   /** The value as a legend or a value label reads it, formatted by the formatter the caller supplied. */
   readonly formattedValue: string;
@@ -188,15 +186,11 @@ export interface TableHeadings {
 
 // Constants ---------------------------------------------------------------------------------------
 
-/** Below this share a slice's percentage is drawn outside the ring instead of inside its wedge, so labels cannot pile up on a thin wedge. */
-export const MIN_SLICE_LABEL_SHARE = 0.05;
-
 /** The share of the outer radius a donut's hole takes by default. */
 export const DEFAULT_INNER_RADIUS_RATIO = 0.62;
 
 // Literals no reader should have to decode.
 const BAR_INNER_GAP = 0.15;
-const SLICE_LABEL_RADIUS_RATIO = 0.5;
 const SERIES_CLASS_PREFIX = "sp-chart__series-";
 const SHARE_EPSILON = 1e-9;
 
@@ -241,6 +235,38 @@ export const chartPointKey = (point: ChartPoint): string => point.label ?? Strin
 export const collectBandKeys = (series: readonly ChartSeries[]): string[] => [
   ...new Set(series.flatMap((one) => one.points.map(chartPointKey))),
 ];
+
+/**
+ * One series' points keyed by band, so a band resolves in one map hit: the shape every (series, band)
+ * lookup a chart makes reads through, from the model that draws a line to the table that states its figures.
+ */
+export type SeriesPointIndex = ReadonlyMap<string, ChartPoint>;
+
+/**
+ * Indexes one series' points by {@link chartPointKey}, once per call rather than once per lookup. A render
+ * asks for thousands of (series, band) pairs — twelve categories over a 366-day range is 4,392 — and
+ * scanning the series' points for each of them is what made that configuration the costliest one to draw.
+ * A band the series repeats keeps its first point, which is the point a `find` over the same points answers.
+ */
+export function indexSeriesPoints(series: ChartSeries): SeriesPointIndex {
+  const index = new Map<string, ChartPoint>();
+  series.points.forEach((point) => {
+    const key = chartPointKey(point);
+    if (!index.has(key)) index.set(key, point);
+  });
+  return index;
+}
+
+/** An `index`'s finite reading of a band `key`: `undefined` where the series has no point there or its figure is not a number. */
+export function indexedFiniteValueAt(index: SeriesPointIndex, key: string): number | undefined {
+  const point = index.get(key);
+  return point !== undefined && Number.isFinite(point.y) ? point.y : undefined;
+}
+
+/** An `index`'s reading of a band `key` as a figure a mark or a table cell states: its finite value, and `0` everywhere else. */
+export function indexedValueAt(index: SeriesPointIndex, key: string): number {
+  return indexedFiniteValueAt(index, key) ?? 0;
+}
 
 /**
  * Whether any series carries a finite point at all: the shared no-data predicate, so the three renderers
@@ -290,10 +316,21 @@ export function seriesClassName(reference: string | undefined, index: number): s
 
 // Bars --------------------------------------------------------------------------------------------
 
-/** The cumulative end value of each series at `key`, in series order; a series with no point there contributes `0`. */
-export const stackValues = (series: readonly ChartSeries[], key: string): number[] => {
+/**
+ * The cumulative end value of each series at `key`, in series order; a series with no point there contributes
+ * `0`. This is the one-band convenience form: a caller resolving many bands builds one index per series with
+ * {@link indexSeriesPoints} and reads every band through {@link stackedValuesAt}, never one index per band.
+ */
+export const stackValues = (series: readonly ChartSeries[], key: string): number[] =>
+  stackedValuesAt(series.map(indexSeriesPoints), key);
+
+/**
+ * {@link stackValues} over indexes the caller built once per series with {@link indexSeriesPoints}: what each
+ * index stacks to at `key`, in index order.
+ */
+export const stackedValuesAt = (indexes: readonly SeriesPointIndex[], key: string): number[] => {
   let running = 0;
-  return series.map((one) => (running += valueAt(one, key)));
+  return indexes.map((index) => (running += indexedValueAt(index, key)));
 };
 
 /** The pixel `0` sits at, clamped into the range: the baseline bars grow from and fall to. */
@@ -305,7 +342,7 @@ export const zeroCoordinate = (scale: LinearScale): number => {
 /**
  * One rect per band and then per series. `grouped` splits a band's bandwidth between the series and centres
  * each bar in its slot; `stacked` gives every series the whole bandwidth and starts each bar where the one
- * below it ended, read from {@link stackValues}. `orientation` decides which rectangle side the value scale
+ * below it ended, read from {@link stackedValuesAt}. `orientation` decides which rectangle side the value scale
  * governs, so a horizontal chart needs no transposition. A zero or negative value still produces a rect, and
  * a rect reaching past the frame is trimmed to `plotArea` rather than painted over the axis.
  */
@@ -318,15 +355,19 @@ export function buildBarRects(options: {
   readonly plotArea: PlotArea;
 }): BarRect[] {
   const { series, bandScale, valueScale, orientation, mode, plotArea } = options;
+  // One point index per series for the whole call, as the paired table builds: every band of every series
+  // resolves through it, so a rect costs a map hit rather than a scan of the series' points.
+  const indexes = series.map(indexSeriesPoints);
   const slot = bandScale.bandwidth / Math.max(1, series.length);
   const bar = mode === "grouped" ? slot * (1 - BAR_INNER_GAP) : bandScale.bandwidth;
   const vertical = orientation === "vertical";
   return bandScale.ticks().flatMap((key) => {
-    const ends = mode === "stacked" ? stackValues(series, key) : [];
+    const ends = mode === "stacked" ? stackedValuesAt(indexes, key) : [];
     const origin = bandScale.scale(key);
     return series.map((one, index) => {
+      const value = indexedValueAt(indexes[index], key);
       const from = valueScale.scale(mode === "stacked" && index > 0 ? ends[index - 1] : 0);
-      const to = valueScale.scale(mode === "stacked" ? ends[index] : valueAt(one, key));
+      const to = valueScale.scale(mode === "stacked" ? ends[index] : value);
       const offset = mode === "grouped" ? index * slot + (slot - bar) / 2 : 0;
       const low = Math.min(from, to);
       const extent = Math.abs(to - from);
@@ -338,7 +379,7 @@ export function buildBarRects(options: {
         y: vertical ? low : origin + offset,
         width: vertical ? bar : extent,
         height: vertical ? extent : bar,
-        value: valueAt(one, key),
+        value,
       };
       return trimToPlotArea(rect, plotArea);
     });
@@ -353,8 +394,8 @@ export function buildBarRects(options: {
  * at all, so a share is never divided by zero, and a series totalling zero or less draws none, having no
  * area. The closing slice ends exactly on the full turn, so a ring has no hairline gap.
  *
- * The weights come from {@link ringTotals}, the one home of how a slice is valued, so the arcs, the shares
- * {@link ringShares} states and the thin-slice predicate cannot disagree about a slice's weight.
+ * The weights come from {@link ringTotals}, the one home of how a slice is valued, so the arcs and the shares
+ * the legend, the readout and the paired table read cannot disagree about a slice's weight.
  */
 export function buildDonutArcs(options: {
   readonly series: readonly ChartSeries[];
@@ -378,8 +419,6 @@ export function buildDonutArcs(options: {
     const closesRing = cursor + share >= 1 - SHARE_EPSILON;
     const endAngle = closesRing ? FULL_TURN_DEGREES : (cursor + share) * FULL_TURN_DEGREES;
     const midAngle = startAngle + (endAngle - startAngle) / 2;
-    const radius = innerRadius + (outerRadius - innerRadius) * SLICE_LABEL_RADIUS_RATIO;
-    const label = polarToCartesian(cx, cy, radius, midAngle);
     cursor += share;
     arcs.push({
       id: one.id,
@@ -388,47 +427,12 @@ export function buildDonutArcs(options: {
       share,
       path: arcPath({ cx, cy, outerRadius, innerRadius, startAngle, endAngle }),
       midAngle,
-      labelX: label.x,
-      labelY: label.y,
       seriesIndex: index,
       formattedValue: format(value),
     });
   });
   return arcs;
 }
-
-/**
- * Each drawn slice's share of the ring's positive total, in the order {@link buildDonutArcs} draws them.
- *
- * Read from {@link ringTotals}, so the shares a caller reasons about are the shares the arcs were drawn
- * with. A series with nothing to draw contributes no entry, so the result holds one share per drawn slice
- * and is `[]` when nothing is drawn at all.
- *
- * @param series - The plotted series, in ring order.
- * @returns Each drawn slice's share, between 0 and 1.
- */
-export function ringShares(series: readonly ChartSeries[]): number[] {
-  const { values, total } = ringTotals(series);
-  if (!Number.isFinite(total) || total <= 0) return [];
-  return values.filter((value) => value > 0).map((value) => value / total);
-}
-
-/**
- * Whether any drawn slice is too thin to carry its percentage inside its own wedge.
- *
- * The predicate a donut draws on before it reserves the band a label outside the ring needs, so the band is
- * spent only when a label needs one. It reads the same shares through the same threshold
- * {@link MIN_SLICE_LABEL_SHARE} the label model splits at, so "too thin to label inside" is one fact in this
- * folder rather than two readings of it.
- *
- * @param series - The plotted series, in ring order.
- * @param threshold - The share below which a slice's label is drawn outside the ring.
- * @returns True when at least one drawn slice's share is below `threshold`.
- */
-export const hasThinSlice = (
-  series: readonly ChartSeries[],
-  threshold: number = MIN_SLICE_LABEL_SHARE,
-): boolean => ringShares(series).some((share) => share < threshold);
 
 // Data tables -------------------------------------------------------------------------------------
 
@@ -443,10 +447,24 @@ export function buildSeriesDataTable(
   formatValue: ValueFormatter,
   options: TableHeadings = {},
 ): ChartDataTable {
+  // Each series is indexed once for the whole call, for the reason the table is expensive: it asks for a
+  // (series, band) pair once per cell, so a scan of the series' points per cell costs bands × series × points.
+  const indexes = series.map(indexSeriesPoints);
+  // A figure the table states more than once is formatted once: money repeats across a table's cells — a
+  // period that sold nothing repeats zero on every series — and formatting is the cost left in this call.
+  // The cache belongs to the call, so it cannot outlive the figures it holds.
+  const formatted = new Map<number, string>();
+  const format = (value: number): string => {
+    const known = formatted.get(value);
+    if (known !== undefined) return known;
+    const text = formatValue(value);
+    formatted.set(value, text);
+    return text;
+  };
   const rows = collectBandKeys(series).map((key) => ({
     key,
-    label: pointLabelAt(series, key) ?? defaultLabelFormatter(key),
-    cells: series.map((one) => formatValue(valueAt(one, key))),
+    label: pointLabelAt(indexes, key) ?? defaultLabelFormatter(key),
+    cells: indexes.map((index) => format(indexedValueAt(index, key))),
   }));
   return { columns: [options.labelHeader ?? "", ...series.map((one) => one.label)], rows };
 }
@@ -470,12 +488,6 @@ export function buildSliceDataTable(
 
 // Internal helpers --------------------------------------------------------------------------------
 
-/** The value a series carries at a band: `0` when it has no point there or the point is not finite. */
-const valueAt = (series: ChartSeries, key: string): number => {
-  const point = series.points.find((candidate) => chartPointKey(candidate) === key);
-  return point !== undefined && Number.isFinite(point.y) ? point.y : 0;
-};
-
 /**
  * The ring's weights: what each series contributes to it, in series order, and their sum.
  *
@@ -493,11 +505,9 @@ const ringTotals = (series: readonly ChartSeries[]): { values: number[]; total: 
   return { values, total: values.reduce((sum, value) => sum + value, 0) };
 };
 
-/** The display label the series give a band, if any of them gives one at all. */
-const pointLabelAt = (series: readonly ChartSeries[], key: string): string | undefined =>
-  series
-    .map((one) => one.points.find((point) => chartPointKey(point) === key))
-    .find((point) => point !== undefined)?.label;
+/** The display label the series give a band, if any of them gives one at all, read from indexes the caller built once. */
+const pointLabelAt = (indexes: readonly SeriesPointIndex[], key: string): string | undefined =>
+  indexes.map((index) => index.get(key)).find((point) => point !== undefined)?.label;
 
 /** A bar trimmed to the frame, so a value outside the domain cannot paint over the axis. */
 const trimToPlotArea = (rect: BarRect, plotArea: PlotArea): BarRect => {

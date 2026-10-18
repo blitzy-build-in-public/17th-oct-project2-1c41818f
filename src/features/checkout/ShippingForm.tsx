@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ShippingForm.tsx
  * Purpose: The shipping step: address entry or reuse of a saved address, with per-field validation
- * Lines: 534
+ * Lines: 535
  */
 
 import { useEffect, useRef } from "react";
@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import { RadioGroup, Select } from "@/components/ui/Select";
-import { ACCOUNT_COPY, CHECKOUT_COPY, COMMON_ACTIONS } from "@/constants/content";
+import { CHECKOUT_COPY, transitWindowLabel } from "@/constants/checkoutCopy";
+import { ACCOUNT_COPY, COMMON_ACTIONS } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES, type AddressFieldMember } from "@/constants/taxonomy";
 import {
@@ -21,14 +22,14 @@ import {
   defaultAddressFor,
   listAddresses,
 } from "@/lib/customerService";
-import { listShippingMethods } from "@/lib/pricingService";
+import { chargeForMethod, listShippingMethods } from "@/lib/pricingService";
 import { useAuth } from "@/state/AuthContext";
 import { useCheckout } from "@/state/CheckoutContext";
 import { useAsync } from "@/state/hooks";
 import type { Address, Session } from "@/types/account";
 import type { PricedCart, ShippingMethod } from "@/types/commerce";
 import type { CurrencyCode, MinorUnits, Result, SelectOption } from "@/types/common";
-import { formatInteger, formatMoney } from "@/utils/format";
+import { formatMoney } from "@/utils/format";
 
 /*
  * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
@@ -78,15 +79,24 @@ const METHOD_PLACEHOLDERS = ["first", "second", "third"] as const;
 const NO_ADDRESSES: readonly Address[] = [];
 const NO_METHODS: readonly ShippingMethod[] = [];
 
-/** The mark between the parts of a delivery row and between a window's bounds. Both are notation rather
- * than wording, so neither is a sentence the content library owns. BLITZY [COPY]: the content library
- * holds no wording for a transit window, for its unit, or for a charge that costs nothing, so the day
- * units and the amount a waived charge reads as live here as notation too; keys belong in that library. */
+/** The mark between the parts of a delivery row: notation rather than wording, so not a sentence the
+ * content library owns. The transit window a row states and the amount a charge of nothing reads as are
+ * wording, and both come from that library, which owns them. */
 const PART_SEPARATOR = " · ";
-const WINDOW_SEPARATOR = "–";
-const DAY_UNIT_SINGULAR = "day";
-const DAY_UNIT_PLURAL = "days";
-const FREE_DELIVERY_AMOUNT = "Free";
+
+/**
+ * The label of the control a message from this step belongs to, so the summary names the field it is about.
+ * A group-qualified key names its own member, and a key no control of this step carries answers nothing.
+ *
+ * @param field - The key a message is filed under, as the flow's error map holds it.
+ * @returns The control's label, or `undefined` for a key this step judges no control for.
+ */
+export function shippingFieldLabel(field: string): string | undefined {
+  const member = field.slice(field.lastIndexOf(".") + 1);
+  if (member === "email") return ACCOUNT_COPY.EMAIL_LABEL;
+  if (member === "shippingMethodId") return CHECKOUT_COPY.SHIPPING_METHOD_LEGEND;
+  return ADDRESS_FIELDS.find((spec) => spec.member === member)?.label;
+}
 
 // Reading the domain -----------------------------------------------------------------------------
 
@@ -115,33 +125,20 @@ function countryNameOf(code: string): string {
 }
 
 /**
- * The transit window a method states, as a row reads it: `5–8 days`, `1 day`, or nothing for a method
- * collected the same day, whose own description already says so. The bounds are formatted through
- * `src/utils/format.ts` and no delivery date is computed here: the estimate an order shows is arithmetic
- * on its own placement date, which is the confirmation's concern.
- */
-function transitWindowLabel(minDays: number, maxDays: number): string {
-  if (maxDays <= 0) return "";
-  const from = maxDays === minDays ? "" : `${formatInteger(minDays)}${WINDOW_SEPARATOR}`;
-  const unit = maxDays === 1 ? DAY_UNIT_SINGULAR : DAY_UNIT_PLURAL;
-  return `${from}${formatInteger(maxDays)} ${unit}`;
-}
-
-/**
  * The charge a method carries for the basket in the flow: what the price request quoted for the method the
  * shopper chose — where a free-delivery threshold and a free-delivery code are already applied — and the
  * method's own stored price for every row that is not the chosen one. No price or total is computed here,
  * and the pricing service reports no chosen method until one is chosen.
  */
 function chargeMinorFor(method: ShippingMethod, quoted: PricedCart | null): MinorUnits {
-  return quoted !== null && quoted.shippingMethodId === method.id
-    ? quoted.shippingMinor
-    : method.priceMinor;
+  return quoted === null ? method.priceMinor : chargeForMethod(quoted, method.id);
 }
 
 /** The amount a row shows: the charge formatted for display, or the word a charge of nothing reads as. */
 function amountLabel(chargeMinor: MinorUnits, currency: CurrencyCode | undefined): string {
-  return chargeMinor === 0 ? FREE_DELIVERY_AMOUNT : formatMoney(chargeMinor, currency);
+  return chargeMinor === 0
+    ? CHECKOUT_COPY.FREE_DELIVERY_CHARGE_LABEL
+    : formatMoney(chargeMinor, currency);
 }
 
 /** One method as a radio option: the option's label is the method's name, which the row itself restates
@@ -458,6 +455,7 @@ export function ShippingForm(): ReactElement {
       <RadioGroup
         containerClassName="sp-summary__shipping"
         error={errors.shippingMethodId}
+        id="shippingMethodId"
         legend={CHECKOUT_COPY.SHIPPING_METHOD_LEGEND}
         name="shippingMethodId"
         onChange={chooseShippingMethod}
@@ -483,6 +481,7 @@ export function ShippingForm(): ReactElement {
         <Input
           autoComplete="email"
           errors={errors}
+          id="email"
           label={ACCOUNT_COPY.EMAIL_LABEL}
           name="email"
           onChange={writeEmail}
@@ -498,6 +497,7 @@ export function ShippingForm(): ReactElement {
               autoComplete={field.autoComplete}
               errors={errors}
               hint={field.hint}
+              id={field.member}
               label={field.label}
               name={field.member}
               onChange={writeAddress(field.member)}
@@ -510,6 +510,7 @@ export function ShippingForm(): ReactElement {
               key={field.member}
               autoComplete={field.autoComplete}
               errors={errors}
+              id={field.member}
               label={field.label}
               name={field.member}
               onChange={writeAddress(field.member)}

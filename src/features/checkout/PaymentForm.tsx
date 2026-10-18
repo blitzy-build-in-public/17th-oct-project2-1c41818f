@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/PaymentForm.tsx
  * Purpose: The payment step: demonstration card entry with Luhn, expiry and CVC validation
- * Lines: 247
+ * Lines: 254
  */
 
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
@@ -9,8 +9,9 @@ import type { ChangeEvent, FormEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
+import { CHECKOUT_COPY, demoPaymentNote } from "@/constants/checkoutCopy";
 import { DEMO_CARD_NUMBERS } from "@/constants/config";
-import { CHECKOUT_COPY, COMMON_ACTIONS, demoPaymentNote } from "@/constants/content";
+import { COMMON_ACTIONS } from "@/constants/content";
 import { useCheckout } from "@/state/CheckoutContext";
 
 /*
@@ -37,15 +38,6 @@ import { useCheckout } from "@/state/CheckoutContext";
  * values for the length of the checkout, reaching no store, no log and no payload.
  */
 
-/**
- * What the two expiry controls are labelled with: the format a card prints its expiry in, as notation
- * rather than as wording. `src/constants/content.ts` names the pair once and neither half separately,
- * so the halves carry the two marks a card itself uses — the reading, together with the `cc-exp-month`
- * and `cc-exp-year` tokens that let a browser fill each half, is what says which half is which.
- */
-const EXPIRY_MONTH_NOTATION = "MM";
-const EXPIRY_YEAR_NOTATION = "YYYY";
-
 /** The card members the payment rule keys its complaints by, spelled exactly as the values spell them. */
 type CardFieldName = "number" | "nameOnCard" | "expiryMonth" | "expiryYear" | "cvc";
 
@@ -56,7 +48,7 @@ type CardPatch = { readonly payment: Partial<Record<CardFieldName, string>> };
 interface CardField {
   /** The member of the flow's payment values this control writes and is judged as. */
   readonly member: CardFieldName;
-  /** The control's label, from `src/constants/content.ts` or the notation above. */
+  /** The control's label, from `src/constants/checkoutCopy.ts`. */
   readonly label: string;
   /** A supporting line under the control, where the copy library holds one for it. */
   readonly hint?: string;
@@ -75,10 +67,10 @@ interface CardField {
  * `updateValues` clears the error of each field its patch names, so binding a control to its member is
  * also what takes that control's message off the screen as it is corrected.
  *
- * The expiry is two controls because the values hold two halves and the rule files a fault on the half
- * in fault: a month outside 1-12 is the month's complaint, and a pair that has already passed is the
- * year's. Every control is required, which is the card rule's own position — a card is judged by its
- * holder's name, its number, its expiry and its security code together.
+ * The expiry takes two controls because the values hold two halves, which the copy library names rather
+ * than a card's notation, and the rule files a fault on the half in fault: a blank half is required on
+ * its own control, while a pair that has already passed is the year's. Every control is required — a
+ * card is judged by its holder's name, its number, its expiry and its security code together.
  */
 const CARD_FIELDS: readonly CardField[] = [
   {
@@ -96,13 +88,13 @@ const CARD_FIELDS: readonly CardField[] = [
   },
   {
     member: "expiryMonth",
-    label: EXPIRY_MONTH_NOTATION,
+    label: CHECKOUT_COPY.CARD_EXPIRY_MONTH_LABEL,
     autoComplete: "cc-exp-month",
     inputMode: "numeric",
   },
   {
     member: "expiryYear",
-    label: EXPIRY_YEAR_NOTATION,
+    label: CHECKOUT_COPY.CARD_EXPIRY_YEAR_LABEL,
     autoComplete: "cc-exp-year",
     inputMode: "numeric",
   },
@@ -114,6 +106,20 @@ const CARD_FIELDS: readonly CardField[] = [
     inputMode: "numeric",
   },
 ];
+
+/**
+ * The label of the control a message from the payment step belongs to, so the step's error summary can name the
+ * field each message is about instead of stating the sentence alone.
+ * A key none of the five card controls carries — the form-level one the seam files a refused card under, or a
+ * field of another step — answers nothing, which is what leaves a refusal that names no control to the panel's
+ * own alert rather than reading it twice for one submit.
+ *
+ * @param field - The key a message is filed under, as the flow's error map holds it.
+ * @returns The label of the control carrying that member, or `undefined` for a key this step judges none for.
+ */
+export function paymentFieldLabel(field: string): string | undefined {
+  return CARD_FIELDS.find((spec) => spec.member === field)?.label;
+}
 
 /**
  * One card member as the patch the flow writes it with.
@@ -209,6 +215,7 @@ export function PaymentForm(): ReactElement {
               autoComplete={field.autoComplete}
               errors={errors}
               hint={field.hint}
+              id={field.member}
               inputMode={field.inputMode}
               label={field.label}
               name={field.member}

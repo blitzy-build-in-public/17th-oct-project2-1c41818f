@@ -1,10 +1,10 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 428
+ * Lines: 433
  */
 
-import type { CurrencyCode } from "@/types/common";
+import type { CurrencyCode, ToastKind } from "@/types/common";
 import type { ShippingMethod } from "@/types/commerce";
 
 // Persistence ----------------------------------------------------------------------------------
@@ -18,13 +18,16 @@ import type { ShippingMethod } from "@/types/commerce";
 export const STORAGE_KEY_PREFIX = "salespro";
 
 /**
- * The keys of the seven pieces of durable state the product keeps — the cart, the session token,
- * the demonstration account store's session table, the last-used report range, the read
- * credential of each order this browser placed without an account, the orders this browser created
- * and the placement credential the seam recorded for each of those orders — and of nothing else.
- * Search history stays in memory in `src/features/search/SearchBar.tsx`, the catalogue is never
- * persisted, and the seeded history needs no entry at all: `src/data/orders.ts` rebuilds it
- * identically in every document, so only what this browser created has to survive.
+ * The keys of the six pieces of durable state the product keeps — the cart, the session token, the
+ * demonstration account store's session table, this browser's own writes to the seeded collections, the
+ * placement credential of each order it placed without an account and the last-used report range — and of
+ * nothing else. Search history stays in memory in `src/features/search/SearchBar.tsx`, and the catalogue is
+ * never persisted.
+ *
+ * Three of the six exist because the collections themselves are rebuilt from the frozen seed on every
+ * document load: `SESSIONS` keeps each issued session's own issue instant and expiry, `CLIENT_WRITES` holds
+ * what this browser placed, registered or edited, which `src/data/clientWrites.ts` replays onto that seed,
+ * and `ORDER_TOKENS` holds the read credential a session-less buyer's own confirmation is reopened with.
  *
  * Consumer: `src/utils/storage.ts`, the only module in the product that touches `localStorage`. It
  * reads every key from here so no caller invents one, and stamps each payload with
@@ -48,32 +51,11 @@ export const STORAGE_KEYS = {
    * confirmation can be reopened after a reload. It holds order identifiers and their placement
    * credentials only: no personal data, no payment data and no credential of any account. */
   ORDER_TOKENS: `${STORAGE_KEY_PREFIX}.order-tokens`,
-  /**
-   * The orders this browser created, as the whole records the store serves them from, newest first.
-   * A created order is the one thing in the history no seed can rebuild: `src/data/orders.ts`
-   * regenerates the seeded year on every load, so an order a submission created would otherwise be
-   * lost with the document that placed it and the confirmation route would refuse a buyer their own
-   * order. It holds the orders this browser created, never a seeded one, and only the most recent of
-   * them: `src/data/placedOrders.ts` bounds the record so a browser that places order after order
-   * cannot grow it without bound.
-   *
-   * Consumer: `src/data/placedOrders.ts`, which writes the record where the order is created in
-   * `src/data/repositories.ts` and reads it back into a store a document builds, so `getOrder`, an
-   * account's history and the per-customer grouping answer the created orders again.
-   */
-  PLACED_ORDERS: `${STORAGE_KEY_PREFIX}.placed-orders`,
-  /**
-   * The placement credential the seam recorded for each account-less order it created — the
-   * idempotency key the submission was sent under, kept against the order it placed — so a credential
-   * minted in an earlier document still verifies the read of that order. It holds identifiers and keys
-   * only: no personal data, no payment data and no credential of any account.
-   *
-   * Consumer: `src/lib/apiOrders.ts`, which records one when a submission creates an account-less
-   * order and is the only reader. The credential is compared against this record and never against
-   * the order's own `idempotencyKey` member, so a payload a reader legitimately holds cannot be
-   * presented as the credential of an order that reader was refused.
-   */
-  ORDER_CREDENTIALS: `${STORAGE_KEY_PREFIX}.order-credentials`,
+  /** This browser's own writes to the seeded collections — the orders it placed, the accounts it
+   * registered together with the digests that verify them, the profiles it edited and the address
+   * books it wrote, alongside the marks its order minting has reached — replayed onto the seed by
+   * `src/data/clientWrites.ts` when a data source is built. */
+  CLIENT_WRITES: `${STORAGE_KEY_PREFIX}.writes`,
 } as const;
 
 /**
@@ -246,7 +228,7 @@ export const DEFAULT_API_LATENCY_MS = 120;
  *
  * The rules that use them: the facet panel becomes a drawer below `XLARGE`; the product grid runs
  * two columns at `SMALL`, three at `MEDIUM` and four at `LARGE`; the header navigation collapses
- * behind a menu below `SMALL`; and the administrator sidebar becomes a compact rail below `MEDIUM`.
+ * behind a menu below `SMALL`; and the administrator sidebar is a compact icon rail below `LARGE`.
  */
 export const BREAKPOINTS = {
   SMALL: 480,
@@ -255,7 +237,7 @@ export const BREAKPOINTS = {
   XLARGE: 1280,
 } as const;
 
-/** The name of one of the four layout stops, as the media-query hook in `src/state/hooks.ts` takes it. */
+/** The name of one of the four layout stops, as the media-query hook in `src/components/ui/hooks.ts` takes it. */
 export type Breakpoint = keyof typeof BREAKPOINTS;
 
 // Client-side protections ----------------------------------------------------------------------
@@ -426,3 +408,26 @@ export const DEMO_CARD_NUMBERS = {
   /** Answers `402`, giving the declined path a deterministic trigger. */
   DECLINED: "4000000000000002",
 } as const;
+
+// Notifications --------------------------------------------------------------------------------
+
+/**
+ * The single home of the queue's duration policy: how long a message of each kind
+ * stays on screen unless the caller overrides it through `ToastInput.durationMs`.
+ *
+ * A failure needs longer to read than a confirmation, which is why an error
+ * outlasts a success or an info note. The viewport reads the resolved value from
+ * the message it renders, so it carries no copy of these numbers.
+ */
+export const TOAST_DURATION_MS: Readonly<Record<ToastKind, number>> = {
+  success: 5000,
+  error: 8000,
+  info: 5000,
+};
+
+/**
+ * How many notifications a burst may leave on screen. A burst longer than this
+ * keeps the newest and lets the oldest go, so an action that reports twice cannot
+ * stack a column of notices over the page it is reporting on.
+ */
+export const TOAST_MAX_VISIBLE = 4;

@@ -1,15 +1,19 @@
 /**
  * Path: src/features/checkout/CheckoutSteps.tsx
  * Purpose: The ordered step indicator with aria-current and per-step headings
- * Lines: 221
+ * Lines: 226
  */
 
 import type { ReactElement } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { CHECKOUT_COPY, CHECKOUT_STEP_TITLES, stepIndicatorStatusLabel } from "@/constants/content";
+import {
+  CHECKOUT_COPY,
+  CHECKOUT_STEP_TITLES,
+  stepIndicatorStatusLabel,
+} from "@/constants/checkoutCopy";
 import { CHECKOUT_FORM_STEPS, stepIndex } from "@/state/checkoutReducer";
-import type { StepIndicatorStatus } from "@/constants/content";
+import type { StepIndicatorStatus } from "@/constants/checkoutCopy";
 import type { CheckoutStep } from "@/state/checkoutReducer";
 
 /*
@@ -58,8 +62,9 @@ export interface CheckoutStepCopy {
  * The heading and the supporting line of each form step, in the order `CHECKOUT_FORM_STEPS` declares.
  *
  * The table is positional rather than keyed by step name, which is the contract `CHECKOUT_STEP_TITLES`
- * already keeps in `src/constants/content.ts`: the step order has exactly one home — the reducer's
- * list — and a table keyed by the names would be a second one that a reordering could contradict.
+ * already keeps in `src/constants/checkoutCopy.ts`: the step order has exactly one home — the
+ * reducer's list — and a table keyed by the names would be a second one that a reordering could
+ * contradict.
  */
 const STEP_COPY: readonly { readonly heading: string; readonly supporting: string }[] = [
   {

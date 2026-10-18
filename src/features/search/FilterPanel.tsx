@@ -9,6 +9,7 @@ import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { useMediaQuery } from "@/components/ui/hooks";
 import { Drawer } from "@/components/ui/Modal";
 import { Checkbox, RadioGroup, Switch } from "@/components/ui/Select";
 import { BREAKPOINTS } from "@/constants/config";
@@ -22,7 +23,6 @@ import {
 import { FACET_DEFINITIONS } from "@/constants/taxonomy";
 import type { FacetDefinition } from "@/constants/taxonomy";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
-import { useMediaQuery } from "@/state/hooks";
 import type { Facet, FacetValue, FilterState } from "@/types/catalog";
 import { indexBy } from "@/utils/collections";
 import { formatNumber } from "@/utils/format";

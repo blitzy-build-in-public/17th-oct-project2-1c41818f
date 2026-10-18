@@ -7,6 +7,7 @@
 import { useCallback, type ChangeEvent, type ReactElement } from "react";
 
 import { Button, IconButton } from "@/components/ui/Button";
+import { usePagination } from "@/components/ui/hooks";
 import { Select } from "@/components/ui/Select";
 import { PAGE_SIZE_OPTIONS } from "@/constants/config";
 import {
@@ -18,7 +19,6 @@ import {
   pagingCountLabel,
 } from "@/constants/content";
 import type { PagingNoun } from "@/constants/content";
-import { usePagination } from "@/state/hooks";
 import type { PageResult, SelectOption } from "@/types/common";
 import { normalisePageSize } from "@/utils/collections";
 import { formatNumber } from "@/utils/format";
@@ -35,7 +35,7 @@ import { formatNumber } from "@/utils/format";
  * and renders the paging the caller passes, which is what makes a filtered, sorted, paged URL reload to the
  * same result set.
  *
- * No paging rule is restated here. `usePagination` in `src/state/hooks.ts` derives the clamped page, the
+ * No paging rule is restated here. `usePagination` in `src/components/ui/hooks.ts` derives the clamped page, the
  * page count, the two bounds and the `pageWindow` entries from the helpers in `src/utils/collections.ts`,
  * and this file renders what it derives; a hand-rolled page count or window would be the second
  * implementation of a rule the request forbids duplicating.

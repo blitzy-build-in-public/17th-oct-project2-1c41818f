@@ -28,6 +28,7 @@ import { firstError, hasErrors, validatePromoCodeShape } from "@/utils/validatio
 
 export {
   applyPromo,
+  chargeForMethod,
   clampDiscount,
   computeTax,
   decidePromo,
@@ -70,8 +71,7 @@ function isPromoRejectionReason(code: string): code is PromoRejectionReason {
  * is not one of the eight — an unbound data source, a malformed body or a superseded request.
  *
  * The seam answers a code it will not apply with the reason as the failure's `code` and the field
- * `"promoCode"`, so this turns a failed `Result<PromoCode>` back into a cause a cart can name rather than
- * one flat message for eight different ones.
+ * `"promoCode"`, so this names the cause rather than collapsing eight reasons into one message.
  */
 export function promoRejectionReason(error: ApiError): PromoRejectionReason | undefined {
   return isPromoRejectionReason(error.code) ? error.code : undefined;

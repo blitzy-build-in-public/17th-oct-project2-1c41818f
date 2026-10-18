@@ -1,27 +1,25 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 399
+ * Lines: 397
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { usePagination } from "@/components/ui/hooks";
 import { DataTable } from "@/components/ui/Table";
 import type { DataTableColumn, DataTablePaging, DataTableSort } from "@/components/ui/Table";
 import { CSV_MAX_CELL_LENGTH, CSV_MAX_ROWS, DEFAULT_PAGE_SIZE } from "@/constants/config";
+import { EMPTY_STATES, FEEDBACK_COPY, PAGING_NOUNS } from "@/constants/content";
 import {
   DATE_RANGE_COPY,
-  EMPTY_STATES,
-  FEEDBACK_COPY,
-  PAGING_NOUNS,
   REPORTS_COPY,
   exportNote,
   exportRowCountNote,
-} from "@/constants/content";
+} from "@/constants/content-reports";
 import { toCsvMatrix, totalsRowCells } from "@/lib/reportService";
-import { usePagination } from "@/state/hooks";
 import { useToast } from "@/state/ToastContext";
 import type {
   BucketGranularity,
@@ -76,7 +74,7 @@ import { formatCellValue } from "@/utils/format";
  * The two captions beside the control state two different facts, and no sentence states both: the cap the
  * download is bounded by comes from `CSV_MAX_ROWS` and `CSV_MAX_CELL_LENGTH` in `src/constants/config.ts`,
  * and the count the last file held is stated separately by `exportRowCountNote` from
- * `src/constants/content.ts`, the module every user-facing sentence lives in.
+ * `src/constants/content-reports.ts`, the module every dashboard and reports sentence lives in.
  */
 
 /** Every class this file puts on the page, each taken by name from the sheet that declares it. */

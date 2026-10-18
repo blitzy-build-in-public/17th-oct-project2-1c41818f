@@ -1,7 +1,7 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections, the indexes built over them once, and the account, session and address writes they carry
- * Lines: 600
+ * Lines: 571
  */
 
 // This is not a path the plan maps on its own: it is the store half of `src/data/repositories.ts`, split out
@@ -11,7 +11,6 @@
 // on it; `src/data/repositories.ts` holds the contract that composes the domain rules, and nothing else
 // imports this module.
 
-import { STORAGE_KEYS } from "@/constants/config";
 import {
   ACCOUNT_COPY,
   FEEDBACK_COPY,
@@ -20,7 +19,18 @@ import {
 } from "@/constants/content";
 import { ROUTES, categoryPath, productPath } from "@/constants/routes";
 import { BRANDS, CATEGORIES, CATEGORY_PRODUCT_COUNT } from "@/data/categories";
+import {
+  emailKey,
+  mergeAddressBooks,
+  mergeCredentials,
+  mergeCustomers,
+  readClientWrites,
+  rememberAccount,
+  rememberAddressBook,
+  rememberProfile,
+} from "@/data/clientWrites";
 import { ADDRESSES, CREDENTIALS, CUSTOMERS, type StoredCredential } from "@/data/customers";
+import { readSessionTable, writeSessionTable } from "@/data/sessionTable";
 import { ORDERS } from "@/data/orders";
 import { PRODUCTS } from "@/data/products";
 import { PRODUCT_RATING_SUMMARY, REVIEWS } from "@/data/reviews";
@@ -58,7 +68,6 @@ import {
 import { groupBy, sortByKey } from "@/utils/collections";
 import { sortByIso, startOfDay, toIsoDateTime } from "@/utils/dates";
 import { DEFAULT_FILTER_STATE, filtersToPath } from "@/utils/queryParams";
-import { readStored, writeStored } from "@/utils/storage";
 import type { SearchLookup, SearchTargets } from "@/utils/searchRules";
 import {
   addressId as newAddressId,
@@ -125,12 +134,6 @@ export function rejectPromo(reason: PromoRejectionReason): Result<never> {
 }
 
 // The seeded collections ----------------------------------------------------------------------------
-
-/** The key an email address is looked up and compared by: an address is case-insensitive, so a stored account
- * and a submitted address meet on this key rather than on the spelling either arrived in. */
-function emailKey(email: string): string {
-  return email.trim().toLowerCase();
-}
 
 /** The key one account-and-product pair of the verified-purchase index is held under. */
 export function purchaseKey(customerId: CustomerId, productId: ProductId): string {
@@ -219,10 +222,14 @@ function countByDay(orders: readonly Order[]): Map<IsoDateString, number> {
  * The rating a product is served with is the one its reviews imply, overlaid once rather than recomputed per
  * read; the address books are reassembled from the account references; the order history is sorted newest
  * first, because the seeded array is grouped by day rather than by instant and an order created at runtime is
- * placed at the front of it; and every lookup a member needs — by identifier, by email, by customer, by
- * account-and-product — is built here, so a read is a map lookup rather than a scan of 1,155 orders or 140
- * products. The session registry is read from its durable table rather than built here, because a session's own
- * issue instant is what that table is for. Nothing in the seeds is written: this store holds copies.
+ * placed at the front of it; this browser's own writes to the collections — the orders it placed, the accounts
+ * it registered, the profile edits and the address books it made — are replayed onto the seeds first, so a
+ * document load carries on where the last one left off instead of reading only the seed; and every lookup a
+ * member needs — by identifier, by email, by customer, by account-and-product, together with the position each
+ * product and each account holds in its collection — is built here, so a read and a replacement are both a map
+ * lookup rather than a scan of 1,155 orders or 140 products. The session registry is read from its durable
+ * table: a session's own issue instant is what that table is for. Nothing in the seeds is written: this store
+ * holds copies.
  *
  * @returns The collections and indexes one data source reads and writes.
  */
@@ -231,9 +238,11 @@ export function createStore() {
     const aggregate = PRODUCT_RATING_SUMMARY[product.id];
     return aggregate === undefined ? product : { ...product, ...aggregate };
   });
-  const addressById = new Map(ADDRESSES.map((address) => [address.id, address]));
-  const customers: Customer[] = [...CUSTOMERS];
-  const orders = sortByIso(ORDERS, (order) => order.placedAt, "desc");
+  const writes = readClientWrites();
+  const customers = mergeCustomers(CUSTOMERS, writes);
+  const credentials = mergeCredentials(CREDENTIALS, writes);
+  const books = mergeAddressBooks(ADDRESSES, customers, writes);
+  const orders = sortByIso([...writes.orders, ...ORDERS], (order) => order.placedAt, "desc");
   const ordersByCustomer = ordersByOwner(orders);
   const tokenByCustomer = new Map(
     customers.map((customer) => [customer.id, sessionTokenFor(customer)]),
@@ -249,27 +258,19 @@ export function createStore() {
   return {
     products,
     productById: new Map(products.map((product) => [product.id, product])),
+    productIndexById: new Map(products.map((product, index) => [product.id, index])),
     categoryByProduct: new Map(PRODUCTS.map((product) => [product.id, product.categoryId])),
     reviews: [...REVIEWS],
     reviewsByProduct: groupBy(REVIEWS, (review) => review.productId),
     customers,
     customerById: new Map(customers.map((customer) => [customer.id, customer])),
-    credentials: new Map<string, StoredCredential>(
-      CREDENTIALS.map((entry) => [emailKey(entry.customer.email), entry]),
-    ),
-    books: new Map<CustomerId, Address[]>(
-      customers.map((customer) => [
-        customer.id,
-        customer.addressIds.flatMap((id) => {
-          const address = addressById.get(id);
-          return address === undefined ? [] : [address];
-        }),
-      ]),
-    ),
+    customerIndexById: new Map(customers.map((customer, index) => [customer.id, index])),
+    credentials,
+    books,
     orders,
     orderById: new Map<OrderId, Order>(orders.map((order) => [order.id, order])),
     ordersByCustomer,
-    nextOrderIndex: orders.length + 1,
+    nextOrderIndex: Math.max(writes.orderMint.nextIndex, orders.length + 1),
     orderSequenceByDay: countByDay(orders),
     sessions: readSessionTable(),
     revokedTokens: new Set<string>(),
@@ -282,61 +283,15 @@ export function createStore() {
 }
 
 /** The collections and indexes one data source reads and writes, as {@link createStore} returns them: the
- * served catalogue and the maps it is read by, the review list and its per-product grouping, the account store
- * with its credentials and address books, the order history newest first with its per-customer grouping and the
- * numbering a created order takes, the session registry read from its durable table with the token derived for
- * each account, the verified-purchase index, and the category tree, brands and search lookup the catalogue
- * reads answer with. */
+ * served catalogue, the reviews and their grouping, the account store, the order history newest first, the
+ * session registry read from its durable table, the verified-purchase index and the catalogue's own lookups.
+ * `productIndexById` and `customerIndexById` hold each record's slot, and every writer keeps them in step. */
 export type DataStore = ReturnType<typeof createStore>;
 
 // The account store ---------------------------------------------------------------------------------
 // Demonstration boundary, stated plainly: this is an in-browser account store, not a security boundary. No
 // password is stored — only the salted digest the shared helper produces and verifies — and a session is an
 // opaque token carrying a role claim and an expiry, re-checked by the transport on every privileged request.
-
-// The durable session table --------------------------------------------------------------------------
-// A session's window is a fact about the instant it was issued, so the registry that holds the records is
-// durable state, written through the storage util at the two points that change it and read back when a store
-// is built. That is what lets a live session survive a reload and keeps a lapsed one lapsed: a token presented
-// after its window has passed is read as the lapsed record it is, never re-dated from a clock that reads now.
-
-/** Whether a value read back is one session record: every member the type declares, each read as the string it
- * was written as, with a `role` of `guest`, `customer` or `admin`. Content the current types do not describe is
- * discarded rather than handed to the registry as a session, because a session's `customerId` and `role` are
- * what a request reaches through. */
-function isStoredSession(value: unknown): value is Session {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { readonly [member: string]: unknown };
-  const role = candidate.role;
-  return (
-    typeof candidate.token === "string" &&
-    typeof candidate.customerId === "string" &&
-    (role === "guest" || role === "customer" || role === "admin") &&
-    typeof candidate.issuedAt === "string" &&
-    typeof candidate.expiresAt === "string"
-  );
-}
-
-/** Whether a payload read back is the session table: an array whose every entry is a session record. One that
- * fails this is discarded whole, because a partly readable table cannot be told from one this build never
- * wrote. */
-function isSessionTable(value: unknown): value is Session[] {
-  if (!Array.isArray(value)) return false;
-  return (value as unknown[]).every((entry) => isStoredSession(entry));
-}
-
-/** The session table as the store holds it, or an empty registry when nothing usable is read back: no store, a
- * refused read, a payload this build cannot read as a table. */
-function readSessionTable(): Map<string, Session> {
-  const rows = readStored<Session[]>(STORAGE_KEYS.SESSIONS, [], isSessionTable);
-  return new Map(rows.map((session): [string, Session] => [session.token, session]));
-}
-
-/** Writes the registry's current records as the session table: best-effort, like every write through the
- * storage util, so a browser that refuses storage keeps the registry a request is answered from. */
-function writeSessionTable(store: DataStore): void {
-  writeStored(STORAGE_KEYS.SESSIONS, [...store.sessions.values()]);
-}
 
 /** Opens a session for an account and records it: the token is the account's own, so opening one again replays
  * it rather than accumulating, and the expiry is the product's single expiry rule. Recording it also lifts any
@@ -354,7 +309,7 @@ function openSession(store: DataStore, customer: Customer, at: IsoDateTimeString
   };
   store.revokedTokens.delete(token);
   store.sessions.set(token, session);
-  writeSessionTable(store);
+  writeSessionTable(store.sessions);
   return session;
 }
 
@@ -368,21 +323,22 @@ function openSession(store: DataStore, customer: Customer, at: IsoDateTimeString
 export function endSession(store: DataStore, token: SessionToken): void {
   store.sessions.delete(token);
   store.revokedTokens.add(token);
-  writeSessionTable(store);
+  writeSessionTable(store.sessions);
 }
 
 /** Replaces one account in the store with the record that stands for it now, in the collection and in the
  * index alike, so a read by identifier and a read of the collection cannot disagree. */
 function replaceAccount(store: DataStore, customer: Customer): void {
-  const index = store.customers.findIndex((candidate) => candidate.id === customer.id);
-  if (index !== -1) store.customers[index] = customer;
+  const index = store.customerIndexById.get(customer.id);
+  if (index !== undefined) store.customers[index] = customer;
   store.customerById.set(customer.id, customer);
 }
 
 /** Creates an account and opens its session: registration signs the customer in, so the digest the shared
  * helper produces is the same shape the seed stores, and the token the account signs in with is registered
- * here, so a second sign-in replays it rather than minting another. The account itself lives in this store's
- * memory alone, so a store built after a reload holds no such account and refuses its session. */
+ * here, so a second sign-in replays it rather than minting another, and the account and its digest are written
+ * to the durable record before the session is opened, so the token names an account a later document rebuilds
+ * from that record rather than refusing. */
 export function registerAccount(
   store: DataStore,
   input: RegistrationInput,
@@ -406,14 +362,16 @@ export function registerAccount(
     addressIds: [],
   };
   store.customers.push(customer);
+  store.customerIndexById.set(customer.id, store.customers.length - 1);
   store.customerById.set(customer.id, customer);
-  store.credentials.set(emailKey(customer.email), {
-    customer,
-    digest: createCredentialDigest(input.password, createSalt(customer.email)),
-  });
+  const digest = createCredentialDigest(input.password, createSalt(customer.email));
+  store.credentials.set(emailKey(customer.email), { customer, digest });
   store.books.set(customer.id, []);
   const token = sessionTokenFor(customer);
   store.tokenByCustomer.set(customer.id, token);
+  // The account and its digest reach the durable record before its session is opened, so the token the
+  // session carries names an account the next document rebuilds from that record.
+  rememberAccount({ customer, digest });
   return accept({ customer, session: openSession(store, customer, now) });
 }
 
@@ -445,7 +403,8 @@ export function signInAccount(store: DataStore, credentials: Credentials): Resul
  * the transport words: one the registry holds no session for, never issued or signed out of, with revocation
  * checked first so a leftover record cannot revive it; and one naming an account the store no longer holds,
  * because ownership is decided from the session's `customerId` and a gone account authenticates nobody. A
- * registered account lives in this store's memory alone, so its session is `unknown` after a reload.
+ * registered account does not fall in that second case: `src/data/clientWrites.ts` holds it, so the store a
+ * reload builds holds it too and the session it minted resolves here.
  */
 export function lookUpSession(store: DataStore, token: string | undefined): Session | undefined {
   if (token === undefined || token.trim() === "") return undefined;
@@ -503,6 +462,8 @@ export function updateProfile(
     marketingOptIn: input.marketingOptIn,
   };
   replaceAccount(store, updated);
+  // The edited half of the account is durable: the fields a profile edit changes are the ones the record keeps.
+  rememberProfile(updated);
   return accept(updated);
 }
 
@@ -534,8 +495,13 @@ export function addBookAddress(
     isDefaultShipping: !book.some((row) => row.isDefaultShipping),
     isDefaultBilling: !book.some((row) => row.isDefaultBilling),
   };
-  store.books.set(id, [...book, address]);
-  replaceAccount(store, { ...customer, addressIds: [...customer.addressIds, address.id] });
+  const written = [...book, address];
+  store.books.set(id, written);
+  const updated: Customer = { ...customer, addressIds: [...customer.addressIds, address.id] };
+  replaceAccount(store, updated);
+  // Both halves are durable: the book the address joined, and the account's reference to it.
+  rememberProfile(updated);
+  rememberAddressBook(id, written);
   return accept(address);
 }
 
@@ -552,10 +518,9 @@ export function updateBookAddress(
   const existing = book.find((address) => address.id === addressId);
   if (existing === undefined) return refuse("address-not-found", NOT_FOUND_COPY.BODY);
   const updated: Address = { ...existing, ...input };
-  store.books.set(
-    id,
-    book.map((address) => (address.id === addressId ? updated : address)),
-  );
+  const written = book.map((address) => (address.id === addressId ? updated : address));
+  store.books.set(id, written);
+  rememberAddressBook(id, written);
   return accept(updated);
 }
 
@@ -574,11 +539,16 @@ export function removeBookAddress(
   if (!book.some((address) => address.id === addressId)) {
     return refuse("address-not-found", NOT_FOUND_COPY.BODY);
   }
-  store.books.set(id, promoteDefaultAfterRemoval(book, addressId));
-  replaceAccount(store, {
+  const remaining = promoteDefaultAfterRemoval(book, addressId);
+  store.books.set(id, remaining);
+  const updated: Customer = {
     ...customer,
     addressIds: customer.addressIds.filter((held) => held !== addressId),
-  });
+  };
+  replaceAccount(store, updated);
+  // The book that remains and the reference the account no longer holds are both durable.
+  rememberProfile(updated);
+  rememberAddressBook(id, remaining);
   return accept(undefined);
 }
 
@@ -596,5 +566,6 @@ export function setBookDefault(
   const address = updated.find((row) => row.id === addressId);
   if (address === undefined) return refuse("address-not-found", NOT_FOUND_COPY.BODY);
   store.books.set(id, updated);
+  rememberAddressBook(id, updated);
   return accept(address);
 }

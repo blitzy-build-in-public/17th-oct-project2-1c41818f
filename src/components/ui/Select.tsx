@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Select.tsx
  * Purpose: Select, checkbox, radio group and switch with accessible labelling
- * Lines: 560
+ * Lines: 561
  */
 
 import { useCallback, useEffect, useId, useRef } from "react";
@@ -82,7 +82,7 @@ export interface CheckboxProps
   readonly description?: string;
   /** A supporting line under the choice, read after the name. */
   readonly hint?: string;
-  /** The choice's message, rendered as an alert and marking the box invalid. */
+  /** The choice's message, rendered as the box's description and marking the box invalid. */
   readonly error?: string;
   /** Whether some but not all of what this box stands for is selected. */
   readonly isIndeterminate?: boolean;
@@ -119,7 +119,7 @@ export interface RadioGroupProps {
   readonly options: readonly SelectOption[];
   /** A supporting line above the options, read after the legend. */
   readonly hint?: string;
-  /** The group's message, rendered as an alert after the options. */
+  /** The group's message, rendered after the options and read as their description. */
   readonly error?: string;
   /** How the options are laid out; vertical unless the caller asks for the horizontal arrangement. */
   readonly orientation?: "vertical" | "horizontal";
@@ -420,10 +420,11 @@ export function Checkbox({
  * assistive technology announces when focus enters the group. The fieldset takes `tabIndex={-1}` so an error
  * summary can send focus to the group it names, a fieldset being unfocusable otherwise.
  *
- * The hint and the error are tied to every radio through `aria-describedby`, the error announcing itself as the
- * alert the field anatomy uses, and the invalid state reaches the radios the same way: a `<fieldset>` cannot
- * carry `aria-invalid`, so each radio carries it while the group renders an error and omits it while it does
- * not, which leaves a valid group's radios with no invalid state to announce. `orientation` adds
+ * The hint and the error are tied to every radio through `aria-describedby`, and the error is read as the
+ * group's own description rather than as a live region of its own — the summary a form renders above its fields
+ * is what announces a refused submit — while the invalid state reaches the radios the same way: a `<fieldset>`
+ * cannot carry `aria-invalid`, so each radio carries it while the group renders an error and omits it while it
+ * does not, which leaves a valid group's radios with no invalid state to report. `orientation` adds
  * the horizontal arrangement's class, which `src/styles/controls.css` declares as a modifier of the
  * stacked group, laying its rows out in one line.
  *

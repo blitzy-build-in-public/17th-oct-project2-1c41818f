@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/lineChartModel.ts
  * Purpose: The line chart's plot model: its scales, axis ticks, series paths, pointer areas and readout placement
- * Lines: 271
+ * Lines: 256
  */
 
 import type { CSSProperties } from "react";
@@ -27,6 +27,8 @@ import {
   seriesClassName,
   zeroCoordinate,
 } from "@/components/charts/chartScales";
+import { indexSeriesPoints, indexedFiniteValueAt } from "@/components/charts/chartGeometry";
+import type { SeriesPointIndex } from "@/components/charts/chartGeometry";
 import type {
   AxisValueFormatter,
   BandScale,
@@ -39,7 +41,7 @@ import type {
   TickMark,
   ValueFormatter,
 } from "@/components/charts/chartScales";
-import { DATE_RANGE_COPY } from "@/constants/content";
+import { DATE_RANGE_COPY } from "@/constants/content-reports";
 import type { ChartSeries } from "@/types/analytics";
 
 /**
@@ -103,6 +105,11 @@ export interface PlotModel {
   readonly marks: readonly SeriesMarks[];
   readonly hits: readonly BandHit[];
   readonly dataTable: ChartDataTable;
+  /**
+   * Each series' points keyed by band, built once with the model: the readout resolves a band through one
+   * map hit per series rather than a scan of the series' points, and nothing else needs a band identity.
+   */
+  readonly pointIndexes: readonly SeriesPointIndex[];
 }
 
 /** What {@link buildPlotModel} is handed: the series, the resolved frame and the formatters. */
@@ -118,18 +125,16 @@ export interface PlotModelOptions {
   readonly formatLabel: LabelFormatter;
 }
 
-/** The y a series carries at a band, or `undefined` when it has no finite point there. */
+/**
+ * The y a series carries at a band, or `undefined` when it has no finite point there.
+ *
+ * The one-off form of {@link indexedFiniteValueAt}: a caller resolving many (series, band) pairs — the
+ * readout resolving one band across twelve series, the model drawing twelve series across 366 bands —
+ * builds the indexes once with {@link indexSeriesPoints} instead.
+ */
 export function finiteValueAt(series: ChartSeries, key: string): number | undefined {
   const point = series.points.find((candidate) => chartPointKey(candidate) === key);
   return point !== undefined && Number.isFinite(point.y) ? point.y : undefined;
-}
-
-/** The last finite y a series ends on, which is the figure its legend entry carries. */
-export function lastFiniteValue(series: ChartSeries): number | undefined {
-  return series.points.reduce<number | undefined>(
-    (last, point) => (Number.isFinite(point.y) ? point.y : last),
-    undefined,
-  );
 }
 
 /** The finite extent of every series' points, or `undefined` when not one of them is a number. */
@@ -149,31 +154,6 @@ function finiteExtent(series: readonly ChartSeries[]): readonly [number, number]
 /** The pixel a band is centred on, which is where its mark, its axis label and the readout all sit. */
 export function bandCentre(scale: BandScale, key: string): number {
   return scale.scale(key) + scale.bandwidth / 2;
-}
-
-/**
- * The three custom properties the frame's stylesheet offsets the readout by.
- *
- * The SVG fills the frame's content box, so a ratio taken inside it maps onto the frame as `padding +
- * (100% - 2 × padding) × ratio`. The sheet clamps the readout against these properties because a
- * stylesheet cannot clamp an inline inset, and it cannot measure the box the readout will take, so the
- * width is stated from the text's own length: reading a rendered box would mean measuring layout, which
- * this renderer never does.
- *
- * @param x - The band's centre across the plot, as a fraction of the viewBox width.
- * @param y - The readout's top down the plot, as a fraction of the frame height.
- * @param characters - The readout's length in characters, which its width is estimated from.
- * @returns The style the readout carries, holding only geometry.
- */
-export function readoutStyle(x: number, y: number, characters: number): ChartStyle {
-  const origin = "var(--space-4)";
-  const span = "(100% - 2 * var(--space-4))";
-  const ratio = (value: number): string => Math.min(Math.max(value, 0), 1).toFixed(4);
-  return {
-    "--sp-chart-readout-x": `calc(${origin} + ${span} * ${ratio(x)})`,
-    "--sp-chart-readout-y": `calc(${origin} + ${span} * ${ratio(y)})`,
-    "--sp-chart-readout-w": `calc(${characters}ch + 2 * var(--space-3))`,
-  };
 }
 
 /**
@@ -223,10 +203,14 @@ export function buildPlotModel(options: PlotModelOptions): PlotModel {
     minimumStep: hasWholeValues(series) ? WHOLE_NUMBER_STEP : undefined,
   });
   const baselineY = includeZero ? zeroCoordinate(valueScale) : plotArea.y + plotArea.height;
+  // Each series is indexed once for the whole model: the marks below ask for a (series, band) pair for every
+  // band of every series, which is what made twelve categories over a 366-day range the costliest to draw.
+  const pointIndexes = series.map(indexSeriesPoints);
   const marks = series.map((one, index) => {
+    const points = pointIndexes[index];
     const positions: Point2D[] = bandKeys.map((key) => ({
       x: bandCentre(bandScale, key),
-      y: valueScale.scale(finiteValueAt(one, key) ?? 0),
+      y: valueScale.scale(indexedFiniteValueAt(points, key) ?? 0),
     }));
     return {
       id: one.id,
@@ -267,5 +251,6 @@ export function buildPlotModel(options: PlotModelOptions): PlotModel {
     marks,
     hits,
     dataTable: buildSeriesDataTable(series, formatValue, { labelHeader: DATE_RANGE_COPY.LABEL }),
+    pointIndexes,
   };
 }

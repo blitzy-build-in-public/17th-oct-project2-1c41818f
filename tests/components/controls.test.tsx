@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/controls.test.tsx
  * Purpose: Button, field, select and overlay behaviour, including keyboard and focus handling
- * Lines: 378
+ * Lines: 382
  */
 
 import { useState } from "react";
@@ -20,6 +20,7 @@ import { Input, TextArea } from "@/components/ui/Input";
 import { Checkbox, RadioGroup, Select, Switch } from "@/components/ui/Select";
 import { ToastViewport } from "@/components/ui/Toast";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE } from "@/constants/config";
 import {
   A11Y_COPY,
   CATALOG_COPY,
@@ -27,7 +28,7 @@ import {
   FEEDBACK_COPY,
   VALIDATION_MESSAGES,
 } from "@/constants/content";
-import { TOAST_DURATION_MS, TOAST_MAX_VISIBLE, useToast } from "@/state/ToastContext";
+import { useToast } from "@/state/ToastContext";
 
 import { makeFieldErrors } from "../fixtures";
 import { renderWithProviders, screen, waitFor, within } from "../testUtils";
@@ -80,7 +81,10 @@ function ClearableErrorField(): ReactElement {
   );
 }
 
-/** Raises notifications through the real queue, beside the viewport the application mounts itself. */
+/**
+ * Raises notifications through the real queue, beside the viewport. The viewport takes the queue and its
+ * dismiss handle as props — `src/App.tsx` mounts it that way — so the harness passes what it reads.
+ */
 function ToastHarness(): ReactElement {
   const toast = useToast();
   return (
@@ -89,7 +93,7 @@ function ToastHarness(): ReactElement {
         {RAISE_SUCCESS}
       </Button>
       <Button onClick={() => toast.error(FEEDBACK_COPY.TOAST_EXPORT_FAILED)}>{RAISE_ERROR}</Button>
-      <ToastViewport />
+      <ToastViewport toasts={toast.toasts} onDismiss={toast.dismiss} />
     </div>
   );
 }
@@ -183,18 +187,18 @@ describe("the field family", () => {
     expect(screen.getByLabelText(new RegExp(EMAIL_LABEL))).toBeRequired();
   });
 
-  it("wires a form error map to its field, announces it, and clears it with the message", async () => {
+  it("wires a form error map to its field, describes the field by it, and clears it", async () => {
     const { user } = renderWithProviders(<ClearableErrorField />);
-    const alert = screen.getByRole("alert");
     const field = screen.getByLabelText(EMAIL_LABEL);
+    const message = screen.getByText(VALIDATION_MESSAGES.EMAIL_FORMAT);
     expect(field).toHaveAttribute("aria-invalid", "true");
-    expect(alert).toHaveTextContent(VALIDATION_MESSAGES.EMAIL_FORMAT);
-    expect(field.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(field.getAttribute("aria-describedby")).toBe(message.id);
+    expect(screen.queryByRole("alert")).toBeNull();
     await user.click(screen.getByRole("button", { name: COMMON_ACTIONS.CLEAR }));
     const cleared = screen.getByLabelText(EMAIL_LABEL);
     expect(cleared).toHaveAttribute("aria-invalid", "false");
     expect(cleared.getAttribute("aria-describedby")).toBeNull();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(VALIDATION_MESSAGES.EMAIL_FORMAT)).toBeNull();
   });
 
   it("takes a multi-line value and counts the characters it receives", async () => {

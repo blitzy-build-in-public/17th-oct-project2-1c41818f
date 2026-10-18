@@ -1,7 +1,7 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 516
+ * Lines: 512
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
@@ -13,14 +13,11 @@
 // them rather than restating any of them.
 
 import { MAX_REPORT_RANGE_DAYS, SHIPPING_METHODS } from "@/constants/config";
-import {
-  CART_COPY,
-  DATE_RANGE_COPY,
-  VALIDATION_MESSAGES,
-  rangeTooLongMessage,
-} from "@/constants/content";
+import { CART_COPY, VALIDATION_MESSAGES } from "@/constants/content";
+import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { BRANDS, CATEGORIES } from "@/data/categories";
+import { nextOrderMint, rememberOrder } from "@/data/clientWrites";
 import {
   SEARCH_TARGETS,
   accept,
@@ -42,9 +39,6 @@ import {
   type DataStore,
 } from "@/data/collectionStore";
 import { PROMO_CODES } from "@/data/orders";
-// The orders this browser created are durable state of their own: this file writes one where it is created
-// and reads them back into the store it builds, which is the reload-safe half of the confirmation route.
-import { rememberPlacedOrder, restorePlacedOrders } from "@/data/placedOrders";
 // The deferred analytics and report graph — its loader, the shape it resolves to and the refusal a failed
 // fetch answers with — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`.
 import {
@@ -164,8 +158,9 @@ function suggestionList(
  * the transport's handler from the identifier the request path carries — so the rows, the `total` and the
  * page count all describe that one product: a product nothing has been written about answers an empty page,
  * and the rating narrowing leaves only that product's rows carrying the rating asked for. The ordering is
- * `src/utils/dates.ts`'s own, so a review submitted at runtime, which the write path unshifts onto the same
- * index, leads the first page because it is the newest.
+ * `src/utils/dates.ts`'s own, so a review a customer submits takes its place by its instant — the newest
+ * first — and leads the first page unless the seed already holds a row for that product dated later the
+ * same day, which the anchor day it draws as a whole day can.
  */
 function reviewPage(store: DataStore, query: ReviewQuery): PageResult<Review> {
   const rows = store.reviewsByProduct.get(query.productId) ?? [];
@@ -215,8 +210,8 @@ function foldRating(store: DataStore, productId: ProductId): void {
     ratingAverage: rows.length === 0 ? 0 : roundToTenths(averageOf(rows.map((row) => row.rating))),
   };
   store.productById.set(productId, updated);
-  const index = store.products.findIndex((candidate) => candidate.id === productId);
-  if (index !== -1) store.products[index] = updated;
+  const index = store.productIndexById.get(productId);
+  if (index !== undefined) store.products[index] = updated;
 }
 
 // Commerce ------------------------------------------------------------------------------------------
@@ -331,11 +326,12 @@ function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<
   }
   const placedAt = toIsoDateTime(new Date());
   const day = startOfDay(placedAt);
-  const sequence = (store.orderSequenceByDay.get(day) ?? 0) + 1;
-  store.orderSequenceByDay.set(day, sequence);
+  // The marks are read here rather than derived from this store alone, because the store was rebuilt from the
+  // seed: its own index and day count would mint the identifier and number the document beside it just used.
+  const mint = nextOrderMint(day, store.nextOrderIndex, store.orderSequenceByDay.get(day) ?? 0);
   const draft: Order = {
-    id: newSequenceId("ord", store.nextOrderIndex),
-    orderNumber: orderNumber(sequence, placedAt),
+    id: newSequenceId("ord", mint.index),
+    orderNumber: orderNumber(mint.sequence, placedAt),
     customerId: request.customerId,
     email: request.email,
     status: "pending",
@@ -351,7 +347,8 @@ function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<
     idempotencyKey: request.idempotencyKey,
   };
   const order = appendStatusHistory(draft, "pending", placedAt);
-  store.nextOrderIndex += 1;
+  store.nextOrderIndex = mint.index + 1;
+  store.orderSequenceByDay.set(day, mint.sequence);
   store.orders.unshift(order);
   store.orderById.set(order.id, order);
   const owner = order.customerId;
@@ -361,9 +358,9 @@ function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<
     else rows.unshift(order);
     for (const line of order.lines) store.verifiedPurchases.add(purchaseKey(owner, line.productId));
   }
-  // The order exists from here on in this browser, not only in this document: the record written now is what
-  // the store a reload builds reads back, so the confirmation route it reopens answers this order again.
-  rememberPlacedOrder(order);
+  // The order and the marks it was minted from are written once the store holds it, so the next document
+  // resolves this one on the confirmation route and keeps numbering past it.
+  rememberOrder(order, mint);
   return accept(order);
 }
 
@@ -441,7 +438,6 @@ function runReportOver(
  */
 export function createSalesProDataSource(): SalesProDataSource {
   const store = createStore();
-  restorePlacedOrders(store);
   return {
     // The catalogue: filtered, faceted, sorted, searched and paged by the catalogue and search services.
     listProducts: (filter) => cataloguePage(store, filter),

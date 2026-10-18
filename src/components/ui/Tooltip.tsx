@@ -12,7 +12,7 @@ import type {
   ReactNode,
 } from "react";
 
-import { useOnClickOutside } from "@/state/hooks";
+import { useOnClickOutside } from "@/components/ui/hooks";
 
 /*
  * Class contract. `src/styles/components.css` is the sole definition site of this family and no file under
@@ -296,7 +296,7 @@ export interface PopoverProps {
  * The open state is either the caller's (`isOpen` with `onOpenChange`) or the panel's own. That single
  * piece of internal state is genuine rather than derived — nothing renders it from anything else — so
  * holding it in state is correct here, and it is never mirrored back from the prop by an effect. A click
- * outside the wrapper closes the panel through `useOnClickOutside` from `src/state/hooks.ts`, which is the
+ * outside the wrapper closes the panel through `useOnClickOutside` from `src/components/ui/hooks.ts`, which is the
  * product's one implementation of that dismissal and the reason this file attaches no listener of its own.
  *
  * The trigger is merged, never replaced: this file writes nothing onto it but `aria-expanded` and, while
