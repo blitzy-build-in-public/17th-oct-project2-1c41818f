@@ -1,10 +1,10 @@
 /**
  * Path: src/features/reports/ReportsPage.tsx
  * Purpose: The reports route: report selector, range control and the selected report's view
- * Lines: 407
+ * Lines: 439
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import { Link } from "react-router-dom";
 
@@ -13,6 +13,7 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import type { TabItem } from "@/components/ui/Tabs";
+import { STORAGE_KEYS } from "@/constants/config";
 import { COMMON_ACTIONS, FEEDBACK_COPY, PAGE_TITLES, documentTitle } from "@/constants/content";
 import { REPORTS_COPY } from "@/constants/content-reports";
 import { ROUTES } from "@/constants/routes";
@@ -24,10 +25,10 @@ import { defaultReportQuery, findDefinition, listReportDefinitions } from "@/lib
 // home for the session and its role claims; the guard over `/admin/*` in `src/Router.tsx` is convenience, and
 // what actually admits the request is this credential.
 import { useAuth } from "@/state/AuthContext";
-import { useAsync, useDocumentTitle } from "@/state/hooks";
+import { useAsync, useDocumentTitle, useLocalStorage } from "@/state/hooks";
 import type { BucketGranularity, ReportDefinition, ReportKind } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
-import { bucketCount, maxReportRange } from "@/utils/dates";
+import { bucketCount, defaultReportRange, maxReportRange } from "@/utils/dates";
 
 import { CustomerReport } from "./CustomerReport";
 import { DateRangePicker } from "./DateRangePicker";
@@ -61,7 +62,8 @@ import { SalesReport } from "./SalesReport";
  * selected panel, so a report that fetches is not mounted while another tab is selected, which is what keeps
  * the three report reads from running at once. The three views own their figures, their chart, their table and
  * the product's single CSV export; `DateRangePicker` owns the presets, the two date fields, the range rules
- * and the stored last-used range, and reports only ranges those rules accept; `Select` is the field family
+ * and the range this mount resumes from, and reports only ranges those rules accept — every one of them through
+ * this page's one handler below, which is what writes the stored last-used range; `Select` is the field family
  * over the vocabulary module's own cut choices; and `Alert`, `EmptyState` and `Skeleton` are the shared states.
  * The body the pending shell reserves is `ReportPlaceholder`'s, which shapes the figures, the chart and the
  * table for itself, so no skeleton of the report's own is written here. No colour, radius or shadow literal and
@@ -187,7 +189,10 @@ function toBucketGranularity(value: string): BucketGranularity | null {
  * seam serves. **The period and the cut** are this page's state, and this page is the only place either lives:
  * the range control is handed the range and reports back every range it applies, and the same two values are
  * passed down to whichever report is selected — which is what makes a changed range or a changed cut re-run the
- * mounted report, and only it, through the abort-aware read that report owns. **The selection** is state too,
+ * mounted report, and only it, through the abort-aware read that report owns. Because the period is this page's,
+ * the stored last-used range is this page's to write as well: the one handler below applies a range and
+ * remembers it in the same step, so the range in force and the days the next visit opens on cannot disagree.
+ * **The selection** is state too,
  * because which report a reader is looking at is a screen's own choice: the URL is the store of catalogue and
  * search query state, and this route reads and writes no query parameter.
  *
@@ -227,9 +232,24 @@ export function ReportsPage(): ReactElement {
     { enabled: session !== null },
   );
 
+  // The trailing window, taken once per mount from one reading of the clock: it is what the store falls back to
+  // when nothing usable is remembered, and a page re-deriving "today" on every render would move it under the
+  // reader.
+  const fallbackRange = useMemo<DateRange>(() => defaultReportRange(), []);
+
+  // The store this page remembers the period in, taken for its writer alone: the period in force is this page's
+  // state below, and what a stored payload means is `storedRangeOr`'s one reading in `src/utils/storage.ts`,
+  // applied by the range control, which resumes from the remembered days on mount and reports them upward like
+  // any other range. The key comes from `STORAGE_KEYS` in `src/constants/config.ts` and the write itself goes
+  // through `useLocalStorage` in `src/state/hooks.ts`, which owns the versioned envelope and the degradation,
+  // so no payload is shaped here.
+  const [, setStoredRange] = useLocalStorage<DateRange>(STORAGE_KEYS.REPORT_RANGE, fallbackRange);
+
   // The period the mounted report covers, seeded once per mount from the service's own trailing window. The
   // range control is handed this value and reports back every range it applies — including the last-used range
-  // it restores on mount — so the period has exactly one owner and the control keeps none of it.
+  // it restores on mount — so the period has exactly one owner and the control keeps none of it. The stored
+  // last-used range is written from the one handler below, beside this state, so the period in force and the
+  // days the next visit to either administrator surface opens on are set together and cannot disagree.
   const [range, setRange] = useState<DateRange>(() => {
     const opening = defaultReportQuery(REPORT_DEFINITIONS, DEFAULT_KIND);
     return { from: opening.from, to: opening.to };
@@ -267,15 +287,27 @@ export function ReportsPage(): ReactElement {
     if (next !== null) setGranularity(next);
   }, []);
 
+  /** Applies a range: the period in force and the range remembered for the next visit together. This is the one
+   *  writer of both, so a range a reader applies at the control, the range the control restores on mount and the
+   *  widened range below all land here, and the store cannot be left behind a change the page made. */
+  const applyRange = useCallback(
+    (next: DateRange): void => {
+      setRange(next);
+      setStoredRange(next);
+    },
+    [setStoredRange],
+  );
+
   // The one action a report's no-activity state offers. The period lives here and nowhere else, so the page is
   // the only place that can widen it, and a mounted view reaches it by asking for it rather than by holding a
   // control of its own. The value is the widest period the product accepts, which is what makes the action
   // resolve instead of moving the reader to a second control: the range control above the reports is where a
-  // reader narrows one. A widened range is one the control's own rules accept, so it reports back like any
-  // other and the mounted report re-runs over it.
+  // reader narrows one. A widened range is one the control's own rules accept, and it is applied through the
+  // same one handler a reader's own range goes through, so it is remembered exactly like one and the store
+  // cannot lag the range now in force.
   const widenPeriod = useCallback((): void => {
-    setRange(maxReportRange());
-  }, []);
+    applyRange(maxReportRange());
+  }, [applyRange]);
 
   const isLoading = status === "idle" || status === "loading";
   const failure = status === "error" ? error : null;
@@ -291,7 +323,7 @@ export function ReportsPage(): ReactElement {
       <div aria-busy="true" className={CLASSES.report}>
         <div className={CLASSES.header}>
           <div className={CLASSES.toolbar}>
-            <DateRangePicker onChange={setRange} value={range} />
+            <DateRangePicker onChange={applyRange} value={range} />
             <Select
               label={CUT_CONTROL_LABEL}
               onChange={handleCutSelect}
@@ -368,7 +400,7 @@ export function ReportsPage(): ReactElement {
             rather than being one report's own controls. Both are the page's state, and both are passed down. */}
         <div className={CLASSES.header}>
           <div className={CLASSES.toolbar}>
-            <DateRangePicker onChange={setRange} value={range} />
+            <DateRangePicker onChange={applyRange} value={range} />
             <Select
               label={CUT_CONTROL_LABEL}
               onChange={handleCutSelect}

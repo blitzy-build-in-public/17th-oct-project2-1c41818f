@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/format.ts
  * Purpose: Formats money, numbers, percentages and compact values for display across every module
- * Lines: 573
+ * Lines: 577
  */
 
 import { DEFAULT_CURRENCY } from "@/constants/config";
@@ -137,7 +137,8 @@ function changeDisplay(
     difference: current - previous,
     changePercent,
     direction,
-    text: changePercent === null ? EMPTY_VALUE_PLACEHOLDER : `${signedText(changePercent, places)}%`,
+    text:
+      changePercent === null ? EMPTY_VALUE_PLACEHOLDER : `${signedText(changePercent, places)}%`,
   };
 }
 
@@ -313,7 +314,10 @@ export function formatFreeShippingRemaining(
 export function formatNumber(value: DisplayNumber, options: NumberDisplayOptions = {}): string {
   const amount = amountOf(value);
   if (amount === null) return EMPTY_VALUE_PLACEHOLDER;
-  const digits = fractionDigitsOf(options.digits ?? DEFAULT_FRACTION_DIGITS, DEFAULT_FRACTION_DIGITS);
+  const digits = fractionDigitsOf(
+    options.digits ?? DEFAULT_FRACTION_DIGITS,
+    DEFAULT_FRACTION_DIGITS,
+  );
   const grouping = options.grouping ?? true;
   const fixed = options.fixed ?? false;
   return formatter(`number:${digits}:${grouping}:${fixed}`, {

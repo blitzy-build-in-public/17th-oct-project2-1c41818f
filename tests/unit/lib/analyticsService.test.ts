@@ -1,16 +1,16 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
  * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines.
- * Lines: 584
+ * Lines: 600
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
 // reads through the service and the seam over the seeded source bound once below. Nothing is mocked,
-// and no case reads the ambient clock — the one range that must hold activity is derived from the
-// newest seeded order rather than from today, so the expectations hold whatever day the suite runs.
-// The statistics behind these figures have their own suite, so this file asserts only how the
-// analytics service routes through them; its length follows its assertions, not the line allocation.
-import { beforeAll, describe, expect, it } from "vitest";
+// and no dated expectation is written down against the day the suite runs on: the seeded reads are
+// issued over ranges derived from the newest seeded order, and the last block over a pinned re-seed.
+// The statistics behind these figures have their own suite, so this file asserts only how the service
+// routes through them.
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   CHART_SERIES_TOKEN_REFERENCES,
@@ -19,10 +19,10 @@ import {
   MAX_REPORT_RANGE_DAYS,
 } from "@/constants/config";
 import { BASELINE_OPTIONS } from "@/constants/taxonomy";
-import { ORDERS } from "@/data/orders";
 import { salesProDataSource } from "@/data/repositories";
 import * as analytics from "@/lib/analyticsService";
 import { API_PATHS, handleRequest, registerDataSource } from "@/lib/mockServer";
+import type { SalesProDataSource } from "@/lib/mockServer";
 import type {
   AnalyticsQuery,
   BaselineKind,
@@ -215,12 +215,12 @@ beforeAll(async () => {
   if (newest === undefined) return;
   const lastDay = dates.startOfDay(newest.placedAt);
   seededRange = { from: dates.addDays(lastDay, -29), to: lastDay };
-  // Four hundred days back clears the seeded window's own 365 days, so the period holds no order and
-  // no fact row while sitting in the past, which every dated query requires.
+  // Four hundred days before the pinned period clears the seeded window's 365 days and the fixtures'
+  // rows alike; from the draw it would slide into their days as the host day advances.
   const offset = -400;
   emptyRange = {
-    from: dates.addDays(seededRange.from, offset),
-    to: dates.addDays(seededRange.to, offset),
+    from: dates.addDays(fixtures.FIXED_DATE_RANGE.from, offset),
+    to: dates.addDays(fixtures.FIXED_DATE_RANGE.to, offset),
   };
 });
 
@@ -540,29 +540,45 @@ describe("the administrator-only reads, through the service and the seam", () =>
 // One period, one set of figures -------------------------------------------------------------------
 
 /** The two seeded periods the figures below are stated over: one month, and the trailing year. */
-const MONTH: DateRange = { from: "2026-09-19", to: "2026-10-18" };
-const TRAILING_YEAR: DateRange = { from: "2025-10-18", to: "2026-10-18" };
+const MONTH: DateRange = fixtures.FIXED_DATE_RANGE;
+const TRAILING_YEAR: DateRange = { ...MONTH, from: dates.addDays(MONTH.to, -364) };
 
-/** The six figures the fact rows of each period total, in the order the sales report states them. They
- * follow the seeded collection, so they move when the seeded draw does: bounding `pickMany` to one stream
- * step per drawn item changed which products every basket holds and how many steps the shared stream spent,
- * which shifts the rest of the plan. The identities below are what this block asserts, and they hold at these
- * figures exactly as they held at the ones drawn by the catalogue-wide shuffle. */
+/** The six figures the fact rows of each period total, in the order the sales report states them: the
+ *  pinned draw's own, re-seeded under FIXED_NOW below because the seed anchors its window to the day it
+ *  loads. They stay literal: the collection, the three reports and the KPI summary must agree with them. */
 const SEEDED_TOTALS: readonly (readonly [DateRange, readonly number[]])[] = [
-  [MONTH, [101, 754, 12_746_083, 224_276, 2_411_990, 10_109_817]],
-  [TRAILING_YEAR, [981, 7_245, 133_154_218, 2_633_668, 20_698_601, 109_821_949]],
+  [MONTH, [101, 679, 13_433_470, 267_241, 2_527_281, 10_638_948]],
+  [TRAILING_YEAR, [983, 7_204, 134_174_504, 2_340_007, 18_873_672, 112_960_825]],
 ];
 
 /** The units one seeded order's lines sold, which the fact rows count and the product report sums. */
 const unitsOf = (order: Order) => sumBy(order.lines, (line) => line.quantity);
 
 describe("one period, one set of figures: the fact rows against the orders they came from", () => {
+  /** The pinned draw this block reads: the seeded collection re-booted at FIXED_NOW and the source over it. */
+  let pinnedOrders: readonly Order[];
+  let pinnedSource: SalesProDataSource;
+
+  beforeAll(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(fixtures.FIXED_NOW));
+    vi.resetModules();
+    pinnedOrders = (await import("@/data/orders")).ORDERS;
+    const repositories = await import("@/data/repositories");
+    pinnedSource = repositories.createSalesProDataSource();
+    // Warm the pin's deferred graph here, so its reads keep the pinned draw once the registry goes back.
+    valueOf(await pinnedSource.getKpis({ ...MONTH, bucket: "day" }));
+    vi.useRealTimers();
+    // The re-seed replaced the registry's data modules, so hand it back for reads that resolve them later.
+    vi.resetModules();
+  });
+
   it.each(SEEDED_TOTALS)("totals %o on the period's own basis", async (range, totals) => {
     const [orders, units, gross, discounts, refunds, net] = totals;
-    const standing = statistics.periodOrders(ORDERS, range);
+    const standing = statistics.periodOrders(pinnedOrders, range);
     // `runReport` answers a promise — the read fetches its modules on first use — so both helpers await.
     const reported = async (kind: ReportKind) =>
-      valueOf(await salesProDataSource.runReport({ kind, ...range, bucket: "day" })).summary.items;
+      valueOf(await pinnedSource.runReport({ kind, ...range, bucket: "day" })).summary.items;
     const stated = async (kind: ReportKind, key: string) =>
       (await reported(kind)).find((item) => item.key === key)?.value;
     // The sales report sums the fact rows' six columns over the range in its own column order, and the
@@ -571,8 +587,8 @@ describe("one period, one set of figures: the fact rows against the orders they 
     expect(gross - discounts - refunds).toBe(net);
     expect([orders, units]).toEqual([standing.length, sumBy(standing, unitsOf)]);
     expect(net).toBe(sumBy(standing, statistics.goodsRevenueMinor));
-    // One range, every surface: the dashboard's KPIs and the three reports state the same figures.
-    const kpis = valueOf(await analytics.getKpis({ ...range, bucket: "day" }, admin()));
+    // One range, every surface: the pin's own KPI read and the three reports state the same figures.
+    const kpis = valueOf(await pinnedSource.getKpis({ ...range, bucket: "day" }));
     expect([kpis.orders, kpis.units, kpis.revenueMinor]).toEqual([orders, units, net]);
     expect([await stated("products", "unitsSold"), await stated("products", "revenue")]).toEqual([
       units,

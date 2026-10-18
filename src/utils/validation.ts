@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/validation.ts
  * Purpose: Every field and form validator, each returning a field-keyed error map
- * Lines: 600
+ * Lines: 599
  */
 
 import { PASSWORD_POLICY, SHIPPING_METHODS } from "@/constants/config";
@@ -26,16 +26,15 @@ import type { ApiError, FieldErrors, Result } from "@/types/common";
 import type { CardInput, PaymentInput } from "@/types/commerce";
 
 /**
- * The contract every rule here keeps: a validator returns a field-keyed error map and never throws, so a
- * blank, absent or wrongly typed value is judged rather than crashing the render that asked. A field rule
- * accepts with an empty map and refuses with one entry keyed by the member name its control binds to, so a
- * control meets the same shape whether a rule or the seam refused it. A rule that judges more than one
- * control — {@link validateRequired}, {@link validateName} — takes that member name as its first parameter,
- * and {@link validateCardExpiry} keys the expiry half or halves in fault. Every sentence comes from
- * `src/constants/content.ts`, every limit from `src/constants/config.ts` or the taxonomy, and the
- * query-state, date-range and paging rules live in their own modules, reused as they stand. Consumers: every
- * submit path in the product, and `src/lib/mockServer.ts`, which runs these rules over an untrusted body so a
- * hand-made request cannot be accepted where the form itself would have refused.
+ * The contract every rule here keeps: a validator returns a field-keyed error map and never throws, so a blank,
+ * absent or wrongly typed value is judged rather than crashing the render that asked. A field rule accepts with
+ * an empty map and refuses with one entry keyed by the member name its control binds to, so a control meets the
+ * same shape whether a rule or the seam refused it. A rule judging more than one control takes that member
+ * name first — {@link validateRequired} and {@link validateName} — and {@link validateCardExpiry} keys the
+ * expiry half or halves in fault. Every sentence comes from `src/constants/content.ts`, every limit from
+ * `src/constants/config.ts` or the taxonomy; the query-state, date-range and paging rules live in their own
+ * modules, reused unchanged. Consumers: every submit path in the product and `src/lib/mockServer.ts`, which
+ * runs these rules over an untrusted body so a hand-made request cannot pass where the form would refuse.
  */
 
 // Rule limits ------------------------------------------------------------------------------------
@@ -77,7 +76,8 @@ const EMAIL_MAX_LENGTH = 254;
 
 /** The characters an email address's local part is built from — the dot-atom set of RFC 5322 — with
  * every run that follows a dot, its dotted domain, and the two around exactly one `@`. */
-const EMAIL_LOCAL_PATTERN = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*";
+const EMAIL_LOCAL_PATTERN =
+  "[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*";
 const EMAIL_DOMAIN_PATTERN = "(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z]{2,}";
 const EMAIL_PATTERN = new RegExp(`^${EMAIL_LOCAL_PATTERN}@${EMAIL_DOMAIN_PATTERN}$`);
 /** The shape a control's text must have: a phone number and a card number as typed, a security code, a
@@ -134,7 +134,9 @@ export type PaymentValidationInput = Omit<PaymentInput, "card"> & {
 
 /** A review as its form holds it: every member `ReviewInput` carries, the rating possibly unchosen,
  * which is why the review form narrows it with {@link isRatingValue} before submitting. */
-export type ReviewDraft = Omit<ReviewInput, "rating"> & { readonly rating: RatingValue | undefined };
+export type ReviewDraft = Omit<ReviewInput, "rating"> & {
+  readonly rating: RatingValue | undefined;
+};
 
 /** The shipping step's submission: the address, the contact email the order records, and the chosen
  * delivery method, each validated by its own rule. */
@@ -224,11 +226,10 @@ export function validatePassword(value: FieldValue): FieldErrors {
     : {};
 }
 
-/** The rule a postal code is accepted by: the pattern its country declares in
- * `src/constants/taxonomy.ts`, compared without regard to case because two of the five countries write codes
- * with letters. `country` is the code the address names; a blank or unsupported one leaves the pattern
- * unjudged, that failure belonging to the country field. Returns the `postalCode` map it breaks, else an
- * empty one. */
+/** The rule a postal code is accepted by: the pattern its country declares in `src/constants/taxonomy.ts`,
+ * compared without regard to case because two of the five countries write codes with letters. `country` is the
+ * code the address names; a blank or unsupported one leaves the pattern unjudged, that failure belonging to the
+ * country field. Returns the `postalCode` map it breaks, else an empty one. */
 export function validatePostalCode(value: FieldValue, country: FieldValue): FieldErrors {
   const postalCode = textOf(value);
   if (postalCode.length === 0) return ruleErrors("postalCode", VALIDATION_MESSAGES.REQUIRED);
@@ -438,17 +439,16 @@ export function validateRegistration(input: FormValues<RegistrationInput>): Fiel
   );
 }
 
-/** The rule the sign-in form is submitted by: both members present, and the address's own shape once one is
- * given. The address is judged by {@link validateEmail}, so a mistyped one is reported on the control it
- * belongs to instead of only by the seam's form-level sentence; reading the value this way discloses nothing
- * about the store, because the rule reads the field and never an account, and an address that names no
- * account is still refused by the seam with the one generic sentence. The password's policy is deliberately
- * not judged — a returning visitor may hold a password predating the current policy and is to be told their
- * credentials do not match, not that their password is the wrong length — and both empty fields share one
- * generic sentence, so neither is singled out. `input` is the credentials as typed; the result holds an
- * `email` and `password` error while either is empty, or an `email` error alone while the address given is
- * malformed. The rejected sign-in is answered by the seam with one generic message that
- * {@link fieldErrorsFromApiError} lands in this same map. */
+/** The rule the sign-in form is submitted by: both members present, and the address's own shape once given. The
+ * address is judged by {@link validateEmail}, so a mistyped one is reported on its own control rather than only
+ * by the seam's form-level sentence; the rule reads the field and never an account, so nothing is disclosed
+ * about the store, and an address naming no account is still refused by the seam with the one generic sentence.
+ * The password's policy is deliberately not judged — a returning visitor may hold a password predating the
+ * current policy and is to be told their credentials do not match, not that their password is the wrong length
+ * — and both empty fields share one generic sentence, so neither is singled out. `input` is the credentials as
+ * typed; the result holds `email` and `password` errors while either is empty, or an `email` error alone while
+ * the address is malformed; a rejected sign-in's generic message reaches this map through the same
+ * {@link fieldErrorsFromApiError}. */
 export function validateSignIn(input: FormValues<Credentials>): FieldErrors {
   return mergeErrors(validateEmail(input?.email), validateRequired("password", input?.password));
 }
@@ -570,14 +570,13 @@ export function clearFieldError(errors: FieldErrors, field: string): FieldErrors
   return Object.fromEntries(Object.entries(errors).filter(([key]) => key !== field));
 }
 
-/** The map an `ApiError` becomes, so a failure the seam reports lands in the same shape a field rule does
- * and a form renders both the same way. A failure naming a `field` is filed under it — how the `422`
- * validation answers from `src/lib/mockServer.ts` mark the control that caused them — and one naming none
- * is filed under {@link FORM_ERROR_KEY}, the single place a form looks for the message it shows above its
- * fields. `error` is the failure a service returned; `fallbackMessage` is the sentence to show when it
- * carries none, defaulting to the neutral one, and a surface with more specific copy — sign-in, order
- * placement — passes its own. The result is a one-entry map keyed by the failing field, or by the form
- * key; the caller keeps the `ApiError` itself, which a page-level error state renders. */
+/** The map an `ApiError` becomes: a seam failure reaches the same shape a field rule returns, so a form renders
+ * both alike. A failure naming a `field` is filed under it — how the `422` answers from `src/lib/mockServer.ts`
+ * mark the control that caused them — and one naming none goes under {@link FORM_ERROR_KEY}, the single place a
+ * form looks for the message shown above its fields. `error` is the failure a service returned;
+ * `fallbackMessage`, the sentence to show when it carries none, defaults to the neutral one, and a surface with
+ * more specific copy — sign-in, order placement — passes its own. The result is a one-entry map keyed by the
+ * failing field or the form key; the caller keeps the `ApiError`, which a page-level error state renders. */
 export function fieldErrorsFromApiError(
   error: ApiError,
   fallbackMessage: string = FEEDBACK_COPY.ERROR_STATE_BODY,

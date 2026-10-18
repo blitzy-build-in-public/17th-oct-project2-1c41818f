@@ -3,7 +3,7 @@
  * Purpose: The seam fixtures and assertions the mock-server specs share: the data source a case binds, the
  * first-entry, payload and refusal helpers, the signed-in customer, a submittable order body and the fake
  * Web Storage a durability case installs.
- * Lines: 152
+ * Lines: 153
  */
 
 import { expect, vi } from "vitest";
@@ -93,7 +93,8 @@ export async function orderBody(idempotencyKey: string, cardNumber: string): Pro
     number: cardNumber,
     nameOnCard: "Dana Okafor",
     expiryMonth: "12",
-    expiryYear: "2032",
+    // The expiry is the one member whose validity is defined against the real clock, so it is read from it.
+    expiryYear: String(new Date().getFullYear() + 5),
     cvc: "123",
   };
   return {

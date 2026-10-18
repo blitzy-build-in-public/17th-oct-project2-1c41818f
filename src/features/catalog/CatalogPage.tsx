@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 370
+ * Lines: 376
  */
 
 import { useId, useRef, useState } from "react";
@@ -183,8 +183,14 @@ export function CatalogPage(): ReactElement {
   };
 
   const failure: ApiError | null = categories.error ?? view.error;
-  const isReading = isResolvingCategory || view.isLoading;
-  const answer = failure === null && !isResolvingCategory ? view.page : null;
+  // A read counts as unfinished both before its load is issued — `view.query` is null while the view describes
+  // no request for the query the address bar names, which is the commit in which the URL has moved on — and
+  // while that load is in flight, because the page the view holds is the previous answer's until this read
+  // settles. Stating that retained page's total under this query's scope is what would pair one query's count
+  // with another query's wording.
+  const isAnswerCurrent = view.query !== null;
+  const isReading = isResolvingCategory || view.isLoading || !isAnswerCurrent;
+  const answer = failure === null && !isReading ? view.page : null;
   const status: AsyncStatus = isReading ? "loading" : failure !== null ? "error" : view.status;
   const total = answer === null ? null : answer.total;
   const appliedCount = countActiveFilters(filters);

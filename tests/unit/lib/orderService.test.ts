@@ -83,22 +83,22 @@ afterAll(() => {
   resetMockServer();
 });
 
-/** A cart line for the bought product, at its own name, sku, price and stock ceiling. */
-function seededLine(quantity = 2): CartLine {
+/** A cart line for the bought product, or a copy a case passes, at its own name, sku, price and stock. */
+function seededLine(quantity = 2, product = BOUGHT): CartLine {
   return makeCartLine({
-    productId: BOUGHT.id,
-    sku: BOUGHT.sku,
-    name: BOUGHT.name,
-    unitPriceMinor: BOUGHT.priceMinor,
-    maxQuantity: BOUGHT.stockOnHand,
-    imageUrl: BOUGHT.images[0].url,
+    productId: product.id,
+    sku: product.sku,
+    name: product.name,
+    unitPriceMinor: product.priceMinor,
+    maxQuantity: product.stockOnHand,
+    imageUrl: product.images[0].url,
     quantity,
   });
 }
 
-/** The snapshot a buyer reviewed: that line priced by the product's one pricing path. */
-function seededSnapshot(quantity = 2): PricedCart {
-  return makePricedCart({ lines: [seededLine(quantity)] });
+/** The snapshot a buyer reviewed: that product's line priced by the product's one pricing path. */
+function seededSnapshot(quantity = 2, product = BOUGHT): PricedCart {
+  return makePricedCart({ lines: [seededLine(quantity, product)] });
 }
 
 /** An invoice payment, the one method whose validity reads no clock, so these cases stay pinned. */
@@ -168,18 +168,18 @@ describe("an order built from the snapshot the buyer reviewed", () => {
 
 describe("a placed order against the catalogue changing afterwards", () => {
   it("holds the purchase-time name, sku and price of every line", () => {
-    const order = makeOrder({ pricedCart: seededSnapshot() });
+    const listed = structuredClone(BOUGHT);
+    const order = makeOrder({ pricedCart: seededSnapshot(2, listed) });
     const before = structuredClone(order);
     const held = {
-      productId: BOUGHT.id,
-      productName: BOUGHT.name,
-      sku: BOUGHT.sku,
-      unitPriceMinor: BOUGHT.priceMinor,
+      productId: listed.id,
+      productName: listed.name,
+      sku: listed.sku,
+      unitPriceMinor: listed.priceMinor,
     };
 
-    // The product is renamed, re-priced and re-skued after the order was placed: a line holding a live
-    // reference to it would follow all three.
-    const changed = BOUGHT as unknown as Editable<typeof BOUGHT>;
+    // The copy is renamed, re-priced and re-skued after placement: a live reference would follow it.
+    const changed = listed as unknown as Editable<typeof listed>;
     changed.name = "Renamed later";
     changed.sku = "REN-9999";
     changed.priceMinor += 5_000;

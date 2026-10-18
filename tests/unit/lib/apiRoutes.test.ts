@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/apiRoutes.test.ts
  * Purpose: The route table's own decisions, driven through the bound seam: the order submission's card and body reading, and the refusals a hand-made request is answered with.
- * Lines: 597
+ * Lines: 598
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -219,7 +219,8 @@ function submission(
     number: card ?? "",
     nameOnCard: "Dana Okafor",
     expiryMonth: "12",
-    expiryYear: "2032",
+    // The expiry is the one member whose validity is defined against the real clock, so it is read from it.
+    expiryYear: String(new Date().getFullYear() + 5),
     cvc: "123",
   };
   return {

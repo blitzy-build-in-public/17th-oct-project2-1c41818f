@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
  * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart
- * Lines: 598
+ * Lines: 586
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,12 +39,14 @@ import {
 import { ROUTES, accountOrderPath, orderConfirmationPath, productPath } from "@/constants/routes";
 import { PROMO_KIND_LABELS, SORT_OPTIONS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import { PROMO_CODES } from "@/data/orders";
+import { API_PATHS, FALLBACK_FAILURE_MESSAGE } from "@/lib/mockServer";
 import { CHECKOUT_FORM_STEPS } from "@/state/checkoutReducer";
 import type { MinorUnits } from "@/types/common";
 import type { PromoCode } from "@/types/commerce";
-import { formatMoney, parseMoneyToMinor } from "@/utils/format";
+import { formatMoney } from "@/utils/format";
 
-import { renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
+import { moneyFigures, rowAmount, summaryFigures, summaryPanel } from "../helpers/journeyHarness";
+import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
 import type { UserEvent } from "../testUtils";
 
 /* The real application throughout, nothing stubbed but the transport's failure switch: every figure is read
@@ -80,52 +82,6 @@ const DECLINED_MESSAGE = paymentDeclinedNote(DEMO_CARD_NUMBERS.APPROVED);
 
 /** What the payment step states about the demonstration, which a refusal must not be mistaken for. */
 const DEMO_NOTICE = demoPaymentNote(DEMO_CARD_NUMBERS.APPROVED, DEMO_CARD_NUMBERS.DECLINED);
-
-// Reading what a surface states in money ---------------------------------------------------------
-
-/** Every money figure a region prints, in the order it prints them: a figure the formatter round-trips. */
-function moneyFigures(scope: HTMLElement): readonly MinorUnits[] {
-  const figures: MinorUnits[] = [];
-  for (const node of scope.querySelectorAll("*")) {
-    const text = (node.textContent ?? "").trim();
-    const minor = parseMoneyToMinor(text);
-    if (node.children.length === 0 && minor > 0 && formatMoney(minor) === text) figures.push(minor);
-  }
-  return figures;
-}
-
-/** The figures an order summary states, in integer minor units. */
-type SummaryFigures = Readonly<
-  Record<"subtotal" | "discount" | "shipping" | "tax" | "total", MinorUnits>
->;
-
-/** The summary panel the surface under test renders, named by the heading that surface states; the cart's and
- *  the checkout's are two regions under two names, so a caller names the one it means. */
-function summaryPanel(name: string = CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING): HTMLElement {
-  return screen.getByRole("region", { name });
-}
-
-/** The amount a summary row states for `label`, or `0` when the region prints no such row. */
-function rowAmount(scope: HTMLElement, label: string): MinorUnits {
-  const row = within(scope).queryAllByText(label)[0]?.parentElement;
-  if (row === null || row === undefined) return 0;
-  const text = row.textContent ?? "";
-  return parseMoneyToMinor(text.slice(text.indexOf(label) + label.length));
-}
-
-/** The figures a summary states once priced; `discountLabel` names the row a single applied code is stated in. */
-async function summaryFigures(scope: HTMLElement, discountLabel?: string): Promise<SummaryFigures> {
-  await waitFor(() =>
-    expect(rowAmount(scope, CART_COPY.SUMMARY_SUBTOTAL_LABEL)).toBeGreaterThan(0),
-  );
-  return {
-    subtotal: rowAmount(scope, CART_COPY.SUMMARY_SUBTOTAL_LABEL),
-    discount: discountLabel === undefined ? 0 : rowAmount(scope, discountLabel),
-    shipping: rowAmount(scope, CART_COPY.SUMMARY_SHIPPING_LABEL),
-    tax: rowAmount(scope, CART_COPY.SUMMARY_TAX_LABEL),
-    total: rowAmount(scope, CART_COPY.SUMMARY_TOTAL_LABEL),
-  };
-}
 
 /** The seeded code a basket of `subtotalMinor` buys with, or the one whose floor it falls short of. */
 function seededPromo(subtotalMinor: MinorUnits, want: "applies" | "below-minimum"): PromoCode {
@@ -401,7 +357,7 @@ describe("promo codes", () => {
 });
 
 describe("the mini-cart", () => {
-  it("opens from the header badge, edits a quantity, gives the focus back and reaches the checkout", async () => {
+  it("opens from the header badge, edits a quantity, gives the focus back and takes the order to its confirmation", async () => {
     const harness = renderApp({ route: ROUTES.CATALOG });
     const name = await addItemToCart(harness.user);
     const badge = screen.getByRole("button", { name: cartButtonLabel(1) });
@@ -423,6 +379,18 @@ describe("the mini-cart", () => {
       await screen.findByRole("link", { name: CART_COPY.PROCEED_TO_CHECKOUT_LABEL }),
     );
     await screen.findByRole("heading", { name: CHECKOUT_COPY.SHIPPING_STEP_HEADING });
+
+    // The mini-cart entry is a way into the whole order, so the walk carries on to the confirmation and the
+    // cleared cart rather than stopping where the checkout begins.
+    await fillShippingAddress(harness.user);
+    await reachReview(harness.user);
+    await harness.user.click(screen.getByRole("button", { name: CHECKOUT_COPY.PLACE_ORDER_LABEL }));
+    await screen.findByText(CHECKOUT_COPY.CONFIRMATION_THANK_YOU);
+    expect(screen.queryByRole("button", { name: CHECKOUT_COPY.PLACE_ORDER_LABEL })).toBeNull();
+
+    await harness.user.click(screen.getByRole("button", { name: cartButtonLabel(0) }));
+    const cleared = await screen.findByRole("dialog", { name: CART_COPY.MINI_CART_HEADING });
+    expect(within(cleared).getByText(EMPTY_STATES.cart.title)).toBeInTheDocument();
   });
 });
 
@@ -594,5 +562,25 @@ describe("placing the order", () => {
     await reloaded.user.click(screen.getByRole("button", { name: cartButtonLabel(0) }));
     const cleared = await screen.findByRole("dialog", { name: CART_COPY.MINI_CART_HEADING });
     expect(within(cleared).getByText(EMPTY_STATES.cart.title)).toBeInTheDocument();
+  });
+});
+
+describe("a checkout the seam refuses", () => {
+  it("reports the failed price read and reconciles the summary on its retry", async () => {
+    const { unmount } = await cartWithItems();
+    unmount();
+    // The failure is armed with nothing else in flight, so the checkout's own price request meets it.
+    const failure = failNext({ method: "POST", path: API_PATHS.CART_PRICE });
+    const { user } = renderApp({ route: ROUTES.CHECKOUT });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(FALLBACK_FAILURE_MESSAGE);
+    await user.click(within(alert).getByRole("button", { name: COMMON_ACTIONS.RETRY }));
+
+    const figures = await summaryFigures(summaryPanel());
+    expect(figures.total).toBe(
+      figures.subtotal - figures.discount + figures.shipping + figures.tax,
+    );
+    failure.disarm();
   });
 });

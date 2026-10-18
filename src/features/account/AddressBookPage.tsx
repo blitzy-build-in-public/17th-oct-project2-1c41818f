@@ -36,7 +36,7 @@ import {
 } from "@/lib/customerService";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
-import { useFocusHandoff } from "@/state/focusHandoff";
+import { handOffThen, useFocusHandoff } from "@/state/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
 import type { Address, AddressInput, AddressKind } from "@/types/account";
@@ -448,7 +448,7 @@ export function AddressBookPage(): ReactElement {
         <Alert
           actionLabel={COMMON_ACTIONS.RETRY}
           error={error}
-          onAction={reloadAddresses}
+          onAction={handOffThen(handOffFocus, reloadAddresses)}
           tone="danger"
         />
       );

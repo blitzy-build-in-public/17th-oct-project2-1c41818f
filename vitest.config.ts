@@ -28,13 +28,6 @@ export default defineConfig({
     // tests/setup.ts arrives in phase 34; Vitest loads a setup file only when it runs test
     // files, so its absence does not fail an otherwise empty run.
     setupFiles: ["tests/setup.ts"],
-    // The integration flows mount the whole application and drive real user-event sequences through
-    // jsdom, so a case measures two to four seconds on an idle host and more while the other files
-    // run; the five-second default failed them for reasons no assertion describes. The ceiling is
-    // raised here, once, for both projects, above the 5,149 ms one case measured under deliberate
-    // load, so contention cannot decide a run. Only the per-test allowance moves: no assertion, case
-    // or skip is relaxed, and a test that genuinely hangs still fails, at the wider limit, not in 5 s.
-    testTimeout: 30_000,
     // Pure logic needs no DOM; the jsdom project below overrides this.
     environment: "node",
     coverage: {
@@ -68,6 +61,13 @@ export default defineConfig({
           name: "jsdom",
           environment: "jsdom",
           include: ["tests/components/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
+          // These flows mount the whole application and drive real user-event sequences through
+          // jsdom, so a case measures two to four seconds on an idle host and more while the other
+          // files run; the five-second default failed them for reasons no assertion describes.
+          // The allowance sits above the 5,149 ms one case measured under deliberate load, so
+          // contention cannot decide a run. Only this project's per-test allowance moves — no
+          // assertion, case or skip is relaxed — and the node project keeps Vitest's 5 s default.
+          testTimeout: 30_000,
         },
       },
     ],

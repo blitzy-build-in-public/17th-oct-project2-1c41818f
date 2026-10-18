@@ -1,10 +1,10 @@
 /**
  * Path: tests/integration/sessionLifecycle.test.tsx
  * Purpose: The session's lifecycle: the stored token revalidated on mount, the refusal, the lapse and the sign-out that end it and announce it, and the durable issuance table the endpoints answer from.
- * Lines: 373
+ * Lines: 442
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEMO_ACCOUNTS, STORAGE_KEYS } from "@/constants/config";
 import { ACCOUNT_COPY, A11Y_COPY, COMMON_ACTIONS, FEEDBACK_COPY } from "@/constants/content";
@@ -77,6 +77,20 @@ async function signInAsShopper(user: UserEvent): Promise<void> {
  *  rendered for the session a case signed in with. */
 function listedTable(): Promise<HTMLElement> {
   return screen.findByRole("table", { name: ACCOUNT_COPY.ORDERS_HEADING });
+}
+
+/** The response latency the two cancellation cases stub, in milliseconds: long enough that the request is
+ *  still waiting when the provider unmounts, so a request nothing cancelled is answered only after the
+ *  window below has passed. */
+const STUBBED_LATENCY_MS = 500;
+
+/** Waits out that window: twice the stubbed latency, which is longer than any request the cases start can
+ *  take once it is aborted, and long enough that one left to settle past the unmount has been answered —
+ *  the outcome the cases assert the absence of. */
+async function waitOutRequestWindow(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 2 * STUBBED_LATENCY_MS);
+  });
 }
 
 // Driving the seam --------------------------------------------------------------------------------
@@ -284,6 +298,61 @@ describe("the session read's refusals", () => {
     const accountReads = signInCalls.filter((call) => ACCOUNT_READ.test(call.path));
     expect(accountReads.map((call) => call.method)).toEqual(["GET"]);
     expect(sessionReads(signInCalls)).toBe(0);
+  });
+});
+
+// An action's request outliving its provider: the seam's latency is stubbed so the request is still in
+// flight when the tree goes, which is the only way the cancellation is observable — the provider is the
+// application root, so unmounting it is what a case has to do. Every assertion below is about what the
+// store answered and what the client persisted, never about a controller the product holds internally:
+// a request cancelled during the wait never reaches the data source, so the store's own table shows it.
+describe("cancelling an action's request when the provider unmounts", () => {
+  beforeEach(() => {
+    resetApiState();
+  });
+
+  // The stub is this describe's mechanism, so it is put back after each of its cases: `tests/setup.ts`
+  // sets the suite's zero latency once at module scope and unstubs no environment between tests.
+  afterEach(() => {
+    vi.stubEnv("VITE_API_LATENCY_MS", "0");
+  });
+
+  it("issues no session when a sign-in's request is cancelled by the unmount", async () => {
+    vi.stubEnv("VITE_API_LATENCY_MS", String(STUBBED_LATENCY_MS));
+    const { user, unmount } = renderApp({ route: ROUTES.LOGIN });
+
+    await signInAsShopper(user);
+    unmount();
+    await waitOutRequestWindow();
+
+    // The answer was cancelled, so nothing was adopted for it and no token was persisted: the visitor
+    // ends signed out on both counts, exactly as one who never submitted does.
+    expect(readStored<SessionToken | null>(STORAGE_KEYS.SESSION, null)).toBeNull();
+    // And the store never issued one: the request was aborted during the wait that precedes dispatch,
+    // which is what the durable table behind the endpoint shows.
+    expect(storedTable()).toHaveLength(0);
+  });
+
+  it("drops the local token but leaves the store's record when a sign-out is cancelled", async () => {
+    // The sign-in runs at the suite's own zero latency, so the profile this case starts from is reached
+    // normally and only the sign-out below is slow.
+    const { user, unmount } = renderApp({ route: ROUTES.LOGIN });
+    await signInAsShopper(user);
+    await screen.findByRole("heading", { name: ACCOUNT_COPY.PROFILE_HEADING });
+    const token = readStored<SessionToken | null>(STORAGE_KEYS.SESSION, null);
+    expect(token).not.toBeNull();
+
+    vi.stubEnv("VITE_API_LATENCY_MS", String(STUBBED_LATENCY_MS));
+    await user.click(screen.getByRole("button", { name: A11Y_COPY.ACCOUNT_MENU_LABEL }));
+    await user.click(await screen.findByRole("button", { name: COMMON_ACTIONS.SIGN_OUT }));
+    unmount();
+    await waitOutRequestWindow();
+
+    // A session the visitor has given up is dropped from the client whatever the request did...
+    expect(readStored<SessionToken | null>(STORAGE_KEYS.SESSION, null)).toBeNull();
+    // ...while the store was never told about it: the cancelled request left the record it would have
+    // retired standing, so this is the case the two behaviours are told apart by.
+    expect(storedTable().some((session) => session.token === token)).toBe(true);
   });
 });
 

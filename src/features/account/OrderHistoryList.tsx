@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryList.tsx
  * Purpose: The customer's order history: the status and date filters, the paged table they resolve to and the loading placeholder
- * Lines: 386
+ * Lines: 377
  */
 
 import { useCallback, useId, useState } from "react";
@@ -56,21 +56,12 @@ import {
  * A rule either of them reads — the range rules, the status vocabulary, the money and date formatting — is
  * imported from the module that owns it, so nothing is stated twice across the pair.
  *
- * BLITZY [COPY GAP]: `src/constants/content.ts` holds no wording for the status filter's unfiltered choice, or
- * for what an empty history says when filters rather than the account are why nothing is listed; both are held
- * here until a plan amendment adds them to `ACCOUNT_COPY`.
+ * This screen authors no sentence: the status filter's unfiltered choice, and the title and
+ * description its filtered-empty state shows, come from `ACCOUNT_COPY` in
+ * `src/constants/content-account.ts`.
  */
 
 // The screen's own vocabulary
-
-/** The status filter's unfiltered choice, and so how a chosen status is cleared. */
-const ANY_STATUS_LABEL = "All statuses";
-
-/** What an empty history says when the filters, not the account, are why nothing is listed. */
-const NO_MATCHING_ORDERS = {
-  TITLE: "No orders match these filters",
-  DESCRIPTION: "Widen the period or choose another status.",
-} as const;
 
 /** The field keys the range rule reports under, which are also the `name` each date control carries, so one
  * error map lands on the control that owns it. No field renders the third, so the alert reads it. */
@@ -318,9 +309,9 @@ export function OrderHistoryList({
       return range !== null || statusValue !== "" ? (
         <EmptyState
           actionLabel={COMMON_ACTIONS.CLEAR_ALL}
-          description={NO_MATCHING_ORDERS.DESCRIPTION}
+          description={ACCOUNT_COPY.ORDERS_NO_MATCH_DESCRIPTION}
           onAction={clearFilters}
-          title={NO_MATCHING_ORDERS.TITLE}
+          title={ACCOUNT_COPY.ORDERS_NO_MATCH_TITLE}
         />
       ) : (
         <EmptyState
@@ -352,7 +343,7 @@ export function OrderHistoryList({
           label={ACCOUNT_COPY.ORDERS_STATUS_FILTER_LABEL}
           onChange={changeFilter(setStatusValue)}
           options={ORDER_STATUS_OPTIONS}
-          placeholder={ANY_STATUS_LABEL}
+          placeholder={ACCOUNT_COPY.ORDERS_STATUS_ANY_LABEL}
           value={statusValue}
         />
         <Input

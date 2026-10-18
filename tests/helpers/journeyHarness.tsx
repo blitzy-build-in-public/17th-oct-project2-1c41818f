@@ -1,7 +1,7 @@
 /**
  * Path: tests/helpers/journeyHarness.tsx
- * Purpose: The harness both journey files read the rendered application through: the copy, records and seam they assert by, the test-utils surface they drive it with, and one reader per rendered surface.
- * Lines: 297
+ * Purpose: The harness the journey files read the rendered application through: the copy, records and seam they assert by, the test-utils surface they drive it with, and one reader per rendered surface.
+ * Lines: 371
  */
 
 import { act } from "@testing-library/react";
@@ -12,6 +12,7 @@ import {
   RELATED_PRODUCTS_LIMIT,
   SEARCH_SUGGESTION_LIMIT,
 } from "@/constants/config";
+import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
 import * as content from "@/constants/content";
 import { ROUTES, categoryPath, productPath } from "@/constants/routes";
 import { CATEGORY_DEFINITIONS, FACET_DEFINITIONS } from "@/constants/taxonomy";
@@ -19,6 +20,7 @@ import { BRANDS } from "@/data/categories";
 import { PRODUCTS } from "@/data/products";
 import { API_PATHS } from "@/lib/apiClient";
 import type { Product, SortKey } from "@/types/catalog";
+import type { MinorUnits } from "@/types/common";
 import { formatMoney, formatRatingValue, parseMoneyToMinor } from "@/utils/format";
 import {
   DEFAULT_FILTER_STATE,
@@ -32,9 +34,9 @@ import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../
 import type { UserEvent } from "../testUtils";
 
 /*
- * Both journey files reach the product through this one surface, so neither of them imports the product's own
- * modules and no reader or input below has a second declaration anywhere: what is listed here is one binding
- * each, re-exported rather than reimplemented.
+ * The harness the journey files read the rendered application through, so neither of them imports the product's
+ * own modules and no reader or input below has a second declaration anywhere: what is listed here is one
+ * binding each, re-exported rather than reimplemented.
  */
 export {
   act,
@@ -157,6 +159,78 @@ export function tilePricesMinor(): number[] {
     const money = MONEY_PATTERN.exec((heading.closest("li") ?? heading).textContent ?? "");
     return money === null ? 0 : parseMoneyToMinor(money[0]);
   });
+}
+
+/** Every money figure a region prints, in the order it prints them: a figure the formatter round-trips. */
+export function moneyFigures(scope: HTMLElement): readonly MinorUnits[] {
+  const figures: MinorUnits[] = [];
+  for (const node of scope.querySelectorAll("*")) {
+    const text = (node.textContent ?? "").trim();
+    const minor = parseMoneyToMinor(text);
+    if (node.children.length === 0 && minor > 0 && formatMoney(minor) === text) figures.push(minor);
+  }
+  return figures;
+}
+
+/** The figures an order summary states, in integer minor units. */
+export type SummaryFigures = Readonly<
+  Record<"subtotal" | "discount" | "shipping" | "tax" | "total", MinorUnits>
+>;
+
+/** The summary panel a surface renders, named by the heading that surface states: the cart's and the
+ *  checkout's are two regions under two names, so a caller names the one it means. */
+export function summaryPanel(
+  name: string = CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING,
+): HTMLElement {
+  return screen.getByRole("region", { name });
+}
+
+/** The amount a summary row states for `label`, or `0` when the region prints no such row. */
+export function rowAmount(scope: HTMLElement, label: string): MinorUnits {
+  const row = within(scope).queryAllByText(label)[0]?.parentElement;
+  if (row === null || row === undefined) return 0;
+  const text = row.textContent ?? "";
+  return parseMoneyToMinor(text.slice(text.indexOf(label) + label.length));
+}
+
+/** The pattern a field's own label is found by: a required field's label continues past its copy with its
+ *  marker, so its whole text is never the copy alone. */
+export function fieldLabel(label: string): RegExp {
+  return new RegExp(`^${label}`);
+}
+
+/** The description each of a scope's invalid controls is read by: the text of the ids its own
+ *  `aria-describedby` names, joined in the order they are read, and empty when it names none. */
+export function descriptionsOfInvalidFields(scope: ParentNode): readonly string[] {
+  return [...scope.querySelectorAll('[aria-invalid="true"]')].map((control) =>
+    (control.getAttribute("aria-describedby") ?? "")
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" "),
+  );
+}
+
+/** Opens a section of a screen that offers its destinations as links, which is how the account area's own
+ *  navigation is reached. */
+export async function openSection(user: UserEvent, label: string): Promise<void> {
+  await user.click(await screen.findByRole("link", { name: label }));
+}
+
+/** The figures a summary states once priced; `discountLabel` names the row a single applied code is stated in. */
+export async function summaryFigures(
+  scope: HTMLElement,
+  discountLabel?: string,
+): Promise<SummaryFigures> {
+  await waitFor(() =>
+    expect(rowAmount(scope, CART_COPY.SUMMARY_SUBTOTAL_LABEL)).toBeGreaterThan(0),
+  );
+  return {
+    subtotal: rowAmount(scope, CART_COPY.SUMMARY_SUBTOTAL_LABEL),
+    discount: discountLabel === undefined ? 0 : rowAmount(scope, discountLabel),
+    shipping: rowAmount(scope, CART_COPY.SUMMARY_SHIPPING_LABEL),
+    tax: rowAmount(scope, CART_COPY.SUMMARY_TAX_LABEL),
+    total: rowAmount(scope, CART_COPY.SUMMARY_TOTAL_LABEL),
+  };
 }
 
 /** The number a piece of count wording states, read from the template the copy module builds it with. */

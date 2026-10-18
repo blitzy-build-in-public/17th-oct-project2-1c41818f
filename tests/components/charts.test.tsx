@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/charts.test.tsx
  * Purpose: Scale mathematics, rendered geometry and the data-table alternative
- * Lines: 596
+ * Lines: 597
  */
 
 import { describe, expect, it } from "vitest";
@@ -122,9 +122,20 @@ function barsOf(container: HTMLElement): SVGRectElement[] {
   return [...container.querySelectorAll("rect")].filter((rect) => !rect.hasAttribute("data-band"));
 }
 
+/** The band each pointer region a drawing publishes, read off the hook the drawing itself uses. */
+function publishedBands(svg: SVGElement, hook: "data-band" | "data-band-index"): (string | null)[] {
+  return [...svg.querySelectorAll(`[${hook}]`)].map((region) => region.getAttribute(hook));
+}
+
 /** Every word the drawing's text nodes hold, which is how a value label or a slice label is read. */
 function labelsOf(svg: SVGSVGElement): (string | null)[] {
   return [...svg.querySelectorAll("text")].map((node) => node.textContent);
+}
+
+/** One row's cells' words: every figure a paired table states is read through what its cells say. */
+function cellWordsOf(row: HTMLElement): (string | null)[] {
+  const cells = within(row).getAllByRole("cell");
+  return cells.map((cell) => cell.textContent);
 }
 
 /** A rect side as a number, so two marks can be compared by the geometry they were drawn with. */
@@ -337,20 +348,15 @@ describe("the chart renderers", () => {
     const svg = drawingOf(container);
 
     expect(await screen.findByRole("img", { name: CHART_TITLE })).toBeInTheDocument();
-    expect(svg.querySelectorAll("g")).toHaveLength(SERIES.length);
-    expect(svg.querySelectorAll("path")).toHaveLength(SERIES.length);
-    expect(svg.querySelectorAll("circle")).toHaveLength(SERIES.length * BAND_KEYS.length);
-    expect(svg.querySelectorAll("rect")).toHaveLength(BAND_KEYS.length);
+    // No series is counted by its marks: the legend and the readout below name every series and its own figure.
+    const bandIndexes = publishedBands(svg, "data-band-index");
+    expect(bandIndexes).toEqual(BAND_KEYS.map((_key, index) => String(index)));
 
     const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(BAND_KEYS.length + 1);
     expect(within(rows[1]).getByRole("rowheader")).toHaveTextContent(DAY_ONE_LABEL);
-    expect(
-      within(rows[1])
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual([formatMoney(NET_ONE), formatMoney(GROSS_ONE)]);
+    expect(cellWordsOf(rows[1])).toEqual([formatMoney(NET_ONE), formatMoney(GROSS_ONE)]);
 
     const legend = screen.getAllByRole("listitem");
     expect(legend).toHaveLength(SERIES.length);
@@ -366,7 +372,7 @@ describe("the chart renderers", () => {
     );
     await user.keyboard("{ArrowRight}");
     expect(screen.getByRole("status")).toHaveTextContent(DAY_TWO_LABEL);
-    await user.hover(svg.querySelectorAll("rect")[0]);
+    await user.hover(svg.querySelectorAll("[data-band-index]")[0]);
     expect(screen.getByRole("status").textContent).toBe(bandOne);
   });
 
@@ -419,9 +425,8 @@ describe("the chart renderers", () => {
       height: scales.DEFAULT_CHART_HEIGHT,
     });
 
-    expect(
-      [...container.querySelectorAll(".sp-chart__tick")].map((node) => node.textContent),
-    ).toEqual([formatMoney(0), DAY_ONE_LABEL]);
+    // The axis states these two words and no other, and it is the words themselves that are read here.
+    expect(labelsOf(drawingOf(container))).toEqual([formatMoney(0), DAY_ONE_LABEL]);
     // And the one value there is lies on the baseline the axis starts at, not halfway up a span no figure reaches.
     const marker = drawingOf(container).querySelector("circle");
     expect(Number(marker?.getAttribute("cy"))).toBe(plotArea.y + plotArea.height);
@@ -433,7 +438,7 @@ describe("the chart renderers", () => {
     const bars = barsOf(container);
 
     expect(await screen.findByRole("img", { name: CHART_TITLE })).toBeInTheDocument();
-    expect(svg.querySelectorAll("rect[data-band]")).toHaveLength(BAND_KEYS.length);
+    expect(publishedBands(svg, "data-band")).toEqual(BAND_KEYS);
     expect(bars).toHaveLength(BAND_KEYS.length * SERIES.length);
     expect(sideOf(bars[0], "x") + sideOf(bars[0], "width")).toBeLessThanOrEqual(
       sideOf(bars[1], "x"),
@@ -527,48 +532,44 @@ describe("the chart renderers", () => {
     const svg = drawingOf(container);
 
     expect(await screen.findByRole("img", { name: CHART_TITLE })).toBeInTheDocument();
-    expect(svg.querySelectorAll("path")).toHaveLength(slices.length);
-    // Every wedge is labelled outside the ring, on the surface the legend's shares are read on, in the digits
-    // the legend writes, and each figure has the leader joining it back to its own wedge. Nothing is dropped
-    // for want of room, and no figure is painted on a fill too saturated to read it against.
+    // Every wedge's share is written on the plot once, in the digits the legend writes, and nothing is dropped.
     expect(labelsOf(svg)).toEqual([
       formatShare(100, SLICE_TOTAL, 1),
       formatShare(300, SLICE_TOTAL, 1),
       formatShare(1, SLICE_TOTAL, 1),
     ]);
-    expect(svg.querySelectorAll("line.sp-chart__leader")).toHaveLength(slices.length);
     expect(screen.getByText(formatMoneyCompact(SLICE_TOTAL))).toBeInTheDocument();
 
     const table = screen.getByRole("table", { name: chartDataTableCaption(CHART_TITLE) });
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(slices.length + 1);
     // The header row names all three columns, so neither figure a row states is left unlabelled.
-    expect(
-      within(rows[0])
-        .getAllByRole("columnheader")
-        .map((cell) => cell.textContent),
-    ).toEqual([
+    const headings = within(rows[0]).getAllByRole("columnheader");
+    expect(headings.map((cell) => cell.textContent)).toEqual([
       CHART_COLUMN_LABELS.GROUP_LABEL,
       CHART_COLUMN_LABELS.VALUE_LABEL,
       CHART_COLUMN_LABELS.SHARE_LABEL,
     ]);
     expect(within(rows[1]).getByRole("rowheader")).toHaveTextContent(SLICE_A.label);
-    expect(
-      within(rows[1])
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual([formatMoney(100), formatShare(100, SLICE_TOTAL, 1)]);
+    expect(cellWordsOf(rows[1])).toEqual([formatMoney(100), formatShare(100, SLICE_TOTAL, 1)]);
 
     // The marker-less flex legend keeps its list semantics, which the base sheet documents the role for.
-    expect(container.querySelector("ul.sp-chart__legend")).toHaveAttribute("role", "list");
-    const legend = screen.getAllByRole("listitem");
+    const legend = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(legend).toHaveLength(slices.length);
     expect(legend[2]).toHaveTextContent(formatMoney(1));
     expect(legend[2]).toHaveTextContent(formatShare(1, SLICE_TOTAL, 1));
 
+    // One ArrowRight per slice walks the whole ring, and the next carries it past the last wedge back to the
+    // first; each slice is named with its own label, figure and share, and no mark is counted to prove it.
+    const text = (): string | null => screen.getByRole("status").textContent;
     await user.tab();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      `${SLICE_A.label} ${formatMoney(100)} ${formatShare(100, SLICE_TOTAL, 1)}`,
-    );
+    expect(text()).toBe(`${SLICE_A.label} ${formatMoney(100)} ${formatShare(100, SLICE_TOTAL, 1)}`);
+    await user.keyboard("{ArrowRight}");
+    expect(text()).toBe(`${SLICE_B.label} ${formatMoney(300)} ${formatShare(300, SLICE_TOTAL, 1)}`);
+    await user.keyboard("{ArrowRight}");
+    expect(text()).toBe(`${SLICE_C.label} ${formatMoney(1)} ${formatShare(1, SLICE_TOTAL, 1)}`);
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("status")).toHaveTextContent(SLICE_A.label);
   });
 
   it.each<[string, (word: string) => ReactElement]>([

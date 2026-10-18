@@ -1,49 +1,75 @@
 /**
  * Path: tests/integration/shoppingFlow.test.tsx
- * Purpose: The landing route and the add-to-cart journey, from a card's quick add and the product page's stepper to the mini-cart.
- * Lines: 191
+ * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states.
+ * Lines: 299
  */
 
 import { describe, expect, it } from "vitest";
 
 import {
   A11Y_COPY,
+  API_PATHS,
   CART_COPY,
   CATALOG_COPY,
   COMMON_ACTIONS,
   DEFAULT_FILTER_STATE,
+  DEFAULT_PAGE_SIZE,
+  EMPTY_STATES,
+  FEEDBACK_COPY,
   HOME_COPY,
+  PRICE_ASCENDING_SORT,
+  PRODUCTS,
   RELATED_PRODUCTS_LIMIT,
   ROUTES,
+  SEARCH_COPY,
   SELLABLE_PRODUCT,
+  SELECTED_BRAND,
   TRUST_CLAIMS,
   addedToCartMessage,
+  announcedTotal,
   buttonNamed,
   cartButtonLabel,
+  controlCount,
+  facetDrawer,
+  facetTermControl,
+  failNext,
   filtersToPath,
   headingNamed,
   isolateJourneyCases,
+  linkNamed,
   productNamed,
   productPath,
   quantityLabel,
   quickAddLabel,
+  readAnnouncedTotal,
   renderApp,
   screen,
+  setQuery,
   settledTiles,
+  showcaseTile,
   statedCount,
   textOf,
   tileHeadings,
+  tileNames,
+  tilePricesMinor,
+  toggleFacetValue,
   waitFor,
   within,
+  withSort,
 } from "../helpers/journeyHarness";
 
 /*
- * The home and cart slices of the product driven through the real application: `renderApp` mounts `src/App.tsx`,
- * the providers, the pages and the seeded data source, so a case asserts what a visitor sees. The add-to-cart
- * journey is the card's quick add, the detail page's stepper and the mini-cart the header badge opens, together
- * with the refusal a product the storefront cannot sell states. Every input comes from the seeded records or the
+ * The home, catalogue and search slices of the product driven through the real application: `renderApp` mounts
+ * `src/App.tsx`, the providers, the pages and the seeded data source, so a case asserts what a visitor sees. The
+ * add-to-cart journey is the card's quick add, the detail page's stepper and the mini-cart the header badge
+ * opens, together with the refusal a product the storefront cannot sell states; the catalogue is entered from a
+ * showcase tile, a search is filtered and sorted, and the empty and failed reads a listing can reach are the
+ * search's own no-match answer and the seam's armed failure. Every input comes from the seeded records or the
  * copy module, so no figure and no sentence is typed.
  */
+
+/** A term no seeded product matches: the query whose own answer is the empty state. */
+const NO_MATCH_TERM = "zzzqqqxyz";
 
 describe("the shopper's home and add-to-cart journey", () => {
   isolateJourneyCases();
@@ -187,5 +213,87 @@ describe("the shopper's home and add-to-cart journey", () => {
     await user.click(buttonNamed(CATALOG_COPY.ADD_TO_CART_LABEL));
 
     expect(await screen.findByRole("button", { name: cartButtonLabel(2) })).toBeInTheDocument();
+  });
+
+  it("scopes the catalogue to the category a showcase tile names", async () => {
+    const { user } = renderApp({ route: ROUTES.HOME });
+    const showcase = await screen.findByRole("region", { name: HOME_COPY.SHOWCASE_TITLE });
+
+    // The tile to follow is the one whose count is a leaf category's own: the catalogue is larger than any
+    // one category and a parent holds nothing, so the tile's count is what the listing behind it announces.
+    const tiles = (await within(showcase).findAllByRole("listitem")).map(showcaseTile);
+    const tile = tiles.find((entry) => entry.count > 0 && entry.count < PRODUCTS.length);
+    if (tile === undefined)
+      throw new Error("The showcase offered no category that scopes the catalogue.");
+
+    await user.click(within(tile.entry).getByRole("link"));
+
+    await waitFor(() => expect(readAnnouncedTotal()).toBe(tile.count));
+    expect(tileNames()).toHaveLength(Math.min(tile.count, DEFAULT_PAGE_SIZE));
+    const chips = screen.getByRole("list", { name: SEARCH_COPY.ACTIVE_FILTERS_HEADING });
+    expect(within(chips).getByText(tile.label)).toBeInTheDocument();
+  });
+
+  it("lists a searched, brand-filtered and price-sorted set whose prices ascend", async () => {
+    // The whole address is written through the query module's own writers, so the case states the query the
+    // URL carries and the page reads it back rather than typing into a field whose value could drift.
+    const query = toggleFacetValue(
+      setQuery(DEFAULT_FILTER_STATE, SELECTED_BRAND.name),
+      "brand",
+      SELECTED_BRAND.id,
+    );
+    const { user } = renderApp({
+      route: filtersToPath(ROUTES.SEARCH, withSort(query, PRICE_ASCENDING_SORT)),
+    });
+
+    const total = await announcedTotal();
+    expect(total).toBeGreaterThan(1);
+    expect(screen.getByLabelText(CATALOG_COPY.SORT_GROUP_LABEL)).toHaveValue(PRICE_ASCENDING_SORT);
+    await settledTiles();
+    const prices = tilePricesMinor();
+    expect(prices.length).toBeGreaterThan(1);
+    expect(prices).toEqual([...prices].sort((left, right) => left - right));
+
+    // The facet the address applies is a filter, so every product the listing offers is that brand's own:
+    // the seeded record behind a rendered name is where the brand the tile was filtered by is read from.
+    for (const heading of tileHeadings()) {
+      expect(productNamed(textOf(heading)).brandId).toBe(SELECTED_BRAND.id);
+    }
+
+    // A facet is counted with its own selection excluded, so the brand control reports the filtered total.
+    const brand = facetTermControl(await facetDrawer(user), SELECTED_BRAND.name);
+    await waitFor(() => expect(controlCount(brand)).toBe(total));
+  });
+
+  it("offers the catalogue as the way out of a search that matches nothing", async () => {
+    const { user } = renderApp({ route: ROUTES.SEARCH });
+    await user.type(await screen.findByLabelText(SEARCH_COPY.FIELD_LABEL), NO_MATCH_TERM);
+    await user.keyboard("{Enter}");
+
+    // The listing is empty because the query legitimately matched nothing, so the page explains that and
+    // offers the one action that leaves it rather than drawing an empty grid.
+    expect(await headingNamed(EMPTY_STATES.searchResults.title, 2)).toBeInTheDocument();
+    expect(screen.getByText(EMPTY_STATES.searchResults.description)).toBeInTheDocument();
+    expect(linkNamed(EMPTY_STATES.searchResults.actionLabel)).toHaveAttribute(
+      "href",
+      ROUTES.CATALOG,
+    );
+  });
+
+  it("reports the seam's failed catalogue read and recovers on its retry", async () => {
+    const failure = failNext({ path: API_PATHS.PRODUCTS });
+    const { user } = renderApp({ route: ROUTES.CATALOG });
+
+    // The armed failure answers the listing's own read, so the error state is the one the visitor meets and
+    // no tile is drawn behind it.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_TITLE);
+    expect(alert).toHaveTextContent(FEEDBACK_COPY.ERROR_STATE_BODY);
+    expect(tileHeadings()).toHaveLength(0);
+
+    failure.disarm();
+    await user.click(buttonNamed(COMMON_ACTIONS.RETRY));
+
+    await waitFor(() => expect(tileHeadings().length).toBeGreaterThan(0));
   });
 });

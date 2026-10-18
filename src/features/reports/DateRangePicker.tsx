@@ -1,10 +1,10 @@
 /**
  * Path: src/features/reports/DateRangePicker.tsx
- * Purpose: The reports slice's range control: the shared range control plus the persisted last-used range
- * Lines: 135
+ * Purpose: The report range control with presets, validation and the persisted last-used range
+ * Lines: 123
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
 import { DateRangeControl } from "@/components/ui/DateRangeControl";
@@ -62,22 +62,24 @@ export interface DateRangePickerProps {
  *
  * The rendering, the preset vocabulary, the draft the fields are edited into, the wording of the range rules
  * and the named comparison all belong to `src/components/ui/DateRangeControl.tsx`, promoted there so the
- * dashboard and this picker cannot drift apart on what a range means. What is left here is the last-used
- * range, and both administrator range controls share it: the key comes from `STORAGE_KEYS` in
- * `src/constants/config.ts`, both the read and the write go through `useLocalStorage` in `src/state/hooks.ts`,
+ * dashboard and this picker cannot drift apart on what a range means. What is left here is the range this mount
+ * resumes from, read from the last-used range both administrator range controls share: the key comes from
+ * `STORAGE_KEYS` in `src/constants/config.ts`, the read goes through `useLocalStorage` in `src/state/hooks.ts`,
  * which owns the versioned envelope and the degradation, and what a payload means is one shared reading —
  * `storedRangeOr` in `src/utils/storage.ts`, which asks the range rules of the days it names and answers the
- * caller's fallback for anything it cannot use. Nothing here touches `window.localStorage` and no key is
- * written out here.
+ * caller's fallback for anything it cannot use. The write is not this file's: the page that owns the range is
+ * its one writer, through the same hook and the same key, so a range applied anywhere on the surface is
+ * remembered exactly like one applied at this control and the store cannot hold a period the page has left.
+ * Nothing here touches `window.localStorage` and no key is written out here.
  *
  * That is what the restore is for. On mount the stored range is read once, checked against the range rules —
  * a payload may predate the cap, or the rules that accept it — and handed to the shared control as the range
  * this mount opens on, which reports it upward exactly once so the page adopts it, falling back to the trailing
  * window `defaultReportRange()` computes. A mount whose page already holds those same two days reports nothing,
  * so a page is neither re-rendered nor asked to run its report again for a range it already had. Every range
- * applied afterwards is written to the store from the one handler that reports it upward, which is what lets
- * the next visit resume where this one finished: persistence rides the event, rather than an effect mirroring
- * the range into storage on a later render.
+ * this control reports is handed straight upward, so the page's own handler is the one place either value is
+ * set: the range in force and the range remembered for the next visit move together, whether the change was
+ * made here or anywhere else on the surface.
  *
  * It keeps no URL state, reads no query parameter and fetches nothing: the range is page state plus one stored
  * key, and the view that mounts this control owns the report it runs over the range it is handed.
@@ -98,33 +100,19 @@ export function DateRangePicker({
   const fallbackRange = useMemo<DateRange>(() => defaultReportRange(), []);
 
   // The last-used range, and the only stored entry this file knows. The hook reads the store once, in the
-  // initialiser of its first render, so a payload another tab rewrites later cannot rewind it.
-  const [storedRange, setStoredRange] = useLocalStorage<DateRange>(
-    STORAGE_KEYS.REPORT_RANGE,
-    fallbackRange,
-  );
+  // initialiser of its first render, so a payload another tab rewrites later cannot rewind it. The write side
+  // of the same hook belongs to the page that owns the range: this control reports and the page remembers.
+  const [storedRange] = useLocalStorage<DateRange>(STORAGE_KEYS.REPORT_RANGE, fallbackRange);
 
   // The range this mount opened on, frozen for the life of the mount: it is what the page is told to adopt,
   // and a later change to the page's own range must not re-derive it or report it a second time. The payload
   // is read through `storedRangeOr`, the one home of what a stored range means, so no rule is restated here.
   const [restoredRange] = useState<DateRange>(() => storedRangeOr(storedRange, fallbackRange));
 
-  // The fields, the range they resolve to in words, the rules' wording and the baseline comparison are the
-  // shared control's; this file adds the store to what it reports. A range the control resolved is the range
-  // now in force, and on the restore path the payload written is the one just read, so the write is
-  // content-identical and the store and the page cannot disagree about what was last used.
-  const changeRange = useCallback(
-    (next: DateRange): void => {
-      setStoredRange(next);
-      onChange(next);
-    },
-    [onChange, setStoredRange],
-  );
-
   return (
     <DateRangeControl
       value={value}
-      onChange={changeRange}
+      onChange={onChange}
       baseline={baseline}
       onBaselineChange={onBaselineChange}
       isDisabled={isDisabled}

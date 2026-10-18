@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/authService.ts
  * Purpose: Registration, sign-in, sign-out, session restore and role checks for the demonstration account store
- * Lines: 361
+ * Lines: 400
  */
 
 import { ACCOUNT_COPY, FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
@@ -14,7 +14,13 @@ import type {
   Role,
   Session,
 } from "@/types/account";
-import type { ApiError, FieldErrors, Result, SessionToken } from "@/types/common";
+import type {
+  ApiError,
+  ApiRequestOptions,
+  FieldErrors,
+  Result,
+  SessionToken,
+} from "@/types/common";
 import {
   FORM_ERROR_KEY,
   fieldErrorsFromApiError,
@@ -277,6 +283,20 @@ export function toAuthFieldErrors(error: ApiError): FieldErrors {
   return fieldErrorsFromApiError(named, authErrorMessage(error));
 }
 
+// What a caller may hand a request ----------------------------------------------------------------
+
+/**
+ * What a caller may hand a session-lifecycle request besides the values the method already takes: the
+ * abort signal that cancels a request which could outlive the component that asked for it.
+ *
+ * The member is `ApiRequestOptions`'s own, taken from it so no second shape is declared for it, and it
+ * is not decided here: `src/state/AuthContext.tsx` passes the signal it aborts when the provider goes,
+ * and a request cancelled through it settles as the transport's shaped `request-aborted` failure rather
+ * than as a rejection. The three methods that take this are the ones a component drives; the optional
+ * parameter leaves every existing call — a service call with the values alone — exactly as it was.
+ */
+export type AuthRequestOptions = Pick<ApiRequestOptions, "signal">;
+
 // The client surface ------------------------------------------------------------------------------
 
 /** The `422` a locally refused input becomes: the first field the map names and its sentence, asked of
@@ -301,13 +321,21 @@ function refusedInput(errors: FieldErrors): Result<never> {
  *
  * @param input - The registration body: email and password, first and last name, and the marketing
  * consent choice.
+ * @param options - The caller's cancellation, forwarded to the transport.
  * @returns The created account with the session opened for it, or the shaped failure: `422` for input
  * that broke a rule, `409` for an address already taken.
  */
-export async function register(input: RegistrationInput): Promise<Result<RegistrationResult>> {
+export async function register(
+  input: RegistrationInput,
+  options: AuthRequestOptions = {},
+): Promise<Result<RegistrationResult>> {
   const errors = validateRegistration(input);
   if (hasErrors(errors)) return refusedInput(errors);
-  return await postJson<RegistrationResult, RegistrationInput>(API_PATHS.AUTH_REGISTER, input);
+  return await postJson<RegistrationResult, RegistrationInput>(
+    API_PATHS.AUTH_REGISTER,
+    input,
+    options,
+  );
 }
 
 /**
@@ -321,11 +349,15 @@ export async function register(input: RegistrationInput): Promise<Result<Registr
  * same `401 invalid-credentials` failure.
  *
  * @param credentials - The email address and the password as typed.
+ * @param options - The caller's cancellation, forwarded to the transport.
  * @returns The issued session, or the shaped failure: `401 invalid-credentials`, or `422` for a body
  * whose two members are not both text.
  */
-export async function signIn(credentials: Credentials): Promise<Result<Session>> {
-  return await postJson<Session, Credentials>(API_PATHS.AUTH_LOGIN, credentials);
+export async function signIn(
+  credentials: Credentials,
+  options: AuthRequestOptions = {},
+): Promise<Result<Session>> {
+  return await postJson<Session, Credentials>(API_PATHS.AUTH_LOGIN, credentials, options);
 }
 
 /**
@@ -336,10 +368,17 @@ export async function signIn(credentials: Credentials): Promise<Result<Session>>
  * A failure is still returned rather than swallowed, so a caller that wants to report one can.
  *
  * @param token - The session token to end.
+ * @param options - The caller's cancellation, forwarded to the transport.
  * @returns Nothing on success — the seam answers `204` with an empty payload — or the shaped failure.
  */
-export async function signOut(token: SessionToken): Promise<Result<void>> {
-  return await postJson<void>(API_PATHS.AUTH_LOGOUT, undefined, { sessionToken: token });
+export async function signOut(
+  token: SessionToken,
+  options: AuthRequestOptions = {},
+): Promise<Result<void>> {
+  return await postJson<void>(API_PATHS.AUTH_LOGOUT, undefined, {
+    ...options,
+    sessionToken: token,
+  });
 }
 
 /**

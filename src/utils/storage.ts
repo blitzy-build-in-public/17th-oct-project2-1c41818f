@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/storage.ts
  * Purpose: Typed, versioned, failure-tolerant localStorage access for every durable value the product keeps
- * Lines: 336
+ * Lines: 339
  */
 
 import { STORAGE_KEYS, STORAGE_KEY_PREFIX, STORAGE_VERSION } from "@/constants/config";
@@ -319,9 +319,12 @@ export function getStoredVersion(key: StorageKey): number | undefined {
  * the cap `src/constants/config.ts` sets. The range rules are that validator's, so none is stated
  * here.
  *
- * Its two consumers are `src/features/reports/DateRangePicker.tsx` and
- * `src/features/admin/AdminDashboardPage.tsx`: each opens on the range this returns and writes an
- * applied range back through `useLocalStorage` in `src/state/hooks.ts`.
+ * Its two readers are `src/features/reports/DateRangePicker.tsx`, which hands the range this returns to
+ * the shared control as the one that mount resumes from, and
+ * `src/features/admin/AdminDashboardPage.tsx`, which opens on it; the range either surface applies is
+ * written back by the page that owns it — `src/features/reports/ReportsPage.tsx` on `/admin/reports`
+ * and the dashboard itself on `/admin` — through `useLocalStorage` in `src/state/hooks.ts`, which
+ * keeps the one stored key level with the range in force.
  *
  * @param stored - The stored payload as it was read, of unknown provenance.
  * @param fallback - The range to open on when nothing usable is stored: the trailing window both

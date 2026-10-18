@@ -7,6 +7,7 @@
 // The dependencies are imported as namespaces, and only here: each builder needs a different handful
 // of their names, so a name used alone, or long enough to wrap a signature, is imported by name.
 import type { ProductPerformance, ReportDefinition, ReportResult } from "@/types/analytics";
+import type { ProductImage } from "@/types/catalog";
 import type { PaymentSummary, ShippingMethod } from "@/types/commerce";
 import type * as Account from "@/types/account";
 import type * as Analytics from "@/types/analytics";
@@ -20,9 +21,8 @@ import { priceCartLines } from "@/lib/pricingService";
 import { normalisePageSize, pageCountFor, pageFlagsFor } from "@/utils/collections";
 import { roundMinorUnits } from "@/utils/format";
 import * as strings from "@/utils/strings";
-// The harness's single time basis: no builder reads a clock — every timestamp is pinned to FIXED_NOW
-// (midday UTC, 15 October 2025) and every identifier derives from the fields a builder was handed. A
-// session's expiry is the one value that must track the real clock, so the case needing one passes it.
+// The harness's single time basis: no builder reads a clock — every timestamp is FIXED_NOW and every
+// identifier derives from the fields handed in; only a session's expiry tracks the real clock.
 /** The instant every fixture timestamp defaults to: midday UTC on 15 October 2025. */
 export const FIXED_NOW = "2025-10-15T12:00:00.000Z";
 export const FIXED_DATE = FIXED_NOW.slice(0, 10);
@@ -80,15 +80,15 @@ function slugForName(name: string): string {
   const declared = [...taxonomy.CATEGORY_DEFINITIONS, ...taxonomy.BRAND_DEFINITIONS];
   return declared.find((candidate) => candidate.name === name)?.slug ?? strings.slugify(name);
 }
-/** Builds a product image: the first seed product, position 0, 600×600, a generated SVG url. */
-export function makeProductImage(overrides?: Partial<Catalog.ProductImage>): Catalog.ProductImage {
-  const product = overrides?.productId ?? strings.productId(PRODUCT_SEEDS[0].name);
+/** Builds an image of `name`: its identifier, an alt naming that product, position 0, 600×600, an SVG url. */
+export function makeProductImage(name: string, overrides?: Partial<ProductImage>): ProductImage {
+  const product = overrides?.productId ?? strings.productId(name);
   const position = overrides?.position ?? 0;
-  const defaults: Catalog.ProductImage = {
+  const defaults: ProductImage = {
     id: `${product}-image-${String(position)}`,
     productId: product,
     url: imageUrlFor(product, position),
-    alt: overrides?.alt ?? `${PRODUCT_SEEDS[0].name}, view ${String(position + 1)}`,
+    alt: overrides?.alt ?? `${name}, view ${String(position + 1)}`,
     width: IMAGE_SIZE_PX,
     height: IMAGE_SIZE_PX,
     position,
@@ -119,7 +119,7 @@ export function makeProduct(overrides?: Partial<Catalog.Product>): Catalog.Produ
     ratingCount: 12,
     stockOnHand: 25,
     lowStockThreshold: 5,
-    images: [makeProductImage({ productId: id })],
+    images: [makeProductImage(name, { productId: id })],
     tags: ["lighting", "desk"],
     status: "active",
     createdAt: FIXED_NOW,

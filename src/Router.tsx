@@ -1,17 +1,24 @@
 /**
  * Path: src/Router.tsx
  * Purpose: The route table with lazy slices, role guards, the suspension boundary and the not-found view
- * Lines: 473
+ * Lines: 545
  */
 
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
-import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
-import { Alert, Skeleton } from "@/components/ui/Feedback";
+import { Button, ButtonGroup } from "@/components/ui/Button";
+import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { NotFoundView } from "@/components/ui/NotFoundView";
-import { A11Y_COPY, COMMON_ACTIONS, PAGE_TITLES, documentTitle } from "@/constants/content";
+import {
+  A11Y_COPY,
+  ACCOUNT_ACCESS_COPY,
+  COMMON_ACTIONS,
+  PAGE_TITLES,
+  documentTitle,
+} from "@/constants/content";
 import { ROUTES, SECTION_ROLES, loginPath } from "@/constants/routes";
 import { isSessionRefusal } from "@/lib/apiContract";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
@@ -45,8 +52,11 @@ import type { ApiError } from "@/types/common";
  * and anything two slices share is a module below them, never a route through this table.
  *
  * The guard below is convenience, not access control. It keeps a visitor out of a screen their session
- * cannot serve, offers the section's own error state with a retry when the session could not be read, and
- * preserves the path they were after in the sign-in link's `returnTo` query; whether a request is allowed is
+ * cannot serve, in whichever of two ways that session calls for: a visitor with no usable session is sent to
+ * the sign-in route with the path they were after in that link's `returnTo` query, while a session in force
+ * whose role the section does not admit is refused where it stands, so the address bar names the screen it
+ * rendered and a reload of it, or a link copied out of it, opens that same refusal. It also offers the
+ * section's own error state with a retry when the session could not be read; whether a request is allowed is
  * decided in `src/lib/mockServer.ts`, which re-checks the session on every privileged endpoint, because
  * hiding a control is not a permission check.
  *
@@ -217,7 +227,7 @@ function useSessionSettled(): boolean {
 interface RequireRoleProps {
   /**
    * The roles the section admits, as one of the two lists `SECTION_ROLES` in `src/constants/routes.ts`
-   * declares. A session holding any other role is sent to sign-in with the path it asked for.
+   * declares. A session holding any other role is refused at the path it asked for.
    */
   readonly allow: readonly Role[];
 }
@@ -226,15 +236,14 @@ interface RequireRoleProps {
  * The guard over a whole section, rendered as a layout route so one check covers every path beneath it.
  *
  * It is deliberately thin: it admits a session whose role the section allows, waits where the session's
- * first answer has not arrived, and otherwise turns the visitor away to sign-in carrying the path they
- * wanted in `returnTo` — the query key `LoginPage` and `RegisterPage` read to continue to it once the
- * session is established. A role that is insufficient is treated exactly like a missing session, because
- * the two ask the visitor for the same thing and a screen of the guard's own would duplicate the sign-in
- * route's. What the two cases then get differs, and `LoginPage` is where they part: a visitor with no
- * session arrives at the form and is sent on to the preserved path once they sign in, while one who is
- * already signed in as a customer is told that their role is what refuses them — the question that screen
- * asks of the preserved path is `canReachPath` in `src/constants/routes.ts` — and is offered the account
- * and the sign-out that can answer it.
+ * first answer has not arrived, and turns every other visitor away in the way their own session calls for. A
+ * visitor with no usable session is sent to sign-in carrying the path they wanted in `returnTo` — the query
+ * key `LoginPage` and `RegisterPage` read to continue to it once the session is established. A session in
+ * force whose role the section does not admit is refused where it stands, by {@link SectionRefusal}, because
+ * the two visitors are asking different things: the first has no session to act with, and a form is what
+ * answers that, while the second has signed in as a role that is not this section's, which no form answers.
+ * Sending the second one to sign-in is what would draw a refusal at a sign-in route's address, leaving the
+ * bar naming a screen the visitor is not reading.
  *
  * A session in force is judged on its role alone and renders its subtree whatever the context's status is,
  * so an action in flight — a profile save, a sign-out elsewhere — cannot blank a screen the visitor is
@@ -251,11 +260,11 @@ interface RequireRoleProps {
  *
  * @param props - The roles this section admits; see {@link RequireRoleProps}.
  * @returns The section's matched child, a placeholder while the session resolves, the section's error state
- *   for a read that failed, or a redirect to sign-in.
+ *   for a read that failed, the refusal for a role the section does not admit, or a redirect to sign-in.
  */
 function RequireRole({ allow }: RequireRoleProps): ReactElement {
   const { error, isAuthenticated, role, status } = useAuth();
-  const { restoreSession } = useAuthDispatch();
+  const { restoreSession, signOut } = useAuthDispatch();
   const { pathname, search } = useLocation();
   const isSessionSettled = useSessionSettled();
 
@@ -265,11 +274,21 @@ function RequireRole({ allow }: RequireRoleProps): ReactElement {
     void restoreSession();
   }, [restoreSession]);
 
+  // The same shape for the refusal's sign-out: the control calls it and nobody here waits on the request,
+  // because the session leaves the context as soon as the action runs.
+  const leaveSession = useCallback((): void => {
+    void signOut();
+  }, [signOut]);
+
   if (isAuthenticated) {
     if (allow.includes(role)) {
       return <Outlet />;
     }
-    return <Navigate replace to={loginPath(`${pathname}${search}`)} />;
+    // The refusal is rendered at the address that was asked for, so the location describes the screen the
+    // visitor is reading and a reload, or a link copied from the bar, opens this same refusal. The sign-in
+    // route is reserved for the visitor with no usable session, the one a form can help; a `role` this
+    // section refuses is what this screen answers, and the sign-out it offers is how another account arrives.
+    return <SectionRefusal onSignOut={leaveSession} />;
   }
 
   // Nothing is in force yet, and that is not yet an answer: the session may be about to arrive from the
@@ -318,6 +337,59 @@ function SessionFailure({ error, onRetry }: SessionFailureProps): ReactElement {
       <div className="sp-page">
         <Alert tone="danger" error={error} actionLabel={COMMON_ACTIONS.RETRY} onAction={onRetry} />
       </div>
+    </div>
+  );
+}
+
+/** Everything {@link SectionRefusal} accepts. */
+interface SectionRefusalProps {
+  /** Ends the session the refusal was raised against, so an account the section admits can arrive. */
+  readonly onSignOut: () => void;
+}
+
+/**
+ * The refusal a guard renders for a session in force whose role the section it asked for does not admit.
+ *
+ * It is drawn at the path the visitor asked for, and that is what it is for: the address bar names the screen
+ * that is rendered, so a reload of it, and a link copied out of it, re-open this refusal rather than a
+ * sign-in screen the visitor has no use for. The sign-in route is left to the visitor holding no usable
+ * session, which is the one visitor a form can help.
+ *
+ * Its wording and both its ways on are the libraries'. The heading and the body are the refusal copy of
+ * `src/constants/content-reports.ts`, so no sentence is written here; the account this role does hold is the
+ * route constant, and the sign-out is the shared verb, which drops the session so another account can arrive
+ * and open the refused section. Neither control leads back to the path that was refused, so the two screens
+ * cannot be walked in a circle. It titles itself, rather than being titled by the guard, because a hook
+ * cannot be called after the guard's early return — and the name it sets is the refusal's own heading, so the
+ * tab describes this screen instead of the section it stands in.
+ *
+ * The page geometry is `sp-page` alone, and that is deliberate. The refused section is the administrator's,
+ * and `src/components/layout/AppLayout.tsx` together with `src/styles/layout.css` already give the
+ * administrator frame's main region the measure and the inline gutter every other route takes from
+ * `sp-container` — which is why no administrator page wraps itself in one. A container here would apply that
+ * gutter a second time and inset this screen further than the section it is refusing.
+ *
+ * @param props.onSignOut - Ends the session the refusal was raised against; see {@link SectionRefusalProps}.
+ * @returns The refusal: the empty state that states it and the two controls that answer it.
+ */
+function SectionRefusal({ onSignOut }: SectionRefusalProps): ReactElement {
+  useDocumentTitle(documentTitle(ACCOUNT_ACCESS_COPY.HEADING));
+
+  return (
+    <div className="sp-page">
+      <EmptyState
+        headingLevel={1}
+        title={ACCOUNT_ACCESS_COPY.HEADING}
+        description={ACCOUNT_ACCESS_COPY.BODY}
+      />
+      <ButtonGroup align="center">
+        <Link className="sp-btn sp-btn--primary" to={ROUTES.ACCOUNT}>
+          {ACCOUNT_ACCESS_COPY.CONTINUE_LABEL}
+        </Link>
+        <Button variant="secondary" onClick={onSignOut}>
+          {COMMON_ACTIONS.SIGN_OUT}
+        </Button>
+      </ButtonGroup>
     </div>
   );
 }

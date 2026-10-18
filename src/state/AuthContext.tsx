@@ -1,7 +1,7 @@
 /**
  * Path: src/state/AuthContext.tsx
  * Purpose: Session state with sign-in and sign-out actions, role helpers and restore on mount
- * Lines: 535
+ * Lines: 592
  */
 
 import {
@@ -35,6 +35,7 @@ import {
   isStoredToken,
   nowInstant,
   readStoredSession,
+  runCancellable,
   usableSession,
 } from "@/state/authSession";
 import type { AuthState, AuthValue, RestoredIdentity } from "@/state/authSession";
@@ -233,6 +234,24 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
   const tokenRef = useRef<SessionToken | null>(storedTokenAtMount);
   const [adopted, setAdopted] = useState<AuthState | null>(null);
 
+  // The requests the five actions have started and not yet settled, one controller each: what makes an
+  // action's request cancellable at all, and what the unmount effect below aborts. One controller per
+  // request rather than one for the life of the provider — the reason is recorded on the runner that
+  // creates them, and getting it wrong would refuse every request the document makes after a trial mount.
+  const inFlightRef = useRef<Set<AbortController>>(new Set());
+
+  // The provider's own cancellation, and the whole of it: no single request is ever cancelled from here,
+  // because the only moment at which none of the five actions' answers can be published into this tree any
+  // more is the moment the tree goes. The registry is read into a local for the cleanup and emptied with
+  // it, so each controller aborts the request still running under it and none is aborted a second time.
+  useEffect(() => {
+    const inFlight = inFlightRef.current;
+    return () => {
+      for (const controller of inFlight) controller.abort();
+      inFlight.clear();
+    };
+  }, []);
+
   /**
    * Adopts a token the store has just issued: it is persisted through `src/utils/storage.ts`, and it
    * becomes the token this client revalidates.
@@ -357,75 +376,101 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
 
   const value = useMemo<AuthValue>(() => derivedValue(state), [state]);
 
+  /**
+   * Adopts the outcome of an action's request, unless that request has been cancelled: what every state
+   * an action writes *after* an await goes through, so a provider subtree that unmounted with the
+   * request in flight is never set into. The synchronous `loading` write a sign-in, a registration or a
+   * sign-out makes before its request leaves is not routed here, because it happens before anything can
+   * cancel it: what this guards is the answer, not the intent.
+   *
+   * @param signal - The signal the request ran under; `aborted` once the tree that asked for it is gone.
+   * @param next - The state the answer would publish.
+   * @returns Whether the state was adopted, so a caller can leave the rest of its publishing step — an
+   * announcement, a revalidation reset — behind the same decision.
+   */
+  const publish = useCallback((signal: AbortSignal, next: AuthState): boolean => {
+    if (signal.aborted) return false;
+    setAdopted(next);
+    return true;
+  }, []);
+
   const signIn = useCallback(
     async (credentials: Credentials): Promise<Result<Session>> => {
       const before = stateRef.current;
       setAdopted({ ...before, status: "loading", error: null });
-      const answer = await signInRequest(credentials);
-      if (!answer.ok) {
-        // A refused sign-in leaves whatever session was already in force alone and records the failure,
-        // which the form maps onto its fields through `toAuthFieldErrors`.
-        setAdopted({
-          status: "error",
-          session: before.session,
-          customer: before.customer,
-          error: answer.error,
+      return await runCancellable(inFlightRef.current, async (signal) => {
+        const answer = await signInRequest(credentials, { signal });
+        if (!answer.ok) {
+          // A refused sign-in leaves whatever session was already in force alone and records the failure,
+          // which the form maps onto its fields through `toAuthFieldErrors`.
+          publish(signal, {
+            status: "error",
+            session: before.session,
+            customer: before.customer,
+            error: answer.error,
+          });
+          return answer;
+        }
+
+        const session = answer.value;
+        if (isSessionExpired(session, nowInstant())) {
+          // The store issued a session the local expiry rule judges lapsed — the one direction the two
+          // clocks can disagree about. Nothing is adopted and nothing is persisted, so the visitor is not
+          // signed in; the store's own answer is still what the form receives, because a refusal the
+          // store did not make is not invented here.
+          removeStored(STORAGE_KEYS.SESSION);
+          tokenRef.current = null;
+          publish(signal, SIGNED_OUT_STATE);
+          return answer;
+        }
+
+        adoptToken(session.token);
+        const profile = await getProfile(session.customerId, {
+          sessionToken: session.token,
+          signal,
         });
+        publish(
+          signal,
+          profile.ok
+            ? { status: "success", session, customer: profile.value, error: null }
+            : { status: "error", session, customer: null, error: profile.error },
+        );
         return answer;
-      }
-
-      const session = answer.value;
-      if (isSessionExpired(session, nowInstant())) {
-        // The store issued a session the local expiry rule judges lapsed — the one direction the two
-        // clocks can disagree about. Nothing is adopted and nothing is persisted, so the visitor is not
-        // signed in; the store's own answer is still what the form receives, because a refusal the
-        // store did not make is not invented here.
-        removeStored(STORAGE_KEYS.SESSION);
-        tokenRef.current = null;
-        setAdopted(SIGNED_OUT_STATE);
-        return answer;
-      }
-
-      adoptToken(session.token);
-      const profile = await getProfile(session.customerId, { sessionToken: session.token });
-      setAdopted(
-        profile.ok
-          ? { status: "success", session, customer: profile.value, error: null }
-          : { status: "error", session, customer: null, error: profile.error },
-      );
-      return answer;
+      });
     },
-    [adoptToken],
+    [adoptToken, publish],
   );
 
   const register = useCallback(
     async (input: RegistrationInput): Promise<Result<RegistrationResult>> => {
       const before = stateRef.current;
       setAdopted({ ...before, status: "loading", error: null });
-      const answer = await registerAccount(input);
-      if (!answer.ok) {
-        setAdopted({
-          status: "error",
-          session: before.session,
-          customer: before.customer,
-          error: answer.error,
-        });
-        return answer;
-      }
+      return await runCancellable(inFlightRef.current, async (signal) => {
+        const answer = await registerAccount(input, { signal });
+        if (!answer.ok) {
+          publish(signal, {
+            status: "error",
+            session: before.session,
+            customer: before.customer,
+            error: answer.error,
+          });
+          return answer;
+        }
 
-      const { session, customer } = answer.value;
-      if (isSessionExpired(session, nowInstant())) {
-        removeStored(STORAGE_KEYS.SESSION);
-        tokenRef.current = null;
-        setAdopted(SIGNED_OUT_STATE);
-        return answer;
-      }
+        const { session, customer } = answer.value;
+        if (isSessionExpired(session, nowInstant())) {
+          removeStored(STORAGE_KEYS.SESSION);
+          tokenRef.current = null;
+          publish(signal, SIGNED_OUT_STATE);
+          return answer;
+        }
 
-      adoptToken(session.token);
-      setAdopted({ status: "success", session, customer, error: null });
-      return answer;
+        adoptToken(session.token);
+        publish(signal, { status: "success", session, customer, error: null });
+        return answer;
+      });
     },
-    [adoptToken],
+    [adoptToken, publish],
   );
 
   // Both come from `useAsync` and are stable for the life of the provider, which is what keeps the
@@ -435,22 +480,28 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
 
   const signOut = useCallback(async (): Promise<void> => {
     const session = stateRef.current.session;
-    if (session !== null) {
-      // Best effort by nature: the store is asked to retire the token and a refusal changes nothing
-      // for the visitor, whose session this client drops either way. Awaiting it keeps the promise
-      // honest — the request has been answered by the time a caller navigates.
-      await signOutRequest(session.token);
-    }
-    removeStored(STORAGE_KEYS.SESSION);
-    tokenRef.current = null;
-    setAdopted(SIGNED_OUT_STATE);
-    // The revalidation's own answer is discarded with the session, so a restored identity does not
-    // linger in memory behind the signed-out state, and anything still in flight is aborted.
-    resetRestore();
-    // Announced for a session the visitor gave up as for one that lapsed: both end signed out, and a
-    // sign-out nothing announces leaves the header's change unexplained.
-    announce(FEEDBACK_COPY.TOAST_SIGNED_OUT);
-  }, [announce, resetRestore]);
+    await runCancellable(inFlightRef.current, async (signal) => {
+      if (session !== null) {
+        // Best effort by nature: the store is asked to retire the token and a refusal changes nothing
+        // for the visitor, whose session this client drops either way. Awaiting it keeps the promise
+        // honest — the request has been answered by the time a caller navigates.
+        await signOutRequest(session.token, { signal });
+      }
+      removeStored(STORAGE_KEYS.SESSION);
+      tokenRef.current = null;
+      // The local drop above stands whatever happened to the request, because a session the visitor has
+      // given up must not stay in the store for a later load to read back as a live one. What is
+      // published behind the guard instead: a request that was cancelled has no session state to publish
+      // into, and a sign-out announced into a tree that is gone is an announcement nobody hears.
+      if (!publish(signal, SIGNED_OUT_STATE)) return;
+      // The revalidation's own answer is discarded with the session, so a restored identity does not
+      // linger in memory behind the signed-out state, and anything still in flight is aborted.
+      resetRestore();
+      // Announced for a session the visitor gave up as for one that lapsed: both end signed out, and a
+      // sign-out nothing announces leaves the header's change unexplained.
+      announce(FEEDBACK_COPY.TOAST_SIGNED_OUT);
+    });
+  }, [announce, publish, resetRestore]);
 
   const restoreSession = useCallback((): Promise<void> => {
     reloadRestore();
@@ -469,20 +520,26 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     const current = stateRef.current;
     const session = usableSession(current.session);
     if (session === null) return;
-    const profile = await getProfile(session.customerId, { sessionToken: session.token });
-    setAdopted(
-      profile.ok
-        ? { status: "success", session, customer: profile.value, error: null }
-        : {
-            status: "error",
-            // The session stands — the store issued it and every request still carries it — so only
-            // the projection failed, and the account as it last read is kept.
-            session,
-            customer: current.customer,
-            error: profile.error,
-          },
-    );
-  }, []);
+    await runCancellable(inFlightRef.current, async (signal) => {
+      const profile = await getProfile(session.customerId, {
+        sessionToken: session.token,
+        signal,
+      });
+      publish(
+        signal,
+        profile.ok
+          ? { status: "success", session, customer: profile.value, error: null }
+          : {
+              status: "error",
+              // The session stands — the store issued it and every request still carries it — so only
+              // the projection failed, and the account as it last read is kept.
+              session,
+              customer: current.customer,
+              error: profile.error,
+            },
+      );
+    });
+  }, [publish]);
 
   const actions = useMemo<AuthActions>(
     () => ({ signIn, register, signOut, restoreSession, refresh }),

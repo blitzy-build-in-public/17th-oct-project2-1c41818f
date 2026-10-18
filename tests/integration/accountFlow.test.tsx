@@ -1,11 +1,12 @@
 /**
  * Path: tests/integration/accountFlow.test.tsx
  * Purpose: Sign-in, profile edit, order history and the address book, plus the unauthenticated redirect.
- * Lines: 579
+ * Lines: 599
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
 import { DEMO_ACCOUNTS } from "@/constants/config";
 import {
   ACCOUNT_ACCESS_COPY,
@@ -32,6 +33,7 @@ import type { MinorUnits } from "@/types/common";
 import { toDateInputValue } from "@/utils/dates";
 import { formatMoney, parseMoneyToMinor } from "@/utils/format";
 
+import { descriptionsOfInvalidFields, fieldLabel, openSection } from "../helpers/journeyHarness";
 import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
 import type { UserEvent } from "../testUtils";
 
@@ -69,23 +71,6 @@ function uniqueEmail(tag: string): string {
 
 // Driving the real forms --------------------------------------------------------------------------
 
-/** The pattern a field's label is found by: a required field's label continues past its copy with its
- *  marker, so its whole text is never the copy alone. */
-function fieldLabel(label: string): RegExp {
-  return new RegExp(`^${label}`);
-}
-
-/** The description each of a scope's invalid controls is read by: the text of the ids its own
- *  `aria-describedby` names, joined in the order they are read, and empty when it names none. */
-function descriptionsOfInvalidFields(scope: ParentNode): readonly string[] {
-  return [...scope.querySelectorAll('[aria-invalid="true"]')].map((control) =>
-    (control.getAttribute("aria-describedby") ?? "")
-      .split(/\s+/)
-      .map((id) => document.getElementById(id)?.textContent ?? "")
-      .join(" "),
-  );
-}
-
 async function fillRegistration(
   user: UserEvent,
   email: string,
@@ -117,10 +102,6 @@ async function signInAs(
   await waitFor(() => {
     expect(screen.queryByText(ACCOUNT_COPY.SIGN_IN_HEADING)).toBeNull();
   });
-}
-
-async function openSection(user: UserEvent, label: string): Promise<void> {
-  await user.click(await screen.findByRole("link", { name: label }));
 }
 
 /** The panel the header's account trigger controls, which is read from the id it points at. */
@@ -173,6 +154,13 @@ function sectionFor(heading: string): HTMLElement {
   return parent;
 }
 
+/** One address card, found by the street line its own heading shows. */
+function addressCard(line1: string): HTMLElement {
+  const card = screen.getByRole("heading", { name: new RegExp(line1) }).closest("li");
+  if (card === null) throw new Error(`The address card at "${line1}" is not a list item.`);
+  return card;
+}
+
 describe("the customer accounts flow", () => {
   beforeEach(() => {
     resetApiState();
@@ -189,8 +177,7 @@ describe("the customer accounts flow", () => {
     expect(await screen.findByText(ACCOUNT_COPY.SIGN_IN_HEADING)).toBeVisible();
     expect(screen.queryByRole("heading", { name: ACCOUNT_COPY.ORDERS_HEADING })).toBeNull();
 
-    // A wrong password is refused with one sentence that names neither member, and marks neither control:
-    // a refusal that pointed at one would tell a stranger which addresses have accounts.
+    // A wrong password is refused with one sentence that names neither member and marks neither control: pointing at one would tell a stranger which addresses have accounts.
     const email = screen.getByLabelText(fieldLabel(ACCOUNT_COPY.EMAIL_LABEL));
     const password = screen.getByLabelText(fieldLabel(ACCOUNT_COPY.PASSWORD_LABEL));
     await user.type(email, DEMO_ACCOUNTS.CUSTOMER_EMAIL);
@@ -214,8 +201,7 @@ describe("the customer accounts flow", () => {
     const email = await screen.findByLabelText(fieldLabel(ACCOUNT_COPY.EMAIL_LABEL));
     const password = screen.getByLabelText(fieldLabel(ACCOUNT_COPY.PASSWORD_LABEL));
 
-    // The address's shape is judged where it was typed, in the shared validator's own words, and linked to
-    // the control rather than only reported above the form.
+    // The address's shape is judged where it was typed, in the shared validator's own words, and linked to the control rather than only reported above the form.
     await user.type(email, "not-an-email");
     await user.type(password, DEMO_ACCOUNTS.PASSWORD);
     await user.click(screen.getByRole("button", { name: ACCOUNT_COPY.SIGN_IN_SUBMIT_LABEL }));
@@ -224,8 +210,7 @@ describe("the customer accounts flow", () => {
     expect(email.getAttribute("aria-describedby")).toContain(shape.id);
     expect(screen.queryByText(ACCOUNT_COPY.SIGN_IN_FAILED_MESSAGE)).toBeNull();
 
-    // An address that is well formed but names no account is the refusal the generic sentence covers, and it
-    // still marks neither control: a refusal that pointed at one would tell a stranger where accounts are.
+    // An address that is well formed but names no account is the refusal the generic sentence covers, and it still marks neither control: pointing at one would tell a stranger where accounts are.
     await user.clear(email);
     await user.type(email, "stranger@salespro.test");
     await user.click(screen.getByRole("button", { name: ACCOUNT_COPY.SIGN_IN_SUBMIT_LABEL }));
@@ -240,9 +225,8 @@ describe("the customer accounts flow", () => {
     expect(await profileScreen()).toBeVisible();
     signedIn.unmount();
 
-    // The sign-in route again, this time with the session in storage and an account path in hand: that path
-    // is one this customer can open, so it stays the destination, while the tab title names the route rather
-    // than the panel's own state — the address in the bar is still `/login`.
+    // The sign-in route again, with the session in storage and an account path in hand: that path is one this
+    // customer can open so it stays the destination, and the tab names the route because the bar still says `/login`.
     const returning = renderApp({ route: loginPath(ROUTES.ACCOUNT_ORDERS) });
     const continuation = await screen.findByRole("link", { name: COMMON_ACTIONS.CONTINUE });
     expect(continuation).toHaveAttribute("href", ROUTES.ACCOUNT_ORDERS);
@@ -259,8 +243,8 @@ describe("the customer accounts flow", () => {
     expect(await profileScreen()).toBeVisible();
     signedIn.unmount();
 
-    // The privileged route with the customer's session in storage: the guard preserves the path it refuses,
-    // and the screen says that the role is what refuses it instead of offering to continue into it again.
+    // The privileged route with the customer's session in storage: the guard refuses in place, at the address
+    // that was asked for — `/admin` stays in the bar while this refusal is what it draws, reload included.
     const refused = renderApp({ route: ROUTES.ADMIN });
     expect(
       await screen.findByRole("heading", { name: ACCOUNT_ACCESS_COPY.HEADING, level: 1 }),
@@ -268,11 +252,15 @@ describe("the customer accounts flow", () => {
     expect(screen.getByText(ACCOUNT_ACCESS_COPY.BODY)).toBeVisible();
     expect(screen.queryByRole("heading", { name: PAGE_TITLES.DASHBOARD, level: 1 })).toBeNull();
     await waitFor(() => {
-      expect(document.title).toBe(documentTitle(PAGE_TITLES.SIGN_IN));
+      expect(document.title).toBe(documentTitle(ACCOUNT_ACCESS_COPY.HEADING));
     });
 
-    // Nothing here leads back into the refusal, so the guard's redirect cannot be walked in a circle: the way
-    // on is the account this role does hold, and a sign-out is how another account gets to the refused page.
+    // The screen is the refusal's, not the sign-in route's. `MemoryRouter` writes no `window.location`, so what
+    // stands in for the bar is that the sign-in screen is absent — which the old redirect would have drawn instead.
+    expect(screen.queryByText(ACCOUNT_COPY.SIGN_IN_HEADING)).toBeNull();
+    expect(screen.queryByLabelText(fieldLabel(ACCOUNT_COPY.EMAIL_LABEL))).toBeNull();
+
+    // Nothing here leads back in, so the refusal cannot be walked in a circle: the way on is the account this role holds.
     expect(screen.queryByRole("link", { name: COMMON_ACTIONS.CONTINUE })).toBeNull();
     expect(screen.getByRole("link", { name: ACCOUNT_ACCESS_COPY.CONTINUE_LABEL })).toHaveAttribute(
       "href",
@@ -288,8 +276,8 @@ describe("the customer accounts flow", () => {
     expect(await profileScreen()).toBeVisible();
     signedIn.unmount();
 
-    // The guard preserves the search along with the path it refuses, so the value it hands over is judged by
-    // the section its route sits in rather than by the whole string it arrived as.
+    // The guard refuses at the address that was asked for, search string and all, instead of handing the path
+    // over to another route: `/admin/reports?bucket=week` is where this refusal is rendered.
     renderApp({ route: `${ROUTES.ADMIN_REPORTS}?bucket=week` });
     expect(
       await screen.findByRole("heading", { name: ACCOUNT_ACCESS_COPY.HEADING, level: 1 }),
@@ -303,8 +291,7 @@ describe("the customer accounts flow", () => {
     const email = screen.getByLabelText(fieldLabel(ACCOUNT_COPY.EMAIL_LABEL));
     const password = screen.getByLabelText(fieldLabel(ACCOUNT_COPY.PASSWORD_LABEL));
 
-    // The four judged fields each report through the description its control names; the consent switch
-    // carries no rule and reports none.
+    // The four judged fields each report through the description its control names; the consent switch carries no rule and reports none.
     await user.click(submit);
     const missing = descriptionsOfInvalidFields(document.body);
     expect(missing).toHaveLength(4);
@@ -339,6 +326,45 @@ describe("the customer accounts flow", () => {
     expect(await screen.findByRole("heading", { name: PAGE_TITLES.CATALOG })).toBeVisible();
   });
 
+  it("saves an address, marks it the default shipping one and removes it again", async () => {
+    const line1 = "12 Alder Way";
+    const { user } = renderApp({ route: ROUTES.REGISTER });
+    await registerAndLand(user, uniqueEmail("addresses"));
+    await openSection(user, ACCOUNT_COPY.NAV_ADDRESSES_LABEL);
+    expect(await screen.findByText(EMPTY_STATES.addresses.title)).toBeVisible();
+
+    // The empty state's own action opens the dialog, and the labels the checkout copy owns fill its fields.
+    await user.click(screen.getByRole("button", { name: EMPTY_STATES.addresses.actionLabel }));
+    const dialog = await screen.findByRole("dialog", { name: ACCOUNT_COPY.ADD_ADDRESS_LABEL });
+    const fill = (label: string): HTMLElement => within(dialog).getByLabelText(fieldLabel(label));
+    await user.type(fill(CHECKOUT_COPY.FULL_NAME_LABEL), "Nina Weber");
+    await user.type(fill(CHECKOUT_COPY.ADDRESS_LINE_1_LABEL), line1);
+    await user.type(fill(CHECKOUT_COPY.CITY_LABEL), "Portland");
+    await user.type(fill(CHECKOUT_COPY.REGION_LABEL), "OR");
+    await user.type(fill(CHECKOUT_COPY.POSTAL_CODE_LABEL), "97205");
+    await user.click(within(dialog).getByRole("button", { name: COMMON_ACTIONS.SAVE }));
+
+    // The book is re-read after a save, so the card the dialog leaves behind is awaited; that card then carries the shipping flag and exactly one badge of that kind.
+    expect(await screen.findByText(line1)).toBeVisible();
+    const card = addressCard(line1);
+    await user.click(within(card).getByLabelText(ACCOUNT_COPY.SET_DEFAULT_SHIPPING_LABEL));
+    await waitFor(() =>
+      expect(within(card).getAllByText(ACCOUNT_COPY.DEFAULT_SHIPPING_BADGE)).toHaveLength(1),
+    );
+
+    // The removal is the dialog's own confirmation, and the book states its empty state again once the card has gone.
+    const remove = new RegExp(`^${COMMON_ACTIONS.REMOVE}\\b`);
+    await user.click(within(card).getByRole("button", { name: remove }));
+    const confirm = await screen.findByRole("dialog", {
+      name: ACCOUNT_COPY.REMOVE_ADDRESS_DIALOG_TITLE,
+    });
+    await user.click(
+      within(confirm).getByRole("button", { name: ACCOUNT_COPY.CONFIRM_REMOVE_ADDRESS_LABEL }),
+    );
+    await waitFor(() => expect(screen.queryByText(line1)).toBeNull());
+    expect(screen.getByText(EMPTY_STATES.addresses.title)).toBeVisible();
+  });
+
   it("shows the signed-in customer only their own account and orders, down to one order's figures", async () => {
     expect(SHOPPER_ORDERS.length).toBeGreaterThan(0);
     const { user, unmount } = renderApp({ route: ROUTES.LOGIN });
@@ -368,8 +394,7 @@ describe("the customer accounts flow", () => {
     expect(await screen.findByRole("heading", { name: number })).toBeVisible();
 
     // Every line the order was placed with, at the price it was placed at: the priced cart the order keeps,
-    // whose own line subtotal is the goods value each row prints, and whose name, sku, quantity and unit price
-    // are the ones the row reads.
+    // whose own line subtotal is the goods value each row prints, and whose name, sku, quantity and price are the row's.
     const items = sectionFor(ACCOUNT_COPY.ORDER_DETAIL_ITEMS_HEADING);
     const lines = within(items).getAllByRole("listitem");
     const priced = order.pricedCart.lines;
@@ -384,8 +409,7 @@ describe("the customer accounts flow", () => {
     });
 
     // What the screen shows reconciles with itself as well as with the record behind it: the rows' goods values
-    // sum to the Subtotal row, so the promotion is applied once, in the discount row beneath them. The discount
-    // is rendered signed and the parser reads its magnitude, which is why it is subtracted here.
+    // sum to the Subtotal row, so the promotion lands once, in the signed discount row read by magnitude here.
     const subtotal = displayedAmount(items, CART_COPY.SUMMARY_SUBTOTAL_LABEL);
     const shipping = displayedAmount(items, CART_COPY.SUMMARY_SHIPPING_LABEL);
     const tax = displayedAmount(items, CART_COPY.SUMMARY_TAX_LABEL);
@@ -399,8 +423,7 @@ describe("the customer accounts flow", () => {
     expect(printedAmounts.reduce((sum, amount) => sum + amount, 0)).toBe(subtotal);
     expect(subtotal - discount + shipping + tax).toBe(total);
 
-    // Both addresses the order was placed with read the country's name, never the code the address stores, which
-    // is how the review step and the address book read theirs.
+    // Both addresses the order was placed with read the country's name, never the code the address stores, which is how the review step and the address book read theirs.
     const addresses = sectionFor(ACCOUNT_COPY.ORDER_DETAIL_ADDRESS_HEADING).parentElement;
     if (addresses === null)
       throw new Error("The order detail's address blocks have no shared frame.");
@@ -483,8 +506,7 @@ describe("the customer accounts flow", () => {
       fieldLabel(ACCOUNT_COPY.ORDERS_STATUS_FILTER_LABEL),
     );
 
-    // The shopper's history is kept clear of cancellation by the seed, so this filter legitimately matches
-    // nothing and reaches the filtered empty state rather than the account's own.
+    // The shopper's history is kept clear of cancellation by the seed, so this filter legitimately matches nothing and reaches the filtered empty state rather than the account's own.
     await user.selectOptions(status, "cancelled");
     expect(await screen.findByRole("button", { name: COMMON_ACTIONS.CLEAR_ALL })).toBeVisible();
     expect(screen.queryByRole("table", { name: ACCOUNT_COPY.ORDERS_HEADING })).toBeNull();
@@ -506,8 +528,7 @@ describe("the customer accounts flow", () => {
       expect(listedOrderNumbers()).toHaveLength(SHOPPER_ORDERS.length);
     });
 
-    // The whole history fits one page, and the control reports exactly that: one current page, nowhere to
-    // move to. That is why the rows changing is asserted through the filter rather than by paging forward.
+    // The whole history fits one page, which is why the rows changing is asserted through the filter, not paging.
     const pager = screen.getByRole("navigation", { name: A11Y_COPY.PAGINATION_LABEL });
     expect(within(pager).getAllByRole("button", { current: "page" })).toHaveLength(1);
     expect(within(pager).getByRole("button", { name: COMMON_ACTIONS.NEXT })).toBeDisabled();
@@ -543,8 +564,7 @@ describe("the customer accounts flow", () => {
   });
 
   it("answers another account's order with the way back rather than a retry that cannot", async () => {
-    // A record this session holds no readable copy of: the seam answers it `404`, exactly as it answers an
-    // identifier no order carries, so asking for it again cannot produce the order.
+    // A record this session holds no readable copy of: the seam answers it `404`, exactly as it answers an identifier no order carries, so asking for it again cannot produce the order.
     const foreign = ORDERS.find(
       (order) => order.customerId !== null && order.customerId !== SHOPPER.id,
     );

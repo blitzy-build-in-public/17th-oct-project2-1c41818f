@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/adminReportsFlow.test.tsx
  * Purpose: The dashboard and the three reports for a range, with CSV export and the empty range
- * Lines: 596
+ * Lines: 600
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +16,7 @@ import {
   documentTitle,
 } from "@/constants/content";
 import {
+  ACCOUNT_ACCESS_COPY,
   ADMIN_COPY,
   CHANNEL_LABELS,
   DATE_RANGE_COPY,
@@ -57,15 +58,19 @@ import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../
 import { COUNT_TEXT, KPI_DELTA_TEXT, MONEY_TEXT, PERCENT_TEXT } from "./figureReaders";
 import type { RenderHarness, UserEvent } from "../testUtils";
 
-// The real application over its seeded data, with the seam's failure switch a case's only other lever. Both
-// acceptance signals are here: the guard's own role check, and the CSV a report exports against its table.
+// The real application over its seeded data, with the seam's failure switch a case's only other lever.
 
 /** The sign-in form's controls; a required field's label also carries the hidden requirement text. */
 const EMAIL_FIELD = new RegExp(`^${ACCOUNT_COPY.EMAIL_LABEL}`);
 const PASSWORD_FIELD = new RegExp(`^${ACCOUNT_COPY.PASSWORD_LABEL}`);
 
-/** The alignment class the shared table's own contract gives a column of figures. */
-const NUMERIC_CELL_CLASS = "sp-table__num";
+/** The pattern each reported column of figures states its cells in; a format absent from it states none. */
+const FIGURE_CELL_TEXT: Readonly<Partial<Record<ReportCellFormat, RegExp>>> = {
+  money: MONEY_TEXT,
+  integer: COUNT_TEXT,
+  percent: PERCENT_TEXT,
+  "compact-number": /^\d+(\.\d+)?[KMB]?$/, // the notation `formatCompactNumber` writes: `1.3K`, `1.2M`
+};
 
 /** The heading each report charts under, so a paired data table is found by the caption built from it. */
 const CHART_HEADINGS: Readonly<Record<ReportKind, string>> = {
@@ -231,8 +236,7 @@ function readBlobText(blob: Blob): Promise<string> {
 
 /** The file the export handed the browser, from the blob the object-URL stub captured. */
 async function capturedCsvRows(): Promise<string[][]> {
-  // Read through `vi.spyOn` rather than off `URL`, which keeps the history observable without handing
-  // the method away from its object.
+  // Read through `vi.spyOn` rather than off `URL`, so the history stays observable without handing it away.
   const blob = vi.spyOn(URL, "createObjectURL").mock.calls.at(-1)?.[0];
   if (!(blob instanceof Blob)) throw new Error("The export created no blob for this case to read.");
   return parseCsvText(await readBlobText(blob));
@@ -248,19 +252,19 @@ afterEach(() => {
 
 /** The table, its sorting, its totals, its paired chart and its figures, for one report definition. */
 async function expectReportSurface(user: UserEvent, definition: ReportDefinition): Promise<void> {
-  // The definition's own columns head the table in its own order, and the run's totals row closes it.
   const { table, grid } = await reportTableOf(definition);
   expect(grid[0]).toEqual(definition.columns.map((column) => column.label));
   expect(grid.length).toBeGreaterThan(2);
   expect(grid.at(-1)?.[0]).toBe(REPORTS_COPY.TOTALS_ROW_LABEL);
 
-  // A column of figures aligns on its digits, and activating a header orders the rows by that column.
+  // A column of figures through its body rows' cells and the order below; the alignment class is presentation.
   const numericColumn = definition.columns.findIndex((column) => column.align === "end");
   const sortColumn = definition.columns.findIndex(
     (column) => column.sortable && column.format === "integer",
   );
-  const bodyRow = within(table).getAllByRole("row")[1];
-  expect(within(bodyRow).getAllByRole("cell")[numericColumn]).toHaveClass(NUMERIC_CELL_CLASS);
+  const figureText = FIGURE_CELL_TEXT[definition.columns[numericColumn].format];
+  if (figureText === undefined) throw new Error("the end-aligned column states no figures");
+  for (const row of grid.slice(1, -1)) expect(row[numericColumn]).toMatch(figureText);
   await user.click(
     within(table).getByRole("button", { name: definition.columns[sortColumn].label }),
   );
@@ -298,7 +302,10 @@ describe("the guard over the administrator routes", () => {
     dashboard.unmount();
 
     renderApp({ route: ROUTES.ADMIN_REPORTS });
-    await waitFor(() => expect(document.title).toBe(documentTitle(PAGE_TITLES.ACCOUNT)));
+    expect(
+      await screen.findByRole("heading", { name: ACCOUNT_ACCESS_COPY.HEADING, level: 1 }),
+    ).toBeVisible();
+    await waitFor(() => expect(document.title).toBe(documentTitle(ACCOUNT_ACCESS_COPY.HEADING)));
     expect(screen.queryByRole("tablist", { name: REPORTS_COPY.SELECTOR_LABEL })).toBeNull();
   });
 });
@@ -376,7 +383,6 @@ describe("the dashboard an administrator sees", () => {
     const revenueBefore = kpiFigure(ADMIN_COPY.KPI_REVENUE_LABEL);
     expect(bucketCount(ADMIN_COPY.CHART_HEADING)).toBe(DEFAULT_REPORT_RANGE_DAYS);
 
-    // A narrower preset recomputes every figure and redraws the chart over fewer buckets.
     const week = { from: addDays(opening.to, -6), to: opening.to };
     await user.click(screen.getByRole("button", { name: lastDaysLabel(7) }));
     await waitFor(() => expect(bucketCount(ADMIN_COPY.CHART_HEADING)).toBe(7));
@@ -483,8 +489,7 @@ describe("the export a report offers", () => {
   it("writes out the rows on screen, and remembers the range it was run over", async () => {
     const reports = await openAsAdmin(ROUTES.ADMIN_REPORTS);
     const { user } = reports;
-    // A seven-day period, so every row the run produced is on one page: the table pages, the export
-    // writes the whole run, and only a range this narrow makes the two row counts comparable.
+    // A seven-day period keeps every row the run produced on one page, so the two row counts are comparable.
     const today = defaultReportRange().to;
     await applyRange(user, addDays(today, -6), today);
     const sales = definitionOf("sales");
@@ -509,7 +514,6 @@ describe("the export a report offers", () => {
     expect(screen.getByText(exportNote(CSV_MAX_ROWS, CSV_MAX_CELL_LENGTH))).toBeInTheDocument();
     expect(screen.getByText(exportRowCountNote(csv.length - 1))).toBeInTheDocument();
 
-    // The range last used is the one the next visit opens on, on either administrator surface.
     const chosen = { from: addDays(today, -13), to: today };
     const fromField = (): HTMLElement => screen.getByLabelText(DATE_RANGE_COPY.FROM_LABEL);
     await applyRange(user, chosen.from, chosen.to);

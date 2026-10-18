@@ -16,7 +16,7 @@
 // Back-office access ---------------------------------------------------------------------------
 /**
  * What a signed-in visitor whose role cannot reach the path they asked for is told. Consumer:
- * `src/features/account/LoginPage.tsx`, which states the refusal instead of offering to continue to it.
+ * `src/Router.tsx`, which renders it as the refusal at that path, so the address bar names that screen.
  */
 export const ACCOUNT_ACCESS_COPY = {
   HEADING: "You do not have access to that page",

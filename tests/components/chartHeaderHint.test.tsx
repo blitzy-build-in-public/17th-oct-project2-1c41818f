@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/chartHeaderHint.test.tsx
  * Purpose: The chart header's three controls in order, and the hint the last of them reveals
- * Lines: 118
+ * Lines: 113
  */
 
 import { describe, expect, it } from "vitest";
@@ -64,24 +64,19 @@ describe("the chart header's controls", () => {
   it("holds the bucket field, the split toggle and the hint in that order", async () => {
     const { container, user } = renderChart();
     const row = controlsRow(container);
-    const bucket = screen.getByLabelText(BUCKET_CONTROL_LABEL);
+    const bucket = within(row).getByLabelText(BUCKET_CONTROL_LABEL);
     const toggle = within(row).getByRole("group", { name: ADMIN_COPY.CHART_SERIES_CONTROL_LABEL });
     // Named by what its hint is about, which is the label the copy module owns.
     const hint = within(row).getByRole("button", { name: ADMIN_COPY.CHART_SERIES_HINT_LABEL });
 
-    // The row mounts the bucket's field, then the split's toggle, then the hint: three controls, in order.
-    expect(row.children).toHaveLength(3);
-    const [field, group, hintSlot] = [...row.children];
-    expect(field).toHaveClass("sp-field");
-    expect(field).toContainElement(bucket);
-    expect(group).toBe(toggle);
-    expect(hintSlot).toContainElement(hint);
-
-    // The hint is the row's last control, so one Tab from the split toggle before it reaches the hint.
-    const channel = within(toggle).getByRole("button", {
-      name: ADMIN_COPY.CHART_SERIES_CHANNEL_LABEL,
-    });
-    channel.focus();
+    // The row mounts the bucket's field, then the split's toggle, then the hint, and the order a keyboard
+    // walks them in is that same order: the field, the toggle's two buttons, then the hint last.
+    const [category, channel] = within(toggle).getAllByRole("button");
+    bucket.focus();
+    expect(bucket).toHaveFocus();
+    await user.tab();
+    expect(category).toHaveFocus();
+    await user.tab();
     expect(channel).toHaveFocus();
     await user.tab();
     expect(hint).toHaveFocus();

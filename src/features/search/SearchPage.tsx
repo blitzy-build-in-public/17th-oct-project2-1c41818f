@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 337
+ * Lines: 353
  */
 
 import { useId } from "react";
@@ -133,9 +133,13 @@ export interface SearchPageProps {
  * read sits with the component that maps the results rather than higher up, so a change to the cart
  * re-renders the results and not the toolbar, the facets or the summary above them.
  *
- * Its four data states are rendered in the order a load passes through them: the placeholder grid while a page
- * is on its way; the shaped failure with its retry when the request did not answer; the empty state with the
- * one action that helps when the query matched nothing; and otherwise the grid with its paging. The toolbar
+ * Its four data states are rendered in the order a load passes through them: the placeholder grid while the
+ * answer for the query the address bar names is on its way — the commit in which the URL has moved on and the
+ * load for it has not been issued yet included, because the page the view still holds there belongs to the
+ * previous query; the shaped failure with its retry when the request did not answer; the empty state with the
+ * one action that helps when the query matched nothing; and otherwise the grid with its paging. So no query's
+ * figures are ever labelled with another query's wording: the count sentence and the polite announcement are
+ * stated only for the query they belong to, and are empty until that query's answer is in hand. The toolbar
  * above them stays usable throughout, so a shopper can refine the query that just failed.
  *
  * A term with nothing searchable in it filters nothing and is not an error, so it is not one of those states:
@@ -181,9 +185,21 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
   // A term the address carries that holds nothing searchable: no token survived tokenising, so nothing was
   // filtered by it. Without the notice below, the whole catalogue would read as that term's own answer.
   const isTermIgnored = query.trim() !== "" && isBrowsing;
-  // The page in hand, and only while the last load did not fail: a failure is reported by the alert below, and
-  // a count beside it would describe a query the surface could not answer.
-  const answer = view.error === null ? view.page : null;
+  // Whether the view holds an answer to the query the address bar names. The view's own signal for that is
+  // `view.query`, which is `null` while it describes no request for the address's query — the commit in which
+  // the URL has moved on and the load for it has not been issued yet — and the page it still holds there is
+  // the previous query's, so nothing below may present those figures as this query's.
+  const isAnswerCurrent = view.query !== null;
+  // The wait a visitor is in: a load on its way, or that commit before it is issued. Both stand the
+  // placeholder grid, so no query's count is ever stated under another query's wording.
+  const isWaiting = view.isLoading || !isAnswerCurrent;
+  // The page in hand, and only while it answers the query the address bar names: the view holds the previous
+  // answer's page for as long as a new one is on its way — its `query` names the request it is describing,
+  // while its status is what says whether the page held is that request's answer — so a figure stated before
+  // the read settles would label the previous query's count with the new query's wording. A failure is
+  // excluded for the same reason: it is reported by the alert below, and a count beside it would describe a
+  // query the surface could not answer.
+  const answer = !isWaiting && view.error === null ? view.page : null;
   const total = answer === null ? null : answer.total;
   // The summary sentence, absent until a page has settled: the library's templates carry the count, so there
   // is nothing to state before one is known.
@@ -203,7 +219,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
 
   let body: ReactElement;
 
-  if (view.isLoading) {
+  if (isWaiting) {
     body = <ResultPlaceholders count={catalog.filters.pageSize} />;
   } else if (view.error !== null) {
     body = (
@@ -320,7 +336,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
             <ActiveFilters focusTargetRef={regionRef} />
             <section
               aria-labelledby={resultsHeadingId}
-              aria-busy={view.isLoading}
+              aria-busy={isWaiting}
               ref={regionRef}
               tabIndex={-1}
             >

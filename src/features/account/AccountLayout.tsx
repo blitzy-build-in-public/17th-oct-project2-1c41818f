@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/AccountLayout.tsx
  * Purpose: Account shell with side navigation and the routed account view
- * Lines: 190
+ * Lines: 191
  */
 
 import type { ReactElement } from "react";
@@ -56,7 +56,8 @@ const ACCOUNT_ICON_PATHS: Readonly<Record<AccountIconName, string>> = {
   /** A lidded box: an order. */
   orders: "M3 6h18v3H3zM5 11h14v10H5z",
   /** A dropped pin: an address. */
-  addresses: "M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
+  addresses:
+    "M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
   /** Four tiles of unequal size: the dashboard. */
   dashboard: "M3 3h8v8H3zM13 3h8v5h-8zM3 13h8v8H3zM13 10h8v11h-8z",
   /** Bars of unequal height: the report. */

@@ -1,7 +1,7 @@
 /**
  * Path: src/state/authSession.ts
  * Purpose: The session's contract as a consumer reads it, the read that revalidates a stored token, and the projections computed from the state
- * Lines: 264
+ * Lines: 302
  */
 
 import { API_PATHS, toApiError } from "@/lib/apiClient";
@@ -30,13 +30,16 @@ import { retry } from "@/utils/async";
  * and `src/components/charts/chartGeometry.ts` beside `chartScales.ts`. `src/state/AuthContext.tsx` is
  * its only importer and this module imports nothing back from it, so the dependency stays one-way.
  *
- * What it owns, in three parts. The contract: `AuthState`, what a consumer reads of the session, and
+ * What it owns, in four parts. The contract: `AuthState`, what a consumer reads of the session, and
  * `AuthValue`, that contract plus the facts derived from it, which is what both consumer hooks resolve
  * to. The read: `readStoredSession`, the retried and classified read a stored token is revalidated
  * through, with the attempts, the backoff and the box a failure is carried in private to this module,
  * and the states a read publishes — `SIGNED_OUT_STATE`, `PENDING_STATE`, `RestoredIdentity` and its
  * `NO_IDENTITY` answer. The projections: `usableSession` and `derivedValue`, with the two helpers they
- * need, computed from the state during render and never stored.
+ * need, computed from the state during render and never stored. And the cancellation an action's request
+ * runs under: `runCancellable`, one controller per request, held for the length of the call so a provider
+ * that unmounts with a request in flight aborts it rather than letting its answer publish into a tree
+ * that is gone.
  *
  * The rules are not restated here either. `src/lib/authService.ts` owns the session lifecycle and every
  * role, authentication and expiry decision — this module calls `restoreSession`, `isAuthenticated` and
@@ -201,6 +204,41 @@ export async function readStoredSession(
           ? cause.failure
           : toApiError(cause, API_PATHS.AUTH_SESSION),
     };
+  }
+}
+
+// Cancelling an action's request -----------------------------------------------------------------
+
+/**
+ * Runs one action's request under a controller of its own, held in `registry` for the length of the call
+ * and released in the `finally`: what lets the caller's signal cancel the request at all, and what lets
+ * the provider's unmount abort every request still in flight when its tree goes. A request cancelled
+ * through a signal settles as the transport's shaped `request-aborted` failure, never as a rejection, so
+ * the action above it reads one `Result` either way.
+ *
+ * One controller per request, never one for the provider's lifetime: `src/main.tsx` mounts the
+ * application under `StrictMode`, which unmounts the provider once between two mounts in development, so
+ * a controller shared by that lifetime would be aborted by the trial cleanup and every request the
+ * document made afterwards would be refused before it was ever dispatched.
+ *
+ * It lives here rather than beside the provider for the reason this module exists at all: the writing
+ * half that uses it is what pushed `src/state/AuthContext.tsx` to the request's 600-line ceiling, so the
+ * helper it needs is split out rather than the ceiling raised.
+ *
+ * @param registry - The set holding one provider's live requests.
+ * @param run - The work, handed the signal that cancels it.
+ * @returns Whatever `run` resolves with.
+ */
+export async function runCancellable<TValue>(
+  registry: Set<AbortController>,
+  run: (signal: AbortSignal) => Promise<TValue>,
+): Promise<TValue> {
+  const controller = new AbortController();
+  registry.add(controller);
+  try {
+    return await run(controller.signal);
+  } finally {
+    registry.delete(controller);
   }
 }
 
