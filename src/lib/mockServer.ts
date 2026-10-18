@@ -122,9 +122,9 @@ export function isDataSourceRegistered(): boolean {
 /**
  * Forgets the per-case state a test leaves behind in the seam: the failures armed and not yet consumed
  * ({@link failNext}) and every remembered order key, so a later case is answered by its own request
- * rather than by an earlier case's arm or replayed submission. The bound data source stays bound, which
- * is what lets the test harness's per-case teardown call it between cases of one file: the source every
- * later case is answered from is bound once and must survive that reset. {@link resetMockServer} is the
+ * rather than by an earlier case's arm or replayed submission. The bound data source stays bound, so this
+ * reset must never leave the seam unbound — that is what lets the test harness call it between cases
+ * and lets `resetApiState` keep answering. {@link resetMockServer} is the
  * stronger reset, and returns the seam to its unbound state as well.
  */
 export function resetMockServerState(): void {

@@ -39,9 +39,9 @@ import type { UserEvent } from "../testUtils";
 
 /*
  * Each case's facts come from the module that owns them — `DEMO_ACCOUNTS`, the seeded records, the copy library,
- * `ROUTES` — and its only lever on the product is `failNext`, the API seam's own failure switch. The source is
- * bound once for the whole file and keeps what a case writes, so a case signs in with a seeded account or
- * registers one of its own rather than editing the shopper's record for a later case to find changed.
+ * `ROUTES` — and its only lever on the product is `failNext`, the API seam's own failure switch. `tests/setup.ts`
+ * clears the durable record and re-binds a store from the frozen seed after every case, so no case's write reaches
+ * a later one: a case signs in with a seeded account or registers its own, never editing the shopper's record.
  */
 
 /** The seeded account an email names, or a thrown seed mistake rather than a case that quietly checks less. */
@@ -64,7 +64,7 @@ function statusLabel(status: OrderStatus): string {
 
 const NEW_ACCOUNT = { firstName: "Nina", lastName: "Weber", password: DEMO_ACCOUNTS.PASSWORD };
 
-/** An address no seeded account holds, unique within the run because a registration stays in the store. */
+/** An address no seeded account holds, and no other address this file registers: a duplicate is refused. */
 function uniqueEmail(tag: string): string {
   return `nina.weber.${tag}@salespro.test`;
 }

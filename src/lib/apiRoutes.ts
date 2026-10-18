@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 486
+ * Lines: 507
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -17,9 +17,11 @@ import {
   isRatingValue,
   validateAddress,
   validateProfileUpdate,
+  validateRating,
   validateRegistration,
   validateReview,
   validatePromoCodeShape,
+  validateShippingMethod,
   validateSignIn,
 } from "@/utils/validation";
 
@@ -152,7 +154,12 @@ function listProductReviews(context: RouteContext): Common.Result<unknown> {
   }
   const rawRating = memberInteger(context.query, "rating");
   const rating: Catalog.RatingValue | null = isRatingValue(rawRating) ? rawRating : null;
-  if (rawRating !== undefined && rating === null) return fieldProblem("rating");
+  if (rating === null) {
+    // A member the caller supplied is judged by the rating rule itself: outside the five, the range
+    // sentence; not a whole number, the unsupported-value one. A blank member is no filter at all.
+    const supplied = memberText(context.query, "rating")?.trim() ?? "";
+    if (supplied !== "") return invalidFields(validateRating(supplied));
+  }
   const query: Catalog.ReviewQuery = {
     productId,
     ...readPaging(context.query),
@@ -169,7 +176,13 @@ function insertProductReview(context: RouteContext): Common.Result<unknown> {
   const body = bodyOf(context);
   const draft = readReviewDraft(body);
   const rating = draft.rating;
-  if (rating === undefined) return fieldProblem("rating");
+  // Only a rating nobody sent is reported as missing: a supplied 0 or 6 is outside the five, a
+  // fractional one is not a whole number, and one sent as text is not the rating the field takes,
+  // so the rule judges the member as it arrived, not the narrowed draft this write needs.
+  if (rating === undefined) {
+    const ratingErrors = validateRating(memberValue(body, "rating"));
+    return hasErrors(ratingErrors) ? invalidFields(ratingErrors) : fieldProblem("rating");
+  }
   const errors = validateReview(draft);
   if (hasErrors(errors)) return invalidFields(errors);
   const input: NewProductReviewInput = {
@@ -220,10 +233,18 @@ function priceCart(context: RouteContext): Common.Result<unknown> {
   const body = bodyOf(context);
   const lines = readCartLines(memberValue(body, "lines"));
   if (!lines.ok) return lines;
+  const shippingMethodId = memberText(body, "shippingMethodId") ?? null;
+  // One parameter, one rule: the order path judges this same id with this same rule, so a method
+  // the store does not deliver by cannot be quoted for either. A blank or absent member is what a
+  // checkout that has not chosen a method yet sends, and it resolves exactly as it always has.
+  if (shippingMethodId !== null && shippingMethodId.trim().length > 0) {
+    const methodErrors = validateShippingMethod(shippingMethodId);
+    if (hasErrors(methodErrors)) return invalidFields(methodErrors);
+  }
   return context.source.priceCart({
     lines: lines.value,
     promoCode: memberText(body, "promoCode") ?? null,
-    shippingMethodId: memberText(body, "shippingMethodId") ?? null,
+    shippingMethodId,
   });
 }
 

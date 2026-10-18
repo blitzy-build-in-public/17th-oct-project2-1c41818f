@@ -6,7 +6,7 @@
 
 import { paymentDeclinedNote } from "@/constants/checkoutCopy";
 import { DEMO_CARD_NUMBERS } from "@/constants/config";
-import { FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
+import { IDEMPOTENCY_CONFLICT_MESSAGE, VALIDATION_MESSAGES } from "@/constants/content";
 import type * as Account from "@/types/account";
 import type * as Commerce from "@/types/commerce";
 import type * as Common from "@/types/common";
@@ -306,7 +306,7 @@ export function createOrder(context: RouteContext): Common.Result<unknown> {
   if (remembered !== undefined) {
     return remembered.fingerprint === fingerprint
       ? remembered.outcome
-      : failure(API_ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT, FEEDBACK_COPY.ERROR_STATE_BODY);
+      : failure(API_ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT, IDEMPOTENCY_CONFLICT_MESSAGE);
   }
   const created = context.source.createOrder(request);
   if (created.ok) {

@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 466
+ * Lines: 479
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -414,9 +414,13 @@ export const CHART_COLUMN_LABELS = {
 export const ratingSummaryLabel = (formattedRating: string, count: number): string =>
   `Rated ${formattedRating} from ${count} ${countNoun(count, "review", "reviews")}`;
 
-/** One message per rule, in the field-independent form. Consumer: `src/utils/validation.ts`. */
+/** One message per rule, in the field-independent form. Consumers: `src/utils/validation.ts`, and
+ * `src/lib/apiRequests.ts` and `src/lib/apiRoutes.ts`, which answer a hand-made request's members
+ * with the same sentences a form shows. */
 export const VALIDATION_MESSAGES = {
   REQUIRED: "This field is required.",
+  OUT_OF_RANGE: "Enter a value inside the range this field accepts.",
+  UNSUPPORTED_VALUE: "Choose one of the values this field accepts.",
   EMAIL_FORMAT: "Enter an email address in the form name@example.com.",
   PHONE_FORMAT: "Enter 7 to 15 digits, with spaces, brackets, dots, hyphens or a leading +.",
   PASSWORD_POLICY: "Your password is too short, or it is missing a letter or a digit.",
@@ -462,5 +466,14 @@ export const PROMO_REJECTION_MESSAGES: Readonly<Record<PromoRejectionReason, str
 /** Says how much more the basket needs before a code applies, from a formatted amount. */
 export const promoMinimumShortfallMessage = (formattedShortfall: string): string =>
   `Add ${formattedShortfall} more to your basket to use this code.`;
+
+/**
+ * The sentence the differing-body idempotency conflict is answered with, naming the reused key and
+ * disclosing no other account's order, the non-disclosure refusals keeping their own sentence.
+ * Consumer: `src/lib/apiOrders.ts`, the `409 idempotency-key-conflict` it answers.
+ */
+export const IDEMPOTENCY_CONFLICT_MESSAGE =
+  "That submission key was already used for a different order.";
+
 // Feedback and empty states: §0.5.5 split into content-feedback.ts ---------------------------------
 export * from "./content-feedback";

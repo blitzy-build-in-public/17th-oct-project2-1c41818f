@@ -391,38 +391,38 @@ export function isRatingValue(value: unknown): value is RatingValue {
   return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
 }
 
-/** The rule a rating is accepted by: one of the five whole numbers, read from a number or from text. A value
- * outside the five reports as missing rather than as out of range, because the star control offers the whole
- * domain and nothing else, so the failure a visitor can reach is an unchosen rating; a hand-made request
- * carrying a sixth star is re-rejected by the seam with `422` naming this field. Returns the `rating` map. */
+/** The rule a rating is accepted by: one of the five whole numbers, read from a number or text. An
+ * absent or blank member is the only one reported as missing; a supplied value takes the range
+ * sentence outside the five, the unsupported-value one otherwise. Returns the `rating` map. */
 export function validateRating(value: FieldValue): FieldErrors {
+  if (isBlank(value)) return ruleErrors("rating", VALIDATION_MESSAGES.REQUIRED);
   const rating = integerOf(value);
-  if (rating !== undefined && isRatingValue(rating)) return {};
-  return ruleErrors("rating", VALIDATION_MESSAGES.REQUIRED);
+  if (rating === undefined) return ruleErrors("rating", VALIDATION_MESSAGES.UNSUPPORTED_VALUE);
+  return isRatingValue(rating) ? {} : ruleErrors("rating", VALIDATION_MESSAGES.OUT_OF_RANGE);
 }
 
 // Form rules -------------------------------------------------------------------------------------
 
-/** The rule the country field is accepted by: one of the countries `src/constants/taxonomy.ts` declares. A
- * code outside the set reports as a missing country, since the control offers the configured set as its only
- * choices and a hand-made request carrying another code is re-rejected by the seam with `422`. Returns the
- * `country` map, empty when the value names a configured country. */
+/** The rule the country field is accepted by: one of the countries `src/constants/taxonomy.ts`
+ * declares, compared without regard to case. A blank member alone reports as missing; a code the
+ * caller supplied from outside that set takes the unsupported-value one, an empty map otherwise. */
 function validateCountry(value: FieldValue): FieldErrors {
+  if (isBlank(value)) return ruleErrors("country", VALIDATION_MESSAGES.REQUIRED);
   return findCountry(textOf(value)) !== undefined
     ? {}
-    : ruleErrors("country", VALIDATION_MESSAGES.REQUIRED);
+    : ruleErrors("country", VALIDATION_MESSAGES.UNSUPPORTED_VALUE);
 }
 
-/** The rule the delivery method is accepted by: one of the methods `src/constants/config.ts` declares. An
- * unknown id reports as an unchosen method, for the same reason a country outside the set does: the radios
- * offer the configured methods, and the seam re-checks the id it is sent. Returns the `shippingMethodId`
- * map, empty when the value names a configured method. */
-function validateShippingMethod(value: FieldValue): FieldErrors {
+/** The rule the delivery method is accepted by: one of the methods `src/constants/config.ts`
+ * declares, the `shippingMethodId` map empty for a configured method. A blank member reports as
+ * missing; an id the caller supplied that names no configured method is not missing, so it takes
+ * the unsupported-value sentence. Exported for `priceCart`, which judges that same member by it. */
+export function validateShippingMethod(value: FieldValue): FieldErrors {
   if (isBlank(value)) return ruleErrors("shippingMethodId", VALIDATION_MESSAGES.REQUIRED);
   const id = textOf(value);
   return SHIPPING_METHODS.some((method) => method.id === id)
     ? {}
-    : ruleErrors("shippingMethodId", VALIDATION_MESSAGES.REQUIRED);
+    : ruleErrors("shippingMethodId", VALIDATION_MESSAGES.UNSUPPORTED_VALUE);
 }
 
 /** The rule the registration form is submitted by: a well-formed email, a password meeting the policy, and

@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRequests.ts
  * Purpose: Reads a request for the in-process API: the members a query carries, the vocabularies they are validated against and the refusals they produce
- * Lines: 599
+ * Lines: 600
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -63,10 +63,11 @@ export function invalidFields(errors: Common.FieldErrors): Common.Result<never> 
   return failure(API_ERROR_CODES.VALIDATION_FAILED, message, field);
 }
 
-/** The 422 for a request member outside the domain its own code declares: a control writes only
- * declared values, so the only way here is a hand-made request, which has no wording of its own. */
-export function fieldProblem(field: string): Common.Result<never> {
-  return failure(API_ERROR_CODES.VALIDATION_FAILED, VALIDATION_MESSAGES.REQUIRED, field);
+/** The 422 for a request member outside the domain its own code declares, which only a hand-made
+ * request reaches: `message` states what is wrong with a member the caller did supply. */
+export function fieldProblem(field: string, message?: string): Common.Result<never> {
+  const wording = message ?? VALIDATION_MESSAGES.UNSUPPORTED_VALUE;
+  return failure(API_ERROR_CODES.VALIDATION_FAILED, wording, field);
 }
 
 /** A `404` for a path, a product, an order or an address that does not exist, worded by the
@@ -298,16 +299,17 @@ export function readRange(
 /** The filter half of a catalogue or facet query, refused when a member is outside the domain it
  * declares. Paging and sort are absent because `GET /api/facets` takes neither. */
 export function readFilterFields(query: QueryRecord): Common.Result<Catalog.FacetQuery> {
+  const rangeProblem = (field: string) => fieldProblem(field, VALIDATION_MESSAGES.OUT_OF_RANGE);
   const rawRating = readFilterNumber(query, FILTER_PARAMS.MIN_RATING);
   if (rawRating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
   const minRating: Catalog.RatingValue | null = isRatingValue(rawRating) ? rawRating : null;
-  if (rawRating !== undefined && minRating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
+  if (rawRating !== undefined && minRating === null) return rangeProblem(FILTER_PARAMS.MIN_RATING);
   const minPriceMinor = readFilterNumber(query, FILTER_PARAMS.MIN_PRICE);
   if (minPriceMinor === null) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
   const maxPriceMinor = readFilterNumber(query, FILTER_PARAMS.MAX_PRICE);
   if (maxPriceMinor === null) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
-  if ((minPriceMinor ?? 0) < 0) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
-  if ((maxPriceMinor ?? 0) < 0) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
+  if ((minPriceMinor ?? 0) < 0) return rangeProblem(FILTER_PARAMS.MIN_PRICE);
+  if ((maxPriceMinor ?? 0) < 0) return rangeProblem(FILTER_PARAMS.MAX_PRICE);
   // An inverted pair is swapped, not refused, the reading src/utils/queryParams.ts gives the same pair.
   const descending =
     minPriceMinor !== undefined && maxPriceMinor !== undefined && minPriceMinor > maxPriceMinor;
@@ -535,11 +537,10 @@ function readLine(value: unknown): Commerce.CartLine | undefined {
   };
 }
 
-/** The cart lines a request carries, refused with `422` when a line is not usable and with
- * `insufficient-stock` when it exceeds the ceiling it recorded. Shelf stock is the pricing rules'
- * business, while that ceiling travels on the line itself and is what the request already answers. */
+/** The lines a request carries: an absent, empty or non-list member reports as missing, a supplied
+ * line takes the unsupported-value sentence, an over-ceiling one `insufficient-stock` instead. */
 export function readCartLines(value: unknown): Common.Result<readonly Commerce.CartLine[]> {
-  if (!isList(value)) return fieldProblem("lines");
+  if (!isList(value)) return fieldProblem("lines", VALIDATION_MESSAGES.REQUIRED);
   const lines: Commerce.CartLine[] = [];
   for (const raw of value) {
     const line = readLine(raw);
@@ -553,7 +554,7 @@ export function readCartLines(value: unknown): Common.Result<readonly Commerce.C
     }
     lines.push(line);
   }
-  return lines.length === 0 ? fieldProblem("lines") : ok(lines);
+  return lines.length === 0 ? fieldProblem("lines", VALIDATION_MESSAGES.REQUIRED) : ok(lines);
 }
 
 /** The money members a submitted snapshot has to carry, and the amounts each of its lines owns. */

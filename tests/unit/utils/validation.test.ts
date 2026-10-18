@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/validation.test.ts
  * Purpose: Each validator's accept and reject cases, and the form-level error maps
- * Lines: 595
+ * Lines: 598
  */
 
 // A pure-function suite: it runs in the node project, reaches no DOM, mocks no module and touches no
@@ -228,10 +228,13 @@ describe("field rules", () => {
     for (const rating of [1, 2, 3, 4, 5, "5"]) expect(validateRating(rating)).toEqual({});
   });
 
-  it("rejects an unchosen, out-of-range or fractional rating as missing", () => {
-    for (const rejected of [0, 6, 4.5, "4.5", undefined, ""]) {
-      expect(validateRating(rejected)).toEqual({ rating: VALIDATION_MESSAGES.REQUIRED });
-    }
+  it.each([
+    [undefined, VALIDATION_MESSAGES.REQUIRED],
+    ["", VALIDATION_MESSAGES.REQUIRED],
+    [0, VALIDATION_MESSAGES.OUT_OF_RANGE],
+    [4.5, VALIDATION_MESSAGES.UNSUPPORTED_VALUE],
+  ])("answers the rating value %s with the sentence its own fault carries", (value, message) => {
+    expect(validateRating(value)).toEqual({ rating: message });
   });
 
   it("narrows a rating selection to the five whole values the star control offers", () => {

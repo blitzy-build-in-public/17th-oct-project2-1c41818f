@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
  * Purpose: Route matching, error mapping, catalogue filter reading, review scoping, idempotency replay, the unregistered-source failure, the transport's shaping and the seed's determinism.
- * Lines: 593
+ * Lines: 596
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import {
   DEMO_ACCOUNTS,
   DEMO_CARD_NUMBERS,
 } from "@/constants/config";
+import { IDEMPOTENCY_CONFLICT_MESSAGE } from "@/constants/content";
 import {
   buildQueryString,
   clearInjectedFailures as clearThroughClient,
@@ -364,6 +365,8 @@ describe("idempotency", () => {
       postJson("/api/orders", { ...body, email: "other@salespro.test" }),
     );
     expectRefusal(conflict, 409, "idempotency-key-conflict");
+    // The conflict's own sentence, so the response says what happened rather than a generic one.
+    expect(conflict.message).toBe(IDEMPOTENCY_CONFLICT_MESSAGE);
   });
 });
 

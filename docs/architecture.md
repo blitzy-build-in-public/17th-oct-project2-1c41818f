@@ -1,7 +1,7 @@
 <!--
 Path: docs/architecture.md
 Purpose: The layers, the import rules and the data flow any new file must fit
-Lines: 332
+Lines: 333
 -->
 
 # Architecture
@@ -66,6 +66,7 @@ The 600-line ceiling is never raised. When one concern cannot be held in one fil
 - `tests/unit/lib/pricingService.test.ts` → `tests/unit/lib/pricingSurface.test.ts` and `tests/unit/lib/customerService.test.ts`.
 - `tests/unit/lib/analyticsService.test.ts` → `tests/unit/lib/analyticsSeries.test.ts` and `tests/unit/lib/analyticsQueries.test.ts`.
 - `tests/unit/lib/mockServer.test.ts` → `tests/unit/lib/seedInvariants.test.ts`, `tests/unit/lib/mockServerDurability.test.ts`, `tests/unit/lib/mockServerHarness.ts` and `tests/unit/lib/mockServerOrderRead.test.ts`.
+- `tests/unit/lib/apiRoutes.test.ts` → `tests/unit/lib/apiRoutesVocabulary.test.ts`: the seam's refusal vocabulary — one rule per parameter, the sentence a present-but-invalid value earns, and the idempotency conflict's own wording — split out of that covering suite, which the plan does not map, when it reached the 600-line ceiling.
 - `tests/unit/state/transactions.test.ts` → `tests/unit/state/checkout.test.ts`.
 - `tests/components/controls.test.tsx` → `tests/components/overlays.test.tsx`: the overlay family's own suite.
 - `tests/components/charts.test.tsx` → `tests/components/chartScales.test.ts`.
@@ -85,7 +86,7 @@ Three corollaries the tree implements:
 
 - No feature slice imports `src/data`. `src/data/repositories.ts` and its store half `src/data/collectionStore.ts` are the only readers of the seeded collections, and a page reaches them through a service.
 - No module under `src/components` or `src/features` imports `src/styles`. `src/main.tsx` is the product's only importer of the eight stylesheets, and the thirteen further sheets reach the page through an `@import` in the sheet each mapping below names: `page-header.css` and `sidebar.css` from `layout.css`; `controls.css` and `data-display.css` from `components.css`; `tabs-accordion.css` from `data-display.css`; `catalog-landing.css` and `catalog-detail.css` from `catalog.css`; `cart.css`, `commerce-cart.css`, `commerce-steps.css` and `summary-panel.css` from `commerce.css`; `chart-series.css` from `admin-reports.css`; and `placeholders.css` from `account.css`. Classes are consumed by name.
-- A shared need is imported from the file that owns it: no barrel `index.ts` exists anywhere, so no folder acquires an implicit public API and an importer always names the file that holds the concern. Where §0.5.5 splits a concern, the mapped path that used to own it stays the name a consumer imports: re-publishing the split path's names where a consumer read them there, composing the region that moved out where a consumer did not. The kinds of split that carry it recur across the tree rather than forming a fixed list of files — the date and number foundations, the transport seam, the data access module, each service with its rule engine, the chart, overlay, state and copy splits, and the pages whose own regions moved out — so a consumer's import path does not change when a concern is split, and the owner is still named by the path that re-exports it. §1 names every split path in the tree and the mapped path each was split out of.
+- A shared need is imported from the file that owns it: no barrel `index.ts` exists anywhere, so no folder acquires an implicit public API and an importer always names the file that holds the concern. Where §0.5.5 splits a concern, the mapped path that used to own it stays the name a consumer imports: re-publishing the split path's names where a consumer read them there, composing the region that moved out where a consumer did not. The kinds of split that carry it recur across the tree rather than forming a fixed list of files — the date and number foundations, the transport seam, the data access module, each service with its rule engine, the chart, overlay, state and copy splits, and the pages whose own regions moved out — so a consumer's import path does not change when a concern is split, and the owner is still named by the path that re-exports it. §1 names every split path in the tree and the path each was split out of.
 
 ## 3. Component interaction
 

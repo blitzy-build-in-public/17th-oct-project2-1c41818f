@@ -1,7 +1,7 @@
 /**
  * Path: tests/setup.ts
  * Purpose: Loads the jest-dom matchers and clears state between tests
- * Lines: 156
+ * Lines: 171
  */
 
 import "@testing-library/jest-dom/vitest";
@@ -9,7 +9,8 @@ import { configure } from "@testing-library/dom";
 import { afterEach, vi } from "vitest";
 
 import { BREAKPOINTS } from "@/constants/config";
-import { resetMockServerState } from "@/lib/mockServer";
+import { createSalesProDataSource } from "@/data/repositories";
+import { registerDataSource, resetMockServerState } from "@/lib/mockServer";
 
 // Every `waitFor` and `findBy*` in the suite waits for an interface the product paints, and the
 // library's one-second default expires while the host is busy — the integration flows render the whole
@@ -137,19 +138,33 @@ installDomShims();
  * Restores the environment between tests: unmounts what the DOM project rendered, drops the
  * cart, session and report range persisted outside a component, forgets the seam's per-case state
  * so a failure an earlier test armed and never triggered cannot answer a later test's request and
- * an order key an earlier test remembered cannot replay its order, clears spy call history so a
- * later test cannot observe an earlier test's export, returns to real timers, and reinstalls the
- * DOM shims last: a test that replaced `window.matchMedia` or spent object URLs would otherwise
- * hand the next test an environment the first test of the file never saw. The installer runs after
- * the clear so the mocks it writes begin with empty call history of their own.
+ * an order key an earlier test remembered cannot replay its order, and — in the project that
+ * renders — binds a fresh data source built from the frozen seed once the durable record is
+ * cleared, so no write an earlier case made is left in the collections a later case reads: those
+ * files render through `tests/testUtils.tsx`, which binds the suite's one source once per file,
+ * and a profile a case saved — or any other write it made through the product's own service —
+ * would otherwise answer every later case in that file, the seeded records among them, leaving the
+ * file's result dependent on the order its cases ran in. The rotation is withheld from the node
+ * project, whose specs bind the source they read themselves — the seam harness per case, or the
+ * seeded source in a `beforeAll` together with the sessions they sign in with — where a source no
+ * session answers would refuse every case after the first rather than isolate it.
+ * It then clears spy call history so a later test cannot observe an earlier test's export, returns
+ * to real timers, and reinstalls the DOM shims last: a test that replaced `window.matchMedia` or
+ * spent object URLs would otherwise hand the next test an environment the first test of the file
+ * never saw. The installer runs after the clear so the mocks it writes begin with empty call
+ * history of their own.
  */
 afterEach(async () => {
-  if (typeof window !== "undefined") {
+  // The DOM is what tells the two projects apart, and it is the project that renders whose binding
+  // is the harness's shared one.
+  const rendersApplication = typeof window !== "undefined";
+  if (rendersApplication) {
     const { cleanup } = await import("@testing-library/react");
     cleanup();
     window.localStorage.clear();
   }
   resetMockServerState();
+  if (rendersApplication) registerDataSource(createSalesProDataSource());
   vi.clearAllMocks();
   vi.useRealTimers();
   installDomShims();

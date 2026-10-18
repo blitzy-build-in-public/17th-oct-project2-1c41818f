@@ -310,10 +310,10 @@ export function failNext(target: FailNextTarget = {}): FailureHandle {
  *
  * Two things go and one stays. The armed failures go, so a failure an earlier case armed for a request it never
  * made cannot answer this case's request. The seam's idempotency store goes, so an order key an earlier case
- * remembered cannot replay its response into this case's submission. The bound data source stays — and is
- * re-bound if a case unbound it — because the seeded source is bound once for the whole file, and a case that
- * left it forgotten would leave every later case in the file with `503 data-source-unavailable` instead of a
- * catalogue. That is why this calls the seam's own state reset rather than the client's `resetApiClient`, which
+ * remembered cannot replay its response into this case's submission. The bound data source stays — and is re-bound
+ * if a case unbound it — because `tests/setup.ts` re-binds a source between cases in the project that renders,
+ * so this re-binding is what keeps a case that unbound the seam mid-case answered for the rest of that case.
+ * That is why this calls the seam's own state reset rather than the client's `resetApiClient`, which
  * forgets the binding along with the state. `tests/setup.ts` performs the same reset after every case, so a
  * case only needs this when it wants a clean seam mid-case.
  */
