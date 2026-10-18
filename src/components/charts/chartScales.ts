@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartScales.ts
  * Purpose: Linear and band scales, nice domains, tick generation and path helpers shared by the charts
- * Lines: 401
+ * Lines: 402
  */
 
 import {
@@ -59,8 +59,9 @@ export const POINT_MARK_LIMIT = 31;
 /** The default frame inset: room for the value axis, its labels and the band labels. */
 export const DEFAULT_PADDING: Padding = { top: 16, right: 24, bottom: 32, left: 56 };
 
-// Literals no reader should have to decode, and the magnitudes the nice-number rules choose between.
-const TICK_GAP = 8;
+/** The gap an axis keeps between itself and the labels it anchors, in user units: what {@link axisLabelTransform} places
+ *  a band label by, and what the bar geometry sizes its band-label gutter with, so the two cannot drift. */
+export const TICK_GAP = 8;
 const TICK_PRECISION = 12;
 const DEFAULT_BAND_PADDING = 0.1;
 const DEFAULT_BAND_ALIGN = 0.5;

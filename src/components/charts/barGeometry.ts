@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/barGeometry.ts
  * Purpose: The bar renderer's own geometry: its scales, its marks, its value labels and its readout placement
- * Lines: 375
+ * Lines: 472
  */
 
 import type { CSSProperties } from "react";
@@ -22,6 +22,7 @@ import {
   gridLineFor,
   seriesClassName,
   stackValues,
+  TICK_GAP,
   zeroCoordinate,
 } from "@/components/charts/chartScales";
 import type {
@@ -73,12 +74,56 @@ const VALUE_LABEL_GAP = 8;
  * The insets the two orientations are drawn with, each reserving the room a value label needs beyond the end
  * of the tallest bar — above the plot for a vertical chart, to its right for a horizontal one, where a
  * compact money figure is about sixty user units long — and a horizontal chart's leading side taking the room
- * a vertical chart spends on its value axis, because a bucket label such as "Week of Jan 27" runs down it.
+ * a vertical chart spends on its value axis, because the label a band carries is written down it.
  */
 const VERTICAL_PADDING: Padding = { ...DEFAULT_PADDING, top: 28 };
 
-/** {@link VERTICAL_PADDING}, with the two insets a horizontal chart's own labels need. */
-const HORIZONTAL_PADDING: Padding = { ...DEFAULT_PADDING, top: 28, right: 72, left: 120 };
+/**
+ * The gutter a horizontal chart's band labels are written in when they are short: the leading inset a run of
+ * bucket or segment names such as "Week of Jan 27" has always been drawn in, so a chart whose labels fit it
+ * renders exactly as it did and {@link bandLabelGutter} widens it only for a label that needs the room.
+ */
+const MIN_BAND_LABEL_GUTTER = 120;
+
+/**
+ * The narrowest plot a horizontal chart is drawn with, in user units — a quarter of this frame's width, which
+ * is what a bar needs to be read against another — and so the point past which {@link bandLabelGutter} stops
+ * widening the leading gutter. A band label longer than the frame can spare is written beyond the frame's
+ * leading edge rather than leaving every bar it is drawn beside without a plot to be read across.
+ */
+const MIN_HORIZONTAL_PLOT_WIDTH = 200;
+
+/**
+ * {@link VERTICAL_PADDING}, with the two insets a horizontal chart's own labels need: the room a value label
+ * takes beyond the end of the longest bar on the trailing side, and the leading gutter its band labels are
+ * written in, which {@link bandLabelGutter} measures for each render rather than fixing here.
+ */
+const HORIZONTAL_PADDING: Padding = {
+  ...DEFAULT_PADDING,
+  top: 28,
+  right: 72,
+  left: MIN_BAND_LABEL_GUTTER,
+};
+
+/**
+ * The size a band label is written at, in this frame's user units: `src/styles/admin-reports.css` sets
+ * `.sp-chart__tick` to `--font-size-xs`, which is `0.75rem` of the document's 16px root, and a font size inside
+ * an SVG is a length in that SVG's own user coordinate system.
+ */
+const LABEL_FONT_SIZE = 12;
+
+/**
+ * The widest advance each class of character reaches in the system sans-serif stack the sheet draws labels
+ * with, as a share of {@link LABEL_FONT_SIZE}: the thin characters by themselves, the lowercase letters and the
+ * digits, the capitals, and the glyphs that fill their own cell. Each advance is at or above what its class
+ * measures in that stack, so a label summed from them is never wider than the room it is measured against.
+ */
+const NARROW_LABEL_CHARS = " !'(),-./:;[]\\fijlrIt";
+const NARROW_LABEL_ADVANCE = 0.44;
+const WIDE_LABEL_CHARS = "MWmw@%";
+const WIDE_LABEL_ADVANCE = 1.02;
+const LOWER_LABEL_ADVANCE = 0.66;
+const UPPER_LABEL_ADVANCE = 0.85;
 
 /** A value this close to nothing is nothing: no extent, and so no label to write. */
 const VALUE_EPSILON = 1e-9;
@@ -183,6 +228,49 @@ function valueLabelTransform(rect: BarRect, orientation: Orientation): AxisLabel
 }
 
 /**
+ * What one character of a band label is charged, as a share of {@link LABEL_FONT_SIZE}. A character in none of
+ * the classes is charged the widest advance of all rather than an average, because a band label is whatever a
+ * caller's formatter writes — a product name, an accented one, a figure — and each has to be measured inside
+ * the frame rather than assumed to be a bare word.
+ */
+function advanceOf(char: string): number {
+  if (NARROW_LABEL_CHARS.includes(char)) return NARROW_LABEL_ADVANCE;
+  if (WIDE_LABEL_CHARS.includes(char)) return WIDE_LABEL_ADVANCE;
+  if (char >= "A" && char <= "Z") return UPPER_LABEL_ADVANCE;
+  if (char >= "a" && char <= "z") return LOWER_LABEL_ADVANCE;
+  if (char >= "0" && char <= "9") return LOWER_LABEL_ADVANCE;
+  return WIDE_LABEL_ADVANCE;
+}
+
+/**
+ * The room one band label takes, in user units: the sum of its characters' advances at the size the sheet draws
+ * it. A band label is anchored at its own end and written away from the plot's leading edge, so a gutter
+ * narrower than this cuts its leading glyphs, and a report's product names run two to three times the width a
+ * bucket name needs.
+ */
+function estimateLabelWidth(label: string): number {
+  let advance = 0;
+  for (const char of label) advance += advanceOf(char);
+  return advance * LABEL_FONT_SIZE;
+}
+
+/**
+ * The gutter a horizontal chart reserves for its band labels: the widest label its band axis holds, plus the gap
+ * that axis keeps to the plot, and never less than {@link MIN_BAND_LABEL_GUTTER} nor so much that
+ * {@link MIN_HORIZONTAL_PLOT_WIDTH} is left for the bars. Every label the axis writes is one of the keys these
+ * were read from — the anti-collision rule only ever drops a label — so no drawn label is wider than the gutter
+ * measured from them all.
+ */
+function bandLabelGutter(labels: readonly string[]): number {
+  const widest = labels.reduce((widest, label) => Math.max(widest, estimateLabelWidth(label)), 0);
+  const most = Math.max(
+    MIN_BAND_LABEL_GUTTER,
+    CHART_VIEWBOX_WIDTH - HORIZONTAL_PADDING.right - MIN_HORIZONTAL_PLOT_WIDTH,
+  );
+  return Math.min(Math.max(widest + TICK_GAP, MIN_BAND_LABEL_GUTTER), most);
+}
+
+/**
  * One pointer region per band: the whole band along the categorical axis and the whole plot across it, so a
  * pointer anywhere over a band names it, gaps between grouped bars and the space above a short bar included.
  * The regions tile the plot without overlapping, since a band starts one step after the band before it.
@@ -231,8 +319,10 @@ function valueDomain(values: readonly number[], includeZero: boolean): readonly 
 /**
  * The geometry one render is drawn from, computed in one pass so the bars, the grid, the axis, the labels and
  * the pointer regions all read one band order and one pair of scales. A horizontal chart builds its scales
- * with their ranges swapped rather than transposing a coordinate afterwards, and nothing here reads a
- * measured pixel: the frame is the viewBox the marks are drawn in.
+ * with their ranges swapped rather than transposing a coordinate afterwards, and nothing here reads a measured
+ * pixel: the frame is the viewBox the marks are drawn in. The one reading taken of the content rather than the
+ * frame is the room a horizontal chart's band labels take, which sets that frame's leading gutter before the
+ * plot is computed — a product name is longer than any fixed gutter, and a clipped one names nothing.
  *
  * @param options - The series, the frame's height, the orientation, the mode and the three formatters.
  * @returns The scales and every mark placed by them.
@@ -241,10 +331,17 @@ export function buildGeometry(options: BarGeometryOptions): BarGeometry {
   const { series, height, orientation, mode, includeZero } = options;
   const horizontal = orientation === "horizontal";
   const bandKeys = collectBandKeys(series);
+  // The labels a horizontal chart's band axis will write are read before the frame is computed, because they
+  // are what its leading gutter is measured from: the gutter narrows the value direction alone, and the band
+  // axis the labels belong to runs down the frame rather than across it.
+  const bandLabels = horizontal ? bandKeys.map((key) => options.formatLabel(key)) : [];
+  const padding = horizontal
+    ? { ...HORIZONTAL_PADDING, left: bandLabelGutter(bandLabels) }
+    : VERTICAL_PADDING;
   const plotArea = computePlotArea({
     width: CHART_VIEWBOX_WIDTH,
     height,
-    padding: horizontal ? HORIZONTAL_PADDING : VERTICAL_PADDING,
+    padding,
   });
   const acrossStart = horizontal ? plotArea.y : plotArea.x;
   const acrossSpan = horizontal ? plotArea.height : plotArea.width;

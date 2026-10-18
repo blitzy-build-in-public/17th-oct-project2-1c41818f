@@ -304,10 +304,10 @@ export function SalesChart({
   const hasTitle = hasCopy(title);
   const description = describePeriod(from, to, baselineLabel);
 
-  // The axis, the readout and the paired table all read a band key through this one formatter, so the
-  // bucket's human wording has a single home in `src/lib/analyticsService.ts`.
+  // The axis, the readout and the paired table read a band key through one formatter, so the bucket's human
+  // wording has one home in `src/lib/analyticsService.ts`; an already-worded key is printed as it stands.
   const formatLabel = useCallback<LabelFormatter>(
-    (key: string): string => bucketLabel(key, bucket),
+    (key: string): string => bucketLabel(key, bucket) || key,
     [bucket],
   );
 

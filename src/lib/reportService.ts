@@ -1,10 +1,10 @@
 /**
  * Path: src/lib/reportService.ts
  * Purpose: The report catalogue, row building, summaries, chart series and the CSV matrix for export
- * Lines: 598
+ * Lines: 545
  */
 
-import { CHART_SERIES_TOKEN_REFERENCES, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
+import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
 import {
   DATE_RANGE_COPY,
   REPORTS_COPY,
@@ -14,13 +14,16 @@ import {
 } from "@/constants/content";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { API_ERROR_CODES, API_PATHS, failure, fillApiPath, getJson } from "@/lib/apiClient";
+// The series charted beside a report, re-exported: the concern was split into its own file when this one
+// reached the 600-line ceiling, so a consumer importing it from here is served exactly as before.
+import { buildReportSeries } from "@/lib/reportSeries";
+
+export { buildReportSeries };
 import type { Customer } from "@/types/account";
 import type {
   BucketGranularity,
-  ChartSeries,
   CsvMatrix,
   ReportCellValue,
-  ReportColumn,
   ReportDefinition,
   ReportKind,
   ReportQuery,
@@ -47,7 +50,7 @@ import {
   validateDateRange,
   type DateRangeErrorCode,
 } from "@/utils/dates";
-import { formatCellValue, formatCellValueForExport, roundMinorUnits } from "@/utils/format";
+import { formatCellValueForExport, roundMinorUnits } from "@/utils/format";
 import { averageOrderValue, goodsRevenueMinor, periodOrders, shareOf } from "@/utils/statistics";
 
 /**
@@ -60,6 +63,10 @@ import { averageOrderValue, goodsRevenueMinor, periodOrders, shareOf } from "@/u
  * keys, headings and cell formats come from `REPORT_DEFINITIONS`, sentences from the copy module,
  * bucket keys and range rules from `src/utils/dates.ts`, and escaping, clipping and the row cap from
  * `src/utils/csv.ts`, which is handed an already-formatted matrix.
+ *
+ * The chart's half of that composition — the band of each row and the series drawn from them — is
+ * `src/lib/reportSeries.ts`, split out of this file when it reached the 600-line ceiling and re-exported
+ * from here, so this file holds the catalogue, the rows, the summaries and the export matrix.
  */
 
 // What a report is built from ---------------------------------------------------------------------
@@ -434,66 +441,6 @@ export function toCsvMatrix(
   };
 }
 
-// The chart beside the table ----------------------------------------------------------------------
-
-/** One charted column: its identity, its heading and a point per row, whose text is its cell rendered by
- *  `formatCellValue`, so a readout states the figure the table states. */
-function seriesOfColumn(
-  rows: readonly ReportRow[],
-  column: ReportColumn,
-  seriesIndex: number,
-  axisKey: string,
-): ChartSeries {
-  return {
-    id: column.key,
-    label: column.label,
-    color: CHART_SERIES_TOKEN_REFERENCES[seriesIndex % CHART_SERIES_TOKEN_REFERENCES.length],
-    points: rows.map((row) => {
-      const axis = row.cells[axisKey];
-      const value = row.cells[column.key];
-      return {
-        x: typeof axis === "string" ? axis : row.id,
-        y: typeof value === "number" ? value : 0,
-        label: formatCellValue(value, column.format),
-      };
-    }),
-  };
-}
-
-/** The column a report leads with: the one its definition marks as the figure its table totals. */
-function headlineColumn(definition: ReportDefinition): ReportColumn | undefined {
-  return definition.columns.find((column) => column.isTotal === true);
-}
-
-/**
- * The series charted beside the report `kind`'s table, built from the rows the table already shows.
- *
- * Deriving the chart from the rows rather than from a second pass over the collections is what stops the
- * two disagreeing, and a series keeps its `id` as the column key, so a re-bucketed view keeps its series
- * identity. The sales and product reports plot the column their definition marks as the table's total;
- * the customer report plots its two counts side by side.
- */
-export function buildReportSeries(
-  kind: ReportKind,
-  rows: readonly ReportRow[],
-  definition: ReportDefinition,
-): ChartSeries[] {
-  switch (kind) {
-    case "sales": {
-      const headline = headlineColumn(definition);
-      return headline === undefined ? [] : [seriesOfColumn(rows, headline, 0, "period")];
-    }
-    case "products": {
-      const headline = headlineColumn(definition);
-      return headline === undefined ? [] : [seriesOfColumn(rows, headline, 0, "product")];
-    }
-    case "customers":
-      return definition.columns
-        .filter((column) => column.key === "newCustomers" || column.key === "returningCustomers")
-        .map((column, index) => seriesOfColumn(rows, column, index, "period"));
-  }
-}
-
 // The composition the data source runs ------------------------------------------------------------
 
 /**
@@ -521,7 +468,7 @@ export function runReportDefinition(
     granularity: resolveGranularity(definition, query),
     rows,
     summary: summarise(kind, rows, query),
-    series: buildReportSeries(kind, rows, definition),
+    series: buildReportSeries(kind, rows, definition, resolveGranularity(definition, query)),
     generatedAt: toIsoDateTime(now),
   };
 }

@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog.css
  * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
- * Lines: 541
+ * Lines: 543
  */
 
 /* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
@@ -87,14 +87,16 @@
     gap: var(--space-6);
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  /* The strip becomes a grid of equal cards at this stop, each at least as wide as the card's contents need: the
+   * rating row is a flex line of stars, value and count that cannot shrink much below 170px, and a card squeezed
+   * under it clips that row against its own overflow. Four cards therefore share a row only where four genuinely
+   * fit and three below that; the cards of a row stay equal, and a card left alone keeps its row's width rather
+   * than stretching across the space its neighbours left. 13rem is the card minimum this band needs: a structural
+   * number of this sheet, the way the artboard ratios above it are, and not a token tokens.css declares. */
   .sp-product-grid--strip {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
     overflow-x: visible;
-  }
-  /* Four to a row at most: a fifth card wraps rather than squeezing the four that fit. */
-  .sp-product-grid--strip > * {
-    flex: 1 1 0;
-    min-inline-size: calc((100% - 3 * var(--space-6)) / 4);
   }
   /* The related strip is four across from here, where the catalogue itself is three. */
   .sp-product-grid--related {

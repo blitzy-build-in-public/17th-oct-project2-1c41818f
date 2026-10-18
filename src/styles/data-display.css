@@ -1,11 +1,19 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 534
+ * Lines: 542
  */
 
 @import "./tabs-accordion.css";
 
 /* ==== Cards and badges ==== */
+/* A card can hold a table wider than the column it is placed in, because a back-office table's legible floor
+ * is --layout-table-min-width. The card is a grid and the body below is one of its items, so a content-based
+ * minimum on either would size the card's own track from that floor and draw the table past the frame — and,
+ * in a narrow column, past the page — instead of letting the table's scroll container scroll it. */
+.sp-card,
+.sp-card__body {
+  min-inline-size: 0;
+}
 .sp-card {
   display: grid;
   background-color: var(--color-surface);
