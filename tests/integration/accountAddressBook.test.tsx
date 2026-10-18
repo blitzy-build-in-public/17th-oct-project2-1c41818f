@@ -2,7 +2,7 @@
  * Path: tests/integration/accountAddressBook.test.tsx
  * Purpose: The address book's own flow: a refused save, two adds, an edit, both default flags and a
  * confirmed removal.
- * Lines: 248
+ * Lines: 245
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,14 +22,11 @@ import { renderApp, resetApiState, screen, waitFor, within } from "../testUtils"
 import type { UserEvent } from "../testUtils";
 
 /*
- * Why the address book is a suite of its own.
+ * What the address book case drives: the dialog's refusal, two adds, an edit, both default flags and a confirmed
+ * removal.
  *
- * Its case drives the dialog's refusal, two adds, an edit, both default flags and a confirmed removal, and it
- * needs readers no other account case uses: the card, the action on it, its default control and the save that
- * waits for the book to be re-read. A concern that cannot fit under the 600-line ceiling is split into a second
- * file rather than the ceiling raised (§0.5.1, §0.5.5), and a split suite carries the helpers it needs itself,
- * as `tests/unit/lib/pricingSurface.test.ts` records of its own copies: nothing here is imported from
- * `tests/integration/accountFlow.test.tsx`, which keeps the rest of the account flow.
+ * It needs readers no other account case uses: the card, the action on it, its default control and the save that
+ * waits for the book to be re-read. Nothing here is imported from `tests/integration/accountFlow.test.tsx`.
  */
 
 // Driving the address book ------------------------------------------------------------------------

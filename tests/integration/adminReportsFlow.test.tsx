@@ -574,7 +574,7 @@ describe("a period that recorded nothing", () => {
 
 describe("a read that fails", () => {
   it("announces one failed read once, with a retry that restores the figures", async () => {
-    // The dashboard reads first, so the range re-run below is the refresh path a duplicate notice was reported on.
+    // One failed read is announced once and the retry restores the figures: the dashboard reads first, so the range re-run below is where a second announcement would show.
     const dashboard = await openAsAdmin();
     await screen.findByRole("region", { name: ADMIN_COPY.KPI_REVENUE_LABEL });
     const failure = failNext({ path: "/api/analytics/kpis" });

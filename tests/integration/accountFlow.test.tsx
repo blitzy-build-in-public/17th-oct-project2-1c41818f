@@ -1,6 +1,6 @@
 /**
  * Path: tests/integration/accountFlow.test.tsx
- * Purpose: Sign-in, profile edit, order history and the address book, plus the unauthenticated redirect.
+ * Purpose: Sign-in, profile edit, order history and the address book, plus the unauthenticated redirect
  * Lines: 599
  */
 

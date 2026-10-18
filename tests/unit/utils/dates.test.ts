@@ -1,8 +1,7 @@
 /**
  * Path: tests/unit/utils/dates.test.ts
- * Purpose: The range arithmetic, bucket boundaries and comparison periods of src/utils/dates.ts, in its
- * own suite because the two suites that touch the module sit at the per-file 600-line ceiling
- * Lines: 599
+ * Purpose: The range arithmetic, bucket boundaries and comparison periods of src/utils/dates.ts
+ * Lines: 598
  */
 
 // A pure-function suite: it reaches no DOM, mocks no module and reads no ambient clock — every rule
@@ -16,8 +15,8 @@ import { VALIDATION_MESSAGES } from "@/constants/content";
 import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import type { BaselineKind, BucketGranularity } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
-// The subject and the shared builders are imported as namespaces, as the two sibling suites import
-// theirs, so every name below is unambiguously an export of the module under test.
+// The subject and the shared builders are imported as namespaces, so every name below is unambiguously an
+// export of the module under test.
 import * as dates from "@/utils/dates";
 import * as fixtures from "../../fixtures";
 

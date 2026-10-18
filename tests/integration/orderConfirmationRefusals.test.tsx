@@ -11,10 +11,10 @@ import { ROUTES, orderConfirmationPath } from "@/constants/routes";
 
 import { renderApp, resetApiState, screen } from "../testUtils";
 
-// The confirmation's refusal half, split out of tests/integration/checkoutFlow.test.tsx per §0.5.5 when the
-// session-lifecycle landing and this checkpoint's fix together took that file past the 600-line ceiling: the
-// two states below need nothing but a route and the renderer, so they stand without the cart, promo and
-// checkout helpers that file's other subjects are driven through.
+// The confirmation route's two refusals, each needing nothing but a route and the renderer, so they stand
+// without the cart, promo and checkout helpers the checkout flow's other subjects are driven through: an
+// identifier no order holds reads as not-found, and an account's own order read without a session is answered
+// with the sign-in that resolves it.
 
 afterEach(() => {
   resetApiState();
@@ -33,9 +33,9 @@ describe("an order read refused for want of a session", () => {
   });
 
   it("answers an identifier no order holds as not-found, never as a sign-in problem", async () => {
-    // The existence of the order is decided before the session is judged (findings `qa2-I03` and
-    // `qa14-02`): a mistyped confirmation address reads as the not-found it is, with the way back to the
-    // catalogue rather than a sign-in prompt, and no retry the seam has already spent.
+    // The existence of the order is decided before the session is judged: a mistyped confirmation address
+    // reads as the not-found it is, with the way back to the catalogue rather than a sign-in prompt, and no
+    // retry the seam has already spent.
     const route = orderConfirmationPath("ord_999999");
     renderApp({ route });
     expect(await screen.findByRole("alert")).toHaveTextContent(NOT_FOUND_COPY.BODY);

@@ -1,6 +1,6 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
- * Purpose: Route matching, error mapping, catalogue filter reading, review scoping, idempotency replay, the unregistered-source failure, the transport's shaping and the seed's determinism.
+ * Purpose: Route matching, error mapping, idempotency replay, the unregistered-source failure and seed determinism
  * Lines: 596
  */
 

@@ -2,7 +2,7 @@
  * Path: tests/unit/lib/mockServerDurability.test.ts
  * Purpose: The seam's durability across a document load: what a document writes is what the next reads, the
  * placement credential of an account-less order and a published review's own row included, and two documents open at once never mint one order identifier between them
- * Lines: 237
+ * Lines: 238
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -28,9 +28,10 @@ import {
   valueOf,
 } from "./mockServerHarness";
 
-// The durability half of the mock-server suite, split out of tests/unit/lib/mockServer.test.ts per §0.5.5
-// because that file stood over the 600-line ceiling and the ceiling is never raised. Every case drives the
-// real seam over the seeded data source, installed behind a fake Web Storage so one document's writes are
+// What the seam guarantees across a document load, and what each case here drives it for: what one document
+// writes is what the next reads — a placed order's placement credential and a published review's own row
+// included — and two documents open at once never mint one order identifier between them. Every case drives
+// the real seam over the seeded data source, installed behind a fake Web Storage so one document's writes are
 // the next document's reads.
 
 /** The page a case reads a product's reviews at: the size the harness exports, so a list read at it is the
@@ -154,9 +155,9 @@ describe("durability across a document load", () => {
       ),
     );
     expect(placed.customerId).toBeNull();
-    // The credential is durable, written through the one storage util under the key the product declares:
-    // that is what lets the confirmation of an order placed here reopen after a reload (findings
-    // `cr15-I06`, `qa5-20`, `qa7-10`-class reloads) rather than only in the document that placed it.
+    // The credential is durable, written through the product's one storage utility under the key the product
+    // declares (STORAGE_KEYS.ORDER_TOKENS), which is what lets the confirmation of an account-less order
+    // reopen after a reload instead of only inside the document that placed it.
     const written = storage.keys();
     expect(written).toContain(STORAGE_KEYS.ORDER_TOKENS);
     const stored = JSON.parse(storage.getValue(STORAGE_KEYS.ORDER_TOKENS) ?? "{}") as {

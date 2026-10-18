@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/overlays.test.tsx
  * Purpose: The overlay family and the supplementary surfaces beside it — dialog semantics, the inert background, focus moved in and restored, Escape, the Tab-edge wrap, the busy confirmation, the drawer presentation, the tooltip and the toast — including keyboard and focus handling
- * Lines: 502
+ * Lines: 501
  */
 
 import { useRef, useState } from "react";
@@ -35,22 +35,21 @@ import { renderWithProviders, screen, waitFor, within } from "../testUtils";
  * rather than as the transform the sheet resolves it to. Every subject is mounted through
  * `renderWithProviders`, and the overlay panels portal onto `document.body`, so queries come from `screen`.
  *
- * A §0.5.5 split of `tests/components/controls.test.tsx`, which had reached the request's 600-line ceiling
- * with these two describes inside it: the overlays are a family in their own right, the button, field and
- * selection families stay there and the overlay and supplementary half is here. No case was edited and none
- * was dropped — the moved ranges were taken as they stood — and each file declares the helpers its own
- * subjects read, so the suite's total is unchanged. The later pass that rewrote the toast's cases is folded in
- * here, where the toast and the tooltip are read: its distinct-message control, its viewport-portal case and
- * its collapse case are declared in this file and in no other.
+ * The family's contract: a panel carries dialog semantics — a named dialog with `aria-modal` set and the
+ * background behind it inert — the focus moves inside it on open and returns to the control that opened it
+ * on close, Escape dismisses a dismissible panel, Tab wraps at the panel's edges, and a confirmation reports
+ * itself busy and answers once while its action is in flight. The drawer presents that same panel below the
+ * small stop; the tooltip describes its trigger only while it is open; and the toast viewport leaves the
+ * inert root for the document body, announces each kind in its own register, caps what it shows, and leaves
+ * the focus on a survivor when a message is dismissed.
  *
- * Each case reads its first post-render expectation through an awaited query, and moves a fake clock inside an
- * awaited query rather than between two of them, because the providers issue requests when they mount and a
- * toast countdown dismisses through a queue update: an update raised outside the testing library's `act` window
- * is what React reports as an act warning. The rule, and why the awaited query is what keeps such a settle
- * inside that window, is stated in `tests/testUtils.tsx`; no case needs an `act` call of its own, with one
- * exception: the drawer's entrance case takes the frame queue into its own hands — asserting the pending class
- * before any frame has run, then running the captured callback inside `act` — so the ordering it asserts is
- * decided by the case rather than by the host's clock.
+ * Each case reads its first post-render expectation through an awaited query and moves a fake clock inside an
+ * awaited query rather than between two, because the providers issue requests when they mount and a toast
+ * countdown dismisses through a queue update, so an update outside the testing library's `act` window is what
+ * React reports as an act warning; the rule itself is stated in `tests/testUtils.tsx` and no case needs an
+ * `act` call of its own, with one exception: the drawer's entrance case captures the frame queue itself,
+ * asserting the pending class before any frame has run and then running the captured callback inside `act`, so
+ * the ordering it asserts is decided by the case rather than by the host's clock.
  */
 
 /** The media-query shim `tests/setup.ts` installs, kept so a case that overrides it puts it back. */

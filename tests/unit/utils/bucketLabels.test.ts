@@ -11,16 +11,16 @@ import type { DateRange, IsoDateString } from "@/types/common";
 import * as dates from "@/utils/dates";
 
 /*
- * A §0.5.5 split of `tests/unit/utils/formatting.test.ts`, which was at the 600-line ceiling with the bucket
- * labels inside it: the wording of a bucket that the range it is charted over clips — the axis label, the report
- * table's period cell and the period cell the same report's download states — is its own case table here. Every
- * function is reached through `@/utils/dates`, their one home, and every expectation is a literal string, so a
- * wording that changes without the reader seeing it fails here.
+ * The wording a bucket takes from the range it is charted over: a chart's axis label and band, the report
+ * table's period cell and the period cell the same report's download states. A bucket the range covers whole
+ * keeps the wording of the period it opens; one the range clips states the days of it the range covers.
+ * Every function is reached through `@/utils/dates`, their one home, and every expectation is a literal
+ * string, so a wording that changes without the reader seeing it fails here.
  */
 
-/** The range every expectation is anchored on: the product's default trailing window, as the live app resolves
- *  it — 2026-09-19 to 2026-10-18 — whose first week holds Sep 19 and 20 alone and whose first month holds
- *  Sep 19 to 30. */
+/** The window every expectation is anchored on: thirty days of the shape the product's default window has,
+ *  that default being the trailing `DEFAULT_REPORT_RANGE_DAYS` (30) days ending today, so the pair here is
+ *  the fixture's own. Its first week holds Sep 19 and 20 alone and its first month holds Sep 19 to 30. */
 const CUT_RANGE: DateRange = { from: "2026-09-19", to: "2026-10-18" };
 /** A range that crosses a year boundary, so a covered span crossing one is stated with both years. */
 const YEAR_CROSSING_RANGE: DateRange = { from: "2025-12-31", to: "2026-01-06" };

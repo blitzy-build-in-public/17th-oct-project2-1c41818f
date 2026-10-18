@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/pricingService.test.ts
  * Purpose: Line and order totals, promo kinds and limits, shipping thresholds and tax rounding
- * Lines: 492
+ * Lines: 491
  */
 
 import { describe, expect, it } from "vitest";
@@ -23,8 +23,7 @@ import type { CategoryId, MinorUnits } from "@/types/common";
 import type { CartLine, PromoCode, PromoRejectionReason, PricedCart } from "@/types/commerce";
 
 // Every figure asserted below is a whole number of minor units and every date comes from the fixture
-// clock, so no case reads the real time. The async reads over the seeded data source live in this suite's
-// §0.5.5 split path, tests/unit/lib/pricingSurface.test.ts, which carries the surface the seam serves.
+// clock, so no case reads the real time.
 
 /** The currency every priced figure is in, and the tax the configured rate puts on 10,000 minor units. */
 const CURRENCY = DEFAULT_CURRENCY;

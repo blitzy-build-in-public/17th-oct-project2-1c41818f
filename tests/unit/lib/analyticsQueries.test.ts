@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsQueries.test.ts
  * Purpose: The query builders a dated read is assembled with, and the fallbacks a defensive read carries.
- * Lines: 162
+ * Lines: 95
  */
 
 // The service's read builders and the fallbacks those reads carry: the cut, the comparison and the ranking
@@ -16,68 +16,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ACCOUNTS } from "@/constants/config";
 import { salesProDataSource } from "@/data/repositories";
 import * as analytics from "@/lib/analyticsService";
-import { API_PATHS, handleRequest, registerDataSource } from "@/lib/mockServer";
-import type { SalesRecord } from "@/types/analytics";
-import type { CategoryId, DateRange, Result } from "@/types/common";
-import type { Order } from "@/types/commerce";
+import { registerDataSource } from "@/lib/mockServer";
+import type { CategoryId, DateRange } from "@/types/common";
 import * as dates from "@/utils/dates";
 
 import * as fixtures from "../../fixtures";
+import { FACTS, KPI_INPUT, signIn, valueOf } from "../../helpers/analyticsHarness";
 
-// The pinned period, and the data the fallbacks are stated over --------------------------------------
+// The pinned period, and the category a labelling fallback names ------------------------------------
 
 /** The trailing thirty days the fixed instant ends: the period these cases are stated over. */
 const RANGE: DateRange = fixtures.FIXED_DATE_RANGE;
 /** A category id no definition in the vocabulary holds, for the labelling fallback a reader sees. */
 const ORPHAN_CATEGORY = "cat_unknown-slug" as CategoryId;
-
-/** One fact row. Every total below is arithmetic a reader can check against the row beside it. */
-function factRow(
-  date: string,
-  orders: number,
-  units: number,
-  gross: number,
-  discount = 0,
-  refund = 0,
-): SalesRecord {
-  const fields = { date, orders, units, grossRevenueMinor: gross, discountMinor: discount };
-  return fixtures.makeSalesRecord({ ...fields, refundMinor: refund });
-}
-
-const FACTS: readonly SalesRecord[] = [
-  // Inside the period, on its own first and last day: 9,000 and 5,000 net of the discount and refund.
-  factRow(RANGE.from, 5, 7, 10_000, 1_000),
-  factRow(RANGE.to, 3, 5, 6_000, 0, 1_000),
-  // The day before the period, which the fallback case below withholds from the comparison, and the day
-  // after it, which no case here reads.
-  factRow(dates.addDays(RANGE.from, -1), 4, 6, 7_000),
-  factRow(dates.addDays(RANGE.to, 1), 50, 50, 999_999),
-];
-
-/** One account created inside the period and one created long before it, so a KPI states both sides. */
-const NEW_ACCOUNT = fixtures.makeCustomer({ email: "new@salespro.test", createdAt: RANGE.from });
-const OLD_ACCOUNT = fixtures.makeCustomer({ email: "old@salespro.test" });
-
-/** One order of the period, placed by the account named or by a guest, and the four the KPIs read. */
-function periodOrder(customerId: Order["customerId"], placedAt: string, number: string): Order {
-  return fixtures.makeOrder({ orderNumber: number, customerId, placedAt });
-}
-
-const PERIOD_ORDERS: readonly Order[] = [
-  periodOrder(NEW_ACCOUNT.id, `${RANGE.from}T09:30:00`, "SP-300001"),
-  periodOrder(NEW_ACCOUNT.id, `${RANGE.to}T10:00:00`, "SP-300002"),
-  periodOrder(null, `${RANGE.from}T11:00:00`, "SP-300003"),
-  periodOrder(OLD_ACCOUNT.id, `${dates.addDays(RANGE.to, 1)}T10:00:00`, "SP-300004"),
-];
-
-/** Everything `computeKpis` reads for RANGE: the fact rows, the orders that converted through it and
- *  the account base they convert a share of. */
-const KPI_INPUT: analytics.KpiInput = {
-  records: FACTS,
-  orders: PERIOD_ORDERS,
-  customers: [NEW_ACCOUNT, OLD_ACCOUNT],
-  query: RANGE,
-};
 
 // The seeded source, bound once, and the range the reads are issued over ---------------------------------
 
@@ -87,27 +38,9 @@ let adminToken = "";
  *  ambient clock, so it holds activity whenever the suite runs. */
 let seededRange: DateRange = RANGE;
 
-/** The payload of a read that must have succeeded, so no member of a successful result is reached
- *  through a cast and no case needs a try/catch around a read. */
-function valueOf<TValue>(result: Result<TValue>): TValue {
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error(`expected a payload, received ${result.error.code}`);
-  return result.value;
-}
-
 /** The session an administrator's read is authorised with. */
 function admin(): analytics.AnalyticsRequestOptions {
   return { sessionToken: adminToken };
-}
-
-/** Signs an account in through the seam's own route and hands back the token, so a read reaches the
- *  dashboard as the application does rather than with a hand-made session. */
-async function signIn(email: string): Promise<string> {
-  const login = handleRequest<{ readonly token: string }>(API_PATHS.AUTH_LOGIN, {
-    method: "POST",
-    body: { email, password: DEMO_ACCOUNTS.PASSWORD },
-  });
-  return valueOf(await login).token;
 }
 
 beforeAll(async () => {

@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/controls.test.tsx
- * Purpose: Button, field and select behaviour, including keyboard and focus handling; the overlay, tooltip and toast half of the suite is in tests/components/overlays.test.tsx
- * Lines: 276
+ * Purpose: Button, field, select and overlay behaviour, including keyboard and focus handling
+ * Lines: 273
  */
 
 import { useState } from "react";
@@ -32,10 +32,7 @@ import { renderWithProviders, screen, within } from "../testUtils";
  * The shared controls seen from the outside — the button family, the field family and the selection controls —
  * through roles, accessible names, ARIA state, rendered text and where the keyboard focus is. No assertion
  * touches a class name or a computed style, so none needs a stylesheet, and every subject is mounted through
- * `renderWithProviders`. The three overlays, the tooltip and the toast viewport are the other half of this
- * suite and live in `tests/components/overlays.test.tsx`, which declares the document root, the media-query
- * shim and the harnesses its own subjects need; all five families together were over the request's 600-line
- * ceiling, which is why the two files are the §0.5.5 split of the one suite.
+ * `renderWithProviders`.
  *
  * Each case reads its first post-render expectation through an awaited query, and moves a fake clock inside an
  * awaited query rather than between two of them, because the providers issue requests when they mount: an

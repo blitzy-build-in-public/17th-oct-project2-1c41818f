@@ -1,6 +1,6 @@
 /**
  * Path: tests/integration/searchQueryConsistency.test.tsx
- * Purpose: The regression guard for the search surface's count: a listing states a count, and renders tiles, only for the query the address bar names
+ * Purpose: A listing states a count, and renders tiles, only for the query the address bar names
  * Lines: 148
  */
 
@@ -30,18 +30,18 @@ import {
 import { renderWithProviders } from "../testUtils";
 
 /*
- * What this file guards, and how it reaches the frame the defect lives in.
+ * What this file proves: a listing states a count, and renders tiles, only for the query the address bar names.
  *
- * The state layer keeps the previous query's page while a new read is on its way — the retention an error state
+ * The state layer keeps the previous query's page while a new read is in flight — the retention an error state
  * falls back on — so a listing surface that states `view.page` as its answer before that read settles labels one
  * query's figures with another query's wording. The window is short and the settled result is correct either
- * way, which is why a case that only asserts the settled screen cannot fail on the defect.
+ * way, so a case that asserts only the settled screen cannot fail here.
  *
- * Two instruments reach it. The first holds the read back — the seam's own configured response delay is raised
- * for the length of the case — so the window between the submit and the answer is a state a case can assert on.
- * The second records every commit the surface takes part in from a layout effect, which runs after the commit's
- * DOM mutation and before the passive effect that issues the next read, so the first frame after the address bar
- * moves is observed rather than missed between two frames.
+ * Two instruments reach that window. The first holds the read back — the seam's own configured response delay is
+ * raised for the length of the case — so the window between the submit and the answer is a state a case can
+ * assert on. The second records every commit the surface takes part in from a layout effect, which runs after
+ * the commit's DOM mutation and before the passive effect that issues the next read, so the first frame after
+ * the address bar moves is observed rather than missed between two frames.
  *
  * Both instruments assert the same rule: while the query in the address bar has no answer in hand, no count of
  * another query is stated and no tile of another query is rendered. The term is one no seeded product matches,

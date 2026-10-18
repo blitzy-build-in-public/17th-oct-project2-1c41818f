@@ -278,11 +278,11 @@ describe("the session read's refusals", () => {
     expect(sessionReads(requests())).toBe(1);
     expect(readStored<SessionToken | null>(STORAGE_KEYS.SESSION, null)).toBeNull();
 
-    // The sign-in that follows is the case the finding is about: the store issues a session, the visitor
-    // lands signed in on the route the redirect preserved, and the requests made for it are its own — the
-    // login and the one account read behind it. No `GET /api/auth/session` follows, because the revalidation
-    // runs once per mount and not again for the token a sign-in has just opened. The catalogue and facet
-    // reads in the same window belong to the landing route, not to the session.
+    // The sign-in that follows holds the product to a session the store issues on the spot: the visitor lands
+    // signed in on the route the redirect preserved, and the requests made for it are its own — the login and
+    // the one account read behind it. No `GET /api/auth/session` follows, because the revalidation runs once
+    // per mount and not again for the token a sign-in has just opened. The catalogue and facet reads in the
+    // same window belong to the landing route, not to the session.
     const beforeSignIn = requests().length;
     await signInAsShopper(user);
     expect(await listedTable()).toBeVisible();
@@ -379,7 +379,7 @@ describe("durable session issuance at the seam", () => {
   it("refuses a token whose window has passed with 401 session-expired", async () => {
     const minted = await mintSession();
     // Eight days back: the record's seven-day window ended a day before now, so the token it names has
-    // lapsed — the reload case the declared refusal was unreachable for.
+    // lapsed, and the reload below refuses it with 401 session-expired.
     backdate(minted.token, 8);
 
     openDocument();

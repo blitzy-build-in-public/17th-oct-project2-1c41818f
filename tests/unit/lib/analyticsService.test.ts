@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
- * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines.
- * Lines: 600
+ * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines
+ * Lines: 535
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
@@ -21,7 +21,7 @@ import {
 import { BASELINE_OPTIONS } from "@/constants/taxonomy";
 import { salesProDataSource } from "@/data/repositories";
 import * as analytics from "@/lib/analyticsService";
-import { API_PATHS, handleRequest, registerDataSource } from "@/lib/mockServer";
+import { registerDataSource } from "@/lib/mockServer";
 import type { SalesProDataSource } from "@/lib/mockServer";
 import type {
   AnalyticsQuery,
@@ -31,18 +31,18 @@ import type {
   ProductPerformance,
   ReportKind,
   RevenueQuery,
-  SalesRecord,
   TopProductsQuery,
 } from "@/types/analytics";
-import type { CategoryId, DateRange, Result } from "@/types/common";
+import type { CategoryId, DateRange } from "@/types/common";
 import type { Order, OrderStatus } from "@/types/commerce";
 import { sumBy } from "@/utils/collections";
 import * as dates from "@/utils/dates";
 import * as statistics from "@/utils/statistics";
 
 import * as fixtures from "../../fixtures";
+import { FACTS, KPI_INPUT, signIn, valueOf } from "../../helpers/analyticsHarness";
 
-// The pinned period, the comparisons it resolves to, and the controlled data of the pure cases ------
+// The pinned period, and the comparisons it resolves to ---------------------------------------------
 
 /** The instant the dated expectations are stated against, so no case reads the ambient clock. */
 const NOW = new Date(fixtures.FIXED_NOW);
@@ -54,53 +54,6 @@ const PREVIOUS_YEAR: DateRange = { from: "2024-09-16", to: "2024-10-15" };
 /** The three cuts and the two comparisons, as the controls that render them declare them. */
 const GRANULARITIES: readonly BucketGranularity[] = ["day", "week", "month"];
 const BASELINES: readonly BaselineKind[] = ["previous-period", "previous-year"];
-
-/** One fact row. Every total below is arithmetic a reader can check against the row beside it. */
-function factRow(
-  date: string,
-  orders: number,
-  units: number,
-  gross: number,
-  discount = 0,
-  refund = 0,
-): SalesRecord {
-  const fields = { date, orders, units, grossRevenueMinor: gross, discountMinor: discount };
-  return fixtures.makeSalesRecord({ ...fields, refundMinor: refund });
-}
-
-const FACTS: readonly SalesRecord[] = [
-  // Inside the period, on its own first and last day: 9,000 and 5,000 net of the discount and refund.
-  factRow(RANGE.from, 5, 7, 10_000, 1_000),
-  factRow(RANGE.to, 3, 5, 6_000, 0, 1_000),
-  // The day before the period, which its comparison reads; the day after it, which neither reads.
-  factRow(dates.addDays(RANGE.from, -1), 4, 6, 7_000),
-  factRow(dates.addDays(RANGE.to, 1), 50, 50, 999_999),
-];
-
-/** One account created inside the period and one created long before it, so a KPI states both sides. */
-const NEW_ACCOUNT = fixtures.makeCustomer({ email: "new@salespro.test", createdAt: RANGE.from });
-const OLD_ACCOUNT = fixtures.makeCustomer({ email: "old@salespro.test" });
-
-/** One order of the period, placed by the account named or by a guest, and the four the KPIs read. */
-function periodOrder(customerId: Order["customerId"], placedAt: string, number: string): Order {
-  return fixtures.makeOrder({ orderNumber: number, customerId, placedAt });
-}
-
-const PERIOD_ORDERS: readonly Order[] = [
-  periodOrder(NEW_ACCOUNT.id, `${RANGE.from}T09:30:00`, "SP-300001"),
-  periodOrder(NEW_ACCOUNT.id, `${RANGE.to}T10:00:00`, "SP-300002"),
-  periodOrder(null, `${RANGE.from}T11:00:00`, "SP-300003"),
-  periodOrder(OLD_ACCOUNT.id, `${dates.addDays(RANGE.to, 1)}T10:00:00`, "SP-300004"),
-];
-
-/** Everything `computeKpis` reads for RANGE: the fact rows, the orders that converted through it and
- *  the account base they convert a share of. */
-const KPI_INPUT: analytics.KpiInput = {
-  records: FACTS,
-  orders: PERIOD_ORDERS,
-  customers: [NEW_ACCOUNT, OLD_ACCOUNT],
-  query: RANGE,
-};
 
 /** A cheap, high-volume product and a dear, low-volume one, so the two rankings disagree: forty units
  *  at $10 lead units while two at $500 lead revenue. */
@@ -179,14 +132,6 @@ let shopperToken = "";
 let seededRange: DateRange = RANGE;
 let emptyRange: DateRange = RANGE;
 
-/** The payload of a read that must have succeeded, so no member of a successful result is reached
- *  through a cast and no case needs a try/catch around a read. */
-function valueOf<TValue>(result: Result<TValue>): TValue {
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error(`expected a payload, received ${result.error.code}`);
-  return result.value;
-}
-
 /** The session an administrator's read is authorised with. */
 function admin(): analytics.AnalyticsRequestOptions {
   return { sessionToken: adminToken };
@@ -195,16 +140,6 @@ function admin(): analytics.AnalyticsRequestOptions {
 /** A day-bucketed revenue series over a period, split by the grouping a case names. */
 function revenueSeries(range: DateRange, groupBy?: RevenueQuery["groupBy"]) {
   return analytics.getRevenueSeries({ ...range, bucket: "day", groupBy }, admin());
-}
-
-/** Signs an account in through the seam's own route and hands back the token, so a read reaches the
- *  dashboard as the application does rather than with a hand-made session. */
-async function signIn(email: string): Promise<string> {
-  const login = handleRequest<{ readonly token: string }>(API_PATHS.AUTH_LOGIN, {
-    method: "POST",
-    body: { email, password: DEMO_ACCOUNTS.PASSWORD },
-  });
-  return valueOf(await login).token;
 }
 
 beforeAll(async () => {

@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/catalogUrlState.test.tsx
  * Purpose: The catalogue's query contract with the address bar: writes raised inside one render, a loaded address canonicalised, and a canonical address left alone.
- * Lines: 206
+ * Lines: 208
  */
 
 import { useEffect } from "react";
@@ -22,13 +22,11 @@ import { categoryId } from "@/utils/strings";
 import { renderWithProviders, resetApiState, screen, waitFor } from "../testUtils";
 
 /*
- * What this file proves, and why the same subject is not carried by `tests/integration/shoppingFlow.test.tsx`.
+ * What this file proves.
  *
  * Query state has one store and it is the address bar, so the cases here read the location itself: which query a
  * write leaves, and which query a loaded address ends at. A harness's `MemoryRouter` keeps that query out of
- * `window.location`, so it has to be rendered to be read, and this file is where the location-reading cases live
- * — the flow file carries the same subject through rendered outcomes, a facet control's checked state and the
- * count a listing announces, and it sits against the request's 600-line ceiling.
+ * `window.location`, so it has to be rendered to be read, and this file is where the location-reading cases live.
  */
 
 // The address bar the cases read ---------------------------------------------------------------------
@@ -86,8 +84,12 @@ function settledInOnePass(): boolean {
 }
 
 /**
- * The addresses qa12-18 lists as rendering the catalogue while naming no state the reader keeps, each with the
- * canonical form of that same selection: the writer omits a value it would otherwise read back to its default.
+ * The addresses whose keys name no state the reader keeps, each with the canonical form of that same selection
+ * beside it. A page size outside the configured set, a page below the first, an unknown sort key, a rating off
+ * the scale and a flag that is neither `true` nor `1` are read back to their defaults, so the writer omits them;
+ * a page past the last is clamped to the page the listing served; an inverted price pair is renormalised; and one
+ * category value written fifty times is one selection. Every expected address is therefore the writer's own
+ * canonical form of what the query reader resolved.
  */
 const CRAFTED_ADDRESSES = [
   { label: "an unconfigured page size", query: "pageSize=7", expected: "" },

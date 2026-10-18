@@ -1,17 +1,16 @@
 /**
  * Path: tests/unit/lib/analyticsBaseline.test.ts
  * Purpose: The previous-year comparison the dashboard offers, and one period's figures across the four surfaces a live order moves.
- * Lines: 187
+ * Lines: 177
  */
 
-// A §0.5.5 split of `tests/unit/lib/analyticsService.test.ts`: near the 600-line ceiling at 584 lines, and the cases
-// below would have carried it past. Two behaviours are asserted here and no other case covers either: that the comparison
-// baseline the dashboard offers — the previous year — is answered from the seeded history rather than from
-// nothing, so every KPI change is a figure instead of the placeholder a comparison with no baseline states;
-// and that one period's orders and revenue read the same on the KPI cards, the revenue series and both the
-// sales and customers reports once an order has been placed in the session. No case reads the ambient clock:
-// each period is derived from the newest seeded order, so the expectations hold whatever day the suite runs,
-// and the one order these cases place is placed through the seam as the application places it.
+// Two behaviours, and no other case covers either: the comparison baseline the dashboard offers — the
+// previous year — is answered from the seeded history rather than from nothing, so every KPI change is a
+// figure instead of the placeholder a comparison with no baseline states; and one period's orders and revenue
+// read the same on the KPI cards, the revenue series and both the sales and customers reports once an order
+// has been placed in the session. No case reads the ambient clock: each period is derived from the newest
+// seeded order, so the expectations hold whatever day the suite runs, and the one order these cases place is
+// placed through the seam as the application places it.
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { DEMO_ACCOUNTS, DEMO_CARD_NUMBERS } from "@/constants/config";
@@ -40,7 +39,8 @@ let adminToken = "";
  *  order's own day, derived from the data rather than from the ambient clock. */
 function trailingThirtyDays(): DateRange {
   const newest = source.getRecentOrders(1)[0];
-  if (newest === undefined) throw new Error("The seeded history holds no order to date a period by.");
+  if (newest === undefined)
+    throw new Error("The seeded history holds no order to date a period by.");
   const lastDay = startOfDay(newest.placedAt);
   return { from: addDays(lastDay, -29), to: lastDay };
 }
@@ -95,9 +95,7 @@ async function readPeriod(range: DateRange, token: string): Promise<PeriodRead> 
     kpiOrders: kpis.orders,
     kpiRevenue: kpis.revenueMinor,
     kpiUnits: kpis.units,
-    seriesTotal: series
-      .flatMap((each) => each.points)
-      .reduce((total, point) => total + point.y, 0),
+    seriesTotal: series.flatMap((each) => each.points).reduce((total, point) => total + point.y, 0),
     salesOrders: sales.orders ?? 0,
     salesNet: sales.netRevenue ?? 0,
     customersOrders: customers.orders ?? 0,
@@ -164,16 +162,8 @@ describe("one period, one set of figures: an order placed in the session against
     // One period, one order count and one revenue: the dashboard's two surfaces and the two reports whose
     // figures are drawn from the orders state the same thing about the sale.
     expect(after.kpiOrders).toBe(before.kpiOrders + 1);
-    expect([after.salesOrders, after.customersOrders]).toEqual([
-      after.kpiOrders,
-      after.kpiOrders,
-    ]);
-    expect([
-      after.kpiRevenue,
-      after.seriesTotal,
-      after.salesNet,
-      after.customersRevenue,
-    ]).toEqual([
+    expect([after.salesOrders, after.customersOrders]).toEqual([after.kpiOrders, after.kpiOrders]);
+    expect([after.kpiRevenue, after.seriesTotal, after.salesNet, after.customersRevenue]).toEqual([
       before.kpiRevenue + goods,
       before.seriesTotal + goods,
       before.salesNet + goods,

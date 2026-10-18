@@ -1,15 +1,15 @@
 /**
  * Path: tests/unit/lib/apiRoutesVocabulary.test.ts
  * Purpose: The vocabulary the seam refuses a hand-made request's own values with, driven through `src/lib/apiRoutes.ts`, `src/lib/apiRequests.ts` and `src/lib/apiOrders.ts`: one rule per parameter, the sentence each value that is present but invalid earns, and the idempotency conflict's own wording.
- * Lines: 346
+ * Lines: 349
  */
 
-// The vocabulary half of the seam's contract, split out of tests/unit/lib/apiRoutes.test.ts when that suite
-// reached the request's 600-line ceiling (§0.5.5: a concern that no longer fits is split into a second file,
-// and the ceiling is never raised). Every case drives the real seam through `src/lib/apiClient.ts`, so no
-// module is mocked and no handler is called directly: each assertion is one a caller can make of the answer it
-// receives, and what is held to account here is the wording these modules state about a value the caller
-// itself supplied — a delivered value is never reported as one nobody sent.
+// The vocabulary the file holds the seam to: the sentence each present-but-invalid value earns, driven
+// through `src/lib/apiRoutes.ts`, `src/lib/apiRequests.ts` and `src/lib/apiOrders.ts`. Every case drives the
+// real seam through `src/lib/apiClient.ts`, so no module is mocked and no handler is called directly: each
+// assertion is one a caller can make of the answer it receives, and what is held to account is the wording
+// these modules state about a value the caller itself supplied — a delivered value is never reported as one
+// nobody sent.
 
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -140,8 +140,11 @@ interface VocabularyCase {
   readonly message: string;
 }
 
-/** Every present-but-invalid value the seam's own QA report enumerates, and the sentence each earns. The
- *  control is named correctly already, so the wording is what these rows hold the answer to. */
+/** One row per parameter a hand-made request carries present but invalid, grouped by the rule it holds the
+ *  answer to, plus the member the caller left out, which its rule answers as missing. Each row asserts the
+ *  sentence that parameter's rule earns, read back from the request the caller sent, so a delivered value is
+ *  never reported as one nobody sent. The control is named correctly already, so the wording is what these
+ *  rows hold the answer to. */
 const VOCABULARY: readonly VocabularyCase[] = [
   {
     what: "a review list rated outside the five",

@@ -1,6 +1,6 @@
 /**
  * Path: tests/integration/shoppingFlow.test.tsx
- * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states.
+ * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states
  * Lines: 299
  */
 

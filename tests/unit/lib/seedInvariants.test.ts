@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/seedInvariants.test.ts
  * Purpose: The seeded data's own invariants: no attributed order and no review dated before its product or the account it belongs to, and nothing seeded dated after the anchor day's first hour.
- * Lines: 90
+ * Lines: 87
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -15,10 +15,7 @@ import { compareIso } from "@/utils/dates";
 
 // The invariants a seeded cohort must not break: an account predates every order attributed to it, and no
 // review precedes the account that wrote it. Both read the data source's own accessors, so no DOM, no
-// provider and no rendering take part and the cases run in the node project. They were split out of
-// `tests/unit/lib/mockServer.test.ts` per §0.5.5 when the two lanes' additions to that suite met the
-// 600-line ceiling; the parent keeps the seam's own contract cases, and the seed-determinism proof lives
-// there, because §0.5.5 names that suite as its single home.
+// provider and no rendering take part and the cases run in the node project.
 
 /** A row limit past the seeded order count, so a pass reads the whole collection it is about. */
 const ALL_ROWS = 10_000;

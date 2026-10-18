@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/state/transactions.test.ts
  * Purpose: Cart and checkout reducer transitions, stock clamping and submission guards
- * Lines: 472
+ * Lines: 470
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,8 +25,6 @@ import { FIXED_NOW, makeCart, makeCartLine, makeCartWithLines, makeProduct } fro
 import type { CartAction, CartState } from "@/state/cartReducer";
 import type { Cart, CartLine } from "@/types/commerce";
 
-// The cart half of those reducers: the checkout's cases live in tests/unit/state/checkout.test.ts,
-// split out when this file passed the 600-line ceiling.
 // The cart reducer is a pure function of a state and an action: every case calls one directly.
 
 const ADD_ONE = cartActions.add(makeCartLine({ quantity: 1 }));

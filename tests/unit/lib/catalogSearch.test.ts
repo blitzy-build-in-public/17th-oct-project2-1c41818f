@@ -1,6 +1,6 @@
 /**
  * Path: tests/unit/lib/catalogSearch.test.ts
- * Purpose: Filtering, cross-filtered facet counts, sort orders, paging and search scoring.
+ * Purpose: Filtering, cross-filtered facet counts, sort orders, paging and search scoring
  * Lines: 504
  */
 

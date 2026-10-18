@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/mockServerOrderRead.test.ts
  * Purpose: The order read's authorisation: an account-less order answered to its placement credential or an administrator alone, and the same refusal a foreign order gets for everyone else
- * Lines: 75
+ * Lines: 74
  */
 
 import { describe, expect, it } from "vitest";
@@ -20,20 +20,19 @@ import {
   valueOf,
 } from "./mockServerHarness";
 
-// The order read's authorisation half, split out of tests/unit/lib/mockServer.test.ts per §0.5.5 when the
-// guest placement credential landed and took that file past the 600-line ceiling. It drives the real seam
-// over the seeded data source, and the case binds its own source through the harness, so it needs nothing
-// from the parent file.
+// The authorisation rule these cases prove: an order that names no account is answered to the credential it
+// was placed with, or to an administrator, and every other caller gets the same `404` a foreign order gets,
+// so a response cannot be read to learn whether an identifier exists. Each case drives the real seam over the
+// seeded data source and binds its own source through the harness.
 
 /** A row limit past the seeded order count, so a count reads the whole collection it is about. */
 const ALL_ROWS = 10_000;
 
 describe("order-detail authorisation", () => {
   it("answers an account-less order to its placement credential alone, and serves an administrator", async () => {
-    // A seeded order that names no account is the case the exposure was reported on: an administrator is
-    // served, a caller that sent no session is refused, and a signed-in customer is refused with the same
-    // `404` a foreign account-owned order answers, so a response cannot be read to learn whether an
-    // identifier exists.
+    // A seeded order that names no account is answered to an administrator; a caller that sent no session is
+    // refused, and a signed-in customer is refused with the same `404` a foreign account-owned order answers,
+    // so a response cannot be read to learn whether an identifier exists.
     const source = startSeam();
     const seeded = source.getRecentOrders(ALL_ROWS).find((order) => order.customerId === null);
     if (seeded === undefined) throw new Error("The seeded orders hold no account-less order.");

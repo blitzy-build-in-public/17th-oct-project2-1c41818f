@@ -1,15 +1,14 @@
 /**
  * Path: tests/unit/lib/analyticsSeries.test.ts
  * Purpose: The band wording of a charted period's series: one band per bucket, and no two bands of one run worded alike.
- * Lines: 72
+ * Lines: 71
  */
 
-// A §0.5.5 split of `tests/unit/lib/analyticsService.test.ts`, which stood at the 600-line ceiling with this
-// concern outside it. What a series' bands are worded by is the case that guards the dashboard's revenue
-// chart, and it needs no seam, no session and no clock of its own: the run is the product's own widest range
-// and the facts are the seeded ones, so the expectations hold whatever day the suite runs. A chart keys a
-// band by its wording, so two buckets worded alike fold into one band and the chart states the figure of
-// whichever of them it found first.
+// What a series' band wording must guarantee: one band per bucket of the run, no two of its bands worded
+// alike, and the run's figures totalling what the KPI states for the same period. A chart keys a band by its
+// wording, so two buckets worded alike fold into one band and the chart states the figure of whichever of
+// them it found first. It needs no seam, no session and no clock: the run is the product's own widest range
+// and the facts are the seeded ones, so the expectations hold whatever day the suite runs.
 import { describe, expect, it } from "vitest";
 
 import { SALES_RECORDS } from "@/data/salesHistory";

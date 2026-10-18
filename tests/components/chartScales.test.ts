@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/chartScales.test.ts
  * Purpose: The chart scales' own mathematics: the steps a value axis ticks at, the extent it spans and the room a band label takes
- * Lines: 172
+ * Lines: 171
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,10 +13,8 @@ import { formatMoney, formatMoneyAxis } from "@/utils/format";
 import { makeChartSeries } from "../fixtures";
 
 /*
- * A §0.5.5 split of `tests/components/charts.test.tsx`: the chart-mathematics cases that need no renderer — the
- * step a value axis ticks at, the extent a degenerate series spans, the room a band label takes and the notation
- * a money axis is written in — are their own suite here, because the renderer suite reached the 600-line ceiling
- * once both this checkpoint's cases and the previous lane's had landed in it. Every case asserts
+ * The scales' mathematics on their own: the step a value axis ticks at, the extent a degenerate series spans,
+ * the room a band label takes and the notation a money axis is written in. Every case asserts
  * `chartScales.ts`'s exported contract, which is React-free, so nothing is mocked and nothing is mounted.
  */
 
@@ -48,7 +46,7 @@ describe("the chart scales' axis mathematics", () => {
       const [low, high] = extent;
       expect(scales.niceDomain(low, high, undefined, scales.WHOLE_NUMBER_STEP)).toEqual(domain);
       expect(scales.linearTicks(low, high, undefined, scales.WHOLE_NUMBER_STEP)).toEqual(expected);
-      // The same extent without the floor is what the count axis used to state.
+      // The same extent ticked at the default step, not the whole-number step, is what the unfixed axis states.
       expect(scales.linearTicks(low, high)).toEqual(unfixed);
     },
   );
@@ -150,7 +148,8 @@ describe("the money axis formatter", () => {
   });
 
   it("keeps one axis out of the other axis's notation entirely", () => {
-    // The defect this replaces: an axis that shortened only its large ticks wrote `$0.00` beside `$2K`.
+    // One axis keeps one notation entirely: a compacted axis writes no full-notation tick, and a full-notation
+    // axis writes no shortened one.
     const compact = [0, 500_000, 1_500_000].map((value) => formatMoneyAxis(value, [0, 1_500_000]));
     const full = [0, 20_000].map((value) => formatMoneyAxis(value, [0, 20_000]));
     expect(compact).not.toContain(formatMoney(0));

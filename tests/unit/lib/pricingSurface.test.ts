@@ -21,10 +21,10 @@ import type { Product } from "@/types/catalog";
 import type { ApiError, Result } from "@/types/common";
 import type { CartLine, PricedCart } from "@/types/commerce";
 
-// The seam half of the pricing service's suite, split out of tests/unit/lib/pricingService.test.ts per
-// §0.5.5 because that file stood over the 600-line ceiling and the ceiling is never raised. Every case here
-// answers through the real transport over the seeded data source — no case mocks a module — and the only
-// isolation used is the seam's own failure injection. Every figure asserted is a whole number of minor units.
+// The contract these cases hold: promo validation, the delivery methods, a basket priced over the seam and
+// the shelf each line is checked against. Every case answers through the real transport over the seeded data
+// source — no case mocks a module, and the only isolation used is the seam's own failure injection — and
+// every figure asserted is a whole number of minor units.
 
 /** The currency every priced figure is in. */
 const CURRENCY = DEFAULT_CURRENCY;
