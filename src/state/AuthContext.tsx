@@ -1,7 +1,7 @@
 /**
  * Path: src/state/AuthContext.tsx
  * Purpose: Session state with sign-in and sign-out actions, role helpers and restore on mount
- * Lines: 555
+ * Lines: 535
  */
 
 import {
@@ -16,32 +16,32 @@ import {
 import type { ReactElement, ReactNode } from "react";
 
 import { STORAGE_KEYS } from "@/constants/config";
+import { FEEDBACK_COPY } from "@/constants/content";
+import { watchSessionRefusals } from "@/lib/apiClient";
+import { isSessionRefusal } from "@/lib/apiContract";
 import {
-  isAdministrator,
-  isAuthenticated,
+  authErrorMessage,
   isSessionExpired,
   register as registerAccount,
-  restoreSession as restoreSessionRequest,
   signIn as signInRequest,
   signOut as signOutRequest,
 } from "@/lib/authService";
-import { displayName, getProfile } from "@/lib/customerService";
+import { getProfile } from "@/lib/customerService";
+import {
+  NO_IDENTITY,
+  PENDING_STATE,
+  SIGNED_OUT_STATE,
+  derivedValue,
+  isStoredToken,
+  nowInstant,
+  readStoredSession,
+  usableSession,
+} from "@/state/authSession";
+import type { AuthState, AuthValue, RestoredIdentity } from "@/state/authSession";
+import { useToast } from "@/state/ToastContext";
 import { useAsync } from "@/state/hooks";
-import type {
-  Credentials,
-  Customer,
-  RegistrationInput,
-  RegistrationResult,
-  Role,
-  Session,
-} from "@/types/account";
-import type {
-  ApiError,
-  AsyncStatus,
-  IsoDateTimeString,
-  Result,
-  SessionToken,
-} from "@/types/common";
+import type { Credentials, RegistrationInput, RegistrationResult, Session } from "@/types/account";
+import type { Result, SessionToken } from "@/types/common";
 import { readStored, removeStored, writeStored } from "@/utils/storage";
 
 /**
@@ -50,10 +50,16 @@ import { readStored, removeStored, writeStored } from "@/utils/storage";
  * account screens read it here, and none of them owns the session.
  *
  * The rules are not restated here. `src/lib/authService.ts` owns the session lifecycle and every role
- * and expiry decision — this module calls `signIn`, `signOut`, `register`, `restoreSession`,
- * `isAuthenticated`, `isAdministrator` and `isSessionExpired` rather than repeating one of them — and
- * `src/utils/storage.ts` is the product's only reader and writer of the store. What this file owns is
- * orchestration, and each decision it makes is recorded where it is made.
+ * and expiry decision — this module calls `signIn`, `signOut`, `register` and `isSessionExpired` rather
+ * than repeating one of them — and `src/utils/storage.ts` is the product's only reader and writer of the
+ * store. What this file owns is orchestration — holding the session, changing it and announcing the
+ * change — and each decision it makes is recorded where it is made.
+ *
+ * The reading half of the session lives beside it: `src/state/authSession.ts` owns the contract a
+ * consumer reads (`AuthState` and `AuthValue`), the states a revalidation publishes, the retried read
+ * behind the mount revalidation and the projections computed from the state. That split is what keeps
+ * this file inside the request's 600-line ceiling, which is never raised; what stays here is the writing
+ * half — the two contexts, the provider that holds and changes the session, and the two consumer hooks.
  *
  * Authentication here is a demonstration account store, not a security boundary: the credential is an
  * opaque `ses_` token the in-browser store issues and no real credential stands behind it. A real
@@ -61,57 +67,7 @@ import { readStored, removeStored, writeStored } from "@/utils/storage";
  * `src/lib/apiClient.ts` is built to be repointed at, and the rules this file calls move with it.
  */
 
-// What a consumer reads --------------------------------------------------------------------------
-
-/**
- * The session this client holds, as every consumer sees it. `session` is non-null exactly while the
- * visitor is signed in and `customer` is its identity projection; the two are adopted together,
- * because every screen that shows one shows the other.
- */
-export interface AuthState {
-  /**
-   * `idle` before anything has been asked and after a sign-out, `loading` while an action or the
-   * mount revalidation is in flight, `success` while a session is held, and `error` when the last
-   * action or the revalidation failed — including the case where the session stands and only its
-   * identity projection failed.
-   */
-  readonly status: AsyncStatus;
-
-  /** The session in force, or `null` for a visitor who is not signed in. */
-  readonly session: Session | null;
-
-  /** The account the session authenticates, or `null` while it is not known. */
-  readonly customer: Customer | null;
-
-  /** The failure the last action or the mount revalidation answered with, or `null`. */
-  readonly error: ApiError | null;
-}
-
-/**
- * Everything a consumer reads, and nothing it writes. The facts below are derived from the state
- * during render and never stored: a role or a name kept beside the session it describes is a second
- * answer to a question the session already answers, and the two drift apart when either changes.
- */
-export interface AuthValue extends AuthState {
-  /** The role in force: the session's own claim, or `guest` for a visitor who is not signed in. */
-  readonly role: Role;
-
-  /** Whether a session worth acting on is held. The guards over `/account/*` read this. */
-  readonly isAuthenticated: boolean;
-
-  /** Whether that session is a sales administrator's — the one role the dashboard and reports admit. */
-  readonly isAdministrator: boolean;
-
-  /** Whether that session is a shopper's: every role that is neither `guest` nor `admin`. */
-  readonly isCustomer: boolean;
-
-  /** The account's full name for the header and the account screens, or `""` while it is not known. */
-  readonly displayName: string;
-
-  /** The account's email address, which the checkout prefills its contact field with; `null` while
-   *  the identity projection is not known. */
-  readonly email: string | null;
-}
+// What a consumer dispatches ---------------------------------------------------------------------
 
 /**
  * Every change this context accepts, one member each, stable for the life of the provider.
@@ -156,19 +112,24 @@ export interface AuthActions {
 
   /**
    * Ends the session and returns the state to a signed-out visitor: the store is asked to retire the
-   * token, the persisted entry is dropped and the revalidation's answer is discarded with it. The
-   * local session is gone whether or not the store answers, because a session the visitor has given
-   * up must not stay in use by the client.
+   * token, the persisted entry is dropped, the revalidation's answer is discarded with it, and the
+   * transition is announced as a notification. The local session is gone whether or not the store
+   * answers, because a session the visitor has given up must not stay in use by the client.
    */
   readonly signOut: () => Promise<void>;
 
   /**
    * Re-asks the store which session the persisted token still names, which is what a surface calls
    * when a request came back `401` and the answer is worth confirming before the visitor is sent back
-   * to sign-in. A visitor holding no persisted token has nothing to revalidate, so the call resolves
-   * without a request, and the outcome arrives through the state rather than through this promise:
-   * the revalidation settles in its own time, and a caller that needs to observe it reads `status`
-   * and `error` from the value the provider publishes.
+   * to sign-in. The provider calls it itself for the same reason, from the transport's report of a
+   * refusal, so a `401` answered to any request in the product reaches this one decision.
+   *
+   * A visitor holding no persisted token has nothing to revalidate, so the call resolves without a
+   * request, and the outcome arrives through the state rather than through this promise: the
+   * revalidation settles in its own time, and a caller that needs to observe it reads `status` and
+   * `error` from the value the provider publishes. A refusal clears the stored entry, signs the visitor
+   * out and is announced; any other failure keeps the entry and is reported as the state's error,
+   * because only a refusal says the credential is no longer accepted.
    */
   readonly restoreSession: () => Promise<void>;
 
@@ -198,154 +159,158 @@ const AuthStateContext = createContext<AuthValue | null>(null);
  */
 const AuthActionsContext = createContext<AuthActions | null>(null);
 
-// The states this module publishes ---------------------------------------------------------------
-
-/** The state of a visitor who is not signed in, shared rather than allocated per render. */
-const SIGNED_OUT_STATE: AuthState = { status: "idle", session: null, customer: null, error: null };
-
-/** The state while an action or the mount revalidation is in flight. */
-const PENDING_STATE: AuthState = { status: "loading", session: null, customer: null, error: null };
-
-/**
- * What one session revalidation resolves to: the session a stored token still names and the account
- * behind it, or two nulls when there is nothing to adopt — no token to ask with, or a token the local
- * expiry rule has already retired. The two travel together because a session without its account is
- * not a state a screen can render.
- */
-interface RestoredIdentity {
-  readonly session: Session | null;
-  readonly customer: Customer | null;
-}
-
-/** The answer a revalidation with nothing to adopt resolves to. */
-const NO_IDENTITY: RestoredIdentity = { session: null, customer: null };
-
-// Projections ------------------------------------------------------------------------------------
-
-/**
- * Whether a stored payload is a session token: a non-empty string, or the `null` a store holding none
- * reads back as. The content is judged no further — the `ses_` prefix proves nothing, and whether a
- * token is real is the store's decision, which `restoreSession` asks. So content another build wrote
- * cannot reach the lookup as though it were a token.
- */
-function isStoredToken(value: unknown): value is SessionToken | null {
-  return value === null || (typeof value === "string" && value.trim().length > 0);
-}
-
-/**
- * The instant a session's expiry is judged against, in the ISO 8601 form `isSessionExpired` parses
- * back to the same moment. The clock is read here because expiry is a fact about now rather than
- * about the record, and it is read in UTC rather than through the local-time helper in
- * `src/utils/dates.ts`, which is outside this file's dependency set: the parser behind
- * `isSessionExpired` reads both forms, so neither reading changes the answer.
- */
-function nowInstant(): IsoDateTimeString {
-  return new Date().toISOString();
-}
-
-/**
- * The session this module treats as one worth acting on, or `null`. `src/lib/authService.ts` decides
- * what that means — a session holding no token, or claiming the `guest` role no account is ever
- * stored as, authenticates nobody — so a record that cannot be used is reported as a visitor who is
- * not signed in rather than rendered as a session.
- */
-function usableSession(session: Session | null): Session | null {
-  return session !== null && isAuthenticated(session) ? session : null;
-}
-
-/**
- * The value a consumer reads, derived from the state during render: every member beyond the state is
- * a projection of the session or of the account, computed here and never stored. A name and an email
- * the client does not have are reported as absent rather than invented, and a visitor holding no
- * usable session reports the `guest` role and no identity.
- */
-function derivedValue(state: AuthState): AuthValue {
-  const session = usableSession(state.session);
-  const account = session === null ? null : state.customer;
-  const administrator = session !== null && isAdministrator(session);
-  const name = account === null ? "" : displayName(account);
-  return {
-    status: state.status,
-    session: state.session,
-    customer: state.customer,
-    error: state.error,
-    role: session === null ? "guest" : session.role,
-    isAuthenticated: session !== null,
-    isAdministrator: administrator,
-    isCustomer: session !== null && session.role === "customer",
-    displayName: name,
-    email: account === null ? null : account.email,
-  };
-}
-
 // Provider ---------------------------------------------------------------------------------------
 
 /**
  * Holds the session and provides it, with its actions, to everything below.
  *
- * Two pieces of state carry it. The first is the token read from storage, which is the subject of the
- * mount revalidation and nothing else — every request a signed-in client makes takes its token from
- * the session this context holds, not from here. The second is the outcome of the most recent action,
- * or `null` while the revalidation is the state's only source; an action's outcome is adopted as soon
- * as it is known, which is the decision that lets a guard reading `isAuthenticated` see the session a
- * sign-in just obtained rather than an answer that arrives a request later.
+ * Two things carry it: the token this client holds — read from storage in the lazy initialiser, adopted
+ * whenever an action opens a session and cleared whenever one ends — which is the subject of the mount
+ * revalidation and nothing else (every request a signed-in client makes takes its token from the session
+ * this context holds, not from here), and the outcome of the most recent action, or `null` while the
+ * revalidation is the state's only source. An action's outcome is adopted as soon as it is known, which is
+ * what lets a guard reading `isAuthenticated` see the session a sign-in just obtained rather than an answer
+ * that arrives a request later.
  *
- * The mount revalidation is `useAsync`, keyed on the stored token and enabled only while one is held:
- * a visitor with nothing stored stays `idle` and no request is issued for them, while a stored token
- * is revalidated by the store that issued it rather than trusted from storage. Its outcome is not
- * copied into state — the published state is composed from the query and the adopted outcome during
- * render — which is what stops a response that settles after the component is gone from setting
- * anything. Hydration happens once, in a lazy initialiser, so the token is read before the first
- * render rather than arriving in an effect a frame later.
+ * The token is held in a ref rather than in state because nothing renders it, and that is what holds the
+ * revalidation's inputs still: the read runs once at mount against whatever token was stored and again only
+ * when `restoreSession` asks for it, so a sign-in cannot set a second read of a session the store has just
+ * issued going. What reads the token is the read itself, taking the one the client holds at the moment it
+ * runs — including one a sign-in has just opened, which is what lets a `401` met later in the document be
+ * confirmed and signed out against.
+ *
+ * That read is `useAsync` over a runner that reads the ref, and it is the one read that decides whether a
+ * session already in force still stands, so it writes its verdict into the adopted outcome as well as into
+ * the query: a refused or lapsed session clears what an earlier action adopted, which is what stops a guard
+ * admitting a visitor the store no longer serves. A visitor holding no token issues no request at all — the
+ * runner reports no identity on that branch — so the mount run costs them a render and nothing more. Nothing
+ * else is copied into state — the published state is composed from the query and that outcome during render,
+ * which is what stops a response settling after the component is gone from setting anything — and the token
+ * is hydrated once, in a lazy initialiser, so it is read before the first render.
+ *
+ * That read is classified and retried rather than treated as one outcome: `session-expired` and
+ * `session-unknown` say the credential carried is no longer accepted, so the entry goes and the visitor
+ * is signed out, while any other failure — a store that could not answer — says nothing about the token,
+ * so the entry stays and the failure is reported for the guard to offer its retry against. `retry`
+ * repeats the second class and never the first, because a request the store has already refused would be
+ * refused again.
+ *
+ * Two things follow the transitions, because a transition nothing announces is one the visitor cannot
+ * account for: every sign-out this provider performs — an explicit one, a confirmed refusal, and a
+ * session the local clock found lapsed — raises the sentence the content library already words for it,
+ * and a refusal met by any other request reaches this provider through `watchSessionRefusals`, so the
+ * decision to sign out keeps one home. The revalidation's own read is the session endpoint's, which the
+ * transport does not report back, so the provider cannot answer its own report for ever.
  *
  * @param props.children - The subtree that may read the session and dispatch its actions.
  * @returns The two providers, state outermost, wrapping the subtree.
  */
 export function AuthProvider({ children }: { children: ReactNode }): ReactElement {
+  // The notification surface a session transition is announced through. `ToastProvider` is mounted above
+  // this provider in `src/App.tsx`, and its helpers are stable, so reading it here costs no re-render.
+  const { info } = useToast();
+
+  /** Announces a session transition in the informational register: nothing has failed for the visitor to
+   *  act on, and the sentence comes from the content library rather than being written here. */
+  const announce = useCallback(
+    (message: string): void => {
+      info(message);
+    },
+    [info],
+  );
+
   // The token alone is persisted, never the session: the role and the expiry it carries are the
   // store's to state, and every read and write of the entry goes through `src/utils/storage.ts`.
-  const [storedToken, setStoredToken] = useState<SessionToken | null>(() =>
+  //
+  // It is held in a ref rather than in state because nothing renders it: the revalidation is its only
+  // reader, and a token in state would be a dependency of that read, so a sign-in would fire a second
+  // full revalidation — a session read and an identity read — for a session the store has just issued.
+  // `useRef`'s argument is evaluated on every render, so the storage read is taken once in the lazy
+  // initialiser and handed to the ref, which then carries it for the life of the provider.
+  const [storedTokenAtMount] = useState<SessionToken | null>(() =>
     readStored<SessionToken | null>(STORAGE_KEYS.SESSION, null, isStoredToken),
   );
+  const tokenRef = useRef<SessionToken | null>(storedTokenAtMount);
   const [adopted, setAdopted] = useState<AuthState | null>(null);
+
+  /**
+   * Adopts a token the store has just issued: it is persisted through `src/utils/storage.ts`, and it
+   * becomes the token this client revalidates.
+   *
+   * That second half is what keeps a refusal reachable mid-session. The held token is the subject of every
+   * revalidation, so a session opened in this document is one a `401` met later in the same document can be
+   * confirmed and signed out against; while the token is persisted and nothing else, a refusal reported
+   * after a sign-in would have nothing to ask the store about, and the visitor would sit in error states as
+   * a signed-in visitor the store no longer serves.
+   *
+   * @param token - The session token the store issued.
+   */
+  const adoptToken = useCallback((token: SessionToken): void => {
+    tokenRef.current = token;
+    writeStored(STORAGE_KEYS.SESSION, token);
+  }, []);
 
   const restore = useAsync<RestoredIdentity>(
     async (signal: AbortSignal): Promise<Result<RestoredIdentity>> => {
-      // `enabled` keeps this run out of the way while nothing is stored; the branch is what makes the
-      // run total rather than conditional on an option the caller cannot see.
-      if (storedToken === null) return { ok: true, value: NO_IDENTITY };
+      // The token is read from the ref at run time, which is what holds this run's inputs still: a sign-in
+      // or a sign-out changes the ref and nothing this hook compares. A run holding no token has no request
+      // to make, which is what lets the mount run be issued for every visitor and stay cheap for one with
+      // nothing stored; a run that has one asks about the token the client holds now, including one a
+      // sign-in has just opened.
+      const token = tokenRef.current;
+      if (token === null) return { ok: true, value: NO_IDENTITY };
 
-      const answer = await restoreSessionRequest(storedToken);
+      const answer = await readStoredSession(token, signal);
       if (!answer.ok) {
-        // The lookup failed, so nothing here can vouch for the stored token: the entry goes, and the
-        // next load starts from a signed-out visitor instead of asking with it again. The failure is
-        // returned rather than absorbed, so the outcome is reported instead of degrading silently.
-        removeStored(STORAGE_KEYS.SESSION);
-        setStoredToken(null);
-        return answer;
+        const failure = answer.error;
+        // Before any mutation: a superseded run changes nothing — not the entry, not the state, not an
+        // announcement — because the run that replaced it owns all three from here on.
+        if (signal.aborted) return { ok: false, error: failure };
+        if (isSessionRefusal(failure)) {
+          // The refusal is the one failure that says the session is over: the entry goes, so no later
+          // load asks with it again; the session an action adopted is cleared, so no guard admits a
+          // visitor the store no longer serves; and the change is announced to explain the redirect.
+          removeStored(STORAGE_KEYS.SESSION);
+          tokenRef.current = null;
+          setAdopted({ status: "error", session: null, customer: null, error: failure });
+          announce(authErrorMessage(failure));
+          return { ok: false, error: failure };
+        }
+        // Any other failure says nothing about the token, so the entry stays and nothing is adopted: the
+        // composition below reports it, and the guard offers the standard retry instead of a sign-out.
+        return { ok: false, error: failure };
       }
 
       const session = answer.value;
       if (isSessionExpired(session, nowInstant())) {
-        // A session the store still records but which has lapsed: nothing is adopted and nothing
-        // stays stored, so the visitor is signed out on every later load as well as on this one.
+        // A session the store still records but which has lapsed: nothing stays stored and nothing is
+        // adopted — the outcome an earlier action adopted included — so the visitor is signed out here
+        // and on every later load.
+        if (signal.aborted) return { ok: true, value: NO_IDENTITY };
         removeStored(STORAGE_KEYS.SESSION);
-        setStoredToken(null);
+        tokenRef.current = null;
+        setAdopted(SIGNED_OUT_STATE);
+        announce(FEEDBACK_COPY.TOAST_SESSION_EXPIRED);
         return { ok: true, value: NO_IDENTITY };
       }
 
-      // The session lookup accepts no options, so there is nothing to cancel it with; the identity
-      // read does, and the signal `useAsync` supplies is forwarded into it, so a request that could
-      // outlive this component is aborted rather than left to settle into nothing.
+      // The session lookup accepts no options, so there is nothing to cancel it with; the identity read
+      // does, and the signal `useAsync` supplies is forwarded into it, so a request that could outlive
+      // this component is aborted rather than left to settle into nothing.
       const profile = await getProfile(session.customerId, {
         sessionToken: session.token,
         signal,
       });
+      // A superseded run adopts nothing: the session it read belongs to a token no longer stored.
+      if (signal.aborted) return { ok: true, value: NO_IDENTITY };
       if (!profile.ok) return profile;
       return { ok: true, value: { session, customer: profile.value } };
     },
-    [storedToken],
-    { enabled: storedToken !== null },
+    // An empty deps list, and the default options: this runs once at mount, against whatever token the
+    // lazy initialiser read, and again only when `restoreSession` calls `reload()`. Keying it on the token
+    // would make every sign-in fire a second full revalidation — a session read and an identity read — for
+    // a session the store has just issued and no consumer needs re-checked.
+    [],
   );
 
   /**
@@ -353,9 +318,11 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
    * resolved, or a signed-out visitor when there was nothing to revalidate.
    *
    * Composed during render rather than copied into state from an effect, which is what keeps a settled
-   * response from writing a value a newer render has already moved past. An action's outcome wins
-   * because it is the newest thing the visitor asked for; a revalidation's failure is reported as a
-   * failure rather than as a silent sign-out, so a visitor whose stored session has lapsed learns why.
+   * response from writing a value a newer render has already moved past. An action's outcome wins because
+   * it is the newest thing the visitor asked for, and the revalidation writes the sign-out it confirms
+   * into that same outcome — so a refused or lapsed session clears what an earlier action adopted. A
+   * failure that is not a refusal says nothing about the token, so it is reported as a failure rather
+   * than as a silent sign-out, and the guard turns it into the standard retry.
    */
   const state = useMemo<AuthState>(() => {
     if (adopted !== null) return adopted;
@@ -390,42 +357,46 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
 
   const value = useMemo<AuthValue>(() => derivedValue(state), [state]);
 
-  const signIn = useCallback(async (credentials: Credentials): Promise<Result<Session>> => {
-    const before = stateRef.current;
-    setAdopted({ ...before, status: "loading", error: null });
-    const answer = await signInRequest(credentials);
-    if (!answer.ok) {
-      // A refused sign-in leaves whatever session was already in force alone and records the failure,
-      // which the form maps onto its fields through `toAuthFieldErrors`.
-      setAdopted({
-        status: "error",
-        session: before.session,
-        customer: before.customer,
-        error: answer.error,
-      });
-      return answer;
-    }
+  const signIn = useCallback(
+    async (credentials: Credentials): Promise<Result<Session>> => {
+      const before = stateRef.current;
+      setAdopted({ ...before, status: "loading", error: null });
+      const answer = await signInRequest(credentials);
+      if (!answer.ok) {
+        // A refused sign-in leaves whatever session was already in force alone and records the failure,
+        // which the form maps onto its fields through `toAuthFieldErrors`.
+        setAdopted({
+          status: "error",
+          session: before.session,
+          customer: before.customer,
+          error: answer.error,
+        });
+        return answer;
+      }
 
-    const session = answer.value;
-    if (isSessionExpired(session, nowInstant())) {
-      // The store issued a session the local expiry rule judges lapsed — the one direction the two
-      // clocks can disagree about. Nothing is adopted and nothing is persisted, so the visitor is not
-      // signed in; the store's own answer is still what the form receives, because a refusal the
-      // store did not make is not invented here.
-      removeStored(STORAGE_KEYS.SESSION);
-      setAdopted(SIGNED_OUT_STATE);
-      return answer;
-    }
+      const session = answer.value;
+      if (isSessionExpired(session, nowInstant())) {
+        // The store issued a session the local expiry rule judges lapsed — the one direction the two
+        // clocks can disagree about. Nothing is adopted and nothing is persisted, so the visitor is not
+        // signed in; the store's own answer is still what the form receives, because a refusal the
+        // store did not make is not invented here.
+        removeStored(STORAGE_KEYS.SESSION);
+        tokenRef.current = null;
+        setAdopted(SIGNED_OUT_STATE);
+        return answer;
+      }
 
-    writeStored(STORAGE_KEYS.SESSION, session.token);
-    const profile = await getProfile(session.customerId, { sessionToken: session.token });
-    setAdopted(
-      profile.ok
-        ? { status: "success", session, customer: profile.value, error: null }
-        : { status: "error", session, customer: null, error: profile.error },
-    );
-    return answer;
-  }, []);
+      adoptToken(session.token);
+      const profile = await getProfile(session.customerId, { sessionToken: session.token });
+      setAdopted(
+        profile.ok
+          ? { status: "success", session, customer: profile.value, error: null }
+          : { status: "error", session, customer: null, error: profile.error },
+      );
+      return answer;
+    },
+    [adoptToken],
+  );
 
   const register = useCallback(
     async (input: RegistrationInput): Promise<Result<RegistrationResult>> => {
@@ -445,15 +416,16 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
       const { session, customer } = answer.value;
       if (isSessionExpired(session, nowInstant())) {
         removeStored(STORAGE_KEYS.SESSION);
+        tokenRef.current = null;
         setAdopted(SIGNED_OUT_STATE);
         return answer;
       }
 
-      writeStored(STORAGE_KEYS.SESSION, session.token);
+      adoptToken(session.token);
       setAdopted({ status: "success", session, customer, error: null });
       return answer;
     },
-    [],
+    [adoptToken],
   );
 
   // Both come from `useAsync` and are stable for the life of the provider, which is what keeps the
@@ -470,12 +442,15 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
       await signOutRequest(session.token);
     }
     removeStored(STORAGE_KEYS.SESSION);
-    setStoredToken(null);
+    tokenRef.current = null;
     setAdopted(SIGNED_OUT_STATE);
     // The revalidation's own answer is discarded with the session, so a restored identity does not
     // linger in memory behind the signed-out state, and anything still in flight is aborted.
     resetRestore();
-  }, [resetRestore]);
+    // Announced for a session the visitor gave up as for one that lapsed: both end signed out, and a
+    // sign-out nothing announces leaves the header's change unexplained.
+    announce(FEEDBACK_COPY.TOAST_SIGNED_OUT);
+  }, [announce, resetRestore]);
 
   const restoreSession = useCallback((): Promise<void> => {
     reloadRestore();
@@ -484,6 +459,11 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     // the value the provider publishes.
     return Promise.resolve();
   }, [reloadRestore]);
+
+  // The transport's report of a refusal met by any request in the product: the same revalidation a
+  // surface would ask for, so the decision to sign out keeps one home. The revalidation's own read is
+  // the session endpoint's, which the transport does not report back, so this cannot answer itself.
+  useEffect(() => watchSessionRefusals(() => void restoreSession()), [restoreSession]);
 
   const refresh = useCallback(async (): Promise<void> => {
     const current = stateRef.current;

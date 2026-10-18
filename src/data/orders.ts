@@ -7,8 +7,8 @@
 import { DEMO_ACCOUNTS, DEMO_CARD_NUMBERS, SHIPPING_METHODS } from "@/constants/config";
 import { ADDRESSES, CUSTOMERS, buildAddress } from "@/data/customers";
 import { DATA_SEED, PRODUCTS, createSeededRandom, type SeededRandom } from "@/data/products";
-import { appendStatusHistory, orderNumber, toOrderLines } from "@/lib/orderService";
-import { decidePromo, priceCartLines } from "@/lib/pricingService";
+import { appendStatusHistory, orderNumber, toOrderLines } from "@/utils/orderRules";
+import { decidePromo, priceCartLines } from "@/utils/pricingRules";
 import type { Address, Customer } from "@/types/account";
 import type { CategoryId, IsoDateString, IsoDateTimeString } from "@/types/common";
 import type {

@@ -1,6 +1,6 @@
 /* Path: src/styles/account.css
  * Purpose: Styles for the account screens: profile form, order history and address cards
- * Lines: 491
+ * Lines: 495
  */
 
 /* The account layer: the sign-in and registration screens, the account shell with its section navigation and
@@ -249,11 +249,15 @@
   display: grid;
   gap: var(--space-3);
 }
-.sp-order-history__table {
-  min-inline-size: var(--layout-table-min-width);
-}
-/* The order number is the row's link, and the one figure that has to line up from row to row. */
+/* The table wears this class as the hook for its row link, and declares no inline size of its own: five
+ * columns fit the customer's content column at every desktop width, so the shared --layout-table-min-width
+ * floor — which pinned this table to 960px inside this column's 924px and cut the Total figure mid-value at
+ * 1280, 1600 and 1920 alike — is not applied to a five-column history. Below the width those five columns
+ * need, the primitive's own scroll container travels sideways rather than squeezing a money column below
+ * legibility, and the order number stays on one line, because the row's identifier split over two lines —
+ * "SP-" above "261016-0007" — is the compression that scroll is here to avoid. */
 .sp-order-history__table a {
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-weight-medium);
 }
@@ -289,8 +293,8 @@
 /* ==== Order detail ====
  * One order read top to bottom: the number with its date and status, the itemised lines, the totals, the two
  * addresses and the status history. The number is monospaced and explicitly selectable, because a customer reads
- * it out or pastes it into a support conversation. commerce.css owns .sp-summary and is not generated yet, so
- * the totals block is declared here rather than composed from a class this folder does not define.
+ * it out or pastes it into a support conversation. src/styles/commerce-cart.css owns .sp-summary, and this
+ * sheet loads no other sheet, so the totals block is declared here rather than composed from that class.
  */
 .sp-order-detail {
   display: grid;

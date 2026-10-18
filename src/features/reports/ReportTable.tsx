@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 325
+ * Lines: 376
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -9,7 +9,7 @@ import type { ReactElement, ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/Table";
-import type { DataTableColumn, DataTablePaging } from "@/components/ui/Table";
+import type { DataTableColumn, DataTablePaging, DataTableSort } from "@/components/ui/Table";
 import { CSV_MAX_CELL_LENGTH, CSV_MAX_ROWS, DEFAULT_PAGE_SIZE } from "@/constants/config";
 import {
   DATE_RANGE_COPY,
@@ -31,7 +31,7 @@ import type {
   ReportSummary,
 } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
-import { normalisePageSize, paginate } from "@/utils/collections";
+import { normalisePageSize, paginate, sortByKey } from "@/utils/collections";
 import { buildCsvResult, downloadCsv } from "@/utils/csv";
 import type { CsvBuildResult } from "@/utils/csv";
 import { formatDateRange } from "@/utils/dates";
@@ -53,11 +53,19 @@ import { formatCellValue } from "@/utils/format";
  *
  * Everything else the table needs belongs to the primitive. `DataTable` owns the caption, the `aria-sort`
  * header semantics, the sticky header, the tabular-numeric treatment, the single empty row and the composed
- * paginator, so no comparator, page window or cell formatter is written here: sorting reads each column's
- * `value`, a cell is rendered by `formatCellValue` from the `ReportCellFormat` its column declares, and the
- * export is built by `reportService.toCsvMatrix` from the same rows, the same definition and the same summary
- * the table renders over — which is what stops the download from disagreeing with the screen, down to the
- * totals row, which is `totalsRowCells`' output in both.
+ * paginator, so no comparator, page window or cell formatter is written here: the order comes from `sortByKey`
+ * over each column's raw cell, a cell is rendered by `formatCellValue` from the `ReportCellFormat` its column
+ * declares, and the export is built by `reportService.toCsvMatrix` from the same rows, the same definition and
+ * the same summary the table renders over — which is what stops the download from disagreeing with the screen,
+ * down to the totals row, which is `totalsRowCells`' output in both.
+ *
+ * The order and the page are this file's, and both are applied to the whole run before the primitive is handed
+ * anything. `DataTable` sorts only what it is given, and what it is given is one page, so an order left to the
+ * primitive would reorder the page on show and leave the rest of the range in the order the service produced,
+ * stating a claim about the range it had not checked: here every row the run produced is ordered, the page is
+ * cut from that order, and a sort activation reopens it at its first page, so the row the table states first is
+ * the range's own extreme in that column. The totals row and the export stay over the whole run, so the sorted
+ * view is still a view of the range it claims.
  *
  * The export is prepared and started synchronously: the matrix, the serialisation and the download are one
  * call, so there is no in-flight window for the control to be disabled for, and a second activation simply
@@ -120,6 +128,13 @@ interface PagingChoice {
   readonly runKey: string;
 }
 
+/** The order a reader has chosen, and the run they chose it for. */
+interface SortChoice {
+  /** The order in force, or `undefined` for the order the run's own read produced. */
+  readonly sort: DataTableSort | undefined;
+  readonly runKey: string;
+}
+
 /** An export prepared for a run, and the run it was prepared for. */
 interface PreparedExport {
   readonly result: CsvBuildResult;
@@ -154,8 +169,9 @@ export interface ReportTableProps {
  * The report table: the definition's own columns rendered by the shared `DataTable`, the run's totals closing
  * it, and the CSV export control that writes out the rows a reader is looking at.
  *
- * Sorting, empty and busy presentation, the caption, the paging control and the totals row's styling are the
- * primitives'; this file configures them and owns the one export the product offers.
+ * Empty and busy presentation, the caption, the `aria-sort` semantics, the paging control and the totals row's
+ * styling are the primitives'; this file owns the order in force and the page cut from it — both taken over the
+ * whole run, as the module note above states — and the one export the product offers.
  *
  * @param props - The run's definition, rows, summary, period and cut; see {@link ReportTableProps}.
  * @returns The export action group over the paged table.
@@ -177,12 +193,18 @@ export function ReportTable({
     pageSize: DEFAULT_PAGE_SIZE,
     runKey: "",
   }));
+  const [sorting, setSorting] = useState<SortChoice>(() => ({ sort: undefined, runKey: "" }));
   const [prepared, setPrepared] = useState<PreparedExport | null>(null);
 
   // The paging this run uses. A choice made for another run opens the new one at its first page and keeps the
   // size the reader picked, which is what a report change should do and what no effect is needed for.
   const choice: PagingChoice =
     paging.runKey === runKey ? paging : { page: 1, pageSize: paging.pageSize, runKey };
+
+  // The order this run is in. A run opens in the order the read produced — its own periods, or its own ranking
+  // — and a choice made for another run is left behind with the run it was made for, as the paging choice above
+  // is, so the two never describe different runs.
+  const sort: DataTableSort | undefined = sorting.runKey === runKey ? sorting.sort : undefined;
 
   const handlePagingChange = useCallback(
     (page: number, pageSize: number): void => {
@@ -198,11 +220,34 @@ export function ReportTable({
     onChange: handlePagingChange,
   });
 
-  // The page on show. Paging rules live in `src/utils/collections.ts`, so the slice comes from `paginate` —
-  // the one place a page is taken out of a collection — rather than from an offset computed here.
+  // A sort activation orders the whole run and reopens it at its first page: the page the reader was on was a
+  // slice of another order, and the row the new order puts first is the run's own extreme in that column.
+  const handleSortChange = useCallback(
+    (next: DataTableSort): void => {
+      setSorting({ sort: next, runKey });
+      setPaging({ page: 1, pageSize: pagination.pageSize, runKey });
+    },
+    [pagination.pageSize, runKey],
+  );
+
+  // The run's rows in the order in force, ordered before any page is cut from them. `sortByKey` in
+  // `src/utils/collections.ts` is the product's one ordering helper, so no comparator is written here, and a
+  // column is ordered by its raw cell — the value the primitive renders through, read the same way — rather
+  // than by its printed text. Ordering the whole run is what makes the row the table states first the range's
+  // own extreme in that column instead of the largest figure of the page the reader happened to be on.
+  const sortedRows = useMemo(() => {
+    if (sort === undefined) return rows;
+    const column = definition.columns.find((candidate) => candidate.key === sort.columnId);
+    if (column === undefined) return rows;
+    return sortByKey(rows, (row) => row.cells[column.key] ?? null, sort.direction);
+  }, [definition, rows, sort]);
+
+  // The page on show, taken out of the run already in that order. Paging rules live in
+  // `src/utils/collections.ts`, so the slice comes from `paginate` — the one place a page is taken out of a
+  // collection — rather than from an offset computed here.
   const pagedRows = useMemo(
-    () => paginate(rows, pagination.page, pagination.pageSize),
-    [rows, pagination.page, pagination.pageSize],
+    () => paginate(sortedRows, pagination.page, pagination.pageSize),
+    [sortedRows, pagination.page, pagination.pageSize],
   );
 
   // The paging contract the primitive renders its control from and reports a change through. The hook's two
@@ -308,12 +353,18 @@ export function ReportTable({
         </p>
         {countNote === null ? null : <p className={CLASSES.exportNote}>{countNote}</p>}
       </div>
+      {/* `key` because the primitive orders its own rows while no `sort` is handed in, and the run this one
+          replaces may be the run whose activation the table is still holding: an order belongs to the run it
+          was asked for and must not outlive it. */}
       <DataTable
+        key={runKey}
         columns={columns}
         rows={pagedRows.items}
         rowKey={reportRowKey}
         caption={caption}
         emptyState={emptyState}
+        sort={sort}
+        onSortChange={handleSortChange}
         paging={tablePaging}
         isLoading={isBusy}
         density="compact"

@@ -1,20 +1,22 @@
 /**
  * Path: src/Router.tsx
  * Purpose: The route table with lazy slices, role guards, the suspension boundary and the not-found view
- * Lines: 393
+ * Lines: 455
  */
 
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { ButtonGroup } from "@/components/ui/Button";
-import { EmptyState, Skeleton } from "@/components/ui/Feedback";
-import { A11Y_COPY, HEADER_COPY, NOT_FOUND_COPY } from "@/constants/content";
+import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
+import { A11Y_COPY, COMMON_ACTIONS, HEADER_COPY, NOT_FOUND_COPY } from "@/constants/content";
 import { ROUTES, SECTION_ROLES, loginPath } from "@/constants/routes";
-import { useAuth } from "@/state/AuthContext";
+import { isSessionRefusal } from "@/lib/apiContract";
+import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import type { Role } from "@/types/account";
+import type { ApiError } from "@/types/common";
 
 /*
  * What this file owns, and what it deliberately leaves out.
@@ -42,9 +44,10 @@ import type { Role } from "@/types/account";
  * and anything two slices share is a module below them, never a route through this table.
  *
  * The guard below is convenience, not access control. It keeps a visitor out of a screen their session
- * cannot serve and preserves the path they were after in the sign-in link's `returnTo` query; whether a
- * request is allowed is decided in `src/lib/mockServer.ts`, which re-checks the session on every privileged
- * endpoint, because hiding a control is not a permission check.
+ * cannot serve, offers the section's own error state with a retry when the session could not be read, and
+ * preserves the path they were after in the sign-in link's `returnTo` query; whether a request is allowed is
+ * decided in `src/lib/mockServer.ts`, which re-checks the session on every privileged endpoint, because
+ * hiding a control is not a permission check.
  *
  * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
  * so every class rendered below is consumed by name. `src/styles/layout.css` owns the page geometry the
@@ -238,13 +241,29 @@ interface RequireRoleProps {
  * reading. Nothing is fetched and no request is made to decide any of this: the session is already in the
  * context, and the check that decides whether a request for privileged data succeeds is the mock server's.
  *
+ * A failure the session's read settled with is told from a refusal, because the two ask the visitor for
+ * different things. A refusal is the store saying the credential is no longer accepted, which the
+ * revalidation has already turned into a cleared session and an announcement, so the visitor is sent to
+ * sign-in with the path preserved. Any other failure is a store that could not answer, which says nothing
+ * about the stored token, so the visitor keeps it and the section's error state offers the standard retry.
+ * Both readings come from the classification in `src/lib/apiContract.ts`, the same one the transport and
+ * the state layer use, so none of the three can disagree about which happened.
+ *
  * @param props - The roles this section admits; see {@link RequireRoleProps}.
- * @returns The section's matched child, a placeholder while the session resolves, or a redirect to sign-in.
+ * @returns The section's matched child, a placeholder while the session resolves, the section's error state
+ *   for a read that failed, or a redirect to sign-in.
  */
 function RequireRole({ allow }: RequireRoleProps): ReactElement {
-  const { isAuthenticated, role, status } = useAuth();
+  const { error, isAuthenticated, role, status } = useAuth();
+  const { restoreSession } = useAuthDispatch();
   const { pathname, search } = useLocation();
   const isSessionSettled = useSessionSettled();
+
+  // A field-shaped callback rather than the action itself: the alert takes a `() => void`, and the guard
+  // has nothing to wait for — the revalidation's outcome arrives through the state it already reads.
+  const retrySession = useCallback((): void => {
+    void restoreSession();
+  }, [restoreSession]);
 
   if (isAuthenticated) {
     if (allow.includes(role)) {
@@ -259,7 +278,46 @@ function RequireRole({ allow }: RequireRoleProps): ReactElement {
     return <RouteFallback />;
   }
 
+  // The session could not be read while the visitor still holds the token, so the answer is the standard
+  // retry: only a refusal — which the revalidation has already turned into a sign-out — sends them to
+  // sign-in, because a sign-in screen would not help a store that could not answer.
+  if (error !== null && !isSessionRefusal(error)) {
+    return <SessionFailure error={error} onRetry={retrySession} />;
+  }
+
   return <Navigate replace to={loginPath(`${pathname}${search}`)} />;
+}
+
+/** Everything {@link SessionFailure} accepts. */
+interface SessionFailureProps {
+  /** The failure the session's read settled with, rendered as the alert's text. */
+  readonly error: ApiError;
+
+  /** Starts the session's read again; the alert's action calls it. */
+  readonly onRetry: () => void;
+}
+
+/**
+ * The error state a guard shows when the session could not be read.
+ *
+ * A failure that is not a refusal says nothing about the stored token — a store that could not answer is
+ * not a store that said no — so the visitor keeps the token and is offered the standard retry rather than
+ * the redirect a refusal gets: turning someone away over a request that failed would give up a session
+ * that is still good. It is composed here the way {@link NotFoundPage} composes its view, from the page
+ * geometry and the alert primitive, so this file introduces no class and no stylesheet.
+ *
+ * @param props.error - The failure to report; see {@link SessionFailureProps}.
+ * @param props.onRetry - Starts the session's revalidation again.
+ * @returns The error state: the register, the sentence and the retry control.
+ */
+function SessionFailure({ error, onRetry }: SessionFailureProps): ReactElement {
+  return (
+    <div className="sp-container">
+      <div className="sp-page">
+        <Alert tone="danger" error={error} actionLabel={COMMON_ACTIONS.RETRY} onAction={onRetry} />
+      </div>
+    </div>
+  );
 }
 
 // Placeholder and not-found -----------------------------------------------------------------------

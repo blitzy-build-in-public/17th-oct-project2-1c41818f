@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 566
+ * Lines: 563
  */
 
 import { useCallback, useId, useState } from "react";
@@ -13,7 +13,7 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { DataTable } from "@/components/ui/Table";
-import type { DataTableColumn, DataTablePaging, DataTableSort } from "@/components/ui/Table";
+import type { DataTableColumn, DataTablePaging } from "@/components/ui/Table";
 import { DEFAULT_PAGE_SIZE, MAX_REPORT_RANGE_DAYS } from "@/constants/config";
 import {
   ACCOUNT_COPY,
@@ -122,10 +122,6 @@ const RANGE_MESSAGES: Readonly<Record<DateRangeErrorCode, string>> = {
 /** The rows the loading placeholder stands in for, one per row a first page typically holds. */
 const PLACEHOLDER_ROWS = 6;
 
-/** The order the table opens in: newest first, the order the history endpoint answers in. The endpoint takes
- * no sort parameter, so a header activation reorders the page on show rather than the whole history. */
-const DEFAULT_SORT: DataTableSort = { columnId: "placed", direction: "desc" };
-
 // Reading a route and an order
 
 /** The order identifier a route segment names, as the identifier the order client takes: the segment is
@@ -197,19 +193,23 @@ function LoadPlaceholder(): ReactElement {
  * total is the figure the order's kept priced cart already holds, never a sum taken here, and the
  * order number is a real link inside its cell rather than a clickable row, because a row that answers a
  * pointer and not a keyboard is an accessibility defect the shared table deliberately refuses to offer.
+ *
+ * No column is sortable and the table is handed no default order, because `GET /api/orders` accepts only
+ * `page`, `pageSize`, `status`, `from` and `to`: this is one page of a history the endpoint orders itself,
+ * and no request this screen can make would change that order. A sortable header could therefore only
+ * reorder the rows in hand while announcing, through `aria-sort`, an ordering of the whole history the
+ * request never produced. The rows render in the order the read returned them — newest first.
  */
 const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
   {
     id: "order",
     header: ACCOUNT_COPY.ORDERS_COLUMN_ORDER,
-    sortable: true,
     value: (order) => order.orderNumber,
     cell: (order) => <Link to={accountOrderPath(order.id)}>{order.orderNumber}</Link>,
   },
   {
     id: "placed",
     header: ACCOUNT_COPY.ORDERS_COLUMN_PLACED,
-    sortable: true,
     value: (order) => order.placedAt,
     format: "date",
   },
@@ -221,7 +221,6 @@ const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
   {
     id: "items",
     header: ACCOUNT_COPY.ORDERS_COLUMN_ITEMS,
-    sortable: true,
     isNumeric: true,
     value: (order) => sumQuantities(order.lines),
     format: "integer",
@@ -229,7 +228,6 @@ const HISTORY_COLUMNS: readonly DataTableColumn<Order>[] = [
   {
     id: "total",
     header: ACCOUNT_COPY.ORDERS_COLUMN_TOTAL,
-    sortable: true,
     isNumeric: true,
     value: (order) => order.pricedCart.grandTotalMinor,
     format: "money",
@@ -352,7 +350,6 @@ function OrderHistoryList({ sessionToken }: { readonly sessionToken: string }): 
       <DataTable
         caption={ACCOUNT_COPY.ORDERS_HEADING}
         columns={HISTORY_COLUMNS}
-        defaultSort={DEFAULT_SORT}
         paging={paging}
         rowKey={(order) => order.id}
         rows={orders}

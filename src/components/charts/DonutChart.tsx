@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/DonutChart.tsx
  * Purpose: Donut with legend, percentage labels and a centre total
- * Lines: 584
+ * Lines: 585
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -552,7 +552,8 @@ export function DonutChart({
           ))}
         </ul>
       ) : null}
-      <div className="sp-chart__data">
+      {/* The paired table's scroll box, named by its caption and focusable so a clipped column is reachable. */}
+      <div className="sp-chart__data" role="region" aria-label={caption} tabIndex={0}>
         <table className="sp-table sp-table--compact" id={captionId}>
           <caption className="sp-table__caption">{caption}</caption>
           <thead>

@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/mockServer.test.ts
  * Purpose: Route matching, error mapping, catalogue filter reading, review scoping, idempotency replay, the unregistered-source failure and seed determinism.
- * Lines: 597
+ * Lines: 660
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,6 +38,7 @@ import {
   matchRoute,
   registerDataSource,
   resetMockServer,
+  type RequestFailureMatcher,
   type SalesProDataSource,
 } from "@/lib/mockServer";
 import type { Customer, Session } from "@/types/account";
@@ -486,6 +487,68 @@ describe("the transport", () => {
     expect(buildQueryString(query)).toBe("brandIds=brd_b&brandIds=brd_a&page=2&q=&sort=price-asc");
     expect(buildQueryString({ q: "oak & ash" })).toBe("q=oak%20%26%20ash");
     expect(buildQueryString({})).toBe("");
+  });
+
+  it("extends a target that already carries a query rather than breaking it", async () => {
+    // A caller may hand the transport a path it built complete. The query passed beside it joins that
+    // path with the separator the path's own form calls for, and the seam still reads every member —
+    // the page size below is one of the configured options, never the default an unread path falls to.
+    const carried = await valueOf(
+      getJson<PageResult<Product>>(`/api/products?pageSize=${PAGE_SIZE}`, { query: { page: 1 } }),
+    );
+    expect([carried.pageSize, carried.page]).toEqual([PAGE_SIZE, 1]);
+    const trailingQuestion = await valueOf(
+      getJson<PageResult<Product>>("/api/products?", { query: { pageSize: PAGE_SIZE } }),
+    );
+    expect(trailingQuestion.pageSize).toBe(PAGE_SIZE);
+    const trailingAmpersand = await valueOf(
+      getJson<PageResult<Product>>(`/api/products?pageSize=${PAGE_SIZE}&`, { query: { page: 2 } }),
+    );
+    expect([trailingAmpersand.pageSize, trailingAmpersand.page]).toEqual([PAGE_SIZE, 2]);
+  });
+
+  it("falls back for a latency the environment cannot apply, reporting each value once", () => {
+    const reported = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    // The variable is unset here, which is the documented default: a build with no value still waits the
+    // configured delay rather than not waiting at all.
+    vi.unstubAllEnvs();
+    expect(getApiLatencyMs()).toBe(DEFAULT_API_LATENCY_MS);
+    // A value that is set and unusable falls back too, and is reported once rather than once per read.
+    vi.stubEnv("VITE_API_LATENCY_MS", "half a second");
+    expect(getApiLatencyMs()).toBe(DEFAULT_API_LATENCY_MS);
+    expect(getApiLatencyMs()).toBe(DEFAULT_API_LATENCY_MS);
+    expect(reported).toHaveBeenCalledTimes(1);
+    expect(String(reported.mock.calls[0]?.[0])).toContain("VITE_API_LATENCY_MS");
+    // A whole number of milliseconds past the timer's range is unusable as well, and is a distinct value.
+    vi.stubEnv("VITE_API_LATENCY_MS", "99999999999999999999");
+    expect(getApiLatencyMs()).toBe(DEFAULT_API_LATENCY_MS);
+    expect(reported).toHaveBeenCalledTimes(2);
+    // And a whole number inside the range is the delay itself.
+    vi.stubEnv("VITE_API_LATENCY_MS", "250");
+    expect(getApiLatencyMs()).toBe(250);
+    reported.mockRestore();
+    vi.stubEnv("VITE_API_LATENCY_MS", "0");
+  });
+
+  it("arms a request by method, by route or by path pattern, and answers every other one", async () => {
+    const browse = (): Promise<Result<Category[]>> => request<Category[]>("/api/categories");
+    const matchers: readonly [RequestFailureMatcher, boolean][] = [
+      [{ method: "POST" }, false],
+      [{ method: "GET" }, true],
+      [{ routeId: "products.list" }, false],
+      [{ routeId: "categories.list" }, true],
+      [{ path: /^\/api\/cart/ }, false],
+      [{ path: /categor/ }, true],
+    ];
+    for (const [matcher, applies] of matchers) {
+      failNext(matcher);
+      const armed = await browse();
+      expect([matcher, armed.ok]).toEqual([matcher, !applies]);
+      if (!armed.ok) expect([matcher, armed.error.status]).toEqual([matcher, 503]);
+      // The arm is consumed by the first request it applied to, whichever that was: the next one is
+      // answered rather than failing behind it.
+      expect((await browse()).ok).toBe(true);
+    }
   });
 
   it("shapes anything a request goes wrong with", () => {

@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Table.tsx
  * Purpose: Sortable data table with column definitions, empty state, sticky header and the pagination contract
- * Lines: 472
+ * Lines: 513
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -30,10 +30,16 @@ import { formatCellValue } from "@/utils/format";
  * sideways rather than compressing its columns below legibility, so this file writes no width of its own. A
  * caller whose own block sets the floor — `sp-report-table__scroll`, `sp-order-history__table` — hands it in
  * through `className`, appended to the scroll container, or `tableClassName`, appended to the table, so
- * `src/styles/admin-reports.css` and `src/styles/account.css` keep owning that decision.
+ * `src/styles/admin-reports.css` and `src/styles/account.css` keep owning that decision. The same decision
+ * makes the container a region rather than an implicit scroller: it wears `role="region"`, is named by the
+ * table's own `caption` and takes a `tabIndex` of zero, so the column a narrow viewport clips is reachable and
+ * scrollable from the keyboard. The `<table>` keeps the caption as its own accessible name, so both regions
+ * are announced with the words the caption shows.
  *
  * State is carried by attributes rather than by a second class, as the sheets' shared contract requires:
- * `aria-sort` on the header cell and `aria-busy` on the table while a request is in flight.
+ * `aria-sort` on the header cell — the direction the column's rows are in, whether this table ordered them
+ * or the read that produced them did — `aria-busy` on the table while a request is in flight and
+ * `data-sticky-header` for the header the sheet holds over the rows or lets travel with them.
  *
  * Sorting and paging are consumed rather than restated. The displayed rows come from `sortByKey` in
  * `src/utils/collections.ts`, whose own consumer list names this file and whose paging helpers are reached
@@ -53,18 +59,18 @@ import { formatCellValue } from "@/utils/format";
  *   - The control of `src/components/ui/Pagination.tsx` is composed here and that file never imports this
  *     one, so the two share one paging implementation without a cycle between them.
  *
- * BLITZY [DESIGN_SYSTEM_GAP]: the sheets declare no non-sticky header and no busy paint for a table — the
- * primitive makes every `.sp-table thead th` sticky as its default — so `isStickyHeader` and `isLoading` are
- * reported by attribute (`data-sticky-header`, `aria-busy`) and no class is invented here for a rule no sheet
- * holds. The same holds for a centred column: `sp-table__num` is the one alignment class the sheets declare,
- * so an end-aligned column wears it while a centred one is set from the caller's own value.
+ * BLITZY [DESIGN_SYSTEM_GAP]: the sheets declare no busy paint for a table, so `isLoading` is reported by
+ * attribute (`aria-busy`) and no class is invented here for a rule no sheet holds. The same holds for a
+ * centred column: `sp-table__num` is the one alignment class the sheets declare, so an end-aligned column
+ * wears it while a centred one is set from the caller's own value.
  * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` holds no wording for a sort direction, and this is
  * the one place it is missed. The direction is therefore carried by `aria-sort` on the header cell — which
- * assistive technology announces as "sorted ascending" or "sorted descending" — and by the caret the sheet
- * draws from that attribute, rather than by a sentence this file would have to invent.
+ * assistive technology announces as "sorted ascending" or "sorted descending" — and, for a column whose
+ * header this table offers as a control, by the caret the sheet draws from that attribute, rather than by a
+ * sentence this file would have to invent.
  */
 
-/** The `aria-sort` value a sortable column's header cell carries. */
+/** The `aria-sort` value a table's header cell carries: a direction it reports, or none. */
 type AriaSortValue = "ascending" | "descending" | "none";
 
 /** The fewest cells the empty row spans, so a table handed no columns still renders one cell. */
@@ -91,6 +97,19 @@ function isSortableColumn<TItem>(column: DataTableColumn<TItem>): boolean {
 function ariaSortValue(columnId: string, sort: DataTableSort | undefined): AriaSortValue {
   if (sort === undefined || sort.columnId !== columnId) return "none";
   return sort.direction === "asc" ? "ascending" : "descending";
+}
+
+/**
+ * The `aria-sort` the header cell of a column reports for an order the read imposed on it, or `undefined`
+ * for a column that declares none — so a column with no order of its own writes no attribute and states
+ * nothing about how its rows are arranged.
+ *
+ * @param column - The column whose header cell is being rendered.
+ * @returns The direction the read ordered the column in, or `undefined` when it declares none.
+ */
+function orderInForceAriaSort<TItem>(column: DataTableColumn<TItem>): AriaSortValue | undefined {
+  if (column.orderInForce === undefined) return undefined;
+  return column.orderInForce === "asc" ? "ascending" : "descending";
 }
 
 /**
@@ -180,6 +199,19 @@ export interface DataTableColumn<TItem> {
   readonly format?: ReportCellFormat;
   /** Offers the column's header as a sort control. */
   readonly sortable?: boolean;
+  /**
+   * The order the read that produced the rows already put this column in: stated by the header cell, never
+   * offered as a control.
+   *
+   * A service that ranks a collection answers in that ranking's own order — `GET
+   * /api/analytics/top-products` returns its products ordered by the metric it was asked for — so such a
+   * table renders the order it was handed and has no order of its own to apply. A column declaring one has
+   * its header cell report the direction through `aria-sort` and carries no sort control, because a control
+   * over these rows could only reorder the page on screen and would state a different claim than the one the
+   * request answered. A `sortable` column ignores it: its header reports the order its own activation put in
+   * force. Absent, the header cell carries no `aria-sort` attribute at all.
+   */
+  readonly orderInForce?: SortDirection;
   /**
    * Marks a column of figures, which align on their digits rather than on their glyphs — the money, count
    * and percentage columns of every table.
@@ -304,9 +336,13 @@ export interface DataTableProps<TItem> {
  * file assembled from a number: money, percentages, counts and dates are rendered by the product's cell
  * dispatcher, so a figure reads the same here as it does in the CSV a report exports.
  *
+ * The rows can be wider than the box that holds them, so the box is a named, focusable scroll region: a
+ * column a narrow viewport clips is reached by Tab and scrolled with the arrow keys, rather than by a pointer
+ * over a scroller nothing announces.
+ *
  * @param props - The columns, the page of rows, the caption, the order, the paging and the presentation;
  *   see {@link DataTableProps}.
- * @returns The scroll container holding the table, and the pagination control when paging is supplied.
+ * @returns The scroll region holding the table, and the pagination control when paging is supplied.
  */
 export function DataTable<TItem>({
   columns,
@@ -384,7 +420,12 @@ export function DataTable<TItem>({
 
   return (
     <>
-      <div className={classNames("sp-table-wrap", className)}>
+      <div
+        className={classNames("sp-table-wrap", className)}
+        role="region"
+        aria-label={caption}
+        tabIndex={0}
+      >
         <table
           className={classNames(
             "sp-table",
@@ -415,7 +456,7 @@ export function DataTable<TItem>({
                   aria-sort={
                     presentation.isSortable
                       ? ariaSortValue(presentation.column.id, activeSort)
-                      : undefined
+                      : orderInForceAriaSort(presentation.column)
                   }
                   aria-label={presentation.isSortable ? undefined : presentation.column.caption}
                   className={presentation.alignmentClassName}

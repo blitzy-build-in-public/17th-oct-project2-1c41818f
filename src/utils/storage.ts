@@ -9,7 +9,7 @@ import type { DateRange } from "@/types/common";
 import { validateDateRange } from "@/utils/dates";
 
 /**
- * The keys this module accepts: the three entries of `STORAGE_KEYS` and nothing else, so every key
+ * The keys this module accepts: the four entries of `STORAGE_KEYS` and nothing else, so every key
  * read or written here is the one `src/constants/config.ts` declares and no other application's
  * entry on the same origin is ever touched.
  */

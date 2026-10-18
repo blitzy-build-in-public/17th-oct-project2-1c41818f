@@ -1,19 +1,13 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 712
+ * Lines: 556
  */
 
-import type { LoyaltyTier } from "@/types/account";
 import type { PromoRejectionReason } from "@/types/commerce";
 
-/**
- * Picks the singular or plural noun a count needs, and states the two boundaries every export here
- * holds: money and dates arrive already formatted from `src/utils/format.ts` and `src/utils/dates.ts`,
- * and every threshold, cap and limit arrives as an argument from `src/constants/config.ts`.
- */
-const noun = (count: number, singular: string, plural: string): string =>
-  count === 1 ? singular : plural;
+import { passwordHintLabel } from "./content-account";
+import { countNoun } from "./content-reports";
 
 // Identity --------------------------------------------------------------------------------------
 /** Product identity. Consumers: `Header.tsx` for the logo, `Footer.tsx` for the legal line. */
@@ -74,7 +68,7 @@ export const HEADER_COPY = {
 export const cartButtonLabel = (itemCount: number): string =>
   itemCount === 0
     ? `${HEADER_COPY.NAV_CART_LABEL}, nothing added yet`
-    : `${HEADER_COPY.NAV_CART_LABEL} ${itemCount} ${noun(itemCount, "item", "items")}`;
+    : `${HEADER_COPY.NAV_CART_LABEL} ${itemCount} ${countNoun(itemCount, "item", "items")}`;
 
 /** Footer copy. Consumer: `src/components/layout/Footer.tsx`. */
 export const FOOTER_COPY = {
@@ -165,7 +159,7 @@ export const quickAddLabel = (productName: string): string =>
 export const categoryPageHeading = (name: string): string => `Products in ${name}`;
 /** Result-set, live-region and stock labels. Consumers: `src/features/catalog/ProductList.tsx`. */
 export const productCountLabel = (count: number): string =>
-  `${count} ${noun(count, "product", "products")}`;
+  `${count} ${countNoun(count, "product", "products")}`;
 export const productCountAnnouncement = (count: number): string =>
   count === 0
     ? "No products match the current filters."
@@ -195,7 +189,7 @@ export const SEARCH_COPY = {
 export const searchSummaryLabel = (query: string, count: number): string =>
   count === 0
     ? `No results for "${query}"`
-    : `${count} ${noun(count, "result", "results")} for "${query}"`;
+    : `${count} ${countNoun(count, "result", "results")} for "${query}"`;
 /** Filter-chip, live-region and paging labels. Consumers: `src/features/search/*` and `Pagination.tsx`. */
 export const clearFacetLabel = (facetLabel: string): string => `Clear ${facetLabel}`;
 export const removeFilterLabel = (filterLabel: string): string => `Remove filter: ${filterLabel}`;
@@ -215,7 +209,7 @@ export const FACET_ANY_LABELS: Readonly<Record<SingleChoiceFacetId, string>> = {
 export const resultsUpdatedAnnouncement = (count: number): string =>
   productCountAnnouncement(count);
 export const suggestionsUpdatedAnnouncement = (count: number): string =>
-  `Now showing ${count} ${noun(count, "suggestion", "suggestions")}.`;
+  `Now showing ${count} ${countNoun(count, "suggestion", "suggestions")}.`;
 export const pageAnnouncement = (page: number, pageCount: number): string =>
   `Page ${page} of ${pageCount}`;
 
@@ -240,7 +234,7 @@ export const PAGING_NOUNS = {
 export const pagingCountLabel = (count: number, collection: PagingNoun): string =>
   count === 0
     ? `No ${collection.plural} match the current filters.`
-    : `${count} ${noun(count, collection.singular, collection.plural)} in total.`;
+    : `${count} ${countNoun(count, collection.singular, collection.plural)} in total.`;
 /** Names the page-size selector for what it changes. Consumer: `src/components/ui/Pagination.tsx`. */
 export const PAGE_SIZE_LABEL = "Results per page";
 
@@ -278,7 +272,7 @@ export const freeShippingProgressLabel = (formattedRemaining: string): string =>
 export const cartItemCountLabel = (count: number): string =>
   count === 0
     ? "Nothing in your cart yet"
-    : `${count} ${noun(count, "item", "items")} in your cart`;
+    : `${count} ${countNoun(count, "item", "items")} in your cart`;
 
 // Checkout and confirmation ---------------------------------------------------------------------
 /** The checkout's steps in order. Consumers: `CheckoutSteps.tsx` and `CheckoutPage.tsx`. */
@@ -359,161 +353,11 @@ export const orderConfirmationHeading = (orderNumber: string): string =>
 export const demoPaymentNote = (approved: string, declined: string): string =>
   `No payment is processed and no card number is stored. Use ${approved} for an approved card, or ${declined} for a declined one; both outcomes are decided in your browser.`;
 
-// Accounts --------------------------------------------------------------------------------------
-/** Account copy. Consumers: `src/features/account/*`. */
-export const ACCOUNT_COPY = {
-  SIGN_IN_HEADING: "Sign in to SalesPro",
-  SIGN_IN_SUBHEADING: "Use a seeded demonstration account. Nothing is sent to an inbox.",
-  REGISTER_HEADING: "Create your account",
-  REGISTER_SUBHEADING: "Registration keeps your orders and addresses in this browser.",
-  EMAIL_LABEL: "Email address",
-  PASSWORD_LABEL: "Password",
-  SHOW_PASSWORD_LABEL: "Show password",
-  HIDE_PASSWORD_LABEL: "Hide password",
-  SIGN_IN_SUBMIT_LABEL: "Sign in and continue",
-  REGISTER_SUBMIT_LABEL: "Create my account",
-  GO_TO_REGISTER_LABEL: "Create an account instead",
-  GO_TO_SIGN_IN_LABEL: "Already have an account? Sign in",
-  SIGN_IN_FAILED_MESSAGE: "That email address and password do not match an account.",
-  DUPLICATE_EMAIL_MESSAGE: "An account already exists for that email address.",
-  NAV_PROFILE_LABEL: "Profile",
-  NAV_ORDERS_LABEL: "Orders",
-  NAV_ADDRESSES_LABEL: "Addresses",
-  PROFILE_HEADING: "Your profile",
-  FIRST_NAME_LABEL: "First name",
-  LAST_NAME_LABEL: "Last name",
-  PHONE_LABEL: "Phone number",
-  MARKETING_OPT_IN_LABEL: "Email me about offers and new products",
-  PROFILE_EMAIL_HINT: "This address identifies your account and cannot be changed here.",
-  PROFILE_TIER_LABEL: "Loyalty tier",
-  PROFILE_MEMBER_SINCE_LABEL: "Member since",
-  ORDERS_HEADING: "Order history",
-  ORDERS_STATUS_FILTER_LABEL: "Filter by status",
-  ORDERS_DATE_FILTER_LABEL: "Filter by the date the order was placed",
-  ORDERS_COLUMN_ORDER: "Order",
-  ORDERS_COLUMN_PLACED: "Placed",
-  ORDERS_COLUMN_STATUS: "Status",
-  ORDERS_COLUMN_ITEMS: "Items",
-  ORDERS_COLUMN_TOTAL: "Total",
-  ORDER_DETAIL_BACK_LABEL: "Back to your orders",
-  ORDER_DETAIL_ITEMS_HEADING: "Items",
-  ORDER_DETAIL_TOTALS_HEADING: "Totals",
-  ORDER_DETAIL_ADDRESS_HEADING: "Shipping address",
-  ORDER_DETAIL_PAYMENT_HEADING: "Payment",
-  ORDER_DETAIL_HISTORY_HEADING: "Status history",
-  ADDRESS_BOOK_HEADING: "Address book",
-  ADD_ADDRESS_LABEL: "Add an address",
-  DEFAULT_SHIPPING_BADGE: "Default shipping",
-  DEFAULT_BILLING_BADGE: "Default billing",
-  SET_DEFAULT_SHIPPING_LABEL: "Make this the default shipping address",
-  SET_DEFAULT_BILLING_LABEL: "Make this the default billing address",
-  REMOVE_ADDRESS_DIALOG_TITLE: "Remove this address?",
-  REMOVE_ADDRESS_DIALOG_BODY: "Orders already placed keep the address they were sent to.",
-  CONFIRM_REMOVE_ADDRESS_LABEL: "Remove address",
-} as const;
-/**
- * What each seeded loyalty label reads as beside its heading on the profile.
- *
- * A label and nothing more: loyalty point accounting is out of scope, so no balance, earning rate or
- * redemption is stated or computed anywhere, and `src/data/customers.ts` assigns the tier once when it
- * seeds an account. Consumer: `src/features/account/ProfilePage.tsx`.
- */
-export const LOYALTY_TIER_LABELS: Readonly<Record<LoyaltyTier, string>> = {
-  bronze: "Bronze",
-  silver: "Silver",
-  gold: "Gold",
-  platinum: "Platinum",
-};
-/** Describes the password rule from the minimum length `src/constants/config.ts` owns. */
-export const passwordHintLabel = (minLength: number): string =>
-  `At least ${minLength} characters, with one letter and one digit.`;
-/** Names the control that deletes one address, using that address's own label. */
-export const removeAddressLabel = (addressLabel: string): string => `Remove ${addressLabel}`;
-/** Lists the seeded demonstration accounts and the password they share. */
-export const demoSignInHint = (adminEmail: string, userEmail: string, password: string): string =>
-  `Seeded accounts: ${adminEmail} for the dashboard and ${userEmail} for a customer account, both with the password ${password}.`;
+// Accounts: §0.5.5 split into content-account.ts ------------------------------------------------
+export * from "./content-account";
 
-/**
- * What a signed-in visitor whose role cannot reach the path they asked for is told. Consumer:
- * `src/features/account/LoginPage.tsx`, which states the refusal instead of offering to continue to it.
- */
-export const ACCOUNT_ACCESS_COPY = {
-  HEADING: "You do not have access to that page",
-  BODY: "That page is for administrators, and the account you are signed in with is not one.",
-  CONTINUE_LABEL: "Go to my account",
-} as const;
-
-// Dashboard and reports, over their shared range control ----------------------------------------
-/** The range control's labels, presets and messages, kept once for both consumers. */
-export const DATE_RANGE_COPY = {
-  LABEL: "Reporting period",
-  FROM_LABEL: "Start date",
-  TO_LABEL: "End date",
-  APPLY_LABEL: "Apply range",
-  THIS_MONTH_PRESET_LABEL: "This month",
-  THIS_YEAR_PRESET_LABEL: "This year",
-  RANGE_INVERTED_MESSAGE: "The end date is before the start date. Swap the two dates.",
-  RANGE_IN_FUTURE_MESSAGE: "The period cannot include dates after today.",
-  /**
-   * States whose days a period boundary falls on, so a range control says which "today" its figures are
-   * bounded by instead of leaving it to be inferred. Rendered under the resolved range by every range
-   * control: `src/features/reports/DateRangePicker.tsx` and the dashboard's own.
-   */
-  LOCAL_TIME_NOTE: "Period boundaries are whole days in your local time zone.",
-} as const;
-/** Names the preset that reaches back a given number of days. */
-export const lastDaysLabel = (days: number): string => `Last ${days} days`;
-/** Preset and range labels, each taking the value its caller has already resolved. */
-export const resolvedRangeLabel = (formattedFrom: string, formattedTo: string): string =>
-  `${formattedFrom} to ${formattedTo}`;
-export const rangeTooLongMessage = (maxDays: number): string =>
-  `Choose a period of ${maxDays} days or fewer.`;
-
-/** Dashboard copy. Consumers: `src/features/admin/*`, with ranges from {@link DATE_RANGE_COPY}. */
-export const ADMIN_COPY = {
-  HEADING: "Sales dashboard",
-  SUBHEADING: "Revenue, orders and product performance for the period you choose.",
-  BASELINE_CONTROL_LABEL: "Compare with",
-  KPI_REVENUE_LABEL: "Revenue",
-  KPI_ORDERS_LABEL: "Orders",
-  KPI_UNITS_LABEL: "Units sold",
-  KPI_AVERAGE_ORDER_VALUE_LABEL: "Average order value",
-  CHART_HEADING: "Revenue over time",
-  CHART_SERIES_CONTROL_LABEL: "Show",
-  CHART_SERIES_TOTAL_LABEL: "Total",
-  CHART_SERIES_CATEGORY_LABEL: "By category",
-  CHART_SERIES_CHANNEL_LABEL: "By channel",
-  BREAKDOWN_HEADING: "Where the revenue came from",
-  TOP_PRODUCTS_HEADING: "Top products",
-  TOP_PRODUCTS_RANK_CONTROL_LABEL: "Rank by",
-  RECENT_ORDERS_HEADING: "Recent orders",
-  NOT_AUTHORIZED_TITLE: "This area is for administrators",
-  NOT_AUTHORIZED_BODY: "The signed-in account does not hold the administrator role.",
-  NOT_AUTHORIZED_ACTION_LABEL: "Go to the storefront",
-} as const;
-/** The name each sales channel shows in the revenue breakdown's series labels. */
-export const CHANNEL_LABELS = { web: "Web", mobile: "Mobile app", store: "Store" } as const;
-/** States how one KPI moved against its named baseline, from both values already formatted. */
-export const kpiChangeLabel = (formattedChange: string, baselineLabel: string): string =>
-  `${formattedChange} versus the ${baselineLabel.toLowerCase()}`;
-
-/** Reports copy. Consumers: `src/features/reports/*`, with ranges from {@link DATE_RANGE_COPY}. */
-export const REPORTS_COPY = {
-  HEADING: "Reports",
-  INTRO: "Run a report over any period, then take the rows away as CSV.",
-  SELECTOR_LABEL: "Report",
-  EXPORT_LABEL: "Download CSV",
-  TOTALS_ROW_LABEL: "Total",
-  SALES_CHART_HEADING: "Revenue by period",
-  PRODUCT_CHART_HEADING: "Revenue by product",
-  CUSTOMER_CHART_HEADING: "New and returning customers",
-} as const;
-/** Describes the export's row cap and cell limit, and whose clock its dates use. */
-export const exportNote = (rowCap: number, cellLimit: number): string =>
-  `The export holds up to ${rowCap} rows and clips each cell at ${cellLimit} characters, so it opens in a spreadsheet. Dates and times are yours, not the server's.`;
-/** States how many rows the export produced. Consumer: `src/features/reports/ReportTable.tsx`. Worded here because this module is the one home of every user-facing sentence, which is why the file is over the request's 600-line ceiling. */
-export const exportRowCountNote = (rowCount: number): string =>
-  `The last export held ${rowCount} ${noun(rowCount, "row", "rows")}.`;
+// Dashboard and reports: §0.5.5 split into content-reports.ts -----------------------------------
+export * from "./content-reports";
 
 // Shared actions --------------------------------------------------------------------------------
 /** Shared verbs, so one action is never labelled two ways. Consumers: every feature and component. */
@@ -663,7 +507,7 @@ export const CHART_COLUMN_LABELS = {
 } as const;
 /** Chart and rating text alternatives, so no value is conveyed by colour or stars alone. */
 export const ratingSummaryLabel = (formattedRating: string, count: number): string =>
-  `Rated ${formattedRating} from ${count} ${noun(count, "review", "reviews")}`;
+  `Rated ${formattedRating} from ${count} ${countNoun(count, "review", "reviews")}`;
 
 /** One message per rule, in the field-independent form. Consumer: `src/utils/validation.ts`. */
 export const VALIDATION_MESSAGES = {

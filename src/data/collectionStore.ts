@@ -1,7 +1,7 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections, the indexes built over them once, and the account, session and address writes they carry
- * Lines: 572
+ * Lines: 600
  */
 
 // This is not a path the plan maps on its own: it is the store half of `src/data/repositories.ts`, split out
@@ -11,6 +11,7 @@
 // on it; `src/data/repositories.ts` holds the contract that composes the domain rules, and nothing else
 // imports this module.
 
+import { STORAGE_KEYS } from "@/constants/config";
 import {
   ACCOUNT_COPY,
   FEEDBACK_COPY,
@@ -23,9 +24,6 @@ import { ADDRESSES, CREDENTIALS, CUSTOMERS, type StoredCredential } from "@/data
 import { ORDERS } from "@/data/orders";
 import { PRODUCTS } from "@/data/products";
 import { PRODUCT_RATING_SUMMARY, REVIEWS } from "@/data/reviews";
-import { isSessionExpired, sessionExpiresAt } from "@/lib/authService";
-import { applyDefaultAddressRule, promoteDefaultAfterRemoval } from "@/lib/customerService";
-import type { SearchLookup, SearchTargets } from "@/lib/searchService";
 import type {
   Address,
   AddressInput,
@@ -51,9 +49,17 @@ import type {
   SessionToken,
 } from "@/types/common";
 import type { Order, PromoRejectionReason } from "@/types/commerce";
+import {
+  applyDefaultAddressRule,
+  isSessionExpired,
+  promoteDefaultAfterRemoval,
+  sessionExpiresAt,
+} from "@/utils/accountRules";
 import { groupBy, sortByKey } from "@/utils/collections";
 import { sortByIso, startOfDay, toIsoDateTime } from "@/utils/dates";
 import { DEFAULT_FILTER_STATE, filtersToPath } from "@/utils/queryParams";
+import { readStored, writeStored } from "@/utils/storage";
+import type { SearchLookup, SearchTargets } from "@/utils/searchRules";
 import {
   addressId as newAddressId,
   createCredentialDigest,
@@ -213,9 +219,10 @@ function countByDay(orders: readonly Order[]): Map<IsoDateString, number> {
  * The rating a product is served with is the one its reviews imply, overlaid once rather than recomputed per
  * read; the address books are reassembled from the account references; the order history is sorted newest
  * first, because the seeded array is grouped by day rather than by instant and an order created at runtime is
- * placed at the front of it; and every lookup a member needs — by identifier, by email, by token, by customer,
- * by account-and-product — is built here, so a read is a map lookup rather than a scan of 1,155 orders or 140
- * products. Nothing in the seeds is written: this store holds copies.
+ * placed at the front of it; and every lookup a member needs — by identifier, by email, by customer, by
+ * account-and-product — is built here, so a read is a map lookup rather than a scan of 1,155 orders or 140
+ * products. The session registry is read from its durable table rather than built here, because a session's own
+ * issue instant is what that table is for. Nothing in the seeds is written: this store holds copies.
  *
  * @returns The collections and indexes one data source reads and writes.
  */
@@ -264,12 +271,9 @@ export function createStore() {
     ordersByCustomer,
     nextOrderIndex: orders.length + 1,
     orderSequenceByDay: countByDay(orders),
-    sessions: new Map<string, Session>(),
+    sessions: readSessionTable(),
     revokedTokens: new Set<string>(),
     tokenByCustomer,
-    customerByToken: new Map<string, CustomerId>(
-      [...tokenByCustomer].map(([id, token]) => [token as string, id]),
-    ),
     verifiedPurchases,
     categories: buildCategoryTree(),
     brands: BRANDS,
@@ -280,8 +284,9 @@ export function createStore() {
 /** The collections and indexes one data source reads and writes, as {@link createStore} returns them: the
  * served catalogue and the maps it is read by, the review list and its per-product grouping, the account store
  * with its credentials and address books, the order history newest first with its per-customer grouping and the
- * numbering a created order takes, the session registry with the token derived for each account, the
- * verified-purchase index, and the category tree, brands and search lookup the catalogue reads answer with. */
+ * numbering a created order takes, the session registry read from its durable table with the token derived for
+ * each account, the verified-purchase index, and the category tree, brands and search lookup the catalogue
+ * reads answer with. */
 export type DataStore = ReturnType<typeof createStore>;
 
 // The account store ---------------------------------------------------------------------------------
@@ -289,9 +294,55 @@ export type DataStore = ReturnType<typeof createStore>;
 // password is stored — only the salted digest the shared helper produces and verifies — and a session is an
 // opaque token carrying a role claim and an expiry, re-checked by the transport on every privileged request.
 
+// The durable session table --------------------------------------------------------------------------
+// A session's window is a fact about the instant it was issued, so the registry that holds the records is
+// durable state, written through the storage util at the two points that change it and read back when a store
+// is built. That is what lets a live session survive a reload and keeps a lapsed one lapsed: a token presented
+// after its window has passed is read as the lapsed record it is, never re-dated from a clock that reads now.
+
+/** Whether a value read back is one session record: every member the type declares, each read as the string it
+ * was written as, with a `role` of `guest`, `customer` or `admin`. Content the current types do not describe is
+ * discarded rather than handed to the registry as a session, because a session's `customerId` and `role` are
+ * what a request reaches through. */
+function isStoredSession(value: unknown): value is Session {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { readonly [member: string]: unknown };
+  const role = candidate.role;
+  return (
+    typeof candidate.token === "string" &&
+    typeof candidate.customerId === "string" &&
+    (role === "guest" || role === "customer" || role === "admin") &&
+    typeof candidate.issuedAt === "string" &&
+    typeof candidate.expiresAt === "string"
+  );
+}
+
+/** Whether a payload read back is the session table: an array whose every entry is a session record. One that
+ * fails this is discarded whole, because a partly readable table cannot be told from one this build never
+ * wrote. */
+function isSessionTable(value: unknown): value is Session[] {
+  if (!Array.isArray(value)) return false;
+  return (value as unknown[]).every((entry) => isStoredSession(entry));
+}
+
+/** The session table as the store holds it, or an empty registry when nothing usable is read back: no store, a
+ * refused read, a payload this build cannot read as a table. */
+function readSessionTable(): Map<string, Session> {
+  const rows = readStored<Session[]>(STORAGE_KEYS.SESSIONS, [], isSessionTable);
+  return new Map(rows.map((session): [string, Session] => [session.token, session]));
+}
+
+/** Writes the registry's current records as the session table: best-effort, like every write through the
+ * storage util, so a browser that refuses storage keeps the registry a request is answered from. */
+function writeSessionTable(store: DataStore): void {
+  writeStored(STORAGE_KEYS.SESSIONS, [...store.sessions.values()]);
+}
+
 /** Opens a session for an account and records it: the token is the account's own, so opening one again replays
  * it rather than accumulating, and the expiry is the product's single expiry rule. Recording it also lifts any
- * revocation the account's last sign-out left, because that is what signing in again means. */
+ * revocation the account's last sign-out left, because that is what signing in again means, and it writes the
+ * table, so the instant this session was issued is durable. The single mint site: registration and sign-in both
+ * arrive here. */
 function openSession(store: DataStore, customer: Customer, at: IsoDateTimeString): Session {
   const token = store.tokenByCustomer.get(customer.id) ?? sessionTokenFor(customer);
   const session: Session = {
@@ -303,18 +354,21 @@ function openSession(store: DataStore, customer: Customer, at: IsoDateTimeString
   };
   store.revokedTokens.delete(token);
   store.sessions.set(token, session);
+  writeSessionTable(store);
   return session;
 }
 
 /**
- * Ends the session a token names: the record is dropped and the token is refused for the rest of this store's
- * life. The refusal is needed because a token is derived from the account it names — which is what lets a
- * session survive a reload — so dropping the record alone would let the very next lookup rebuild it. Beyond
- * this page the client ends the session too, by clearing the copy it persisted.
+ * Ends the session a token names: the record is dropped, the token is refused and the table is rewritten, so a
+ * sign-out outlives the document that asked for it rather than leaving a record a later page reads back as a
+ * live session. The refusal is this store's own because a token is derived from the account it names, so a
+ * record dropped alone could be revived by a write that rebuilt the registry. Beyond this page the client ends
+ * the session too, by clearing the copy it persisted.
  */
 export function endSession(store: DataStore, token: SessionToken): void {
   store.sessions.delete(token);
   store.revokedTokens.add(token);
+  writeSessionTable(store);
 }
 
 /** Replaces one account in the store with the record that stands for it now, in the collection and in the
@@ -327,7 +381,8 @@ function replaceAccount(store: DataStore, customer: Customer): void {
 
 /** Creates an account and opens its session: registration signs the customer in, so the digest the shared
  * helper produces is the same shape the seed stores, and the token the account signs in with is registered
- * here, which is what lets a session survive a reload. */
+ * here, so a second sign-in replays it rather than minting another. The account itself lives in this store's
+ * memory alone, so a store built after a reload holds no such account and refuses its session. */
 export function registerAccount(
   store: DataStore,
   input: RegistrationInput,
@@ -359,7 +414,6 @@ export function registerAccount(
   store.books.set(customer.id, []);
   const token = sessionTokenFor(customer);
   store.tokenByCustomer.set(customer.id, token);
-  store.customerByToken.set(token, customer.id);
   return accept({ customer, session: openSession(store, customer, now) });
 }
 
@@ -380,52 +434,26 @@ export function signInAccount(store: DataStore, credentials: Credentials): Resul
 }
 
 /**
- * The instant a session reconstructed from a stored token is dated by.
+ * The session a token still names, whether or not it has expired, because expiry is the transport's decision
+ * and only the transport can tell an expired session from an unknown one.
  *
- * A token this store never minted is rebuilt from the account it names — that derivation is what lets a
- * session survive a reload — but the instant the token was minted is not durable: the client persists the
- * token alone, and an account's `lastLoginAt` is written in memory and rebuilt from the seeds on every
- * document, so it describes the account's seeded past rather than the token in hand. Dating the rebuilt
- * session by that value handed every reload a session that had already lapsed — the seeded sign-in is older
- * than the seven-day lifetime for 38 of the 40 seeded accounts — and the client signed the visitor out on
- * the spot, which is the reload a session is required to survive.
- *
- * The account's own last sign-in is therefore kept only while it still supports a live session, the case a
- * record can vouch for; otherwise the presented token is dated from the moment it is presented. Expiry keeps
- * its full force wherever a record exists to judge it against: every session this store mints carries an
- * expiry from {@link sessionExpiresAt}, and `restore` refuses one that is past it.
+ * A session is read from the registry and never rebuilt: it keeps the record's own dates, so one presented
+ * after its window has passed answers as the lapsed record it is, not a fresh one. Its role, though, is
+ * stamped from the account the record names, not from the record's own claim — written here at the one mint
+ * site — because the account is the store's authority on what a token reaches: a claim edited outside the
+ * store must not widen what the token does. Two tokens are therefore `unknown` — nothing at all, a refusal
+ * the transport words: one the registry holds no session for, never issued or signed out of, with revocation
+ * checked first so a leftover record cannot revive it; and one naming an account the store no longer holds,
+ * because ownership is decided from the session's `customerId` and a gone account authenticates nobody. A
+ * registered account lives in this store's memory alone, so its session is `unknown` after a reload.
  */
-function reconstructedIssuedAt(customer: Customer, now: IsoDateTimeString): IsoDateTimeString {
-  const lastSignIn = customer.lastLoginAt ?? customer.createdAt;
-  return Date.parse(sessionExpiresAt(lastSignIn)) > Date.parse(now) ? lastSignIn : now;
-}
-
-/** The session a token still names, whether or not it has expired, because expiry is the transport's decision
- * and only the transport can tell an expired session from an unknown one. A token this process never issued —
- * the case a reload creates — is rebuilt from the account it was minted for and dated by
- * {@link reconstructedIssuedAt}, which keeps the account's own last sign-in while it still supports a live
- * session and dates the token from now when it does not. */
 export function lookUpSession(store: DataStore, token: string | undefined): Session | undefined {
   if (token === undefined || token.trim() === "") return undefined;
-  // A token its own account signed out of: refused before the rebuild below could revive it.
   if (store.revokedTokens.has(token)) return undefined;
-  const recorded = store.sessions.get(token);
-  if (recorded !== undefined) return recorded;
-  const customerId = store.customerByToken.get(token);
-  if (customerId === undefined) return undefined;
-  const customer = store.customerById.get(customerId);
-  if (customer === undefined) return undefined;
-  const issuedAt = reconstructedIssuedAt(customer, toIsoDateTime(new Date()));
-  const rebuilt: Session = {
-    // The transport brands a token where it resolves one; here it is the text the registry keys it by.
-    token: token as SessionToken,
-    customerId,
-    role: customer.role,
-    issuedAt,
-    expiresAt: sessionExpiresAt(issuedAt),
-  };
-  store.sessions.set(rebuilt.token, rebuilt);
-  return rebuilt;
+  const session = store.sessions.get(token);
+  if (session === undefined) return undefined;
+  const account = store.customerById.get(session.customerId);
+  return account === undefined ? undefined : { ...session, role: account.role };
 }
 
 /** The session a stored token restores, or the refusal it earns: an unknown token and one past its expiry are
@@ -532,7 +560,7 @@ export function updateBookAddress(
 }
 
 /** Removes an address, and with it the reference the account held: the rule that falls each default a removal
- * took to the address that remains is `src/lib/customerService.ts`'s, applied to the book as it stands. */
+ * took to the address that remains is `src/utils/accountRules.ts`'s, applied to the book as it stands. */
 export function removeBookAddress(
   store: DataStore,
   id: CustomerId,
@@ -555,7 +583,7 @@ export function removeBookAddress(
 }
 
 /** Makes one address the default of the kind the request names, clearing the previous default of that kind
- * through the customer service's own rule. */
+ * through `src/utils/accountRules.ts`'s own rule. */
 export function setBookDefault(
   store: DataStore,
   id: CustomerId,

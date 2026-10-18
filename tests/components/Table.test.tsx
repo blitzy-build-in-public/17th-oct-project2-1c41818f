@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/Table.test.tsx
  * Purpose: Column rendering, sorting, the empty state and the pagination contract
- * Lines: 278
+ * Lines: 316
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -59,6 +59,24 @@ const COLUMNS: readonly DataTableColumn<Product>[] = [
   { id: "sku", header: "SKU", value: (row) => row.sku },
   { id: "price", header: "Price", value: (row) => row.priceMinor, format: "money", sortable: true },
 ];
+
+/* A table whose rows arrive already ranked, so the order belongs to the read and the table has none of its
+ * own to apply: one column states the order it was ranked in, the other is plain, and neither can be sorted. */
+const RANKED_COLUMNS: readonly DataTableColumn<Product>[] = [
+  { id: "name", header: "Product", value: (row) => row.name },
+  {
+    id: "price",
+    header: "Price",
+    value: (row) => row.priceMinor,
+    format: "money",
+    orderInForce: "desc",
+  },
+];
+
+/** The header cell of `columnId` among the columns a case hands the table, by the same id lookup. */
+function headerCellOf(columns: readonly DataTableColumn<Product>[], columnId: string): HTMLElement {
+  return screen.getAllByRole("columnheader")[columns.findIndex((column) => column.id === columnId)];
+}
 
 /** What every table here is rendered with, the prices added up, and the catalogue paging is read from. */
 const TABLE_PROPS: Pick<DataTableProps<Product>, "columns" | "rows" | "rowKey" | "caption"> = {
@@ -193,6 +211,26 @@ describe("DataTable", () => {
     await user.click(nameControl);
     expect(headerCell("price")).toHaveAttribute("aria-sort", "descending");
     expect(renderedNames()).toEqual(BY_PRICE_DESCENDING);
+  });
+
+  it("announces the order a column arrived in, and offers no control over the order it cannot change", async () => {
+    renderWithProviders(<DataTable {...TABLE_PROPS} columns={RANKED_COLUMNS} />);
+    await screen.findByRole("table", { name: CAPTION });
+
+    // The ranked column states the direction its rows are in, and the header carries no control, because
+    // the read that produced the rows owns the order and the table has none of its own to apply.
+    const rankedHeader = headerCellOf(RANKED_COLUMNS, "price");
+    expect(rankedHeader).toHaveAttribute("aria-sort", "descending");
+    expect(within(rankedHeader).queryByRole("button")).toBeNull();
+
+    // A column that is neither sortable nor ordered states nothing about the rows it heads.
+    const plainHeader = headerCellOf(RANKED_COLUMNS, "name");
+    expect(plainHeader).not.toHaveAttribute("aria-sort");
+    expect(within(plainHeader).queryByRole("button")).toBeNull();
+
+    // Declaring an order is a statement, not an order applied: the rows stay where the read put them.
+    expect(renderedNames()).toEqual(BY_NAME_ASCENDING);
+    expect(renderedNames()).not.toEqual(BY_PRICE_DESCENDING);
   });
 });
 

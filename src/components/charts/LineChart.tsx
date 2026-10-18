@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/LineChart.tsx
  * Purpose: Accessible line and area chart with grid, axis ticks, hover readout and a data-table alternative
- * Lines: 453
+ * Lines: 461
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -419,7 +419,15 @@ export function LineChart({
       ) : null}
 
       {hasData ? (
-        <div className="sp-chart__data">
+        /* The paired table travels sideways inside this box, so the box is a named scroll region a keyboard
+         * reaches and the arrow keys scroll, as the shared table's own container is; the name is the caption
+         * the table carries, so the region and the table are announced with the same words. */
+        <div
+          className="sp-chart__data"
+          role="region"
+          aria-label={chartDataTableCaption(chartName)}
+          tabIndex={0}
+        >
           <table className="sp-table sp-table--compact" id={tableId}>
             <caption className="sp-table__caption">{chartDataTableCaption(chartName)}</caption>
             <thead>

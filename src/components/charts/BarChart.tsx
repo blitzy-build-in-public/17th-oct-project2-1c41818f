@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/BarChart.tsx
  * Purpose: Vertical, horizontal, grouped and stacked bars with value labels
- * Lines: 381
+ * Lines: 400
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -356,8 +356,15 @@ export function BarChart({
       ) : null}
       <div className="sp-chart__data">
         {/* The wrapper is the table primitive's own scroll container: without it a six-column paired table
-            sets the minimum width of every box above it, and the chart's card overflows a phone's viewport. */}
-        <div className="sp-table-wrap">
+            sets the minimum width of every box above it, and the chart's card overflows a phone's viewport.
+            Because it scrolls, it is also a named region a keyboard can reach and scroll, named by the caption
+            the table inside it carries. */}
+        <div
+          className="sp-table-wrap"
+          role="region"
+          aria-label={chartDataTableCaption(captionSubject)}
+          tabIndex={0}
+        >
           <table className="sp-table sp-table--compact">
             <caption className="sp-table__caption" id={captionId}>
               {chartDataTableCaption(captionSubject)}

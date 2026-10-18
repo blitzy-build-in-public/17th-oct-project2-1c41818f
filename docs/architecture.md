@@ -1,7 +1,7 @@
 <!--
 Path: docs/architecture.md
 Purpose: The layers, the import rules and the data flow any new file must fit
-Lines: 274
+Lines: 277
 -->
 
 # Architecture
@@ -12,15 +12,15 @@ This document fixes where a new file belongs, which imports are legal, how data 
 
 ## 1. The layers
 
-| Layer               | Modules                                                                                          | Responsibility                                                                                                                                                                                                 | Phases     |
-| ------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| Foundations         | `src/types`, `src/constants`, `src/utils`                                                        | Shapes, literals and pure helpers. No React, no data access                                                                                                                                                    | 3–6        |
-| Data access         | `src/data`, `src/lib/apiClient.ts`, `src/lib/mockServer.ts`                                      | The seeded collections, the repositories over them, the in-process API and its transport seam                                                                                                                  | 9, 11–12   |
-| Domain services     | `src/lib/*Service.ts`                                                                            | One domain rule per file: `authService`, `catalogService`, `searchService`, `pricingService`, `orderService`, `customerService`, `analyticsService`, `reportService`. No React import anywhere under `src/lib` | 9–10       |
-| Shared presentation | `src/components`, `src/styles`                                                                   | Layout, UI primitives, product components, hand-written SVG charts, and the design tokens every stylesheet consumes                                                                                            | 7–8, 15–20 |
-| State               | `src/state`                                                                                      | Contexts, reducers and hooks for authentication, cart, catalogue, checkout and toasts                                                                                                                          | 13–14      |
-| Feature slices      | `src/features/` — `home`, `catalog`, `search`, `cart`, `checkout`, `account`, `admin`, `reports` | The eight route-shaped modules                                                                                                                                                                                 | 21–32      |
-| App shell           | `src/Router.tsx`, `src/App.tsx`, `src/main.tsx`                                                  | The route table, the provider composition and the mount                                                                                                                                                        | 33         |
+| Layer               | Modules                                                                                          | Responsibility                                                                                                                                                                                                                                                                                                        | Phases     |
+| ------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Foundations         | `src/types`, `src/constants`, `src/utils`                                                        | Shapes, literals and pure helpers. No React, no data access                                                                                                                                                                                                                                                           | 3–6        |
+| Data access         | `src/data`, `src/lib/apiClient.ts`, `src/lib/mockServer.ts`                                      | The seeded collections, the repositories over them, the in-process API and its transport seam                                                                                                                                                                                                                         | 9, 11–12   |
+| Domain services     | `src/lib/*Service.ts`                                                                            | One domain rule per file, published here and implemented one layer down in `src/utils/*Rules.ts` so the data layer may reach it: `authService`, `catalogService`, `searchService`, `pricingService`, `orderService`, `customerService`, `analyticsService`, `reportService`. No React import anywhere under `src/lib` | 9–10       |
+| Shared presentation | `src/components`, `src/styles`                                                                   | Layout, UI primitives, product components, hand-written SVG charts, and the design tokens every stylesheet consumes                                                                                                                                                                                                   | 7–8, 15–20 |
+| State               | `src/state`                                                                                      | Contexts, reducers and hooks for authentication, cart, catalogue, checkout and toasts                                                                                                                                                                                                                                 | 13–14      |
+| Feature slices      | `src/features/` — `home`, `catalog`, `search`, `cart`, `checkout`, `account`, `admin`, `reports` | The eight route-shaped modules                                                                                                                                                                                                                                                                                        | 21–32      |
+| App shell           | `src/Router.tsx`, `src/App.tsx`, `src/main.tsx`                                                  | The route table, the provider composition and the mount                                                                                                                                                                                                                                                               | 33         |
 
 **A file may import only from its own layer or from a layer below it.** Nothing imports upward, and that is also why the phases could be generated in the order the table lists: by the time a file was written, everything it reaches already existed.
 
@@ -32,7 +32,13 @@ The 600-line ceiling is never raised. When one concern cannot be held in one fil
 - `src/lib/reportService.ts` → `src/lib/reportSeries.ts`; `src/data/repositories.ts` → `src/data/collectionStore.ts`
 - the chart files → `src/components/charts/chartGeometry.ts`, `barGeometry.ts`, `lineChartModel.ts`
 - `src/utils/dates.ts` → `src/utils/isoInstants.ts`, whose names `dates.ts` re-exports so no consumer changes
+- the service rule engines → `src/utils/pricingRules.ts`, `orderRules.ts`, `catalogRules.ts`, `searchRules.ts`, `analyticsRules.ts`, `reportRules.ts` and `accountRules.ts`, whose names their services re-export so no consumer's import changes
 - `src/styles/catalog.css` → `src/styles/catalog-landing.css`, `src/styles/catalog-detail.css`
+- `src/styles/commerce.css` → `src/styles/commerce-cart.css`, which the mapped sheet loads with `@import`
+- `src/constants/content.ts` → `src/constants/content-reports.ts`, whose names `content.ts` re-exports so no consumer changes
+- `tests/components/controls.test.tsx` → `tests/components/overlays.test.tsx`, the overlay family's cases
+
+The service rule engines are placed in Foundations for a second reason on top of the ceiling: the pure rules a service applies are the same rules `src/data/repositories.ts` and its store half compose to answer a route, and the data module may import only its own layer or one below it. So each engine lives in `src/utils/*Rules.ts` — pricing, order, catalog, search, analytics, report and account — its service re-exports every name it published before, and each rule still has exactly one body. A file below a service never imports the service.
 
 ## 2. The two hard rules
 
@@ -42,7 +48,7 @@ The 600-line ceiling is never raised. When one concern cannot be held in one fil
 Three corollaries the tree implements:
 
 - No feature slice imports `src/data`. `src/data/repositories.ts` and its store half `src/data/collectionStore.ts` are the only readers of the seeded collections, and a page reaches them through a service.
-- No module under `src/components` or `src/features` imports `src/styles`. `src/main.tsx` is the product's only importer of the eight stylesheets, and the further sheets (`controls.css`, `data-display.css`, `page-header.css`, `tabs-accordion.css`, `catalog-landing.css`, `catalog-detail.css`) reach the page through `@import`. Classes are consumed by name.
+- No module under `src/components` or `src/features` imports `src/styles`. `src/main.tsx` is the product's only importer of the eight stylesheets, and the further sheets (`controls.css`, `data-display.css`, `page-header.css`, `tabs-accordion.css`, `catalog-landing.css`, `catalog-detail.css`, `commerce-cart.css`) reach the page through `@import`. Classes are consumed by name.
 - A shared need is imported from the file that owns it, never through a re-export that hides the owner.
 
 ## 3. Component interaction
@@ -233,7 +239,7 @@ A render failure is caught by the error boundary in `src/App.tsx`, which replace
 - **Money is an integer number of minor units end to end**, never a float, and is formatted only through `src/utils/format.ts`.
 - **Dates are ISO 8601 strings**, parsed, formatted and bucketed only through `src/utils/dates.ts`, which re-exports the instant primitives of `src/utils/isoInstants.ts`.
 - **Identifiers are prefixed strings** (`prod_`, `cat_`, `brd_`, `cus_`, `adr_`, `ord_`, `line_`, `rev_`, `prom_`, `ses_`) produced by the generators in `src/utils/strings.ts`.
-- **Persistence has one door.** Nothing writes to `localStorage` outside `src/utils/storage.ts`, and the keys it uses — `salespro.cart`, `salespro.session`, `salespro.report-range` — live in `src/constants/config.ts` with the version stamp that discards a payload written by an older shape rather than migrating it.
+- **Persistence has one door.** Nothing writes to `localStorage` outside `src/utils/storage.ts`, and the keys it uses — `salespro.cart`, `salespro.session`, `salespro.sessions`, `salespro.report-range` — live in `src/constants/config.ts` with the version stamp that discards a payload written by an older shape rather than migrating it.
 - **Paths are written once**, in `src/constants/routes.ts`, together with the builders (`productPath`, `categoryPath`, `loginPath`, `registerPath`, `accountOrderPath`, `orderConfirmationPath`) that keep the route table, the navigation and the links from drifting apart.
 - **Text has one home per kind**: all user-facing copy in `src/constants/content.ts`, the controlled vocabulary of categories, brands, sort keys, statuses, and the facet and report definitions in `src/constants/taxonomy.ts`.
 - **No package outside the three pinned runtime dependencies** of `package.json` — `react`, `react-dom` and `react-router-dom`, the only non-React runtime import in the tree. Everything a library would have supplied — validation, formatting, the charts, the table, CSV — is built here.

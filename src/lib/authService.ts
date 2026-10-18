@@ -1,10 +1,9 @@
 /**
  * Path: src/lib/authService.ts
  * Purpose: Registration, sign-in, sign-out, session restore and role checks for the demonstration account store
- * Lines: 405
+ * Lines: 359
  */
 
-import { SESSION_TTL_MS } from "@/constants/config";
 import { ACCOUNT_COPY, ADMIN_COPY, FEEDBACK_COPY, VALIDATION_MESSAGES } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import type {
@@ -14,14 +13,7 @@ import type {
   Role,
   Session,
 } from "@/types/account";
-import type {
-  ApiError,
-  FieldErrors,
-  IsoDateTimeString,
-  Result,
-  SessionToken,
-} from "@/types/common";
-import { parseIso, toIsoDateTime } from "@/utils/dates";
+import type { ApiError, FieldErrors, Result, SessionToken } from "@/types/common";
 import {
   FORM_ERROR_KEY,
   fieldErrorsFromApiError,
@@ -33,13 +25,14 @@ import {
 import { API_ERROR_CODES, API_PATHS, failure, getJson, postJson } from "@/lib/apiClient";
 
 /**
- * The account store's rules: who a session says the visitor is, how long that session lasts, and how an
- * authentication failure is worded. Consumers: `src/Router.tsx` and the privileged feature slices,
- * which guard a route with {@link assertRole}; `LoginPage` and `RegisterPage`, which land a signed-in
- * visitor with {@link roleHomePath} and render {@link toAuthFieldErrors} and {@link authErrorMessage};
- * `src/state/AuthContext.tsx`, which restores a persisted token through {@link restoreSession}; and
- * `src/data/repositories.ts`, which answers a session lookup by the same expiry rule as
- * {@link isSessionExpired}.
+ * The account store's rules: who a session says the visitor is, how an authentication failure is
+ * worded, and the session lifetime published from `src/utils/accountRules.ts`, which owns it so the
+ * data layer may read it from a layer below this one. Consumers: `src/Router.tsx` and the privileged
+ * feature slices, which guard a route with {@link assertRole}; `LoginPage` and `RegisterPage`, which
+ * land a signed-in visitor with {@link roleHomePath} and render {@link toAuthFieldErrors} and
+ * {@link authErrorMessage}; `src/state/AuthContext.tsx`, which restores a persisted token through
+ * {@link restoreSession}; and `src/data/repositories.ts`, which answers a session lookup by the same
+ * expiry rule as `isSessionExpired`.
  *
  * This is a demonstration account store, not a security boundary. The product ships no server, so the
  * accounts, their digests and their sessions live in the browser, and the credential a client holds is
@@ -179,50 +172,11 @@ export function assertRole(
 
 // Session lifetime --------------------------------------------------------------------------------
 
-/**
- * When a session issued at `issuedAt` stops being accepted: the issue instant plus the seven days
- * `SESSION_TTL_MS` allows.
- *
- * This and {@link isSessionExpired} are the product's only expiry rule, so the session a client stores,
- * the session a lookup answers with and the session the seam accepts cannot disagree about when it
- * lapses. The result is truncated to the second, which is the precision the stored local ISO form
- * carries and, against a seven-day lifetime, immaterial.
- *
- * An `issuedAt` that names no real instant yields the empty string, which no caller may read as a
- * usable expiry: {@link isSessionExpired} treats an unreadable instant as expired, so a malformed
- * issue instant denies the session rather than granting it.
- *
- * @param issuedAt - The local ISO 8601 date-time the session was issued at.
- * @returns The local ISO 8601 date-time it expires at, or `""` when `issuedAt` is unreadable.
- */
-export function sessionExpiresAt(issuedAt: IsoDateTimeString): IsoDateTimeString {
-  const issued = parseIso(issuedAt);
-  return issued === null ? "" : toIsoDateTime(new Date(issued.getTime() + SESSION_TTL_MS));
-}
-
-/**
- * Whether a session has lapsed by `now`.
- *
- * A session is expired at the exact instant it expires, the half-open rule the seam applies, so a
- * session this function still accepts is one the seam still accepts. Anything unreadable is expired:
- * an `expiresAt` that does not parse and a `now` that does not parse both deny the session, because an
- * instant nobody can judge is not a licence to stay signed in.
- *
- * The instant is a parameter rather than a clock read, so the rule stays pure, a caller owns its own
- * clock and a test is deterministic. Consumers: `src/data/repositories.ts` when it answers a session
- * lookup, and `src/state/AuthContext.tsx` when it decides whether a restored session is still worth
- * showing.
- *
- * @param session - The session to judge; only its `expiresAt` is read.
- * @param now - The instant to judge it against, as a local ISO 8601 date-time.
- * @returns Whether the session has expired at `now`.
- */
-export function isSessionExpired(session: Session, now: IsoDateTimeString): boolean {
-  const expiresAt = parseIso(session.expiresAt);
-  const instant = parseIso(now);
-  if (expiresAt === null || instant === null) return true;
-  return expiresAt.getTime() <= instant.getTime();
-}
+// The expiry rule lives in `src/utils/accountRules.ts`, which both this layer and the data layer may
+// read, and is published here because every caller imports the session from this service: the data
+// layer that stamps a session's `expiresAt` and the screen that judges a restored one read the same
+// single home.
+export { isSessionExpired, sessionExpiresAt } from "@/utils/accountRules";
 
 /** Where each role lands after signing in, read from `src/constants/routes.ts` so no path is written
  * here and a route change moves this table with it. */

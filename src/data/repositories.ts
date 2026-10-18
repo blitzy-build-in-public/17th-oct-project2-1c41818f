@@ -57,7 +57,7 @@ import {
   paginateProducts,
   selectRelated,
   sortProducts,
-} from "@/lib/catalogService";
+} from "@/utils/catalogRules";
 // The interface is imported as a type only: the data source is bound to the transport at the composition root,
 // so no runtime import may join the two modules.
 import type {
@@ -67,9 +67,9 @@ import type {
   ReportRunQuery,
   SalesProDataSource,
 } from "@/lib/mockServer";
-import { appendStatusHistory, orderNumber, toOrderLines } from "@/lib/orderService";
-import { decidePromo, normalisePromoCode, priceCartLines } from "@/lib/pricingService";
-import { applyTextMatch, buildSuggestions } from "@/lib/searchService";
+import { appendStatusHistory, orderNumber, toOrderLines } from "@/utils/orderRules";
+import { decidePromo, normalisePromoCode, priceCartLines } from "@/utils/pricingRules";
+import { applyTextMatch, buildSuggestions } from "@/utils/searchRules";
 import type { ReportResult } from "@/types/analytics";
 import type {
   Facet,

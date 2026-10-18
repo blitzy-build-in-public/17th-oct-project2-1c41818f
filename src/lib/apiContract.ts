@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiContract.ts
  * Purpose: The contract the in-process API is built on: its error vocabulary, the failure it shapes and the data-source interface it asks for
- * Lines: 447
+ * Lines: 485
  */
 
 import type * as Account from "@/types/account";
@@ -71,6 +71,42 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   [API_ERROR_CODES.VALIDATION_FAILED]: 422,
   [API_ERROR_CODES.DATA_SOURCE_UNAVAILABLE]: 503,
 };
+
+/**
+ * The two 401s that say the credential a request presented is no longer accepted, so it must not be
+ * presented again: `session-expired` for a token past its window, and `session-unknown` for one no
+ * session was ever issued for.
+ *
+ * `unauthenticated` is deliberately absent. It says the request carried no token at all, which says
+ * nothing about the session a client holds, so reading it as a refusal would end the session of a
+ * visitor over a request that never presented theirs.
+ *
+ * This list is the classification's one home. It is read by the transport that sees every answer
+ * (`src/lib/apiClient.ts`), by the state layer that decides whether to sign the visitor out
+ * (`src/state/AuthContext.tsx`) and by the route guard that decides between a retry and the sign-in
+ * screen (`src/Router.tsx`), so the three cannot disagree about what a refusal is.
+ */
+export const SESSION_REFUSAL_CODES = [
+  API_ERROR_CODES.SESSION_EXPIRED,
+  API_ERROR_CODES.SESSION_UNKNOWN,
+] as const;
+
+/** One code of {@link SESSION_REFUSAL_CODES}, derived from the list so the two cannot drift. */
+export type SessionRefusalCode = (typeof SESSION_REFUSAL_CODES)[number];
+
+/**
+ * Whether a failure is the store refusing the credential a request carried.
+ *
+ * The code decides and nothing else does: the status is the `401` every unauthenticated failure shares,
+ * so a failure is classified by what the store said rather than by the number it said it with.
+ *
+ * @param error - The failure a request resolved with.
+ * @returns `true` for {@link SESSION_REFUSAL_CODES}, `false` for every other code — `unauthenticated`,
+ *   `invalid-credentials` and the transport's own failures included.
+ */
+export function isSessionRefusal(error: Common.ApiError): boolean {
+  return (SESSION_REFUSAL_CODES as readonly string[]).includes(error.code);
+}
 
 // Shaping an outcome -----------------------------------------------------------------------------
 
@@ -379,10 +415,12 @@ export interface SalesProDataSource {
   /** The session a stored token still names; fails with `401` and the code `session-unknown` for a
    * token no session was issued for and `session-expired` for one past its expiry. */
   restoreSession(token: Common.SessionToken): Common.Result<Account.Session>;
-  /** The session recorded for `token` — whether or not it has expired, because expiry is the seam's
-   * decision, so it can tell `session-expired` from `session-unknown` — or `undefined` when the token
-   * names no session. A token this process has not issued is rebuilt from the account store, because a
-   * session issued before a page reload must be restorable from the token alone. */
+  /** The session the registry records for `token`, whether or not it has expired, or `undefined` for a
+   * token the registry holds no session for and for one whose record names an account the store no
+   * longer holds. Expiry is not judged here: the seam tells `session-expired` from `session-unknown`.
+   * The registry is durable state written through `src/utils/storage.ts`, so a token an earlier document
+   * stored resolves to its own record, with the issue instant and window it was given then — one
+   * presented after its window has passed answers as the lapsed record it is, never re-dated. */
   getSession(token: string | undefined): Account.Session | undefined;
   /** The account `id` names, or `undefined`; the seam decides whether the caller may read it. */
   getCustomer(id: Common.CustomerId): Account.Customer | undefined;

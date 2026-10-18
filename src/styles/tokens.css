@@ -268,7 +268,7 @@
   --layout-sidebar-rail: 64px;
   --layout-aside-width: 320px; /* the cart and checkout summary column */
   --layout-facet-width: 260px;
-  --layout-table-min-width: 960px; /* below this a report or order table scrolls instead of compressing */
+  --layout-table-min-width: 960px; /* below this a report table scrolls instead of compressing */
   --layout-measure: 65ch; /* the prose measure */
 
   /* ==== Breakpoints — the documented single source of the four layout stops ==== */

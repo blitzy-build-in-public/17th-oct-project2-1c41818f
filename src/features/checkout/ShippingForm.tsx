@@ -33,11 +33,11 @@ import { formatInteger, formatMoney } from "@/utils/format";
 /*
  * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
  * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step's
- * register: `sp-step__body` for the step's grid, `sp-address-form` for the field grid, `sp-address-picker`
- * with `__option` and `__body` for the saved-address radios and the lines beneath them,
- * `sp-summary__shipping` with `sp-summary__method` for the delivery methods, and `sp-step__actions` for
- * the row the step's two controls share, which the sheet places primary-first in markup and trailing from
- * the medium stop. The rest arrives with the shared primitives, from controls.css and layout.css.
+ * register: `sp-step__body`, `sp-address-form`, `sp-address-picker` with `__body` for the saved-address
+ * radios and the lines beneath them, and `sp-step__actions` for the row the step's two controls share,
+ * which it places primary-first in markup and trailing from the medium stop. Its companion
+ * `src/styles/commerce-cart.css` owns `sp-address-picker__option` and `sp-summary__shipping` with
+ * `sp-summary__method` for the delivery methods; the rest arrives from controls.css and layout.css.
  *
  * `ROUTES` is imported although `src/constants/routes.ts` sits outside this file's dependency set: the
  * step's return control links to the cart, §0.6.1 and §0.6.4 make that module the single home of every

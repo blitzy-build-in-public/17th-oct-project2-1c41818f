@@ -1,7 +1,7 @@
 /**
  * Path: src/features/admin/TopProductsTable.tsx
  * Purpose: The dashboard's best-performing-products table by revenue or units
- * Lines: 250
+ * Lines: 259
  */
 
 import { useMemo, type ReactElement } from "react";
@@ -37,8 +37,11 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
  *
  * Three boundaries are deliberate. The rows are rendered in the order the read returned them and no column is
  * `sortable`, because the service ranks them under the requested metric and a header that reordered them would
- * state a different claim than the ranking asked for. There is no `error` prop, because the page owns the one
- * error surface for the range it requested, and no paging, because the read is a `limit`-bounded ranking.
+ * state a different claim than the ranking asked for. That order is still stated rather than left to be
+ * inferred: the column the read ranked by declares it through `orderInForce`, so its header announces the
+ * direction to assistive technology while no header is a control — the toggle above the table is what changes
+ * the ranking, and the table itself cannot. There is no `error` prop, because the page owns the one error
+ * surface for the range it requested, and no paging, because the read is a `limit`-bounded ranking.
  *
  * The row's link is built from the product the row names rather than from a slug it does not carry:
  * `ProductPerformance` holds the product's id, name and sku and no slug, the product read behind the detail
@@ -188,7 +191,8 @@ export function TopProductsTable({
     title !== undefined && title.trim() !== "" ? title.trim() : ADMIN_COPY.TOP_PRODUCTS_HEADING;
 
   // Derived during render and never mirrored into state. The array is memoised because the table memoises the
-  // presentation it builds from the columns on their identity, so a fresh array each render would defeat that.
+  // presentation it builds from the columns on their identity, so a fresh array each render would defeat that,
+  // and it is rebuilt when the metric changes because the column the read ranked by states that fact.
   const columns = useMemo<readonly DataTableColumn<ProductPerformance>[]>(
     () => [
       {
@@ -209,6 +213,9 @@ export function TopProductsTable({
         value: (row) => row.units,
         format: "integer",
         isNumeric: true,
+        // The read ranked by the unit count under this metric, so the column states that order, and the
+        // reader changes it from the toggle above the table rather than from a header this table cannot honour.
+        orderInForce: metric === "units" ? "desc" : undefined,
       },
       {
         id: "revenue",
@@ -216,6 +223,8 @@ export function TopProductsTable({
         value: (row) => row.netRevenueMinor,
         format: "money",
         isNumeric: true,
+        // The same statement under the revenue metric, which is the read's default ranking.
+        orderInForce: metric === "revenue" ? "desc" : undefined,
       },
       {
         id: "share",
@@ -224,7 +233,7 @@ export function TopProductsTable({
         isNumeric: true,
       },
     ],
-    [],
+    [metric],
   );
 
   return (

@@ -1,7 +1,7 @@
 /**
  * Path: src/data/analyticsGraph.ts
  * Purpose: The modules a first analytics or report read fetches on use — the seeded daily sales fact table, the aggregation rules and the report composition — with the loader that resolves them and the refusal a failed fetch answers with
- * Lines: 124
+ * Lines: 125
  */
 
 // Not a path the plan maps on its own: it is a §0.5.5 split path of `src/data/repositories.ts`, the same way
@@ -13,11 +13,12 @@
 
 import { FEEDBACK_COPY } from "@/constants/content";
 import { accept } from "@/data/collectionStore";
-// The two modules whose graph a first analytics or report read fetches, imported for their types alone: an
-// `import type` is erased, so naming the members the loader caches below costs the entry chunk nothing — which
-// is the whole point of fetching them.
-import type * as AnalyticsService from "@/lib/analyticsService";
-import type * as ReportService from "@/lib/reportService";
+// The two foundations modules whose graph a first analytics or report read fetches, imported for their types
+// alone: an `import type` is erased, so naming the members the loader caches below costs the entry chunk nothing
+// — which is the whole point of fetching them, and the reason the loader below names no module of the layer
+// above this one, which the data-access layer may not reach.
+import type * as AnalyticsRules from "@/utils/analyticsRules";
+import type * as ReportRules from "@/utils/reportRules";
 import type { SalesRecord } from "@/types/analytics";
 import type { Result } from "@/types/common";
 
@@ -36,15 +37,15 @@ export interface DeferredAnalytics {
   /** The daily fact rows, one per category, channel and day of activity. */
   readonly salesRecords: readonly SalesRecord[];
   /** The KPI aggregation, with its comparison baseline. */
-  readonly computeKpis: typeof AnalyticsService.computeKpis;
+  readonly computeKpis: typeof AnalyticsRules.computeKpis;
   /** The revenue series, bucketed and optionally split. */
-  readonly computeRevenueSeries: typeof AnalyticsService.computeRevenueSeries;
+  readonly computeRevenueSeries: typeof AnalyticsRules.computeRevenueSeries;
   /** The ranked product performance over the order collection. */
-  readonly computeTopProducts: typeof AnalyticsService.computeTopProducts;
+  readonly computeTopProducts: typeof AnalyticsRules.computeTopProducts;
   /** The definition a report kind names, or `undefined` for a kind none declares. */
-  readonly findDefinition: typeof ReportService.findDefinition;
+  readonly findDefinition: typeof ReportRules.findDefinition;
   /** The one composition a whole report run — rows, summary and series — comes from. */
-  readonly runReportDefinition: typeof ReportService.runReportDefinition;
+  readonly runReportDefinition: typeof ReportRules.runReportDefinition;
 }
 
 /** The graph once a read has fetched it, or `null` before the first read that needs it. */
@@ -69,8 +70,8 @@ export function loadAnalyticsGraph(): Promise<DeferredAnalytics | null> {
   if (analyticsGraph !== null) return Promise.resolve(analyticsGraph);
   analyticsGraphLoad ??= Promise.all([
     import("@/data/salesHistory"),
-    import("@/lib/analyticsService"),
-    import("@/lib/reportService"),
+    import("@/utils/analyticsRules"),
+    import("@/utils/reportRules"),
   ]).then(
     ([salesHistory, analytics, reports]) => {
       const loaded: DeferredAnalytics = {

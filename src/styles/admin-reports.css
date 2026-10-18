@@ -53,9 +53,10 @@
 }
 
 /* ==== Dashboard grid ==== */
-/* A dashboard is a column of blocks at one rhythm, and a pair of panels that answer related questions shares
- * a row once there is width for two. A titled block composes `.sp-card` in markup, so this sheet adds only
- * the rhythm inside it. */
+/* A dashboard is a column of blocks at one rhythm. A row holds one block at every width — the two tables at
+ * the foot of the dashboard carry six and five columns, and a half-width card clips the recent orders' Status
+ * badges at 1280, 1600 and 1920 alike, so each gets the content column's whole width instead. A titled block
+ * composes `.sp-card` in markup, so this sheet adds only the rhythm inside it. */
 .sp-dashboard {
   display: grid;
   gap: var(--space-6);
@@ -139,9 +140,6 @@
   }
   .sp-admin__heading {
     flex: 1 1 auto;
-  }
-  .sp-dashboard__row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (min-width: 1024px) {
@@ -406,7 +404,9 @@
  * A wide report keeps its columns and travels sideways inside its own box, because a table squeezed to
  * legibility at 375px is not legible at all. The 960px floor is --layout-table-min-width, applied through a
  * descendant selector rather than by asking the component for a second class. The totals row is deliberately
- * not sticky: this container scrolls sideways only, so a sticky bottom edge would resolve against the page. */
+ * not sticky: this container scrolls sideways only, so a sticky bottom edge would resolve against the page.
+ * The frame is a panel of the administrator register like the KPI card and the chart frame beside it, so it
+ * carries the same elevation token they do. */
 .sp-report-table {
   display: grid;
   gap: var(--space-3);
@@ -415,10 +415,10 @@
 .sp-report-table__scroll {
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scrollbar-gutter: stable;
   background-color: var(--color-surface);
   border: var(--border-width) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
 }
 .sp-report-table__scroll > .sp-table {
   min-inline-size: var(--layout-table-min-width);
@@ -526,5 +526,5 @@
 
 /* ==== Responsive summary ====
  * At --breakpoint-sm: two KPI cards and two summary figures across, date fields side by side. At
- * --breakpoint-md: the toolbars inline with their heading and a pair of dashboard panels sharing a row. At
- * --breakpoint-lg: four KPI cards and four summary figures across, and the plot at its full height. */
+ * --breakpoint-md: the toolbars inline with their heading. At --breakpoint-lg: four KPI cards and four
+ * summary figures across, and the plot at its full height. */

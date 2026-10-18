@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/catalogSearchFlow.test.ts
  * Purpose: Search scoring, type-ahead suggestions, the debounced input path and the transport-backed reads.
- * Lines: 436
+ * Lines: 482
  */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -342,6 +342,52 @@ describe("the catalogue transport", () => {
     expect(listed.total).toBe(served.filter((one) => one.categoryId === subject.categoryId).length);
     const searched = makeFilterState({ q: "aurora", sort: "relevance", pageSize: 24 });
     expect(await search.search(searched)).toEqual(await catalog.listProducts(searched));
+  });
+
+  it("carries every optional filter member into the listing a search requests", async () => {
+    // The subject is an in-stock, well-rated, tagged product, because a case that narrows on all of them
+    // at once has to start from a product that survives its own filter. The price band is the product's
+    // own price at both ends, so a listing that dropped that member would answer a broader page.
+    const subject = served.find(
+      (one) => one.stockOnHand > 0 && one.ratingAverage >= 4 && one.tags.length > 0,
+    );
+    if (subject === undefined) {
+      throw new Error("The served catalogue holds no in-stock, rated and tagged product.");
+    }
+    const filter = makeFilterState({
+      categoryIds: [subject.categoryId],
+      brandIds: [subject.brandId],
+      minPriceMinor: subject.priceMinor,
+      maxPriceMinor: subject.priceMinor,
+      minRating: 4,
+      inStockOnly: true,
+      tags: [subject.tags[0]],
+      pageSize: config.PAGE_SIZE_OPTIONS[config.PAGE_SIZE_OPTIONS.length - 1],
+    });
+    const listed = valueOf(await catalog.listProducts(filter), "A listing carrying every filter");
+    const searched = valueOf(await search.search(filter), "A search carrying every filter");
+    const expected = catalog.paginateProducts(
+      catalog.sortProducts(
+        catalog.filterProducts(served, catalog.normaliseProductQuery(filter)),
+        filter.sort,
+      ),
+      filter,
+    );
+    // The two client entry points build the same request from one state, and the transport answers it
+    // with what the pure pipeline over the collection it serves produces: a member either entry point
+    // left out would answer a page this filter does not.
+    expect(searched).toEqual(listed);
+    expect(listed).toEqual(expected);
+    expect(listed.total).toBeGreaterThan(0);
+    expect(idsOf(listed.items)).toContain(subject.id);
+    for (const one of listed.items) {
+      expect([one.categoryId, one.brandId]).toEqual([subject.categoryId, subject.brandId]);
+      expect([one.priceMinor, one.stockOnHand > 0, one.ratingAverage >= 4]).toEqual([
+        subject.priceMinor,
+        true,
+        true,
+      ]);
+    }
   });
 
   it("relates a product to its same-category neighbours, nearest in price first", async () => {

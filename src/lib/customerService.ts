@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/customerService.ts
  * Purpose: Profile updates and the address-book rules, including at most one default of each kind
- * Lines: 493
+ * Lines: 416
  */
 
 import { FEEDBACK_COPY } from "@/constants/content";
@@ -31,7 +31,6 @@ import type {
   FieldErrors,
   Result,
 } from "@/types/common";
-import { maxBy } from "@/utils/collections";
 import { normaliseWhitespace } from "@/utils/strings";
 import {
   FORM_ERROR_KEY,
@@ -45,11 +44,12 @@ import {
  * One account's profile and address book: the reads and writes a signed-in customer's own record is
  * reached through, and the address rules that keep a book valid.
  *
- * Three boundaries hold here. The address rules live in this module and nowhere else: no component
- * sets a default flag, clears a competing one, or decides which address inherits a flag after a
- * removal, so `src/data/repositories.ts` composes the exported rules to answer the address endpoints
- * and `src/features/account/AddressBookPage.tsx` only renders their result. Authorisation belongs to
- * the seam: `src/lib/mockServer.ts` resolves the caller's session and refuses a record the session
+ * Three boundaries hold here. The default-flag rules live in `src/utils/accountRules.ts`, which both
+ * this layer and the data layer may read, and are published by this module: no component sets a
+ * default flag, clears a competing one, or decides which address inherits a flag after a removal, so
+ * `src/data/repositories.ts` composes the published rules to answer the address endpoints and
+ * `src/features/account/AddressBookPage.tsx` only renders their result. Authorisation belongs to the
+ * seam: `src/lib/mockServer.ts` resolves the caller's session and refuses a record the session
  * neither owns nor administrates, so this module decides no ownership and keeps no session state of
  * its own. Failures are values: each method resolves a `Result` carrying the seam's own `code` and
  * `field`, so a form marks the control that caused a refusal without wrapping a call in a
@@ -265,9 +265,9 @@ export async function updateAddress(
  * Removes one address from a book.
  *
  * For each kind whose default the removed address held, the flag falls to the most recently added
- * address that remains — the rule {@link promoteDefaultAfterRemoval} applies, composed by the data
- * layer that serves this endpoint, so no component decides the successor. An address that held no
- * default leaves the book's flags untouched.
+ * address that remains — the rule `promoteDefaultAfterRemoval` in `src/utils/accountRules.ts`
+ * applies, composed by the data layer that serves this endpoint, so no component decides the
+ * successor. An address that held no default leaves the book's flags untouched.
  *
  * Confirming the removal belongs to the surface: `src/components/ui/Modal.tsx`'s `ConfirmDialog` asks
  * the customer, and this call deletes once they have agreed. It answers `204`, so the payload is
@@ -290,9 +290,10 @@ export function removeAddress(
  * Makes one address the default of the kind asked for, clearing the previous default of that same
  * kind and leaving the other kind exactly as it stood.
  *
- * The two kinds are independent, which is what {@link applyDefaultAddressRule} enforces when the
- * data layer applies it: an address may be the shipping default, the billing default, both or
- * neither, and an order whose customer has no billing default is billed to its shipping address.
+ * The two kinds are independent, which is what `applyDefaultAddressRule` in
+ * `src/utils/accountRules.ts` enforces when the data layer applies it: an address may be the shipping
+ * default, the billing default, both or neither, and an order whose customer has no billing default
+ * is billed to its shipping address.
  *
  * @param id - The account that owns the book.
  * @param addressId - The address to nominate; `404` when it names none of this account's addresses.
@@ -316,82 +317,19 @@ export function setDefaultAddress(
 
 // The address rules -------------------------------------------------------------------------------
 
-/**
- * Points one address of a book at being the default of `kind`, and clears the flag of that kind on
- * every other address: the rule that keeps at most one default of each kind per customer, and the
- * only place a default flag is written.
- *
- * The two kinds are independent, so nominating a shipping default leaves `isDefaultBilling` exactly
- * as it stood on every address: one address can be the default of one kind, of both or of neither.
- * An id that names no address of the book changes nothing — nominating an address the book does not
- * hold is the data layer's `404`, not a rule that empties the default it cannot fill.
- *
- * Nothing is mutated. The result is a new array, and an address whose flag already holds the value
- * asked for is carried over as the same object, so a caller comparing references sees a change only
- * where one was made.
- *
- * @param addresses - The book as it stands; never mutated.
- * @param addressId - The address to nominate.
- * @param kind - Which default to point at that address.
- * @returns The book with its defaults applied, or a copy of it when the id names no address.
- */
-export function applyDefaultAddressRule(
-  addresses: readonly Address[],
-  addressId: AddressId,
-  kind: AddressKind,
-): Address[] {
-  if (!addresses.some((address) => address.id === addressId)) return [...addresses];
-  return addresses.map((address) => withDefaultFlag(address, kind, address.id === addressId));
-}
-
-/**
- * The book after one address is removed: the removed address is gone, and each kind that lost its
- * default falls to the most recently added address that remains.
- *
- * The book is passed as it stands, including the address being removed, because that entry is what
- * tells the rule which kinds lost their default — the shape `SalesProDataSource.removeAddress`
- * composes over the stored book. An id that names no address removes nothing and promotes nothing,
- * a book left empty promotes nothing, and an address that held no default leaves every flag as it
- * was.
- *
- * "Most recently added" is read from the identifiers rather than from array position, so the winner
- * does not depend on how a book happens to be stored or in which order it was read back: the
- * greatest identifier wins, compared by code unit. Both identifier forms this product mints order
- * usefully under that comparison — a padded sequence (`adr_0007` before `adr_0012`) orders by
- * insertion, and a slug keyed by the owner and the label (`adr_<owner>-<label>`) orders stably by
- * name — and either way the choice is deterministic, which is what makes two runs over the seeded
- * books promote the same address and a test over seeded data reproducible.
- *
- * @param addresses - The book as it stands, the address being removed included; never mutated.
- * @param removedId - The address being removed.
- * @returns A new book without it, with each default it held promoted.
- */
-export function promoteDefaultAfterRemoval(
-  addresses: readonly Address[],
-  removedId: AddressId,
-): Address[] {
-  const removed = addresses.find((address) => address.id === removedId);
-  const remaining = addresses.filter((address) => address.id !== removedId);
-  if (removed === undefined) return remaining;
-  const shipping = removed.isDefaultShipping ? promoteDefault(remaining, "shipping") : remaining;
-  return removed.isDefaultBilling ? promoteDefault(shipping, "billing") : shipping;
-}
-
-/** Points `kind`'s default at the most recently added address of `addresses` — the greatest
- * identifier — and leaves every flag as it was when the book holds no address to promote. */
-function promoteDefault(addresses: readonly Address[], kind: AddressKind): Address[] {
-  const candidate = maxBy(addresses, (address) => address.id);
-  if (candidate === undefined) return [...addresses];
-  return addresses.map((address) => withDefaultFlag(address, kind, address.id === candidate.id));
-}
+// The default-flag rules live in `src/utils/accountRules.ts`, which both this layer and the data layer
+// may read, and are published here because every caller reaches the address book through this service:
+// the data layer applies them when it answers the set-default and removal endpoints, and the address
+// book reads their result. Each rule keeps its one home there.
+export { applyDefaultAddressRule, promoteDefaultAfterRemoval } from "@/utils/accountRules";
 
 /**
  * The address that is the default of `kind`, or `undefined` when the book holds none: the lookup the
  * checkout's shipping step preselects with and the address book marks its cards by.
  *
  * The first address carrying the flag wins, so a book that somehow held two of a kind — which
- * {@link applyDefaultAddressRule} prevents — still answers with one rather than with an arbitrary
- * one of them.
+ * `applyDefaultAddressRule` in `src/utils/accountRules.ts` prevents — still answers with one rather
+ * than with an arbitrary one of them.
  *
  * @param addresses - The book to search; the order it is held in decides between duplicates only.
  * @param kind - Which default to look for.
@@ -402,21 +340,6 @@ export function defaultAddressFor(
   kind: AddressKind,
 ): Address | undefined {
   return addresses.find((address) => isDefaultOf(address, kind));
-}
-
-/** Returns `address` with its `kind` flag set to `isDefault` and its other flag untouched: the one
- * place a flag is written, and the exhaustive switch over the two kinds. */
-function withDefaultFlag(address: Address, kind: AddressKind, isDefault: boolean): Address {
-  switch (kind) {
-    case "shipping":
-      return address.isDefaultShipping === isDefault
-        ? address
-        : { ...address, isDefaultShipping: isDefault };
-    case "billing":
-      return address.isDefaultBilling === isDefault
-        ? address
-        : { ...address, isDefaultBilling: isDefault };
-  }
 }
 
 /** Whether `address` is the default of `kind`: the exhaustive switch over the two kinds. */

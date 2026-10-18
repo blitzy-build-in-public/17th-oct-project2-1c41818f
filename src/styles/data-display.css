@@ -1,6 +1,6 @@
 /* Path: src/styles/data-display.css
  * Purpose: Styles for the shared primitives of cards and badges, the data table, pagination, overlays and toasts, with the tab and accordion families split into src/styles/tabs-accordion.css; loaded from src/styles/components.css
- * Lines: 586
+ * Lines: 616
  */
 
 @import "./tabs-accordion.css";
@@ -157,12 +157,25 @@
 }
 
 /* ==== Data table ==== */
+/* The table's own scroll container, and its only one. It scrolls on the inline axis, so the block axis is
+ * declared hidden rather than left to compute to auto, and no scrollbar gutter is reserved: an axis that is
+ * not visible makes the other compute to auto, and a reserved vertical gutter beside a table that never
+ * scrolls vertically costs the table 15px of its inline size and leaves the last column short of the
+ * container's own inline-end edge. With the block axis declared and the gutter gone, one scroll to the
+ * container's true maximum brings the final column's header cell and its cells fully inside the visible box. */
 .sp-table-wrap {
   overflow-x: auto;
+  overflow-y: hidden;
   background-color: var(--color-surface);
   border: var(--border-width) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  scrollbar-gutter: stable;
+}
+/* A table frame the flush body of an already-elevated card renders does not repeat the card's elevation: the
+ * shadow belongs to the panel, and two siblings in one card — the dashboard's recent-orders and top-products
+ * tables — would otherwise differ, one framed by a second shadow and the other not. The frame the reports
+ * screen renders stands on its own surface and keeps the elevation its own sheet gives it. */
+.sp-card .sp-table-wrap {
+  box-shadow: none;
 }
 .sp-table {
   inline-size: 100%;
@@ -177,12 +190,16 @@
   text-align: start;
 }
 /* The header stays over the rows it labels, one rung below every overlay, and the frame scrolls sideways
- * rather than compressing a report's columns. */
+ * rather than compressing a report's columns. The cell is pinned to the header's own token and carries no
+ * block padding, because the UA's 1px block padding sits under a declared height: with it, a cell holding a
+ * sort control grew to 46.5px while a plain one stayed at 44, so the height was the content's and not the
+ * token's. */
 .sp-table thead th {
   position: sticky;
   inset-block-start: 0;
   z-index: var(--z-table-header);
   block-size: var(--table-header-height);
+  padding-block: 0;
   padding-inline: var(--space-4);
   background-color: var(--color-surface);
   border-block-end: var(--border-width) solid var(--color-border);
@@ -191,6 +208,12 @@
   color: var(--color-text-muted);
   text-align: start;
   white-space: nowrap;
+}
+/* `isStickyHeader={false}` on the primitive: the header travels with the rows instead of staying over them.
+ * The attribute `src/components/ui/Table.tsx` writes is the state, as the sheets' shared contract requires,
+ * and the selector is qualified by `.sp-table` so it out-specifies the sticky default above. */
+.sp-table[data-sticky-header="false"] thead th {
+  position: static;
 }
 .sp-table td,
 .sp-table th[scope="row"] {
@@ -216,6 +239,10 @@
     background-color: var(--color-surface-sunken);
   }
 }
+/* The dense row every back-office, report and paired chart table wears, against the comfortable one the
+ * shopper's own order list keeps: `density` is a declared difference between the two registers of the
+ * product rather than an inconsistency, and the two differ only in the token they take their block padding
+ * from — --space-2 here, --space-3 above — with --space-4 inline in both, so neither is a per-page literal. */
 .sp-table--compact td,
 .sp-table--compact th[scope="row"] {
   padding-block: var(--space-2);
@@ -234,7 +261,10 @@
   align-items: center;
   gap: var(--space-2);
   inline-size: 100%;
-  min-block-size: var(--table-header-height);
+  /* The control fills the cell it labels and centres its own content, so the header keeps the token's height
+   * whatever the cell holds; the height itself stays declared once, on the cell. */
+  block-size: 100%;
+  min-block-size: 100%;
   color: inherit;
   font: inherit;
 }

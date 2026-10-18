@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 387
+ * Lines: 395
  */
 
 import type { CurrencyCode } from "@/types/common";
@@ -18,9 +18,10 @@ import type { ShippingMethod } from "@/types/commerce";
 export const STORAGE_KEY_PREFIX = "salespro";
 
 /**
- * The keys of the three pieces of durable state the product keeps — the cart, the session token and
- * the last-used report range — and of nothing else. Search history stays in memory in
- * `src/features/search/SearchBar.tsx`, and the catalogue is never persisted.
+ * The keys of the four pieces of durable state the product keeps — the cart, the session token, the
+ * demonstration account store's session table and the last-used report range — and of nothing else.
+ * Search history stays in memory in `src/features/search/SearchBar.tsx`, and the catalogue is never
+ * persisted.
  *
  * Consumer: `src/utils/storage.ts`, the only module in the product that touches `localStorage`. It
  * reads every key from here so no caller invents one, and stamps each payload with
@@ -31,6 +32,13 @@ export const STORAGE_KEYS = {
   CART: `${STORAGE_KEY_PREFIX}.cart`,
   /** The persisted session token, restored and revalidated on the next page load. */
   SESSION: `${STORAGE_KEY_PREFIX}.session`,
+  /**
+   * The demonstration account store's session table: every session the store has issued, keyed by
+   * its token, so a persisted token keeps its own issue instant and expiry across a reload. That is
+   * what makes the seven-day window a fixed window rather than one that restarts whenever a token
+   * is presented (§0.12.2), and it is what lets a live session survive a reload (§0.1.1).
+   */
+  SESSIONS: `${STORAGE_KEY_PREFIX}.sessions`,
   /** The last report range an administrator chose, so the dashboard reopens where it was left. */
   REPORT_RANGE: `${STORAGE_KEY_PREFIX}.report-range`,
 } as const;
@@ -257,7 +265,7 @@ export const RELATED_PRODUCTS_LIMIT = 4;
 /**
  * How long an issued session stays valid, in milliseconds: seven days.
  *
- * Consumers: `src/lib/authService.ts` and `src/lib/mockServer.ts`, which stamp a session's
+ * Consumers: `src/utils/accountRules.ts` and `src/lib/mockServer.ts`, which stamp a session's
  * `expiresAt` from it. A session past this point fails to restore, and the visitor is signed out
  * rather than left in a half-authenticated state.
  */

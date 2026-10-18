@@ -1,12 +1,14 @@
 /**
  * Path: src/lib/apiClient.ts
  * Purpose: The single transport seam: one typed request function with latency, abort, error shaping and a test double
- * Lines: 396
+ * Lines: 471
  */
 
 import type { ApiError, ApiRequestOptions, HttpMethod, QueryParams, Result } from "@/types/common";
 
+import { isSessionRefusal } from "@/lib/apiContract";
 import {
+  API_PATHS,
   FALLBACK_FAILURE_MESSAGE,
   createAbortError,
   delay,
@@ -194,6 +196,65 @@ export function toApiError(cause: unknown, path: string): ApiError {
   return transportFailure("UNEXPECTED_ERROR");
 }
 
+// Reporting a refusal to whoever holds the session -------------------------------------------------
+
+/**
+ * The listeners a refusal is reported to, in subscription order.
+ *
+ * The subscription lives here because this is the only module that sees every request's answer: a page's
+ * own read and the session's own revalidation both pass through {@link request}, so the module holding
+ * the session learns of a refusal without a feature slice having to reach across for it. A client of a
+ * real server puts the same reporting in one HTTP interceptor, which is the shape this keeps.
+ */
+const sessionRefusalListeners = new Set<(error: ApiError) => void>();
+
+/**
+ * Subscribes to the refusals the transport meets: the listener is called with the failure of every
+ * request that resolved `session-expired` or `session-unknown`, so the module that holds the session can
+ * confirm the refusal with the store and sign the visitor out when it stands.
+ *
+ * The transport reports and decides nothing. It holds no session and no opinion about who the visitor
+ * is, so the sign-out decision stays in one place (`src/state/AuthContext.tsx`) rather than being taken
+ * wherever a request happens to be sent from.
+ *
+ * @param listener - Called with the refusal's failure, once per refused request. Nothing else travels:
+ *   the request's path, body and payload say nothing about the session.
+ * @returns The unsubscribe function, so a caller that unmounts stops listening.
+ */
+export function watchSessionRefusals(listener: (error: ApiError) => void): () => void {
+  sessionRefusalListeners.add(listener);
+  return (): void => {
+    sessionRefusalListeners.delete(listener);
+  };
+}
+
+/** The path of a target without its query string, which is the form a path comparison has to read. */
+function pathnameOf(path: string): string {
+  const separator = path.indexOf("?");
+  return separator === -1 ? path : path.slice(0, separator);
+}
+
+/**
+ * Reports a refusal to {@link watchSessionRefusals}' subscribers and returns the outcome it was given,
+ * so each settle path of {@link request} tails one call with `return`.
+ *
+ * One request is deliberately not reported: the session endpoint's own read. That read is the session's
+ * holder asking the store for its verdict, so reporting it back would be the holder answering itself,
+ * and a listener that revalidates on a refusal would answer with the very refused read it was told
+ * about, for ever.
+ *
+ * @param path - The request's target as the caller wrote it; only its pathname is compared.
+ * @param outcome - What the request resolved to, returned unchanged and reported when it is a refusal.
+ * @returns The same outcome, so a caller needs no second look at it.
+ */
+function reportSessionRefusal<TValue>(path: string, outcome: Result<TValue>): Result<TValue> {
+  if (outcome.ok) return outcome;
+  if (!isSessionRefusal(outcome.error)) return outcome;
+  if (pathnameOf(path) === API_PATHS.AUTH_SESSION) return outcome;
+  for (const listener of sessionRefusalListeners) listener(outcome.error);
+  return outcome;
+}
+
 /**
  * Shapes the failure a rejected promise is reported as: the one home of it, so a caller that awaits a
  * promise directly instead of reading a `Result` has no reason to form the error itself, and the state
@@ -239,6 +300,13 @@ export function toRejectionError(cause: unknown): ApiError {
  * `request-aborted` (`499`) like any other supersession and never rejects, because the wait's abort
  * error is shaped back into a value by the catch below.
  *
+ * A refusal the store answered with — `session-expired` or `session-unknown` — is reported to every
+ * listener subscribed through {@link watchSessionRefusals} before it is returned, so whoever holds the
+ * session learns that the credential a request carried is no longer accepted. The report is one-way and
+ * the outcome is handed back untouched, so a caller branches on the same `Result` it would have received
+ * anyway. The session endpoint's own read is the one exception, for the reason {@link reportSessionRefusal}
+ * states.
+ *
  * Two things deliberately do not live here: the domain rules of filtering, faceting, searching,
  * pricing, ordering, aggregation and reporting, each of which has one home in a service of this folder;
  * and any queue, retry or cache, because a caller that needs to supersede a request cancels it through
@@ -262,9 +330,12 @@ export async function request<TValue>(
       resolveRequestTarget(path, options.query),
       dispatcherOptions(options),
     );
-    return isResultOf<TValue>(settled) ? settled : refuse(toApiError(settled, path));
+    return reportSessionRefusal(
+      path,
+      isResultOf<TValue>(settled) ? settled : refuse(toApiError(settled, path)),
+    );
   } catch (cause: unknown) {
-    return refuse(toApiError(cause, path));
+    return reportSessionRefusal(path, refuse(toApiError(cause, path)));
   }
 }
 
