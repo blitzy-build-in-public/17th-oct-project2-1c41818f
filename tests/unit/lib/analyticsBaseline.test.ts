@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsBaseline.test.ts
  * Purpose: The previous-year comparison the dashboard offers, and one period's figures across the four surfaces a live order moves.
- * Lines: 177
+ * Lines: 182
  */
 
 // Two behaviours, and no other case covers either: the comparison baseline the dashboard offers — the
@@ -10,8 +10,10 @@
 // read the same on the KPI cards, the revenue series and both the sales and customers reports once an order
 // has been placed in the session. No case reads the ambient clock: each period is derived from the newest
 // seeded order, so the expectations hold whatever day the suite runs, and the one order these cases place is
-// placed through the seam as the application places it.
-import { beforeAll, describe, expect, it } from "vitest";
+// placed through the seam as the application places it. Nor does a case read a sibling's write: each binds its
+// own freshly seeded source and signs the administrator in for itself, so the order the second case places
+// cannot be in the collection the first case's figures are held to, in any order the runner takes them in.
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { DEMO_ACCOUNTS, DEMO_CARD_NUMBERS } from "@/constants/config";
 import { ORDERS } from "@/data/orders";
@@ -27,12 +29,13 @@ import { periodOrders } from "@/utils/statistics";
 
 import { orderBody, signInCustomer, startSeam, valueOf } from "./mockServerHarness";
 
-// The seeded source, bound once, and the two sessions these cases read and write with -----------------
+// The seeded source and the session these cases read and write with, bound per case -----------------
 
-/** The data source the seam serves, bound by {@link startSeam} before any case runs. */
+/** The data source the seam serves, bound by {@link startSeam} before each case runs. */
 let source: SalesProDataSource;
-/** The administrator's session, which every analytics and report read requires. The order the second case
- *  places carries the seeded customer's own session, handed over by {@link signInCustomer}. */
+/** The administrator's session, which every analytics and report read requires, signed in before each case
+ *  runs. The order the second case places carries the seeded customer's own session, handed over by
+ *  {@link signInCustomer}. */
 let adminToken = "";
 
 /** The period every case is stated over: the trailing thirty days of the seeded history, ending on its newest
@@ -103,7 +106,9 @@ async function readPeriod(range: DateRange, token: string): Promise<PeriodRead> 
   };
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
+  // Bound per case rather than once for the file: the seam re-seeds the collection a case reads, so what a
+  // sibling case placed is not in it.
   source = startSeam();
   adminToken = await signIn(DEMO_ACCOUNTS.ADMIN_EMAIL);
 });

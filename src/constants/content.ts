@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 480
+ * Lines: 491
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -301,6 +301,17 @@ export const CART_COPY = {
   AVAILABILITY_WARNING: "This product is out of stock. Remove the line or check back later.",
   QUANTITY_CLAMPED_NOTICE: "Your quantity was reduced to what is still in stock.",
 } as const;
+/**
+ * Announces a re-priced basket as its total alone, for the polite status node each summary panel keeps
+ * beside its figures: a price change is announced as the basket's total — the one figure a cart change
+ * moves — and never as the whole figures block, which would read every row out again. Consumers:
+ * `src/features/cart/CartSummary.tsx` and `src/features/checkout/OrderSummaryPanel.tsx`.
+ *
+ * @param formattedTotal - The basket's total, already formatted by `src/utils/format.ts`.
+ * @returns The sentence the two summary panels announce.
+ */
+export const cartTotalAnnouncement = (formattedTotal: string): string =>
+  `${CART_COPY.SUMMARY_TOTAL_LABEL} ${formattedTotal}`;
 /**
  * Names the control that removes one cart line, from the product on it.
  * Consumers: `src/features/cart/*` and `MiniCart.tsx`.

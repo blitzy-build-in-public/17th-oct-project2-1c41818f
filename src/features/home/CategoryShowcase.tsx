@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/CategoryShowcase.tsx
  * Purpose: Category tiles with product counts that link into the filtered catalogue
- * Lines: 233
+ * Lines: 257
  */
 
 import type { ReactElement } from "react";
@@ -21,9 +21,13 @@ import type { AsyncStatus, ApiError } from "@/types/common";
  * section's own rhythm, `sp-category-showcase__subtitle` for the supporting line under its heading, which is
  * the muted register the same role takes on every other surface, `sp-category-tiles` for the grid that draws
  * two columns on a phone, three from --breakpoint-sm and four from --breakpoint-md, and the tile's
- * `sp-category-tile` with its `__name` and `__count` regions. `src/styles/data-display.css` owns the frame the
- * tile borrows: `sp-card` paints the surface, the border, the radius and the elevation, and
- * `sp-card--interactive` adds the pointer cursor and the hover and focus-within emphasis.
+ * `sp-category-tile` with its `__media` box, its `__name` and its `__count`. The media box is that sheet's own
+ * 3:2 frame, and `src/styles/catalog.css` sizes the image the box holds to the whole of it: the artwork is the
+ * category tile builder's, which `src/data/categories.ts` ships as a `data:image/svg+xml` URI, so the band paints
+ * a picture without a file to fetch and the two sheets between them declare everything the picture is drawn in.
+ * `src/styles/data-display.css` owns the frame the tile borrows: `sp-card` paints the surface, the border, the
+ * radius and the elevation, and `sp-card--interactive` adds the pointer cursor and the hover and focus-within
+ * emphasis.
  *
  * That sheet states the markup it expects — the tile is a link that takes the card's frame in markup — so
  * the tile is a `Link` wearing both families rather than a `Card` with a link inside it: `Card` declares no
@@ -51,11 +55,12 @@ const SHOWCASE_HEADING_ID = "category-showcase-heading";
 const PLACEHOLDER_TILE_KEYS = ["first", "second", "third", "fourth"] as const;
 
 /**
- * One tile of the band: a category, how many products it holds and where it leads.
+ * One tile of the band: a category, how many products it holds, the artwork it wears and where it leads.
  *
  * Every field arrives already decided. The label and the count come from the category facet the parent read —
  * the count is the facet's own figure, never one recomputed or aggregated here, and a parent's total is never
- * assembled from its children — and the target is the catalogue URL the parent composed through
+ * assembled from its children — the artwork is the tile the category tree served for this category, already
+ * paired with the value by the parent, and the target is the catalogue URL the parent composed through
  * `src/utils/queryParams.ts`, which is the one place a filter URL exists.
  */
 export interface CategoryTile {
@@ -63,6 +68,12 @@ export interface CategoryTile {
   readonly label: string;
   /** How many products the category holds, as the category facet counts them. */
   readonly count: number;
+  /**
+   * The tile's artwork, as the category tree serves it: a deterministic `data:image/svg+xml` URI, and the empty
+   * string when the parent found no node for this value. An empty URI renders no media box at all, because an
+   * image whose source is empty is a request for the document itself rather than a decorative picture.
+   */
+  readonly image: string;
   /** The catalogue target the tile navigates to, built by the parent. */
   readonly to: string;
 }
@@ -168,7 +179,8 @@ function ShowcaseEmptyState({ browseAllTo, onRetry }: EmptyBandWiring): ReactEle
  * inside it, and each one a link into the catalogue scoped to that category.
  *
  * It is presentational and total. It fetches nothing, computes no count, aggregates no child category into a
- * parent and builds no URL, and it renders all four states — the placeholder band while the read is in flight,
+ * parent, builds no URL and draws no artwork of its own — the tile's picture arrives on the tile, a URI the
+ * category tree served — and it renders all four states — the placeholder band while the read is in flight,
  * the alert carrying the failure's own message with its retry, the empty state when the category facet comes
  * back with no values, and the loaded grid otherwise — deriving the branch during render, so no state is
  * mirrored and no placeholder is ever shown beside a stale grid. The heading is rendered in every one of those
@@ -210,6 +222,18 @@ export function CategoryShowcase({
         {tiles.map((tile) => (
           <li key={tile.to}>
             <Link className="sp-card sp-card--interactive sp-category-tile" to={tile.to}>
+              {/* The tile's picture, and the only image the band draws. The category tile builder in
+                  `src/data/categories.ts` generates it as an inline SVG data URI — the product's one source of
+                  category imagery — so this element renders artwork the page already holds and asks for no file;
+                  an earlier note withheld an image element here, and the generated artwork is what settles it. A
+                  tile the join left without artwork renders no box rather than an image with an empty source,
+                  and `alt=""` is deliberate: the picture is decorative, so the link's accessible name stays the
+                  category name and the count below it. */}
+              {tile.image === "" ? null : (
+                <div className="sp-category-tile__media">
+                  <img src={tile.image} alt="" />
+                </div>
+              )}
               <h3 className="sp-category-tile__name">{tile.label}</h3>
               <span className="sp-category-tile__count">{productCountLabel(tile.count)}</span>
             </Link>

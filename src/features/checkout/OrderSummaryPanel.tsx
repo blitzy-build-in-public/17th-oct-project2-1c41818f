@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderSummaryPanel.tsx
  * Purpose: The checkout's order summary panel: the basket's priced figures and the states they arrive in
- * Lines: 280
+ * Lines: 294
  */
 
 import { useId } from "react";
@@ -15,6 +15,7 @@ import {
   COMMON_ACTIONS,
   appliedPromoLabel,
   cartItemCountLabel,
+  cartTotalAnnouncement,
   freeShippingProgressLabel,
 } from "@/constants/content";
 import type { ApiError, AsyncStatus } from "@/types/common";
@@ -38,6 +39,10 @@ import { formatFreeShippingRemaining, formatMoney } from "@/utils/format";
  * `--discount` and `--total` modifiers, `sp-summary__note` and `sp-summary__progress-label` — the panel
  * register the cart's own summary draws, which is why this panel is a `Card` carrying that class rather than
  * a card of its own.
+ *
+ * `src/styles/base.css` supplies `sp-visually-hidden`, which the announcement node beside the figures is
+ * applied with: a base utility rather than one of this panel's own classes, keeping the node out of sight
+ * while it stays in the accessibility tree, the way the cart's own summary applies it.
  */
 
 /** The classes this panel puts on its own markup, written once so a rename is one edit. */
@@ -48,6 +53,7 @@ const CLASSES = {
   row: "sp-summary__row",
   note: "sp-summary__note",
   progressLabel: "sp-summary__progress-label",
+  visuallyHidden: "sp-visually-hidden",
 } as const;
 
 /**
@@ -253,27 +259,35 @@ function summaryBody(props: OrderSummaryPanelProps): ReactElement {
  * It restates and it computes nothing — no subtotal, no discount, no delivery charge, no total and no
  * free-delivery threshold. Every figure arrives already priced, and this is where each one is formatted. The
  * heading stands whatever the price request is doing, so the shopper always has the panel the figures will
- * land in, and the figures sit in a polite live region: a re-price is announced once, without moving the focus
- * the shopper is using.
+ * land in. The block carries no live semantics of its own: the announcement node beside it
+ * states the basket's total alone, through the copy module's builder, so a re-price is announced
+ * as the new total and not as the whole block, without moving the focus the shopper is using.
  *
  * @param props - The priced cart, the request's lifecycle, the step's own claim on the report and the retry.
  * @returns The summary panel.
  */
 export function OrderSummaryPanel(props: OrderSummaryPanelProps): ReactElement {
   const headingId = useId();
+  // What the panel announces, and the scope it announces it in, are the copy module's builder's to state. A
+  // pricing failure keeps the snapshot the flow last priced, so the error half is what empties the node then:
+  // there is no total to state, and the failure reaches the shopper through the alert the body renders.
+  const totalAnnouncement =
+    props.snapshot === null || props.error !== null
+      ? ""
+      : cartTotalAnnouncement(formatMoney(props.snapshot.grandTotalMinor, props.snapshot.currency));
 
   return (
     <Card aria-labelledby={headingId} as="section" className={CLASSES.summary}>
       <h2 className={CLASSES.summaryTitle} id={headingId}>
         {CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING}
       </h2>
-      <div
-        aria-atomic="true"
-        aria-busy={props.status === "loading"}
-        aria-live="polite"
-        className={CLASSES.stack}
-      >
+      <div aria-busy={props.status === "loading"} className={CLASSES.stack}>
         {summaryBody(props)}
+      </div>
+      {/* Present from the first render and only ever given new text, because a live region inserted at the
+          moment of its own update is not announced reliably. */}
+      <div className={CLASSES.visuallyHidden} role="status">
+        {totalAnnouncement}
       </div>
     </Card>
   );

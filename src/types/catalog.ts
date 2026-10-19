@@ -1,7 +1,7 @@
 /**
  * Path: src/types/catalog.ts
  * Purpose: Catalogue shapes: product, image, category, brand, review, inventory, facet and filter types
- * Lines: 407
+ * Lines: 415
  */
 
 import type {
@@ -148,8 +148,16 @@ export interface Category {
  * `productCount` belongs to every node rather than to the top level alone — a leaf reports the
  * products the catalogue holds in it and a parent the rolled-up total beneath it — so the count of a
  * child reached through `children` is readable from this type, as the payload answers it.
+ *
+ * `image` is the node's tile: a deterministic `data:image/svg+xml` URI built from the category when
+ * the categories are seeded, so the category showcase paints a category's artwork with no image file
+ * and no image request. It sits here beside `productCount` because both are values derived for
+ * display; `Category` is the stored entity and its attribute set stays as it is. The picture is
+ * decorative — the row that renders it names the category in text — so no surface derives an
+ * accessible name from it.
  */
 export interface CategoryNode extends Category {
+  readonly image: string;
   readonly productCount: number;
   readonly children: readonly CategoryNode[];
 }

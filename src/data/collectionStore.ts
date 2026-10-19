@@ -1,7 +1,7 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections and the indexes built over them once, with the writes over them re-exported from their own split path
- * Lines: 221
+ * Lines: 225
  */
 
 // This is not a path the tree maps on its own: it is the store half of `src/data/repositories.ts`, split out
@@ -15,7 +15,7 @@
 // rules, and nothing else imports this module.
 
 import { ROUTES, categoryPath, productPath } from "@/constants/routes";
-import { BRANDS, CATEGORIES, CATEGORY_PRODUCT_COUNT } from "@/data/categories";
+import { BRANDS, CATEGORIES, CATEGORY_PRODUCT_COUNT, CATEGORY_TILES } from "@/data/categories";
 import {
   mergeAddressBooks,
   mergeCredentials,
@@ -77,10 +77,13 @@ export function purchaseKey(customerId: CustomerId, productId: ProductId): strin
   return `${customerId}|${productId}`;
 }
 
-/** The tree of the seeded categories, each node carrying its children and its product count in position order.
- * The count is a member of the node type the endpoint declares — `CategoryNode` — so it is derived here and
- * needs no second type beside it: a leaf reports its own catalogue count and a parent the rolled-up total
- * beneath it, exactly as the seed derived them, because the count record is keyed by category. */
+/** The tree of the seeded categories, each node carrying its children, its product count and its tile in position
+ * order. Both derived members belong to the node type the endpoint declares — `CategoryNode` — so they are
+ * derived here and need no second type beside them: a leaf reports its own catalogue count and a parent the
+ * rolled-up total beneath it, exactly as the seed derived them, because the count record is keyed by category;
+ * and the tile is the one the imagery builder in `src/data/categories.ts` made for that category, attached
+ * rather than rebuilt so the showcase paints the same artwork in every render and asks for no image file. The
+ * tile record is built from the seeded categories, so every node has one and no fallback is needed. */
 function buildCategoryTree(): readonly CategoryNode[] {
   const byParent = groupBy(
     CATEGORIES.filter(
@@ -90,6 +93,7 @@ function buildCategoryTree(): readonly CategoryNode[] {
   );
   const node = (category: Category): CategoryNode => ({
     ...category,
+    image: CATEGORY_TILES[category.id],
     productCount: CATEGORY_PRODUCT_COUNT[category.id] ?? 0,
     children: sortByKey(byParent.get(category.id) ?? [], (child) => child.position).map(node),
   });

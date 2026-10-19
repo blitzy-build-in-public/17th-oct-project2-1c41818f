@@ -3,7 +3,7 @@
  * Purpose: The checkout's refused price request — the seam's failure reported with a retry, the basket priced
  * again and the steps beyond it still reached — and a code the seam refuses mid-flow, withdrawn with its
  * reason stated.
- * Lines: 131
+ * Lines: 132
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,7 +25,7 @@ import {
   field,
   fillShippingAddress,
 } from "../helpers/checkoutHarness";
-import { summaryFigures, summaryPanel } from "../helpers/journeyHarness";
+import { findSummaryPanel, summaryFigures, summaryPanel } from "../helpers/journeyHarness";
 import { failNext, renderApp, resetApiState, screen, within } from "../testUtils";
 
 /*
@@ -95,8 +95,9 @@ describe("a code the seam refuses mid-flow", () => {
     expect(await screen.findByText(PROMO_REJECTION_MESSAGES.expired)).toBeInTheDocument();
 
     // The code was withdrawn rather than left failing, and the basket was priced again without it: no
-    // applied-code row stands and the figures are the code-less ones.
-    const figures = await summaryFigures(summaryPanel());
+    // applied-code row stands and the figures are the code-less ones. The region the figures are read from
+    // is the route's own, so the read waits for it there rather than racing the placeholder it loads behind.
+    const figures = await summaryFigures(await findSummaryPanel());
     expect(screen.queryByText(appliedPromoLabel(closed.code))).toBeNull();
     expect(figures.discount).toBe(0);
     expect(figures.total).toBe(

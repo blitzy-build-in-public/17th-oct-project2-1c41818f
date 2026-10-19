@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/HomePage.tsx
  * Purpose: Landing route composing the hero, featured-products and category-showcase sections
- * Lines: 315
+ * Lines: 344
  */
 
 import type { ReactElement } from "react";
@@ -16,9 +16,14 @@ import { SORT_OPTIONS } from "@/constants/taxonomy";
 import { CategoryShowcase, type CategoryTile } from "@/features/home/CategoryShowcase";
 import { FeaturedProducts } from "@/features/home/FeaturedProducts";
 import { HeroSection } from "@/features/home/HeroSection";
-import { buildFacets, listProducts } from "@/lib/catalogService";
+import {
+  buildFacets,
+  flattenCategoryTree,
+  listCategories,
+  listProducts,
+} from "@/lib/catalogService";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
-import type { Facet, FacetId, FilterState, Product } from "@/types/catalog";
+import type { CategoryNode, Facet, FacetId, FilterState, Product } from "@/types/catalog";
 import type { Result } from "@/types/common";
 import { DEFAULT_FILTER_STATE, filtersToPath, toggleFacetValue } from "@/utils/queryParams";
 
@@ -152,7 +157,10 @@ const PROMO_ACTIONS: readonly PromoAction[] = [
  * Everything the landing route renders once its read answers.
  *
  * The strip's products are a page of the catalogue and the showcase's tiles are the category facet's own values,
- * so neither band has to fetch, count or format anything: they render the state they are handed.
+ * so neither band has to fetch, count or format anything: they render the state they are handed. The tiles arrive
+ * with their artwork already joined on, because the read that asked the facet for the counts asked the category
+ * tree for the imagery in the same pass, and the showcase paints a tile as it is given rather than looking a
+ * category up.
  */
 interface HomeContent {
   /** The products to feature, in the order the catalogue returned them, already cut to the strip's length. */
@@ -171,15 +179,30 @@ interface HomeContent {
  * filter panel's own control for that category produce one URL. A response carrying no category facet, and a
  * facet carrying no values, both yield no tiles, which the band renders as its empty state.
  *
+ * The artwork is joined in from the tree rather than counted by the facet — a facet value names a category by
+ * identifier and the tree carries that category's tile — so the walk over {@link flattenCategoryTree} is what
+ * pairs the two. That join cannot miss, because the facet's terms and the tree's nodes come from the one seeded
+ * category collection, and it still takes the data layer's own convention for a lookup that finds nothing: the
+ * empty string. The band reads an empty URI as no picture at all, which is what keeps an empty source — a request
+ * for the document itself — out of the markup.
+ *
  * @param facets - The facets the read returned.
+ * @param nodes - The category tree the read returned, as `src/lib/catalogService.ts` answers it.
  * @returns One tile per category value, or an empty list when the response names none.
  */
-function categoryTilesFrom(facets: readonly Facet[]): readonly CategoryTile[] {
+function categoryTilesFrom(
+  facets: readonly Facet[],
+  nodes: readonly CategoryNode[],
+): readonly CategoryTile[] {
   const categoryFacet = facets.find((facet) => facet.id === CATEGORY_FACET_ID);
   if (categoryFacet === undefined) return NO_TILES;
+  const images = new Map<string, string>(
+    flattenCategoryTree(nodes).map((node) => [node.id, node.image]),
+  );
   return categoryFacet.values.map((value) => ({
     label: value.label,
     count: value.count,
+    image: images.get(value.value) ?? "",
     to: filtersToPath(
       ROUTES.CATALOG,
       toggleFacetValue(DEFAULT_FILTER_STATE, CATEGORY_FACET_ID, value.value),
@@ -188,19 +211,20 @@ function categoryTilesFrom(facets: readonly Facet[]): readonly CategoryTile[] {
 }
 
 /**
- * The slice's single read: the featured listing first, then the facets the showcase counts.
+ * The slice's single read: the featured listing first, then the facets the showcase counts, then the category
+ * tree those tiles take their artwork from.
  *
- * The two requests run in sequence rather than together, because a view keeps one catalogue request in flight at
+ * The three requests run in sequence rather than together, because a view keeps one catalogue request in flight at
  * a time, and the first failure is returned unchanged — a seam that answered nothing is reported once, by the
- * read that met it, rather than being turned into a second request that fails the same way. The signal travels
- * into both, so a navigation away from the route cancels whichever request is outstanding.
+ * read that met it, rather than being turned into a further request that fails the same way. The signal travels
+ * into all three, so a navigation away from the route cancels whichever request is outstanding.
  *
  * The strip is cut to `RELATED_PRODUCTS_LIMIT`, the configured small-count literal nearest this use: no
  * home-specific strip length is configured, `src/constants/config.ts` owns every configured number, and the
  * endpoint accepts only the configured page sizes — so the request is paged at the state's default size and the
  * page keeps its leading products, which is a choice about what to display rather than a figure computed here.
  *
- * @param signal - The abort signal of the read, forwarded into both requests.
+ * @param signal - The abort signal of the read, forwarded into every request.
  * @returns The strip's products and the showcase's tiles, or the shaped failure; never a rejection.
  */
 async function loadHomeContent(signal: AbortSignal): Promise<Result<HomeContent>> {
@@ -212,11 +236,16 @@ async function loadHomeContent(signal: AbortSignal): Promise<Result<HomeContent>
   const facets = await buildFacets(DEFAULT_FILTER_STATE, { signal });
   if (!facets.ok) return facets;
 
+  // The facets count categories but carry no imagery, and the tile builder's artwork is served with the tree, so
+  // the fixed reference collection is read after the two requests above and the two halves are joined by id.
+  const categories = await listCategories({ signal });
+  if (!categories.ok) return categories;
+
   return {
     ok: true,
     value: {
       featuredProducts: listing.value.items.slice(0, RELATED_PRODUCTS_LIMIT),
-      categoryTiles: categoryTilesFrom(facets.value),
+      categoryTiles: categoryTilesFrom(facets.value, categories.value),
     },
   };
 }

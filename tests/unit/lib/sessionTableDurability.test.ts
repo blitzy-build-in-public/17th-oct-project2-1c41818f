@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/sessionTableDurability.test.ts
  * Purpose: The durable session table across documents: a session one document issues is honoured by the next, a sign-out reaches a document that is already open, and the copy of the table taken before that sign-out is refused
- * Lines: 229
+ * Lines: 234
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,12 +10,7 @@ import { STORAGE_KEYS } from "@/constants/config";
 import { createSalesProDataSource } from "@/data/repositories";
 import type { SessionRecord } from "@/data/sessionTable";
 import { getJson, postJson } from "@/lib/apiClient";
-import {
-  API_PATHS,
-  registerDataSource,
-  resetMockServerState,
-  type SalesProDataSource,
-} from "@/lib/mockServer";
+import { API_PATHS, registerDataSource, type SalesProDataSource } from "@/lib/mockServer";
 import type { Session } from "@/types/account";
 import type { Result } from "@/types/common";
 import { readStored, writeStored } from "@/utils/storage";
@@ -25,6 +20,7 @@ import {
   installFakeStorage,
   refusalOf,
   signInCustomer,
+  startSeam,
   valueOf,
 } from "./mockServerHarness";
 
@@ -37,6 +33,11 @@ import {
 // one bound source cannot be open twice — and binds the one that is to answer. Nothing here stands in for a
 // store, a seal or a clock: what is asserted is what the endpoints answer, what the durable table holds, and
 // what a table written back by hand earns.
+//
+// The hook below binds a fresh document for each case rather than leaving the previous case's one bound: the
+// seam's binding outlives the per-case reset, and no source is bound on this project's behalf, so a case that
+// inherited one would be answered — and would have its table written — by a document still holding the records
+// an earlier case issued.
 
 /** One day in milliseconds, the unit a session's window is moved by. */
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,7 +80,7 @@ describe("the session table across documents", () => {
   let storage: ReturnType<typeof installFakeStorage> | null = null;
 
   beforeEach(() => {
-    resetMockServerState();
+    startSeam();
   });
 
   afterEach(() => {
@@ -134,12 +135,14 @@ describe("the session table across documents", () => {
     storage = installFakeStorage();
     const issued = await signInCustomer();
 
-    // The copy a script in the page takes while the session is live: the row exactly as this browser wrote it,
-    // its seal included, with no revocation mark — the mark the sign-out is about to add is the only member that
-    // would distinguish the copy from the table it came from.
+    // The copy a script in the page takes while the session is live: the row this browser wrote for this case's
+    // own token, its seal included, with no revocation mark — the mark the sign-out is about to add is the only
+    // member that would distinguish the copy from the table it came from. The row is picked out of the copy by
+    // its token, so what the case proves is its own record and no row another case left can decide it.
     const copy = storedTable();
-    expect(storedTokens()).toEqual([issued.token]);
-    expect(copy[0]?.revokedAt).toBeUndefined();
+    const written = copy.find((record) => record.token === issued.token);
+    expect(written).toBeDefined();
+    expect(written?.revokedAt).toBeUndefined();
 
     await signOut(issued.token);
 
@@ -162,11 +165,13 @@ describe("the session table across documents", () => {
       "session-unknown",
     );
 
-    // The store recovers: the next sign-in writes a table that no longer holds the copy at all, and that session
-    // stands — the refusal is a fact about the copy, not about the table it was written over.
+    // The store recovers: the next sign-in writes a table that holds the session it just issued and no longer
+    // the copy's token, and that session stands — the refusal is a fact about the copy, not about the table it
+    // was written over.
     const later = await signInCustomer();
     expect((await valueOf(readSession(later.token))).token).toBe(later.token);
-    expect(storedTokens()).toEqual([later.token]);
+    expect(storedTokens()).toContain(later.token);
+    expect(storedTokens()).not.toContain(issued.token);
   });
 
   it("keeps a record another document wrote when this one writes the table", async () => {

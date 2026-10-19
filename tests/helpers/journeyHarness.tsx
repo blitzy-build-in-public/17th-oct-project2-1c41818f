@@ -1,7 +1,7 @@
 /**
  * Path: tests/helpers/journeyHarness.tsx
  * Purpose: The harness the journey files read the rendered application through: the copy, records and seam they assert by, the test-utils surface they drive it with, and one reader per rendered surface.
- * Lines: 371
+ * Lines: 380
  */
 
 import { act } from "@testing-library/react";
@@ -183,6 +183,15 @@ export function summaryPanel(
   name: string = CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING,
 ): HTMLElement {
   return screen.getByRole("region", { name });
+}
+
+/** The same region, awaited: a route paints its own region only after the guard that admits it has settled,
+ *  so a case asserting on the region waits for it rather than racing the placeholder the page shows while
+ *  it loads. The suite's own `asyncUtilTimeout` is the ceiling it waits within. */
+export async function findSummaryPanel(
+  name: string = CHECKOUT_COPY.CONFIRMATION_TOTALS_HEADING,
+): Promise<HTMLElement> {
+  return screen.findByRole("region", { name });
 }
 
 /** The amount a summary row states for `label`, or `0` when the region prints no such row. */

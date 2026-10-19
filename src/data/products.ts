@@ -1,7 +1,7 @@
 /**
  * Path: src/data/products.ts
  * Purpose: The seeded catalogue: hand-authored anchor products expanded deterministically, with specs and generated imagery
- * Lines: 368
+ * Lines: 388
  */
 
 import { DEFAULT_CURRENCY } from "@/constants/config";
@@ -12,7 +12,13 @@ import {
   CATEGORY_COPY,
   LEAF_CATEGORY_SLUGS,
 } from "@/data/productAnchors";
-import type { AnchorProduct, BrandSlug, LeafCategorySlug } from "@/data/productAnchors";
+import type {
+  AnchorProduct,
+  BrandSlug,
+  CategoryCopy,
+  CategoryLine,
+  LeafCategorySlug,
+} from "@/data/productAnchors";
 import {
   BRAND_NAME_BY_SLUG,
   DISCOUNT_EVERY,
@@ -224,6 +230,20 @@ function completeProduct(core: ProductCore, plan: ProductPlan, rand: SeededRando
   return { ...draft, images: imagesOf(draft, plan.index) };
 }
 /**
+ * The materials a line may be described with: the cloth the line's own wording names, or its category's
+ * whole pool when the line names no cloth. The result is always a non-empty list — every pool holds at
+ * least one material, and a named cloth is a one-entry list of its own — so the material costs exactly
+ * one draw of the seed whichever case applies, and the products after this one in the stream keep the
+ * values they had.
+ *
+ * @param line - The line the product is named after.
+ * @param copy - The copy of that line's category, whose material pool a line naming no cloth draws from.
+ * @returns The candidates the material is drawn from: the one cloth the line names, or the category's pool.
+ */
+function lineMaterials(line: CategoryLine, copy: CategoryCopy): readonly string[] {
+  return line.material === undefined ? copy.materials : [line.material];
+}
+/**
  * Composes the core of one generated product: its name from its brand, a descriptor and one of its category's
  * lines, its copy from that category's materials and uses, its price from the band it is due, and its
  * specification rows from its anchor. The line and the descriptor follow the position inside its own category
@@ -239,7 +259,7 @@ function generatedCore(plan: ProductPlan, rand: SeededRandom): ProductCore {
   const descriptor =
     PRODUCT_DESCRIPTORS[Math.floor(plan.offset / copy.lines.length) % PRODUCT_DESCRIPTORS.length];
   const brandName = BRAND_NAME_BY_SLUG.get(plan.brandSlug) ?? plan.brandSlug;
-  const material = rand.pick(copy.materials);
+  const material = rand.pick(lineMaterials(line, copy));
   const use = rand.pick(copy.uses);
   const warranty = WARRANTY_TERMS[plan.index % WARRANTY_TERMS.length];
   const sku = skuFor(plan.brandSlug, plan.index);
@@ -250,16 +270,16 @@ function generatedCore(plan: ProductPlan, rand: SeededRandom): ProductCore {
       : priceMinor;
   const categoryRows = categoryRowsFor(anchor, plan.offset);
   return {
-    name: `${brandName} ${descriptor} ${line}`,
+    name: `${brandName} ${descriptor} ${line.name}`,
     sku,
     categorySlug: plan.categorySlug,
     brandSlug: plan.brandSlug,
     priceMinor,
     listPriceMinor,
-    tags: [plan.categorySlug, ...slugify(line).split("-")],
-    summary: `${line} by ${brandName}, made from ${material} for ${use}.`,
+    tags: [plan.categorySlug, ...slugify(line.name).split("-")],
+    summary: `${line.name} by ${brandName}, made from ${material} for ${use}.`,
     description: [
-      `The ${line} by ${brandName} is made from ${material} for ${use}.`,
+      `The ${line.name} by ${brandName} is made from ${material} for ${use}.`,
       copy.detail,
       `The warranty runs for ${warranty}.`,
     ].join(" "),

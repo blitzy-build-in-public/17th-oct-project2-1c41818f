@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartSummary.tsx
  * Purpose: Totals panel with promo-code entry, discount lines and free-shipping progress
- * Lines: 434
+ * Lines: 428
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -16,6 +16,7 @@ import {
   COMMON_ACTIONS,
   FEEDBACK_COPY,
   appliedPromoLabel,
+  cartTotalAnnouncement,
   freeShippingProgressLabel,
   removePromoLabel,
 } from "@/constants/content";
@@ -237,9 +238,8 @@ function SummaryRows({ pricedCart }: { readonly pricedCart: PricedCart }): React
  * region whatever else is in hand, the amounts the price last answered with stand through the re-price a
  * shopper's own edit asked for, a placeholder rather than zeroes stands while no price exists yet, and the
  * amounts of a settled price are the loaded state — in a plain figures region that carries the busy state,
- * with the panel's own polite status node beside it. A re-price is announced once, by that node and as the
- * basket's new total on its own, so the announcement states what changed instead of reading every row out
- * again, and never moves the focus the shopper is using.
+ * with the panel's own polite status node beside it, which announces the basket's total alone through the
+ * copy module's builder.
  *
  * The amounts are a definition list: each row states its label as the term and its formatted figure as the
  * definition, so the two are one pair to a reader who cannot see the column's alignment rather than two loose
@@ -286,16 +286,13 @@ export function CartSummary({
   );
 
   const isLoading = status === "loading";
-  // The one figure a cart change moves, and the whole of what the panel announces: a new quantity, a code or
-  // a delivery method moves the total, while every row around it says the same thing again. A price in flight
-  // and a price that failed both leave the priced cart null, so nothing is stated until a total exists.
+  // What the panel announces, and the scope it announces it in, are the copy module's builder's to state.
+  // The panel stays empty while the price is in flight and after it has failed, because no total exists to
+  // state then: a failure reaches the shopper through the alert the figures region renders in its place.
   const totalAnnouncement =
     pricedCart === null
       ? ""
-      : `${CART_COPY.SUMMARY_TOTAL_LABEL} ${formatMoney(
-          pricedCart.grandTotalMinor,
-          pricedCart.currency,
-        )}`;
+      : cartTotalAnnouncement(formatMoney(pricedCart.grandTotalMinor, pricedCart.currency));
 
   const changeCode = (event: ChangeEvent<HTMLInputElement>): void => {
     setCode(event.target.value);
@@ -421,11 +418,8 @@ export function CartSummary({
       </form>
       <div aria-busy={isLoading}>{renderFigures()}</div>
       {/* Present from the first render and only ever given new text, because a live region inserted at the
-          moment of its own update is not announced reliably. It carries the one figure a cart change moves —
-          the basket's total — rather than the whole block, so a new quantity is announced as the total it
-          produced and not as the progress sentence, the subtotal, the delivery charge and the tax read out
-          again. It stays empty while the price is in flight and after it has failed, because there is no
-          total to state then and a failure announces itself through the alert's own `role="alert"`. */}
+          moment of its own update is not announced reliably. What it states is what the copy module's
+          builder decides, so its scope is declared there rather than here. */}
       <div className="sp-visually-hidden" role="status">
         {totalAnnouncement}
       </div>

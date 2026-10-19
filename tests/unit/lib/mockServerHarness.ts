@@ -3,7 +3,7 @@
  * Purpose: The seam fixtures and assertions the mock-server specs share: the data source a case binds, the
  * first-entry, payload and refusal helpers, the signed-in customer, a submittable order body and the fake
  * Web Storage a durability case installs.
- * Lines: 153
+ * Lines: 160
  */
 
 import { expect, vi } from "vitest";
@@ -143,6 +143,13 @@ export function installFakeStorage(): {
 /**
  * Binds a fresh data source to the seam with the injected latency stubbed away: the state every case in both
  * specs starts from, because the seam reaches its data through a binding rather than an import.
+ *
+ * A spec whose cases mutate the served collections calls this in `beforeEach`, not once for the file: the
+ * binding outlives the reset a run makes between cases and no source is bound on a `node`-project file's
+ * behalf, so a source bound once would answer every later case with what an earlier one left in it and write
+ * those records back into the table it writes.
+ *
+ * @returns The source bound now, so a case that reads the seeded collections directly reaches the one it bound.
  */
 export function startSeam(): SalesProDataSource {
   vi.stubEnv("VITE_API_LATENCY_MS", "0");

@@ -1,7 +1,7 @@
 /**
  * Path: src/data/productAnchors.ts
  * Purpose: The catalogue's hand-authored source: the leaf-category vocabulary, the copy pools each category is written from, and the twelve anchor products the seeded catalogue expands.
- * Lines: 397
+ * Lines: 470
  */
 
 // Split out of `src/data/products.ts` along the seam between the hand-authored catalogue source and
@@ -33,11 +33,24 @@ export const LEAF_CATEGORY_SLUGS: readonly LeafCategorySlug[] = LEAF_CATEGORIES.
   (entry) => entry.slug,
 );
 
+/**
+ * One line of a category's pool, as a generated product is named after it: the line itself, and — where the
+ * line's own wording names a cloth, as "Merino", "Waxed", "Cast Iron" and "Linen" do — the material that
+ * wording promises, which is then the only material this line's summary, description, features and `Material`
+ * row may record, so no product can contradict its own name. A line that names no cloth leaves `material`
+ * out and is described with a material drawn from its category's `materials` pool.
+ */
+export interface CategoryLine {
+  readonly name: string;
+  readonly material?: string;
+}
 /** The copy pools of one leaf category, keyed by the leaf-slug union: the lines it sells, the materials and
  *  uses its copy is written around, and one detail sentence that closes the generated description of every
  *  line listed here — so it must hold for all of them, not just the line it was written for. */
-interface CategoryCopy {
-  readonly lines: readonly string[];
+export interface CategoryCopy {
+  readonly lines: readonly CategoryLine[];
+  /** The pool a line draws its material from when the line names no cloth of its own; a line that names one
+   *  records that material instead and never reads this pool. */
   readonly materials: readonly string[];
   readonly uses: readonly string[];
   readonly detail: string;
@@ -45,80 +58,140 @@ interface CategoryCopy {
 
 export const CATEGORY_COPY: Readonly<Record<LeafCategorySlug, CategoryCopy>> = {
   audio: {
-    lines: ["Over-Ear Headphones", "Bookshelf Speakers", "Turntable", "Soundbar"],
+    lines: [
+      { name: "Over-Ear Headphones" },
+      { name: "Bookshelf Speakers" },
+      { name: "Turntable" },
+      { name: "Soundbar" },
+    ],
     materials: ["aluminium", "recycled ABS"],
     uses: ["long listening sessions", "a small front room"],
     detail:
       "It is made for long listening in a small room, where an even mid-range matters more than volume.",
   },
   cameras: {
-    lines: ["Mirrorless Camera", "Prime Lens", "Travel Tripod", "Camera Backpack"],
+    lines: [
+      { name: "Mirrorless Camera" },
+      { name: "Prime Lens" },
+      { name: "Travel Tripod" },
+      { name: "Camera Backpack", material: "ripstop nylon" },
+    ],
     materials: ["magnesium alloy", "carbon fibre"],
     uses: ["travel photography", "a full day of shooting"],
     detail:
       "It is made for travel photography, where the gear is carried all day and set up wherever the light is.",
   },
   laptops: {
-    lines: ["Ultralight Laptop", "Workstation Laptop", "Convertible Laptop", "Compact Laptop"],
+    lines: [
+      { name: "Ultralight Laptop" },
+      { name: "Workstation Laptop" },
+      { name: "Convertible Laptop" },
+      { name: "Compact Laptop" },
+    ],
     materials: ["recycled aluminium", "carbon fibre"],
     uses: ["a daily commute", "editing on the move"],
     detail:
       "It is built to be carried between places and opened and closed a few thousand times a year.",
   },
   "phones-accessories": {
-    lines: ["Charging Stand", "Protective Case", "USB-C Cable", "Phone Grip"],
+    lines: [
+      { name: "Charging Stand" },
+      { name: "Protective Case" },
+      { name: "USB-C Cable", material: "silicone" },
+      { name: "Phone Grip" },
+    ],
     materials: ["recycled ABS", "silicone"],
     uses: ["charging at a desk", "a phone that travels"],
     detail: "It is made to sit with a phone every day, at a desk or in a pocket.",
   },
   cookware: {
-    lines: ["Cast Iron Skillet", "Chef's Knife", "Saucepan", "Baking Tray"],
+    lines: [
+      { name: "Cast Iron Skillet", material: "cast iron" },
+      { name: "Chef's Knife", material: "forged stainless steel" },
+      { name: "Saucepan" },
+      { name: "Baking Tray", material: "forged stainless steel" },
+    ],
     materials: ["cast iron", "forged stainless steel"],
     uses: ["family kitchens", "a slow Sunday"],
     detail: "It is built for a kitchen that cooks most nights and washes up straight after.",
   },
   furniture: {
-    lines: ["Standing Desk", "Bookshelf", "Dining Chair", "Storage Bench"],
+    lines: [
+      { name: "Standing Desk" },
+      { name: "Bookshelf" },
+      { name: "Dining Chair" },
+      { name: "Storage Bench" },
+    ],
     materials: ["solid oak", "powder-coated steel"],
     uses: ["a home office", "small rooms"],
     detail:
       "It is built to be moved from one small room to another and to stay square when it gets there.",
   },
   fitness: {
-    lines: ["Adjustable Dumbbell", "Exercise Mat", "Resistance Band Set", "Kettlebell"],
+    lines: [
+      { name: "Adjustable Dumbbell" },
+      { name: "Exercise Mat", material: "natural rubber" },
+      { name: "Resistance Band Set", material: "natural rubber" },
+      { name: "Kettlebell" },
+    ],
     materials: ["cast iron", "natural rubber"],
     uses: ["early sessions", "a home gym"],
     detail:
       "It is built for a home gym, where it has to store small and survive being used every day.",
   },
   camping: {
-    lines: ["Backpacking Tent", "Sleeping Bag", "Camp Stove", "Camp Chair"],
+    lines: [
+      { name: "Backpacking Tent", material: "ripstop nylon" },
+      { name: "Sleeping Bag", material: "ripstop nylon" },
+      { name: "Camp Stove", material: "anodised aluminium" },
+      { name: "Camp Chair" },
+    ],
     materials: ["ripstop nylon", "anodised aluminium"],
     uses: ["weekend trips", "a wet night"],
     detail:
       "It is made for trips where everything has to pack small and be carried rather than wheeled.",
   },
   "mens-clothing": {
-    lines: ["Merino Half-Zip Sweater", "Oxford Shirt", "Waxed Jacket", "Chino Trousers"],
+    lines: [
+      { name: "Merino Half-Zip Sweater", material: "merino wool" },
+      { name: "Oxford Shirt", material: "organic cotton" },
+      { name: "Waxed Jacket", material: "organic cotton twill" },
+      { name: "Chino Trousers", material: "organic cotton twill" },
+    ],
     materials: ["merino wool", "organic cotton twill"],
     uses: ["the office", "the weekend"],
     detail:
       "The fabric is chosen to hold its shape through a winter of wear, not just the season it was bought in.",
   },
   "womens-clothing": {
-    lines: ["Merino Wrap Dress", "Wool Coat", "Linen Shirt", "Cotton Trousers"],
+    lines: [
+      { name: "Merino Wrap Dress", material: "merino wool" },
+      { name: "Wool Coat", material: "merino wool" },
+      { name: "Linen Shirt", material: "washed linen" },
+      { name: "Cotton Trousers", material: "organic cotton twill" },
+    ],
     materials: ["merino wool", "washed linen"],
     uses: ["the desk and the dinner after", "the shoulder season"],
     detail: "It is cut so the fabric falls straight rather than clinging at the waist.",
   },
   "skin-care": {
-    lines: ["Cleansing Balm", "Hydrating Serum", "Day Cream", "Body Lotion"],
+    lines: [
+      { name: "Cleansing Balm" },
+      { name: "Hydrating Serum" },
+      { name: "Day Cream" },
+      { name: "Body Lotion" },
+    ],
     materials: ["shea butter", "cold-pressed jojoba"],
     uses: ["a short morning routine", "reactive skin"],
     detail: "It is made for a routine short enough to keep, morning and evening.",
   },
   "board-games": {
-    lines: ["Strategy Board Game", "Party Game", "Card Game", "Family Board Game"],
+    lines: [
+      { name: "Strategy Board Game" },
+      { name: "Party Game" },
+      { name: "Card Game", material: "recycled board" },
+      { name: "Family Board Game" },
+    ],
     materials: ["recycled board", "beech wood"],
     uses: ["game nights", "a full table"],
     detail: "The rules are taught in five minutes and stay interesting past twenty plays.",
