@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 479
+ * Lines: 480
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -168,13 +168,14 @@ export const categoryPageHeading = (name: string): string => `Products in ${name
 export const productCountLabel = (count: number): string =>
   `${count} ${countNoun(count, "product", "products")}`;
 /**
- * Announces a result set in the results live region, or that the filters matched nothing.
- * Consumer: `src/features/catalog/ProductList.tsx`.
+ * Announces how many products the current query matched, or that the filters matched nothing. Consumers:
+ * `src/features/catalog/CatalogPage.tsx` and, through {@link resultsUpdatedAnnouncement},
+ * `src/features/search/SearchPage.tsx`.
  */
 export const productCountAnnouncement = (count: number): string =>
   count === 0
     ? "No products match the current filters."
-    : `Now showing ${productCountLabel(count)}.`;
+    : `${productCountLabel(count)} ${countNoun(count, "matches", "match")} the current filters.`;
 /**
  * States how much stock a product has left, from the count still available.
  * Consumer: `src/features/catalog/ProductList.tsx`.
