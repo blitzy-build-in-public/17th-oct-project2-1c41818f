@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/analyticsRules.ts
  * Purpose: The aggregation rules the dashboard and the reports read and the seeded repositories compose: period bucketing, KPI aggregation, comparison baselines and top-product performance
- * Lines: 510
+ * Lines: 511
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -452,8 +452,9 @@ function rankingOrder(metric: Metric) {
  * their difference as its net revenue — so a later price change cannot move what a placed order earned,
  * and a line the priced cart did not record falls back to its unit price. The orders it ranks are a
  * period's population from `periodOrders` in `src/utils/statistics.ts`, the one home for the status
- * rule, so a refunded order keeps its lines, a cancelled one is in no surface's figures, and each row
- * states its share of the period's revenue across every product sold, adding to 100 across the ranking.
+ * rule, so an order whose trade came back — a cancelled one, whose lines were voided, or a refunded one,
+ * whose money was returned — is in no surface's figures, and each row states its share of the period's
+ * revenue across every product sold, adding to 100 across the ranking.
  */
 export function computeTopProducts(input: TopProductsInput): ProductPerformance[] {
   const { orders, categoryIds, query } = input;

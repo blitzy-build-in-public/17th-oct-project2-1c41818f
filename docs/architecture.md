@@ -1,7 +1,7 @@
 <!--
 Path: docs/architecture.md
 Purpose: The layers, the import rules and the data flow any new file must fit
-Lines: 339
+Lines: 340
 -->
 
 # Architecture
@@ -38,6 +38,7 @@ The 600-line ceiling is never raised. When one concern cannot be held in one fil
 - `src/lib/reportService.ts` → `src/utils/reportRules.ts`: the report catalogue, row building, summaries and the series charted beside a report's table, re-exported by the service that also builds the CSV matrix.
 - `src/data/repositories.ts` → `src/data/analyticsGraph.ts`, `src/data/collectionStore.ts`, `src/data/clientWrites.ts`, `src/data/reviewWrites.ts` and `src/data/sessionTable.ts`: the loader a first analytics or report read resolves through, the store half over the seeded collections, this browser's own durable writes, the review half of that durable record, and the session table a session's own window is read back from. Two of those split again along their own seams: `src/data/collectionStore.ts` → `src/data/storeWrites.ts` — the refusals an operation answers with and the account, session and address writes over the collections, every name of which `collectionStore.ts` re-exports so no consumer changes — and `src/data/clientWrites.ts` → `src/data/clientWriteRecord.ts` — the record's shape and its empty value, given a home of their own so that the review half reads that shape there instead of reading it back from the module that folds it, which is what leaves the edge between the two running one way.
 - `src/data/orders.ts` → `src/data/orderAttribution.ts`: which seeded account owns each of the order history's sixty attributed orders, planned by `planAttribution`, which the order module imports one way and composes into the history it builds.
+- `src/data/products.ts` → `src/data/productAnchors.ts` and `src/data/productRules.ts`: the hand-authored half the catalogue expands — the leaf-category vocabulary, the copy pool each category is written from and the twelve anchor products — and the generation rules it is priced, stocked, rated and dated by, both imported by `products.ts`, which keeps the seeded stream, the imagery builders and the module's public surface.
 - `src/utils/format.ts` → `src/utils/formatPrimitives.ts`, which `format.ts` imports one way and re-exports the members consumers read from it, and `src/utils/exhaustive.ts`, the exhaustiveness proof the four switch sites each carried, in one home: `format.ts` does not import it — the four sites, `src/state/cartReducer.ts`, `src/state/checkoutReducer.ts`, `src/state/catalogReducer.ts` and `src/features/checkout/CheckoutPage.tsx`, each import `assertNever` from it in their own right.
 - `src/utils/dates.ts` → `src/utils/isoInstants.ts` and `src/utils/dateDisplay.ts`, whose names `dates.ts` re-exports so no consumer changes.
 - `src/utils/strings.ts` → `src/utils/hashing.ts` and `src/utils/credentials.ts`: the FNV-1a core, the domain separators and the constant-time comparison every digest, token, salt and seal rests on, and the demonstration credential digest the seed data and the sign-in path both call — salt, hash and verify — with the seal an item of durable state is written with, imported one way by `strings.ts` — and by the credential module itself for the comparison — and re-exported so no consumer changes.

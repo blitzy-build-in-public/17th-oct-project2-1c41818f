@@ -1,7 +1,7 @@
 /**
  * Path: src/data/salesHistory.ts
  * Purpose: The daily sales fact rows derived from the generated orders, keyed by category and channel
- * Lines: 379
+ * Lines: 383
  */
 
 import { ORDERS } from "@/data/orders";
@@ -11,6 +11,7 @@ import type { CategoryId, IsoDateString, MinorUnits, ProductId } from "@/types/c
 import type { Order } from "@/types/commerce";
 import { createComparator, groupBy, indexBy, sortBy, sumBy } from "@/utils/collections";
 import { parseIso, startOfDay } from "@/utils/dates";
+import { isGivenBack } from "@/utils/orderRules";
 
 // The fact table ---------------------------------------------------------------------------------
 
@@ -48,16 +49,17 @@ import { parseIso, startOfDay } from "@/utils/dates";
  * across the rows its lines fall into by the per-line shares `src/lib/pricingService.ts` already computed.
  * Three identities therefore hold over the whole table, and they are this module's acceptance test: the
  * gross revenue is the sum of every placed order line's subtotal, the discount is the sum of every placed
- * order's own discount, and the refunds are the goods of the orders that were cancelled — so gross less
- * discount less refunds is what the orders still standing brought, which is exactly the
+ * order's own discount, and the refunds are the goods of the orders that were cancelled or refunded — so
+ * gross less discount less refunds is what the orders still standing brought, which is exactly the
  * `periodOrders`/`goodsRevenueMinor` basis `src/utils/statistics.ts` owns, and no row's net revenue is ever
  * negative.
  *
  * **Additive where a reader sums it.** `orders` counts each order once, its own +1 attributed to the single
  * row of the category that carried the most of its goods, ties going to the lower category id, so a sum
- * over the rows of a period is the orders placed in that period rather than one count per category an order
- * sold into. `units` states the ordering population's units alone, because a cancelled order's lines were
- * voided. Both are what makes this table's totals equal the order collection's, the reconciliation this
+ * over the rows of a period is the orders placed in that period that still stand rather than one count per
+ * category an order sold into, an order whose trade came back having no count to attribute at all. `units`
+ * states the standing population's units alone, because a given-back order's lines were voided or its money
+ * returned. Both are what makes this table's totals equal the order collection's, the reconciliation this
  * module exists to keep.
  *
  * Dates are local calendar days, because bucketing, the comparison baselines and the report ranges are all
@@ -158,7 +160,7 @@ interface SalesContribution {
 }
 
 /** What a contribution carried of its order's goods: the lines' subtotals less the discounts those lines
- *  took, which is the most one category took of the order and, for a cancelled order, what a refund
+ *  took, which is the most one category took of the order and, for a given-back order, what a refund
  *  removes from its row. */
 function goodsOf(contribution: SalesContribution): MinorUnits {
   return contribution.grossRevenueMinor - contribution.discountMinor;
@@ -193,7 +195,7 @@ function attributionIndex(contributions: readonly SalesContribution[]): number {
 /**
  * The contributions one order makes to the fact table: its priced lines grouped by the category their
  * products sit in, each group summed to the units it sold, the goods it came to before any discount, that
- * group's share of the order's discount and, for an order that was cancelled, the goods a refund removes.
+ * group's share of the order's discount and, for a given-back order, the goods a refund removes.
  *
  * Both per-line amounts are read from the priced cart the order keeps entire rather than recomputed:
  * `lineSubtotalMinor` is the line's own price times its quantity, and `discountMinor` is the share of the
@@ -202,11 +204,13 @@ function attributionIndex(contributions: readonly SalesContribution[]): number {
  * exceeds its own line, so a category-scoped code's discount lands in the category it applied to and no
  * row's net can go negative. Nothing here multiplies, rounds or prices anything.
  *
- * **Stated over the one order population `src/utils/statistics.ts` owns.** An order that was cancelled
- * sold nothing: its lines were voided, so it states no units and carries no count, and its goods are what
- * its rows' `refundMinor` removes. A refunded order's sale stands — only its money came back afterwards —
- * so its units, its count and its goods all stay. The gross and the discount are stated over every placed
- * order whatever its status, which is what keeps this module's three identities closing over any range.
+ * **Stated over the one order population `src/utils/statistics.ts` owns.** An order whose trade came back
+ * sold nothing a period can state — a cancelled one had its lines voided, a refunded one had its money
+ * returned, and `isGivenBack` in `src/utils/orderRules.ts` is the one rule that tells the two — so it
+ * states no units, carries no count, and its goods are what its rows' `refundMinor` removes: the three
+ * figures of its rows net to nothing. Every other order's units, count and goods all stay. The gross and
+ * the discount are stated over every placed order whatever its status, which is what keeps this module's
+ * three identities closing over any range.
  *
  * @param order - The order to reduce; neither it nor its cart is written to.
  * @returns One contribution per category the order sold into, and none at all for an order holding no
@@ -215,7 +219,7 @@ function attributionIndex(contributions: readonly SalesContribution[]): number {
 function contributionsOf(order: Order): readonly SalesContribution[] {
   const channel = channelFor(order);
   const date = startOfDay(order.placedAt);
-  const cancelled = order.status === "cancelled";
+  const givenBack = isGivenBack(order.status);
   const byCategory = groupBy(order.pricedCart.lines, (line) => categoryOf(line.productId));
   const contributions: SalesContribution[] = [...byCategory].map(([categoryId, lines]) => {
     const grossRevenueMinor = sumBy(lines, (line) => line.lineSubtotalMinor);
@@ -225,13 +229,13 @@ function contributionsOf(order: Order): readonly SalesContribution[] {
       categoryId,
       channel,
       orders: 0,
-      units: cancelled ? 0 : sumBy(lines, (line) => line.quantity),
+      units: givenBack ? 0 : sumBy(lines, (line) => line.quantity),
       grossRevenueMinor,
       discountMinor,
-      refundMinor: cancelled ? grossRevenueMinor - discountMinor : 0,
+      refundMinor: givenBack ? grossRevenueMinor - discountMinor : 0,
     };
   });
-  if (cancelled || contributions.length === 0) return contributions;
+  if (givenBack || contributions.length === 0) return contributions;
   const carrying = attributionIndex(contributions);
   return contributions.map((contribution, index) =>
     index === carrying ? { ...contribution, orders: 1 } : contribution,
@@ -291,8 +295,8 @@ function toSalesRecord(row: SalesRow): SalesRecord {
  * The reduction is one grouping pass over the orders and one accumulation loop, and nothing else reads the
  * clock, a random stream or a stored value of its own, so two calls over equal collections return deeply
  * equal tables — the same rows in the same order — and the rows reconcile with the orders they came from: a
- * period's `orders` is the orders placed in it that were not cancelled, its `units` the units those orders
- * sold, and its revenue the goods they brought net of the discounts applied to them.
+ * period's `orders` is the orders placed in it that still stand, its `units` the units those orders sold,
+ * and its net revenue the goods they brought net of the discounts applied to them.
  *
  * @param orders - The collection to reduce; neither it nor any order in it is written to. The seeded history
  * when a caller names nothing, so the table {@link seededSalesRecords} answers with and every test stated

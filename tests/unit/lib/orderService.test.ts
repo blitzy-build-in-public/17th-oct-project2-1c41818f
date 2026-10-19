@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/orderService.test.ts
  * Purpose: Order construction from a snapshot, numbering, status transitions and snapshot immutability
- * Lines: 576
+ * Lines: 585
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +24,7 @@ import {
   toOrderLines,
 } from "@/lib/orderService";
 import { isValidIso } from "@/utils/dates";
+import { isGivenBack } from "@/utils/orderRules";
 import { placementTokenFor } from "@/utils/orderPlacements";
 import { orderId, productId } from "@/utils/strings";
 import {
@@ -267,6 +268,10 @@ const EVENT_TARGETS: Readonly<Record<OrderStatusEvent, OrderStatus>> = {
   refund: "refunded",
 };
 
+/** The statuses whose trade came back, stated here rather than read from the module under test: a cancelled
+ *  order's lines were voided, a refunded order's money was returned, and every other status is trade. */
+const GIVEN_BACK: readonly OrderStatus[] = ["cancelled", "refunded"];
+
 describe("the status machine", () => {
   /** The moves an order may make, and the moves it may not. */
   const ALLOWED: [OrderStatus, OrderStatus][] = [
@@ -329,6 +334,10 @@ describe("the status machine", () => {
       EVENTS.some((event) => nextStatus(status, event) !== status),
     );
     expect(movable).toEqual(STATUSES.filter((status) => status !== "refunded"));
+  });
+
+  it.each(STATUSES)("reports %s as given back only when its trade came back", (status) => {
+    expect(isGivenBack(status)).toBe(GIVEN_BACK.includes(status));
   });
 });
 

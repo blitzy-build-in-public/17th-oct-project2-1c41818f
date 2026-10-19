@@ -23,7 +23,7 @@ import {
   selectDiscountTotalMinor,
   selectFreeShippingProgress,
 } from "@/features/cart/cartSelectors";
-import { normalisePromoCode, promoRejectionMessage, validatePromoCode } from "@/lib/pricingService";
+import { normalisePromoCode, promoRefusalMessage, validatePromoCode } from "@/lib/pricingService";
 import { useCart, useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import type { ApiError, AsyncStatus, FieldErrors } from "@/types/common";
@@ -340,9 +340,9 @@ export function CartSummary({
     // filed against the field rather than stated in the band: the field's own message is what marks the
     // control invalid and describes it, which is how the reason reaches the input and the sheet's invalid
     // treatment instead of standing over it unattached.
-    const reason = promoRejectionMessage(result.error);
-    if (reason !== undefined) {
-      setFieldErrors({ [PROMO_CODE_FIELD]: reason });
+    const refusal = promoRefusalMessage(result.error);
+    if (refusal !== undefined) {
+      setFieldErrors({ [PROMO_CODE_FIELD]: refusal });
       return;
     }
     // A failure that is not one of the reasons a code is refused names the control it belongs to, so it is

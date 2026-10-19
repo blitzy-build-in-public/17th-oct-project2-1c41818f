@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/pricingService.test.ts
  * Purpose: Line and order totals, promo kinds and limits, shipping thresholds and tax rounding
- * Lines: 466
+ * Lines: 492
  */
 
 import { describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import {
   FREE_SHIPPING_THRESHOLD_MINOR,
   SHIPPING_METHODS,
 } from "@/constants/config";
-import { PROMO_REJECTION_MESSAGES } from "@/constants/content";
+import { FEEDBACK_COPY, PROMO_REJECTION_MESSAGES } from "@/constants/content";
 import { PROMO_KIND_LABELS } from "@/constants/taxonomy";
 // The module under test is imported as a namespace, as formatting.test.ts imports src/utils/format.ts:
 // this file exercises eleven of its exports, and eleven specifiers named singly cost thirteen lines.
@@ -446,21 +446,47 @@ describe("the wording a refusal carries", () => {
   /** The eight reasons a code can be refused, read from the copy module that holds a sentence for each. */
   const REASONS = Object.keys(PROMO_REJECTION_MESSAGES) as PromoRejectionReason[];
 
+  /** The control the seam files a code it will not apply against, as `src/lib/pricingService.ts` states. */
+  const REFUSAL_FIELD = "promoCode";
+
   it("holds a sentence for each of the eight reasons", () => {
     expect(REASONS).toHaveLength(8);
   });
 
-  it.each(REASONS)("reads %s out of a failed request and names the sentence for it", (reason) => {
-    const error = makeApiError({ status: 409, code: reason });
-    expect(pricing.promoRejectionReason(error)).toBe(reason);
-    expect(pricing.promoRejectionMessage(error)).toBe(PROMO_REJECTION_MESSAGES[reason]);
+  it.each(REASONS)("names the sentence for %s out of a refusal against the code", (reason) => {
+    const error = makeApiError({ status: 409, code: reason, field: REFUSAL_FIELD });
+    expect(pricing.promoRefusalMessage(error)).toBe(PROMO_REJECTION_MESSAGES[reason]);
   });
 
-  it("reports no promo reason for a failure that is not one of the eight", () => {
-    for (const code of ["insufficient-stock", "validation-failed", "unexpected-error"]) {
-      const error = makeApiError({ code });
-      expect(pricing.promoRejectionReason(error)).toBeUndefined();
-      expect(pricing.promoRejectionMessage(error)).toBeUndefined();
+  it("states nothing for a failure that is not about the code the basket holds", () => {
+    // A failure naming no control at all and one naming a control that is not the code's: neither is the
+    // basket's own code being refused, so the surface has no sentence of its own to state about it.
+    for (const error of [
+      makeApiError({ code: "insufficient-stock" }),
+      makeApiError({ code: "validation-failed", field: "lines" }),
+      makeApiError({ code: "unexpected-error" }),
+    ]) {
+      expect(pricing.promoRefusalMessage(error)).toBeUndefined();
     }
   });
+
+  it.each([
+    [
+      "the message the failure carries",
+      "Use between 4 and 16 characters for the code.",
+      "Use between 4 and 16 characters for the code.",
+    ],
+    ["the shared failure sentence when it carries none", "", FEEDBACK_COPY.ERROR_STATE_BODY],
+  ])(
+    "states %s for a refusal against the code that is not one of the eight",
+    (_outcome, carried, expected) => {
+      const error = makeApiError({
+        status: 422,
+        code: "validation-failed",
+        message: carried,
+        field: REFUSAL_FIELD,
+      });
+      expect(pricing.promoRefusalMessage(error)).toBe(expected);
+    },
+  );
 });

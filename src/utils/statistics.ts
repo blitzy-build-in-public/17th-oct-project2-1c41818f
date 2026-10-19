@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/statistics.ts
  * Purpose: Percentage change, growth, averages, moving averages and percentiles for the dashboard and reports
- * Lines: 532
+ * Lines: 536
  */
 
 import type { BaselineKind, ChartPoint } from "@/types/analytics";
@@ -10,6 +10,7 @@ import type { Order } from "@/types/commerce";
 import { averageOf, clampNumber, sum } from "@/utils/collections";
 import { isWithinPreparedRange, prepareRange } from "@/utils/dates";
 import { roundMinorUnits, type ChangeDirection } from "@/utils/format";
+import { isGivenBack } from "@/utils/orderRules";
 
 /**
  * The statistical layer of the product: the arithmetic behind the dashboard's KPI cards, its revenue
@@ -66,28 +67,31 @@ function sortedFiniteValues(values: readonly number[]): number[] {
 // A period's orders and its goods revenue -----------------------------------------------------------
 
 /**
- * The orders a period's figures are stated over: the orders placed inside `range` whose status is not
- * `cancelled`. This is the one home for that population, and every surface that states a period of
- * trade reads it — `computeTopProducts` in `src/lib/analyticsService.ts`, and
- * `buildProductPerformanceRows` and `buildCustomerRows` in `src/lib/reportService.ts` — so a range
- * counts one set of orders and therefore reports one set of units, one revenue and one share on the
- * dashboard and in the reports, instead of each surface deciding for itself which orders it reads.
+ * The orders a period's figures are stated over: the orders placed inside `range` whose trade did not come
+ * back, judged by `isGivenBack` in `src/utils/orderRules.ts`. This is the one home for that population, and
+ * every surface that states a period of trade reads it — `computeTopProducts` in
+ * `src/lib/analyticsService.ts`, and `buildProductPerformanceRows` and `buildCustomerRows` in
+ * `src/lib/reportService.ts` — so a range counts one set of orders and therefore reports one set of units,
+ * one revenue and one share on the dashboard and in the reports, instead of each surface deciding for itself
+ * which orders it reads.
  *
- * A cancelled order is the only status left out, because it is the one that sold nothing: its lines
- * were voided and no surface should state them as trade. A refunded order keeps every line it sold,
- * because the sale stands and only the money came back afterwards. Both ends of `range` are inclusive,
- * through `prepareRange` and `isWithinPreparedRange` in `src/utils/dates.ts`, which resolve the
- * period's two ends once for the whole scan and cut the same boundary the period's buckets are cut on. The orders come back in input order, as a new array: the caller's collection is read and
- * never mutated.
+ * A cancelled order's lines were voided and a refunded order's money was returned, so neither sold anything
+ * a period can state, and both are left out. The daily fact table in `src/data/salesHistory.ts` removes those
+ * same orders' net through its refund column and states none of their units or orders, so the table's net
+ * revenue over a range is exactly this population's `goodsRevenueMinor` — one period, one figure, whichever
+ * of them a surface reads. Both ends of `range` are inclusive, through `prepareRange` and
+ * `isWithinPreparedRange` in `src/utils/dates.ts`, which resolve the period's two ends once for the whole
+ * scan and cut the same boundary the period's buckets are cut on. The orders come back in input order, as a
+ * new array: the caller's collection is read and never mutated.
  *
  * @param orders - Every order to select the period's population from; never mutated.
  * @param range - The period the population is stated over, both ends inclusive.
- * @returns The orders placed in the period that were not cancelled, in input order.
+ * @returns The orders placed in the period that still stand, in input order.
  */
 export function periodOrders(orders: readonly Order[], range: DateRange): Order[] {
   const bounds = prepareRange(range);
   return orders.filter(
-    (order) => order.status !== "cancelled" && isWithinPreparedRange(order.placedAt, bounds),
+    (order) => !isGivenBack(order.status) && isWithinPreparedRange(order.placedAt, bounds),
   );
 }
 

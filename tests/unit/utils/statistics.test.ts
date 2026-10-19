@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/statistics.test.ts
  * Purpose: Unit coverage of src/utils/statistics.ts: percentage change, growth, averages, moving averages and percentiles for the dashboard and reports
- * Lines: 583
+ * Lines: 586
  */
 
 import { describe, expect, it } from "vitest";
@@ -30,8 +30,10 @@ const ON_LAST_DAY = "2025-10-15T23:59:59";
 const BEFORE_RANGE = "2025-09-15T23:59:59";
 const AFTER_RANGE = "2025-10-16T00:00:00";
 const MID_RANGE = "2025-10-01T09:00:00";
-/** The one day the two mid-period orders share, and a range whose first end names no day at all. */
+/** The one day the two mid-period orders share, the period's own last day, which one standing order holds
+ *  alone, and a range whose first end names no day at all. */
 const MID_RANGE_DAY: DateRange = { from: "2025-10-01", to: "2025-10-01" };
+const LAST_DAY_ONLY: DateRange = { from: "2025-10-15", to: "2025-10-15" };
 const UNREADABLE_RANGE: DateRange = { from: "15/09/2025", to: "2025-10-15" };
 
 /** One of the period's orders: its order number, the instant it was placed and its status; the
@@ -40,9 +42,9 @@ function periodOrder(number: string, at: string, status: OrderStatus): Order {
   return fixtures.makeOrder({ orderNumber: number, placedAt: at, status });
 }
 /** Six orders over one period: one on each boundary day, one before it, one after it, one cancelled
- *  inside it and one refunded inside it. The two mid-period orders share a day and an instant, so the
- *  single-day case below separates them by their status alone; the expected list is deliberately not
- *  their date order. */
+ *  inside it and one refunded inside it. Neither a cancelled order nor a refunded one is trade, so both are
+ *  left out, and the two mid-period orders share a day and an instant so the single-day case below reads
+ *  them by their status alone; the expected list is deliberately not their date order. */
 const ORDERS: readonly Order[] = [
   periodOrder("SP-100001", ON_LAST_DAY, "confirmed"),
   periodOrder("SP-100002", BEFORE_RANGE, "confirmed"),
@@ -51,7 +53,7 @@ const ORDERS: readonly Order[] = [
   periodOrder("SP-100005", ON_FIRST_DAY, "confirmed"),
   periodOrder("SP-100006", AFTER_RANGE, "confirmed"),
 ];
-const EXPECTED_PERIOD_ORDER_NUMBERS: readonly string[] = ["SP-100001", "SP-100004", "SP-100005"];
+const EXPECTED_PERIOD_ORDER_NUMBERS: readonly string[] = ["SP-100001", "SP-100005"];
 
 /** Two of one seed product at 1,999 minor units each: a basket whose subtotal is its own lines' total,
  *  and the same basket carrying the fixed 998-minor order-level code an applied promo leaves behind. */
@@ -130,16 +132,17 @@ const NO_BASELINE_COMPARISON: statistics.KpiComparison = {
 // The period's orders and its goods revenue -------------------------------------------------------
 
 describe("periodOrders: the orders a period states its figures over", () => {
-  it("keeps both ends of the range inclusive, drops a cancelled order and what sits outside it", () => {
+  it("keeps both ends of the range inclusive, drops both orders whose trade came back and what sits outside it", () => {
     expect(statistics.periodOrders(ORDERS, RANGE).map((order) => order.orderNumber)).toEqual(
       EXPECTED_PERIOD_ORDER_NUMBERS,
     );
   });
 
-  it("reads a single-day range as that day alone, and one naming no day as nothing", () => {
+  it("reads a single-day range as that day alone: the standing order on it kept, the day whose two orders came back empty", () => {
     expect(
-      statistics.periodOrders(ORDERS, MID_RANGE_DAY).map((order) => order.orderNumber),
-    ).toEqual(["SP-100004"]);
+      statistics.periodOrders(ORDERS, LAST_DAY_ONLY).map((order) => order.orderNumber),
+    ).toEqual(["SP-100001"]);
+    expect(statistics.periodOrders(ORDERS, MID_RANGE_DAY)).toEqual([]);
     expect(statistics.periodOrders(ORDERS, UNREADABLE_RANGE)).toEqual([]);
   });
 

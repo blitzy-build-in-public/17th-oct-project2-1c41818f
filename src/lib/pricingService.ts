@@ -1,10 +1,10 @@
 /**
  * Path: src/lib/pricingService.ts
  * Purpose: Line and order totals, promo application, shipping and tax for the cart and checkout
- * Lines: 168
+ * Lines: 177
  */
 
-import { PROMO_REJECTION_MESSAGES, VALIDATION_MESSAGES } from "@/constants/content";
+import { FEEDBACK_COPY, PROMO_REJECTION_MESSAGES, VALIDATION_MESSAGES } from "@/constants/content";
 import { API_ERROR_CODES, API_PATHS, failure, getJson, postJson } from "@/lib/apiClient";
 import type { ApiError, Result } from "@/types/common";
 import type {
@@ -67,20 +67,29 @@ function isPromoRejectionReason(code: string): code is PromoRejectionReason {
 // Reading a promo failure -------------------------------------------------------------------------
 
 /**
- * The reason a failed promo request names, read from the failure's `code`, or `undefined` when the failure
- * is not one of the eight — an unbound data source, a malformed body or a superseded request.
+ * The sentence a surface states when a price or validation failure refused the code the basket holds, or
+ * `undefined` when the failure is not about that code at all and the surface must leave it alone.
  *
- * The seam answers a code it will not apply with the reason as the failure's `code` and the field
- * `"promoCode"`, so this names the cause rather than collapsing eight reasons into one message.
+ * The seam files a code it will not apply against the control the code belongs to — `"promoCode"` — with
+ * the `PromoRejectionReason` as the failure's `code`, so the field is what identifies a refusal and the
+ * code names its cause: the sentence is then the reason's own wording from `src/constants/content.ts`. The
+ * shape rule refuses a spelling that is not a code at all against that same field, and carries the
+ * sentence to read in its own message, which is why one reader serves both.
+ *
+ * What a surface does with the sentence is the same everywhere, because the code the basket holds is one
+ * the seam will not honour: the code is withdrawn and this sentence states why the figures changed, which
+ * is what leaves the retry beside a price failure one that can succeed. `undefined` means the failure is
+ * about something else — an unbound data source, a line the catalogue can no longer cover, a superseded
+ * request — and nothing about the code should change.
+ *
+ * @param error - The failure a promo check or a price request answered with.
+ * @returns The sentence to state, or `undefined` when the failure is not about the code the basket holds.
  */
-export function promoRejectionReason(error: ApiError): PromoRejectionReason | undefined {
-  return isPromoRejectionReason(error.code) ? error.code : undefined;
-}
-
-/** The sentence a shopper reads for a promo failure, from `src/constants/content.ts`, or `undefined` when
- * the failure is not one of the eight and the failure's own message is what should be shown instead. */
-export function promoRejectionMessage(error: ApiError): string | undefined {
-  return isPromoRejectionReason(error.code) ? PROMO_REJECTION_MESSAGES[error.code] : undefined;
+export function promoRefusalMessage(error: ApiError): string | undefined {
+  if (error.field !== PROMO_CODE_FIELD) return undefined;
+  if (isPromoRejectionReason(error.code)) return PROMO_REJECTION_MESSAGES[error.code];
+  const carried = error.message.trim();
+  return carried.length > 0 ? carried : FEEDBACK_COPY.ERROR_STATE_BODY;
 }
 
 // The API seam ------------------------------------------------------------------------------------
@@ -97,7 +106,7 @@ export interface PricingRequestOptions {
  *
  * A failure is a value, never an exception. A code that no longer applies answers `409` with the
  * `PromoRejectionReason` as its `code` and `"promoCode"` as its `field` — read with
- * {@link promoRejectionReason} — and a line that can no longer be priced answers `422` naming its field.
+ * {@link promoRefusalMessage} — and a line that can no longer be priced answers `422` naming its field.
  *
  * @param lines - The basket to price, as the cart holds it.
  * @param promoCode - The code the cart carries, or `undefined` for none; normalised before it is sent.
@@ -127,7 +136,7 @@ export function priceCart(
  * or digits is refused without a request and answered exactly as the seam would have answered it — the shape
  * rule's message, `422`, against the `promoCode` field. What a shape cannot decide is whether a code is still
  * open, above the basket's floor, within its uses or aimed at goods this basket holds: that is the data
- * layer's answer, and it arrives as a `409` whose `code` is the reason (see {@link promoRejectionReason}).
+ * layer's answer, and it arrives as a `409` whose `code` is the reason (see {@link promoRefusalMessage}).
  *
  * @param code - The code as the shopper typed it; normalised before it is checked or sent.
  * @param lines - The basket the code would discount, which decides its floor and its eligible goods.

@@ -113,7 +113,7 @@ describe("the pricing surface the cart and the checkout call", () => {
     const error = failureOf(await pricing.validatePromoCode("ZZZZ9", basket));
     expect(error.status).toBe(409);
     expect(error.field).toBe("promoCode");
-    expect(pricing.promoRejectionReason(error)).toBe("unknown");
+    expect(pricing.promoRefusalMessage(error)).toBe(PROMO_REJECTION_MESSAGES.unknown);
     expect(error.message).toBe(PROMO_REJECTION_MESSAGES.unknown);
   });
 
@@ -185,7 +185,7 @@ describe("the pricing surface the cart and the checkout call", () => {
     const error = failureOf(await pricing.priceCart(basket, "SUMMER25", null));
     expect(error.status).toBe(409);
     expect(error.field).toBe("promoCode");
-    expect(pricing.promoRejectionReason(error)).toBe("expired");
+    expect(pricing.promoRefusalMessage(error)).toBe(PROMO_REJECTION_MESSAGES.expired);
   });
 
   it("prices a line at the catalogue's price and keeps a submitted total out of the order it places", async () => {
@@ -221,7 +221,7 @@ describe("the pricing surface the cart and the checkout call", () => {
     expect(error.status).toBe(500);
     expect(error.code).toBe("unexpected-error");
     expect(error.message).toBe(message);
-    expect(pricing.promoRejectionReason(error)).toBeUndefined();
+    expect(pricing.promoRefusalMessage(error)).toBeUndefined();
   });
 
   it("answers 503 before any data source has been bound", async () => {

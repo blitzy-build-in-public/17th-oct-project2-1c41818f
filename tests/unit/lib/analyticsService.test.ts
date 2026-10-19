@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsService.test.ts
  * Purpose: Bucketing boundaries, KPI aggregation and comparison baselines
- * Lines: 535
+ * Lines: 537
  */
 
 // The dashboard's rules where they live: the pure aggregations directly, the four administrator-only
@@ -480,10 +480,12 @@ const TRAILING_YEAR: DateRange = { ...MONTH, from: dates.addDays(MONTH.to, -364)
 
 /** The six figures the fact rows of each period total, in the order the sales report states them: the
  *  pinned draw's own, re-seeded under FIXED_NOW below because the seed anchors its window to the day it
- *  loads. They stay literal: the collection, the three reports and the KPI summary must agree with them. */
+ *  loads. Each pair was derived from the seeded order collection alone — orders and units over the orders
+ *  that still stand, gross and discounts over every placed order, and refunds over the orders whose trade
+ *  came back — and the collection, the three reports and the KPI summary must agree with them. */
 const SEEDED_TOTALS: readonly (readonly [DateRange, readonly number[]])[] = [
-  [MONTH, [101, 679, 13_433_470, 267_241, 2_527_281, 10_638_948]],
-  [TRAILING_YEAR, [983, 7_204, 134_174_504, 2_340_007, 18_873_672, 112_960_825]],
+  [MONTH, [89, 588, 13_433_470, 267_241, 4_147_013, 9_019_216]],
+  [TRAILING_YEAR, [819, 6_015, 134_174_504, 2_340_007, 36_899_065, 94_935_432]],
 ];
 
 /** The units one seeded order's lines sold, which the fact rows count and the product report sums. */

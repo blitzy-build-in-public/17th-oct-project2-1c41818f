@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/orderRules.ts
  * Purpose: The order rules the checkout and the account read and the seeded repositories compose: order numbering, snapshot construction and the status transitions
- * Lines: 254
+ * Lines: 275
  */
 
 import type { IsoDateTimeString } from "@/types/common";
@@ -96,6 +96,27 @@ function toOrderLine(line: PricedCartLine): OrderLine {
 }
 
 // The status vocabulary and its transitions ------------------------------------------------------
+
+/** The statuses whose trade came back, so no figure is left to state: a `cancelled` order's lines were
+ *  voided before they went anywhere, and a `refunded` order's money was returned after they did. */
+const GIVEN_BACK_STATUSES: readonly OrderStatus[] = ["cancelled", "refunded"];
+
+/**
+ * Reports whether an order's trade came back, which is what decides whether a period's figures state it.
+ *
+ * A cancelled order's lines were voided and a refunded order's money was returned, so neither is trade a
+ * period can count. The daily fact table removes the whole net of an order this reports `true` for, states
+ * none of its units and attributes none of its count to a row, and the one order population every dashboard
+ * and report figure is stated over — `periodOrders` in `src/utils/statistics.ts` — keeps the orders it
+ * reports `false` for. This is the single home of that rule, which is why the reduction's refund column and
+ * the population the reports count cannot come to different conclusions about which orders still stand.
+ *
+ * @param status - The status an order holds.
+ * @returns Whether the order's goods were voided or its money returned, so none of it is trade.
+ */
+export function isGivenBack(status: OrderStatus): boolean {
+  return GIVEN_BACK_STATUSES.includes(status);
+}
 
 /** Every event that moves an order on, one home each, so nothing in the product spells one by hand. A
  * `const` object rather than an `enum`, which `erasableSyntaxOnly` forbids; {@link OrderStatusEvent} is

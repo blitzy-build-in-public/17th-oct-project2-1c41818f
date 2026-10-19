@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 377
+ * Lines: 374
  */
 
 import { useEffect } from "react";
@@ -27,7 +27,7 @@ import {
   selectItemCount,
   selectPricedLinesById,
 } from "@/features/cart/cartSelectors";
-import { priceCart, promoRejectionMessage } from "@/lib/pricingService";
+import { priceCart, promoRefusalMessage } from "@/lib/pricingService";
 import { useCart, useCartDispatch } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import { useFocusHandoff } from "@/components/ui/focusHandoff";
@@ -91,10 +91,6 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * cart-scoped label for this control exists. A key naming what is cleared would let the control read the
  * way its own register would.
  */
-
-/** The control the pricing seam names when the code this cart carries is what it refused: the field a
- *  promo rejection is filed against, as `src/lib/pricingService.ts` and the seam both spell it. */
-const PROMO_CODE_FIELD = "promoCode";
 
 /** The checkout control's classes: the button family's base name, its primary variant and the block
  *  modifier that fills the column it stands in. */
@@ -203,9 +199,10 @@ export function CartPage(): ReactElement {
    * and the guard cannot fire twice for one code, because the code it clears is the one this effect reads.
    */
   useEffect(() => {
-    if (error === null || error.field !== PROMO_CODE_FIELD || promoCode === null) return;
+    const refusal = error === null ? undefined : promoRefusalMessage(error);
+    if (refusal === undefined || promoCode === null) return;
     cart.applyPromoCode(null);
-    toasts.error(promoRejectionMessage(error) ?? error.message);
+    toasts.error(refusal);
   }, [cart, error, promoCode, toasts]);
 
   /**

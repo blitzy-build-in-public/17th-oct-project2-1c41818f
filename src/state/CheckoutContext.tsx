@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CheckoutContext.tsx
  * Purpose: The checkout step machine, its entered values, submission state and error map
- * Lines: 590
+ * Lines: 598
  */
 
 import {
@@ -20,7 +20,7 @@ import { flushSync } from "react-dom";
 import { toRejectionError } from "@/lib/apiClient";
 import { buildOrderInput, createIdempotencyKey, createOrder } from "@/lib/orderService";
 import type { OrderContact } from "@/lib/orderService";
-import { priceCart } from "@/lib/pricingService";
+import { priceCart, promoRefusalMessage } from "@/lib/pricingService";
 import { useAuth } from "@/state/AuthContext";
 import { useCart, useCartDispatch } from "@/state/CartContext";
 import {
@@ -36,6 +36,7 @@ import type {
   CheckoutValues,
   CheckoutValuesPatch,
 } from "@/state/checkoutReducer";
+import { useToast } from "@/state/ToastContext";
 import type { Address, AddressInput } from "@/types/account";
 import type { Order, PaymentInput, PricedCart } from "@/types/commerce";
 import type { AddressId, ApiError, AsyncStatus, FieldErrors } from "@/types/common";
@@ -311,6 +312,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
   const { email: sessionEmail, session } = useAuth();
   const { lines, promoCode } = useCart();
   const cartActions = useCartDispatch();
+  const { error: announce } = useToast(); // Its stable helper only: the queue changes on every toast.
 
   const [state, dispatch] = useReducer(checkoutReducer, sessionEmail, initialCheckoutState);
 
@@ -348,9 +350,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
    * describe a request rather than the flow.
    *
    * An empty basket is not priced — the snapshot is cleared instead, so a checkout with nothing in it
-   * renders its empty state and has nothing to submit. The state changes land from a microtask rather
-   * than in the effect's synchronous phase, so the loading render is its own instead of one cascaded out
-   * of the effect that triggered the request.
+   * renders its empty state. State changes land from a microtask, so the loading render is its own.
+   *
+   * A code the seam refuses leaves the cart here, so the retry the surfaces offer is one that can
+   * succeed; the reason is stated on the transient-outcome surface that outlives the alert.
    */
   useEffect(() => {
     const controller = new AbortController();
@@ -373,6 +376,11 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
           // A superseded request reports nothing: the pass that cancelled it owns the state from here.
           if (controller.signal.aborted) return;
           if (!answer.ok) {
+            const refusal = promoRefusalMessage(answer.error);
+            if (refusal !== undefined && promoCode !== null) {
+              cartActions.applyPromoCode(null);
+              announce(refusal);
+            }
             setPricing({ status: "error", error: answer.error });
             return;
           }
@@ -391,7 +399,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }): ReactEl
     return () => {
       controller.abort();
     };
-  }, [dispatch, lines, promoCode, shippingMethodId, pricingRunToken]);
+  }, [cartActions, announce, dispatch, lines, promoCode, shippingMethodId, pricingRunToken]);
 
   /** Adopts the session's email address when it arrives after the flow has started: `useAuth()`
    *  revalidates a stored session asynchronously, so a reload into the checkout finds no identity on its

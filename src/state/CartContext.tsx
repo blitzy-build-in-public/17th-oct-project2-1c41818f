@@ -1,7 +1,7 @@
 /**
  * Path: src/state/CartContext.tsx
  * Purpose: Cart lines, promo code, persistence, mini-cart visibility and the clear the checkout dispatches
- * Lines: 537
+ * Lines: 503
  */
 
 import {
@@ -23,7 +23,6 @@ import {
   cartReducer,
   createCartLine,
   createInitialCartState,
-  fromCart,
   isCartState,
   toCart,
 } from "@/state/cartReducer";
@@ -118,21 +117,6 @@ export interface CartActions {
   clearCart(): void;
   /** Stores the code the shopper applied, or `null` once they withdraw it. */
   applyPromoCode(code: string | null): void;
-  /**
-   * Adopts lines built elsewhere, re-clamped by the reducer.
-   *
-   * The cart slice calls this after a catalogue refresh to bring each line's stock ceiling up to
-   * date; a line whose product can no longer supply the quantity it holds is clamped down and the
-   * cart renders its availability warning, while a line whose product has nothing left on hand is
-   * dropped rather than stored, because no quantity of it could be bought.
-   */
-  replaceLines(lines: CartLine[]): void;
-  /**
-   * Adopts a whole cart — the shape a stored one is read back as — through the reducer's `fromCart`
-   * mapping and its restore transition, so every line is re-clamped against the ceiling it carries
-   * and a line whose product can no longer be bought at all is dropped.
-   */
-  restoreCart(cart: Cart): void;
   /** Opens the mini-cart drawer. */
   openMiniCart(): void;
   /** Closes the mini-cart drawer. */
@@ -326,20 +310,6 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
     [dispatch],
   );
 
-  const replaceLines = useCallback(
-    (lines: CartLine[]): void => {
-      dispatch(cartActions.replaceLines(lines));
-    },
-    [dispatch],
-  );
-
-  const restoreCart = useCallback(
-    (cart: Cart): void => {
-      dispatch(cartActions.restore(fromCart(cart)));
-    },
-    [dispatch],
-  );
-
   const readLines = useCallback((): readonly CartLine[] => linesRef.current, []);
 
   const openMiniCart = useCallback((): void => {
@@ -364,8 +334,6 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
       removeItem,
       clearCart,
       applyPromoCode,
-      replaceLines,
-      restoreCart,
       openMiniCart,
       closeMiniCart,
       toggleMiniCart,
@@ -377,8 +345,6 @@ export function CartProvider({ children }: { children: ReactNode }): ReactElemen
       removeItem,
       clearCart,
       applyPromoCode,
-      replaceLines,
-      restoreCart,
       openMiniCart,
       closeMiniCart,
       toggleMiniCart,
