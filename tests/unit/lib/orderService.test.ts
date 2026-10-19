@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/orderService.test.ts
- * Purpose: Order construction from a snapshot, numbering, status transitions and snapshot immutability
- * Lines: 599
+ * Purpose: Order construction from a snapshot, numbering, status transitions, snapshot immutability and the placement credential a guest order is read with
+ * Lines: 590
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +25,7 @@ import {
   toOrderLines,
 } from "@/lib/orderService";
 import { isValidIso } from "@/utils/dates";
+import { placementTokenFor } from "@/utils/orderPlacements";
 import { orderId, productId } from "@/utils/strings";
 import {
   FIXED_NOW,
@@ -96,9 +97,10 @@ function seededLine(quantity = 2, product = BOUGHT): CartLine {
   });
 }
 
-/** The snapshot a buyer reviewed: that product's line priced by the product's one pricing path. */
+/** The snapshot a buyer reviewed, priced at the delivery method every submission below names. */
 function seededSnapshot(quantity = 2, product = BOUGHT): PricedCart {
-  return makePricedCart({ lines: [seededLine(quantity, product)] });
+  const lines = [seededLine(quantity, product)];
+  return makePricedCart({ lines, shippingMethodId: SHIPPING_METHOD_ID });
 }
 
 /** An invoice payment, the one method whose validity reads no clock, so these cases stay pinned. */
@@ -398,7 +400,7 @@ describe("the submission guard's client half", () => {
       buildOrderInput({ ...seededSnapshot(), lines: [] }, contact, createIdempotencyKey()),
     );
     const keyless = await createOrder(buildOrderInput(seededSnapshot(), contact, " "));
-    // A line the catalogue cannot supply is the store's refusal: it is the one holding the stock figure.
+    // A line the catalogue cannot supply is the store's refusal, which names the basket it could not price.
     const unsuppliable = makePricedCart({
       lines: [makeCartLine({ productId: productId("gone"), quantity: 1, maxQuantity: 5 })],
     });
@@ -413,7 +415,7 @@ describe("the submission guard's client half", () => {
     expect(refused.error).toMatchObject({
       status: 422,
       code: "insufficient-stock",
-      field: "snapshot",
+      field: "lines",
     });
   });
 });
@@ -515,7 +517,7 @@ describe("the transport surface", () => {
     expect(theirHistory.items.map((row) => row.id)).toEqual([theirOrder.id]);
   });
 
-  it("keeps another account out of an order, and reads a guest's order by its placement credential alone", async () => {
+  it("keeps another account out of an order, and answers a foreign order and an absent one alike", async () => {
     const mine = registerBuyer("owner");
     const theirs = registerBuyer("stranger");
     const ownOrder = await placeInvoiceOrder(seededSnapshot(), mine.session.token);
@@ -538,28 +540,17 @@ describe("the transport surface", () => {
     if (noHistory.ok) throw new Error("A history is not readable without a session.");
     expect(noHistory.error.status).toBe(401);
 
-    // A guest's order names no account, so the identifier its confirmation route carries reaches nothing:
-    // it answers the credential the placement was submitted under, and every other caller is refused as a
-    // foreign account-owned order is — the anonymous one before ownership, the stranger with `404`.
+    // A guest's order takes its read credential from the attempt that placed it, remembered here for the
+    // order: presenting it is what the confirmation route does by default. The idempotency key that attempt
+    // was submitted under is a different value and no credential at all.
     const placed = await placeOrderWithKey(seededSnapshot(), contactFor(INVOICE_PAYMENT));
-    const guest = placed.order;
-    expect(guest.customerId).toBeNull();
-    const uncredentialed = await getOrder(guest.id);
-    if (uncredentialed.ok) throw new Error("An account-less order is not readable without one.");
-    expect(uncredentialed.error).toMatchObject({ status: 401, code: "unauthenticated" });
-    const stranger = await getOrder(guest.id, token);
-    if (stranger.ok) throw new Error("Another account reads an account-less order.");
-    expect(stranger.error).toMatchObject({ status: 404, code: "order-not-found" });
-
-    // The credential the submission carried, and only that, answers the read in full.
-    const read = await getOrder(guest.id, { orderToken: placed.key });
-    if (!read.ok) throw new Error(`The order could not be read: ${read.error.code}`);
-    expect(read.value).toMatchObject({
-      id: guest.id,
-      orderNumber: guest.orderNumber,
-      customerId: null,
-    });
-    expect(read.value.shippingAddress).toEqual(guest.shippingAddress);
+    expect(placed.order.customerId).toBeNull();
+    const credential = placementTokenFor(placed.order.id);
+    expect(credential).toMatch(/^plc_\S+$/);
+    expect(credential).not.toBe(placed.key);
+    const guestRead = await getOrder(placed.order.id);
+    if (!guestRead.ok) throw new Error(`The order could not be read: ${guestRead.error.code}`);
+    expect(guestRead.value.shippingAddress).toEqual(placed.order.shippingAddress);
   });
 
   it("discards a card at the seam: an order keeps its brand and last four digits only", async () => {

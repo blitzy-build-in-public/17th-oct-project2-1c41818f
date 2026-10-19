@@ -1,17 +1,19 @@
 /* Path: src/styles/page-header.css
  * Purpose: Styles for the page header and its breadcrumb trail that src/components/layout/PageHeader.tsx renders, split out of src/styles/layout.css, which loads this sheet with @import
- * Lines: 134
+ * Lines: 136
  */
 
 /* The page-header family, and the sole definition site of the .sp-page-header* classes
  * src/components/layout/PageHeader.tsx renders: the header frame with the loading modifier that holds the block
  * size a settled header takes, the crumb trail and the crumb slot that stands in for it, the page's one <h1>, the
- * optional description and the slot that reserves its rows, and the page's primary control. Split out of src/styles/layout.css, which loads this
- * sheet with @import above its first rule, because that sheet stood at 598 lines against the request's
- * 600-line ceiling before the crumb hover rule the breadcrumb contract requires; the plan's remedy for a
- * concern that cannot fit is the split, never the ceiling. A CSS @import is inlined where it sits, so these
- * rules hold the cascade position they held inside layout.css: src/main.tsx still imports the eight mapped
- * stylesheets, no file under src/components/** imports a stylesheet, and every class here is consumed by name.
+ * optional description and the slot that reserves its rows, and the page's primary control, with the crumb hover rule
+ * the breadcrumb contract requires. Split out of src/styles/layout.css, which loads this
+ * sheet with @import above its first rule, at the position the moved rules held:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * A CSS @import is inlined where it sits, so these
+ * rules hold the cascade position they held inside layout.css: src/main.tsx still imports the same eight mapped
+ * stylesheets with no ninth path anywhere, no file under src/components/** imports a stylesheet, and every class
+ * here is consumed by name.
  * The current crumb's colour is carried by aria-current="page" — and by the --current modifier the component
  * writes for the same thing — while the crumbs before it are links, which take their hover from here because
  * base.css's `:where(a):hover` ties this rule's specificity and loses the load order. Every value is a var()

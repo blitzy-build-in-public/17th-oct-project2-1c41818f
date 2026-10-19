@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/MiniCart.tsx
  * Purpose: The cart drawer opened from the header badge, with quick quantity edits and a checkout link
- * Lines: 272
+ * Lines: 271
  */
 
 import type { ReactElement } from "react";
@@ -37,9 +37,8 @@ import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
  * render rather than failing quietly. `src/App.tsx` composes providers and the layout and owns no router,
  * which is exactly why the router belongs to the entry point above it.
  *
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only
- * importer of `src/styles/**` — so every class below is consumed by name and this list is what the sheets
- * owe the file. `src/styles/data-display.css`, reached through the `@import` at the top of
+ * Class contract. This list is what the sheets owe the drawer, each class named with the sheet that
+ * declares it. `src/styles/data-display.css`, reached through the `@import` at the top of
  * `src/styles/components.css`, owns the panel: `.sp-drawer`, its `--end` edge, `__header`, `__title`,
  * `__body` and `__footer`, the backdrop and the focus behaviour. None of those is named here, because
  * `src/components/ui/Modal.tsx` is the file that composes them; this file renders the drawer's content
@@ -56,12 +55,12 @@ import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
  * added class in `cart.css` — a `.sp-minicart__count` at the same register — would give the line a
  * name of its own; the class is reported rather than invented here.
  *
- * BLITZY [LAYOUT]: the plan asks for a bottom sheet below the small stop, and the sheets declare no
- * bottom-edge drawer: `.sp-drawer` has `--start`, `--end` and `--wide` and no fourth variant. The panel is
- * therefore anchored to the inline-end edge at every width, where `min(--drawer-width, 100%)` already
- * clamps it to full bleed on a phone below `--breakpoint-sm` — which is what makes the badge reachable at
- * the narrowest width too. A bottom-edge variant would be a class this file may not invent and a
- * stylesheet it does not own; reported for the sheet rather than worked around.
+ * BLITZY [LAYOUT]: the drawer's presentation below the small stop is meant to be the bottom edge, and the
+ * sheets declare no bottom-edge drawer: `.sp-drawer` has `--start`, `--end` and `--wide` and no fourth
+ * variant. The panel is therefore anchored to the inline-end edge at every width, where
+ * `min(--drawer-width, 100%)` already clamps it to full bleed on a phone below `--breakpoint-sm` — which is
+ * what makes the badge reachable at the narrowest width too. The missing variant is the sheet's to add: a
+ * bottom-edge drawer would be a class this file may not invent and a stylesheet it does not own.
  */
 
 /**

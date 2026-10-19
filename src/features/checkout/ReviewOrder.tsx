@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ReviewOrder.tsx
  * Purpose: The review step: items, addresses, shipping, totals and payment restated before submission
- * Lines: 516
+ * Lines: 515
  */
 
 import { useId, useRef } from "react";
@@ -31,8 +31,7 @@ import type { PricedCart, PricedCartLine } from "@/types/commerce";
 import { formatFreeShippingRemaining, formatMoney, formatQuantity } from "@/utils/format";
 
 /*
- * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step: `sp-review`
+ * Class contract. `src/styles/commerce.css` owns this step: `sp-review`
  * for the grid each state of the step sits in — the step's own root, and the grid the sections sit in inside
  * it —
  * `sp-review__section` for one section (a heading, the edit control returning

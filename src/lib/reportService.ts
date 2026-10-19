@@ -51,8 +51,8 @@ export {
   type ReportRunRequest,
 } from "@/utils/reportRules";
 
-// The series charted beside a report, re-exported from the split path this file grew when it reached the
-// 600-line ceiling: a consumer importing it from here is served exactly as before.
+// The series charted beside a report: one file may not exceed 600 lines, so the chart's half of the report
+// contract lives in `src/lib/reportSeries.ts`, and this path re-exports it for a consumer that imports it here.
 export { buildReportSeries } from "@/lib/reportSeries";
 
 // The export matrix -------------------------------------------------------------------------------

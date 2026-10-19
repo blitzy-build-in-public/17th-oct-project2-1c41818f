@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportsPage.tsx
  * Purpose: The reports route: report selector, range control and the selected report's view
- * Lines: 439
+ * Lines: 438
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -37,10 +37,9 @@ import { ReportBodyPlaceholder } from "./ReportPlaceholder";
 import { SalesReport } from "./SalesReport";
 
 /*
- * Class contract. `src/styles/admin-reports.css` is the sole definition site of the administrator register and
- * no file under `src/features/**` may import a stylesheet — `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class below is adopted by name, and this comment is the list the sheet owes the
- * file: `sp-admin__main` is the content column beside the sidebar, which the dashboard is written in too;
+ * Class contract. `src/styles/admin-reports.css` is the sole definition site of the administrator register,
+ * and this comment is the list the sheet owes the file, each class named with the sheet that declares it:
+ * `sp-admin__main` is the content column beside the sidebar, which the dashboard is written in too;
  * `sp-report` is the shell's grid at one gap; `sp-report__header` carries the period control and the cut
  * control at their own rhythm, and `sp-report__toolbar` the row they take from --breakpoint-md; and
  * `sp-report__selector` is the container the selector's own sideways scroll is given, and `sp-report__body` the

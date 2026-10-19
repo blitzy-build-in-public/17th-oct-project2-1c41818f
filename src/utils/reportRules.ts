@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/reportRules.ts
  * Purpose: The report rules the report service and the seeded repositories both compose: the catalogue, row building, summaries and chart series
- * Lines: 554
+ * Lines: 568
  */
 
 import { CHART_SERIES_TOKEN_REFERENCES } from "@/constants/config";
@@ -395,6 +395,21 @@ export function summarise(
 
 // The composition the data source runs ------------------------------------------------------------
 
+/** Everything {@link runReportDefinition} reads: the report kind, the collections it is built from, the range
+ *  it runs over, the definition that ran and the instant the result is dated by. */
+export interface RunReportDefinitionInput {
+  /** Which report is run: the sales, products or customers definition. */
+  readonly kind: ReportKind;
+  /** The seeded collections the rows are read from. */
+  readonly input: ReportDataInput;
+  /** The range and the cut the run covers, which every band is keyed and clipped by. */
+  readonly query: ReportQuery;
+  /** The definition that ran: the source of the columns, their headings and their formats. */
+  readonly definition: ReportDefinition;
+  /** The instant the run is dated by, defaulting to the clock at the call. */
+  readonly now?: Date;
+}
+
 /**
  * A whole report run: its rows, the summary, the chart beside it and when it was built.
  *
@@ -403,14 +418,13 @@ export function summarise(
  * collections. An empty range is a valid result and not an error: no rows, a zeroed summary, empty
  * series. The result echoes the range it ran over and the cut actually used, so a report reached from a
  * link carrying part of its query can still state its own period.
+ *
+ * @param run - The report kind, the collections it is built from, the range it runs over, its definition
+ *  and the instant it is dated by.
+ * @returns The whole run: its rows, its summary, the series charted beside it and when it was built.
  */
-export function runReportDefinition(
-  kind: ReportKind,
-  input: ReportDataInput,
-  query: ReportQuery,
-  definition: ReportDefinition,
-  now: Date = new Date(),
-): ReportResult {
+export function runReportDefinition(run: RunReportDefinitionInput): ReportResult {
+  const { kind, input, query, definition, now = new Date() } = run;
   const rows = buildRows(kind, input, query);
   return {
     definitionId: definition.id,

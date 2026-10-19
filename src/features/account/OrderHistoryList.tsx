@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryList.tsx
  * Purpose: The customer's order history: the status and date filters, the paged table they resolve to and the loading placeholder
- * Lines: 377
+ * Lines: 376
  */
 
 import { useCallback, useId, useState } from "react";
@@ -43,13 +43,12 @@ import {
 } from "@/utils/dates";
 
 /*
- * Class contract, consumed by name: no file under `src/features/**` imports a stylesheet, because
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/account.css` owns the history's block —
+ * Class contract. `src/styles/account.css` owns the history's block —
  * `sp-order-history` with its `__filters`, `__table`, `__placeholder` and `__empty` — and earlier sheets supply
  * the rest: the table primitive, `sp-alert`, `sp-empty` and `sp-stack`, the `sp-placeholder-cell` register
- * `src/styles/placeholders.css` gives a figure in a table cell, and `src/styles/cart.css`'s
+ * `src/styles/placeholders.css` gives a figure in a table cell, and `src/styles/summary-panel.css`'s
  * `sp-summary__note`. The detail half of the same contract — `sp-order-detail` and its parts — is stated in
- * `src/features/account/OrderHistoryPage.tsx`, this module's only importer.
+ * `src/features/account/OrderHistoryPage.tsx`, the one module that imports it.
  *
  * Both account order routes render the detail file, because the slice spends three view files on four routes:
  * this one holds the history and `src/features/account/OrderHistoryPage.tsx` branches once on the order segment.

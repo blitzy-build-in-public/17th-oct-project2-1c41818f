@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/DonutChart.tsx
  * Purpose: Donut with legend, percentage labels and a centre total
- * Lines: 574
+ * Lines: 573
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -33,8 +33,7 @@ import { formatMoney, formatMoneyCompact, formatPercent, formatShare } from "@/u
 
 /*
  * Class contract. `src/styles/admin-reports.css` and the `src/styles/chart-series.css` sheet it imports are the
- * sole definition site of this family — the sheets `src/main.tsx` loads with the other seven — and no file under
- * `src/components/**` may import a stylesheet, so every class below is consumed by name: `sp-chart` for the
+ * sole definition site of this family, so every class below is consumed by name: `sp-chart` for the
  * frame's grid, `sp-chart__header` with its `__title` and `__controls`, `sp-chart__frame` for the plot's box,
  * `sp-chart__svg` for the drawing, `sp-chart__slice` beside one of the twelve `sp-chart__series-N` classes for a
  * segment's colour, `sp-chart__label` for a slice's percentage — on the wedge where it has room, outside the ring

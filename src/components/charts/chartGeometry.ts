@@ -9,13 +9,13 @@ import type { ChartPoint, ChartSeries } from "@/types/analytics";
 import { bucketStart, formatBucketLabel } from "@/utils/dates";
 import { formatCompactNumber, formatPercent } from "@/utils/format";
 
-// The label-width rule this module used to hold lives in `labelMetrics.ts`; it is published here so the
-// scales and renderers that read it keep the import path they have always used.
+// The label-width rule lives in `labelMetrics.ts`; it is re-published here so the scales and the
+// renderers that read it keep one import path.
 export { LABEL_FONT_SIZE, estimateLabelWidth } from "@/components/charts/labelMetrics";
 import { FULL_TURN_DEGREES, arcPath } from "@/components/charts/svgPaths";
 
-// The path builders this module used to hold live in `svgPaths.ts`; they are published here so the scales
-// and renderers keep the import path they have always used.
+// The path builders live in `svgPaths.ts`; they are re-published here so the scales and the
+// renderers that read them keep one import path.
 export {
   arcPath,
   buildAreaPath,

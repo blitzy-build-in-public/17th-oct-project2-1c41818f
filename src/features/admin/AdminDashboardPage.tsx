@@ -49,8 +49,8 @@ import { defaultReportRange, maxReportRange, resolveBaselineRange } from "@/util
 import { storedRangeOr } from "@/utils/storage";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class below is adopted by name from the sheet that declares it.
+ * Class contract. This list is what the sheets owe the page, each class named with the sheet that declares
+ * it.
  * `src/styles/admin-reports.css` owns the administrator register this page is written in: `sp-admin__main` for
  * the content column, `sp-kpi-grid`, `sp-dashboard__section` and `sp-dashboard__row` for the block rhythm, and
  * `sp-chart__title` and `sp-chart__frame` for the chart family. The range control's own classes — `sp-date-range`

@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiClient.ts
  * Purpose: The single transport seam: one typed request function with latency, abort, error shaping and a test double
- * Lines: 484
+ * Lines: 486
  */
 
 import type { ApiError, ApiRequestOptions, HttpMethod, QueryParams, Result } from "@/types/common";
@@ -272,18 +272,20 @@ function reportSessionRefusal<TValue>(path: string, outcome: Result<TValue>): Re
  * itself, and it is what keeps such a rejection from leaving a surface loading forever.
  *
  * It reports the transport's own `500 unexpected-error`, the failure of a request that reached no
- * endpoint, because no endpoint refused it; and it carries the cause's own message rather than the
- * sentence the seam publishes, because a rejection has a message to show and an unreached route has
- * none. The `message` is empty when the cause is not an `Error`, which is the one case a surface renders
- * as copy of its own.
+ * endpoint, because no endpoint refused it, and takes it from {@link transportFailure} so the
+ * sentence it carries is the one the seam publishes: a surface renders that `message` verbatim —
+ * `src/components/ui/Feedback.tsx`, and the state layers that pass a failure into it — because a
+ * runtime exception's own message is a framework's account of itself, not copy a shopper can read.
  *
- * @param cause - What the rejected promise reported: the value it rejected with, an `Error` whose
- * message names the failure.
+ * The cause is therefore taken for the caller's shape and never read: the parameter documents what a
+ * caller passes through, and nothing of it reaches the failure.
+ *
+ * @param _cause - What the rejected promise reported: the value it rejected with, deliberately unread
+ * because no part of a runtime exception belongs on a rendered surface.
  * @returns The shaped failure, in the fields a refused request carries; never `null`, never an exception.
  */
-export function toRejectionError(cause: unknown): ApiError {
-  const { status, code } = TRANSPORT_FAILURES.UNEXPECTED_ERROR;
-  return { status, code, message: cause instanceof Error ? cause.message : "" };
+export function toRejectionError(_cause: unknown): ApiError {
+  return transportFailure("UNEXPECTED_ERROR");
 }
 
 // The request pipeline ----------------------------------------------------------------------------

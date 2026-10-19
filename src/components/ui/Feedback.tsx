@@ -14,8 +14,8 @@ import type { ApiError } from "@/types/common";
 import { formatPercent } from "@/utils/format";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class below is consumed by name. `src/styles/components.css` owns the data-page feedback states:
+ * Class contract. No stylesheet is imported here, so every class below is consumed by name.
+ * `src/styles/components.css` owns the data-page feedback states:
  * `sp-spinner` with its keyframes; `sp-skeleton` with its `--text`, `--card` and `--row` shapes and its
  * `__line` part; `sp-empty`, `sp-alert` and `sp-progress` with their `__icon`, `__title`, `__body`,
  * `__action`, `__track`, `__fill` and `__label` regions and the alert's `--info`, `--success` and

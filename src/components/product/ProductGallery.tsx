@@ -1,7 +1,7 @@
 /**
  * Path: src/components/product/ProductGallery.tsx
  * Purpose: Product imagery with a thumbnail strip, keyboard navigation and alt text
- * Lines: 272
+ * Lines: 271
  */
 
 import { useRef, useState } from "react";
@@ -12,14 +12,13 @@ import type { Product, ProductImage } from "@/types/catalog";
 
 /*
  * Class contract. `src/styles/catalog-detail.css` is the sole definition site of this block — it is the sheet
- * `src/styles/catalog.css` loads with `@import "./catalog-detail.css";`, and `src/main.tsx` is the only
- * importer of `src/styles/**`, so no file under `src/components/**` imports a stylesheet. Every class below is
- * therefore consumed by name: `sp-gallery` for the block, `sp-gallery__stage` for the box the current image
+ * `src/styles/catalog.css` loads with `@import "./catalog-detail.css";`. No stylesheet is imported here. Every
+ * class below is consumed by name: `sp-gallery` for the block, `sp-gallery__stage` for the box the current image
  * sits in, `sp-gallery__image` for that image, `sp-gallery__thumbs` for the strip, `sp-gallery__thumb` for one
- * image's control and `sp-gallery__caption` for the line under the strip. State is carried by the attribute
- * and never by a second class: the sheet paints the current thumbnail through `[aria-current="true"]` — the
- * accent plus a thicker border, so the mark survives greyscale as well as colour — and the picture inside a
- * thumbnail is cropped to its box by the `src/styles/catalog.css` rule written for `.sp-gallery__thumb img`.
+ * image's control and `sp-gallery__caption` for the line under the strip. State is carried by the attribute and
+ * never by a second class: the sheet paints the current thumbnail through `[aria-current="true"]` — the accent
+ * plus a thicker border, so the mark survives greyscale as well as colour — and the picture inside a thumbnail
+ * is cropped to its box by the `src/styles/catalog.css` rule written for `.sp-gallery__thumb img`.
  *
  * The thumbnails are the plain `<button>` the sheet owns rather than a member of
  * `src/components/ui/Button.tsx`, for the reason `src/components/ui/Tabs.tsx` states for its own family:

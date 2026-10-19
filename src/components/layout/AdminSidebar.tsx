@@ -1,7 +1,7 @@
 /**
  * Path: src/components/layout/AdminSidebar.tsx
  * Purpose: Administrator navigation that marks the current section
- * Lines: 183
+ * Lines: 182
  */
 
 import type { ReactElement } from "react";
@@ -21,9 +21,8 @@ import type { RoutePath } from "@/constants/routes";
  * an administrator who cannot see the glyph still hears the destination's name, and the `title`
  * each link carries names it to a pointer. From the large stop the stylesheet reveals those same
  * elements in place as the labelled column, so this component renders one copy of the navigation
- * and no second one hangs off the document. Nothing here imports a stylesheet — only `src/main.tsx`
- * imports `src/styles/**` — and no breakpoint appears here, because the rail belongs to the
- * stylesheet that owns the layout.
+ * and no second one hangs off the document. Nothing here imports a stylesheet, and no breakpoint appears
+ * here, because the rail belongs to the stylesheet that owns the layout.
  */
 
 /** Names the line that labels this landmark and its navigation, so the words are written once. */

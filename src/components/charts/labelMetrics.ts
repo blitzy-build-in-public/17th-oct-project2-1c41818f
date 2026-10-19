@@ -5,11 +5,11 @@
  */
 
 /**
- * Why this file exists beside `chartGeometry.ts`: the charts' geometry is one concern the plan's 600-line
- * ceiling split once already, and the axis-label half of it outgrew the room left. The rule stays one rule —
- * the axis that thins a run of labels and the insets that reserve room for the labels at either end call
- * {@link estimateLabelWidth} rather than reading the text themselves — and both modules that need it reach it
- * from here, `chartGeometry.ts` first among them.
+ * Why this file exists beside `chartGeometry.ts`: the charts' geometry is one concern, and one file may hold
+ * no more than 600 lines, so the concern is split; the axis-label half of it outgrew the room left. The rule
+ * stays one rule — the axis that thins a run of labels and the insets that reserve room for the labels at
+ * either end call {@link estimateLabelWidth} rather than reading the text themselves — and both modules that
+ * need it reach it from here, `chartGeometry.ts` first among them.
  *
  * The contract: pure, no read of the document, the clock or the platform, and a fresh number out.
  */

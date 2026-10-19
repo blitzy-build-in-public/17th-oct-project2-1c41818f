@@ -1,11 +1,12 @@
 /**
  * Path: src/utils/csv.ts
  * Purpose: Serialises rows to CSV with escaping, a row cap and a download trigger
- * Lines: 294
+ * Lines: 297
  */
 
 import { CSV_MAX_CELL_LENGTH, CSV_MAX_ROWS } from "@/constants/config";
 import type { CsvMatrix, ReportCellValue } from "@/types/analytics";
+import { stripControlCharacters } from "@/utils/strings";
 
 /** The field separator every export uses: one comma, per RFC 4180, and the fallback for any other. */
 export const CSV_DELIMITER = ",";
@@ -123,7 +124,9 @@ function needsFormulaGuard(text: string): boolean {
  * LibreOffice read as "this is text" rather than as a formula, do not display, and leave the reader the
  * characters the table showed; a plain signed decimal is the exception, left unguarded so a negative money
  * or percent figure stays the number a spreadsheet can sum. A `null` or `undefined` cell is empty, and a
- * number is written by locale-independent `String()` with no `Intl` call. Pure.
+ * number is written by locale-independent `String()` with no `Intl` call. Every other control character is
+ * removed first, through {@link stripControlCharacters}, so a NUL or a DEL a hand-made request stored cannot
+ * reach a file; a tab, a CR and a LF are kept, since the quoting above handles a field carrying one. Pure.
  *
  * @param value - The cell's raw value.
  * @param delimiter - The field separator; defaults to {@link CSV_DELIMITER}.
@@ -133,7 +136,7 @@ export function escapeCsvCell(
   value: ReportCellValue | undefined,
   delimiter = CSV_DELIMITER,
 ): string {
-  const text = value === null || value === undefined ? "" : String(value);
+  const text = stripControlCharacters(String(value ?? ""));
   const separator = resolveDelimiter(delimiter);
   const field = needsFormulaGuard(text) ? CSV_TEXT_GUARD + text : text;
   const mustQuote = field.includes(separator) || CSV_SPECIAL_CHARS.test(field);

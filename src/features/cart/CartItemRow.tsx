@@ -23,8 +23,8 @@ import type { CartLine, PricedCartLine } from "@/types/commerce";
 import { formatMoney } from "@/utils/format";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
- * of `src/styles/**` — so every class below is consumed by name and this list is what the sheets owe the file.
+ * Class contract. This list is what the sheets owe the row, each class named with the sheet that declares
+ * it.
  *
  * `src/styles/cart.css` owns the row: `sp-cart-row` is a named-area grid of exactly seven children —
  * `media body remove / media qty total / media price price / warn warn warn`, widened at the medium stop to
@@ -48,8 +48,8 @@ import { formatMoney } from "@/utils/format";
  * squeezing one of them: the sheet's own wrapping gives the sentence a line of its own there. A `grid-area` has
  * no effect on a flex item, which is what makes the row's own `__warning` class safe to carry into a container
  * that declares no area for it. The warn row the full form's template declares is a row of that template, so a
- * line with nothing to warn about leaves it empty and still pays its row gap; reported here because the template
- * is that sheet's to change.
+ * line with nothing to warn about leaves it empty and still pays its row gap; the row gap an empty warn row
+ * pays is that sheet's to change.
  *
  * The money registers are the sheet's, and it sets both of them for this row. `PriceTag` draws the unit price in
  * its `sp-price__current` register, the heading-3 one wherever the figure is the message; here the sheet steps
@@ -61,8 +61,8 @@ import { formatMoney } from "@/utils/format";
  *
  * The name is text and not a link, a boundary of this file rather than an omission: `CartLine` carries no slug and
  * this file's dependency list admits no route constants, so there is nothing to navigate to. `__name`'s own
- * `:hover` register consequently paints a word that is not interactive; reported for the sheet, not worked around
- * by inventing a class or a path here.
+ * `:hover` register consequently paints a word that is not interactive, and that register on a word
+ * nothing can navigate to is the sheet's to change rather than a class or a path invented here.
  *
  * BLITZY [DESIGN_SYSTEM_GAP]: `src/constants/content.ts` holds no cart-scoped sentence naming what is left of
  * a line's product — the cart's own `QUANTITY_CLAMPED_NOTICE` says a quantity *was reduced*, which is not what

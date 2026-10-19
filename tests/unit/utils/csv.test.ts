@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/csv.test.ts
  * Purpose: CSV serialisation, escaping, clipping, row capping and the download trigger, at and over every documented boundary
- * Lines: 509
+ * Lines: 525
  */
 
 // The unit project runs in node, so this file asks for jsdom: `downloadCsv`'s one side effect needs
@@ -161,6 +161,22 @@ describe("escapeCsvCell: the field text one cell becomes", () => {
     expect(csv.escapeCsvCell("Orbital, Lamp", '"')).toBe('"Orbital, Lamp"');
     expect(csv.escapeCsvCell("Orbital, Lamp", "\n")).toBe('"Orbital, Lamp"');
     expect(csv.escapeCsvCell("Orbital, Lamp", "")).toBe('"Orbital, Lamp"');
+  });
+
+  it("drops a control character from a cell and keeps the tab, CR and LF the format quotes", () => {
+    const matrix: CsvMatrix = {
+      header: ["Label", "Note"],
+      rows: [
+        ["Da\u0000na", "one\u0001two"],
+        ["Tabbed", "a\tb"],
+        ["Broken", "first\r\nsecond"],
+      ],
+    };
+    expect(csv.serialiseCsv(matrix)).toBe(
+      ["Label,Note", "Dana,onetwo", "Tabbed,a\tb", 'Broken,"first\r\nsecond"'].join(
+        csv.CSV_LINE_ENDING,
+      ),
+    );
   });
 });
 

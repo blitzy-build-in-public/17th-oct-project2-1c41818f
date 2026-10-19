@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchSuggestions.tsx
  * Purpose: The type-ahead suggestion list grouping product, brand and category matches
- * Lines: 317
+ * Lines: 316
  */
 
 import type { ReactElement } from "react";
@@ -16,9 +16,8 @@ import { isAbortError } from "@/utils/async";
 import { formatDiscount, formatMoney, formatScaledPercent } from "@/utils/format";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class is consumed by name from `src/styles/catalog.css`, which owns this
- * surface. `sp-search-suggestions` is the panel the bar anchors; `__list` is one kind's own grid —
+ * Class contract. `src/styles/catalog.css` owns this surface, and this list is what the sheet owes the
+ * file: `sp-search-suggestions` is the panel the bar anchors; `__list` is one kind's own grid —
  * carried by the group wrapper rather than by the listbox, because its `display: grid` is what makes
  * each row a grid item that spans the panel, so a selected row's tint and its leading accent bar cover
  * the whole row instead of the row's text box; `__group` is that kind's title; `__item` is a row, whose
@@ -31,7 +30,7 @@ import { formatDiscount, formatMoney, formatScaledPercent } from "@/utils/format
  * element default `src/styles/base.css` paints with the accent-subtle and accent-contrast tokens, so the
  * marking colour reaches the document through `tokens.css` like every other value on this surface.
  *
- * BLITZY [BUDGET]: the concern reached 309 lines against its 270-line budget — the class contract, the
+ * BLITZY [BUDGET]: the concern reached 316 lines against its 270-line budget — the class contract, the
  * four data states, the ARIA wiring of a labelled listbox and the extraction of the option row — and
  * stays well inside the 600-line ceiling. Nothing was cut from it to reach a number.
  */

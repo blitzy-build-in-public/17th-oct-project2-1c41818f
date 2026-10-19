@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductReviews.tsx
  * Purpose: The review list with rating filter and paging, and the review form for a signed-in customer
- * Lines: 599
+ * Lines: 600
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -66,8 +66,8 @@ import type { ReviewDraft } from "@/utils/validation";
  * they already did — the review rule in `src/utils/validation.ts`, and the statuses and refusal shapes in
  * `src/lib/apiClient.ts`, which the service forwards unchanged.
  *
- * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class is consumed by name. `src/styles/catalog-detail.css`, which `src/styles/catalog.css` loads with
+ * Class contract. This list is what the sheets owe the surface, each class named with the sheet that
+ * declares it. `src/styles/catalog-detail.css`, which `src/styles/catalog.css` loads with
  * `@import`, declares `sp-reviews`, its `__summary` row, its `__list` and `__item`, the
  * `__header`/`__author`/`__date` byline, the `__title` h3, the `__body` prose measure and the `__form` grid;
  * `src/styles/controls.css` owns `sp-form` and `sp-form__actions`, and the feedback primitives own theirs. The
@@ -309,6 +309,7 @@ function ReviewForm({
       onSubmit={handleSubmit}
     >
       <h3 id={headingId}>{CATALOG_COPY.WRITE_REVIEW_LABEL}</h3>
+      <Alert tone="info">{CATALOG_COPY.REVIEW_FORM_NAME_NOTICE}</Alert>
       {fieldErrors[FORM_ERROR_KEY] === undefined ? null : (
         <Alert tone="danger">{fieldErrors[FORM_ERROR_KEY]}</Alert>
       )}

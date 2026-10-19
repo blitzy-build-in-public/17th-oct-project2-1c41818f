@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ProductPerformanceReport.tsx
  * Purpose: The product-performance report: units, revenue and share by product
- * Lines: 325
+ * Lines: 324
  */
 
 import { useCallback, useMemo } from "react";
@@ -29,8 +29,7 @@ import { formatDateRange } from "@/utils/dates";
 import { formatCellValue } from "@/utils/format";
 
 /*
- * Class contract, consumed by name: no file under `src/features/**` imports a stylesheet, because
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/admin-reports.css` declares the report
+ * Class contract. `src/styles/admin-reports.css` declares the report
  * shell this view fills — `sp-report__body`, the block that stacks the summary figures, the paired chart and
  * the table; `sp-report__summary` with its `__summary-item`, `__summary-label` and `__summary-value` regions,
  * the register a report states its figures in; and `sp-report__empty`, the block a period with no activity

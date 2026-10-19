@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/config.ts
  * Purpose: Configuration and keys: storage keys, tax rate, shipping thresholds, page sizes, breakpoints and latency default
- * Lines: 434
+ * Lines: 490
  */
 
 import type { CurrencyCode, ToastKind } from "@/types/common";
@@ -13,22 +13,30 @@ import type { ShippingMethod } from "@/types/commerce";
  * Namespace every storage key is built from, so a value SalesPro writes cannot collide with a key
  * another application on the same origin writes.
  *
- * Consumer: the `STORAGE_KEYS` set below, which derives each of its entries from it.
+ * Consumer: the `STORAGE_KEYS` and `SESSION_STORAGE_KEYS` sets below, each of which derives every entry
+ * it holds from it.
  */
 export const STORAGE_KEY_PREFIX = "salespro";
 
 /**
- * The keys of the six pieces of durable state the product keeps — the cart, the session token, the
- * demonstration account store's session table, this browser's own writes to the seeded collections, the
- * placement credential of each order it placed without an account and the last-used report range — and of
- * nothing else. Search history stays in memory in `src/features/search/SearchBar.tsx`, and the catalogue is
- * never persisted.
+ * The keys of the eight pieces of durable state the product keeps — the cart, the session token, the
+ * demonstration account store's session table, the seal those records are written with, this browser's own
+ * writes to the seeded collections, the placement credential of each order it placed without an account, the seals those two
+ * tables' records are written with and the last-used report range — and of nothing else. Search history stays in memory in
+ * `src/features/search/SearchBar.tsx`, and the catalogue is never persisted.
  *
- * Three of the six exist because the collections themselves are rebuilt from the frozen seed on every
+ * This is the durable set and nothing more: `SESSION_STORAGE_KEYS` below is the tab-scoped set, holding what
+ * the product keeps in the browser's session store rather than in the visitor's durable state.
+ *
+ * Three of the eight exist because the collections themselves are rebuilt from the frozen seed on every
  * document load: `SESSIONS` keeps each issued session's own issue instant and expiry, `CLIENT_WRITES` holds
  * what this browser placed, registered, edited or published, which `src/data/clientWrites.ts` replays onto
  * that seed, and `ORDER_TOKENS` holds the read credential a session-less buyer's own confirmation is
  * reopened with.
+ *
+ * `SESSION_SEAL` stands apart from the value it seals by design: a secret kept inside the record it proves
+ * would be replaced along with that record, so the session table's records are sealed with a secret held
+ * under its own key.
  *
  * Consumer: `src/utils/storage.ts`, the only module in the product that touches `localStorage`. It
  * reads every key from here so no caller invents one, and stamps each payload with
@@ -42,10 +50,24 @@ export const STORAGE_KEYS = {
   /**
    * The demonstration account store's session table: every session the store has issued, keyed by
    * its token, so a persisted token keeps its own issue instant and expiry across a reload. That is
-   * what makes the seven-day window a fixed window rather than one that restarts whenever a token
-   * is presented (§0.12.2), and it is what lets a live session survive a reload (§0.1.1).
+   * what makes the seven-day window a fixed window rather than one that restarts whenever a token is
+   * presented, and it is what lets a live session survive a reload.
    */
   SESSIONS: `${STORAGE_KEY_PREFIX}.sessions`,
+  /** The secret the session table's records are sealed with: one value this browser mints for itself, so a
+   * record the product's own code did not write, or one whose members were edited after it was written, can
+   * be told from a record it did and is refused as a token no session was issued for. It is kept under its
+   * own key rather than inside the table it seals, because a secret stored beside the records it proves
+   * would be replaced with them. The check is demonstration-grade, not a boundary: the secret is held in the
+   * same browser store the records are, so whoever writes one can write the other — the limit
+   * `src/data/collectionStore.ts` states for the whole account store. */
+  SESSION_SEAL: `${STORAGE_KEY_PREFIX}.session-seal`,
+  /** The secret a placement record is sealed with: one value this browser mints for itself, so an entry a
+   * script wrote into `ORDER_TOKENS` can be told from one the product itself recorded and is refused, and a
+   * guest's confirmation is not reopened by an entry nobody placed. It is a second secret rather than the
+   * session table's, because a sign-out rotates that one and a rotation must not reach a guest's own
+   * confirmation. */
+  PLACEMENT_SEAL: `${STORAGE_KEY_PREFIX}.placement-seal`,
   /** The last report range an administrator chose, so the dashboard reopens where it was left. */
   REPORT_RANGE: `${STORAGE_KEY_PREFIX}.report-range`,
   /** The read credential of each order this browser placed without an account, so the buyer's own
@@ -57,6 +79,28 @@ export const STORAGE_KEYS = {
    * wrote and the reviews it published, alongside the marks its order minting has reached — replayed
    * onto the seed by `src/data/clientWrites.ts` when a data source is built. */
   CLIENT_WRITES: `${STORAGE_KEY_PREFIX}.writes`,
+} as const;
+
+/**
+ * The tab-scoped set: what the product keeps in the browser's session store instead of in the durable
+ * store above, so it belongs to one tab's session and goes when that tab does.
+ *
+ * Consumer: `src/utils/storage.ts`, the only module in the product that touches browser storage — it reads
+ * and writes these keys through `readSessionStored` and `writeSessionStored`, which give them the same
+ * versioned envelope, the same refusal-reported-as-a-value contract and the same degradation the durable
+ * keys get, over `sessionStorage` instead of `localStorage` — and `src/main.tsx`, which reaches its one
+ * entry through those two functions rather than through a store of its own.
+ *
+ * A separate object because `STORAGE_KEYS` documents itself as the eight pieces of durable state and of
+ * nothing else, and because `clearStoredKeys()` walks that object against the durable store: an entry added
+ * here is not swept by it, which is what a tab-scoped marker wants.
+ */
+export const SESSION_STORAGE_KEYS = {
+  /**
+   * When this tab's document last reloaded itself for a chunk a deployment had moved, so the reload is not
+   * repeated for a failure the reload could not clear.
+   */
+  STALE_CHUNK_RECOVERY: `${STORAGE_KEY_PREFIX}.stale-chunk-recovery`,
 } as const;
 
 /**
@@ -108,9 +152,9 @@ export const CATALOGUE_PRICE_CEILING_MINOR = 189_999;
 /**
  * The five delivery methods a checkout may offer, with what each costs and how long it takes.
  *
- * These are immutable, plan-priced configuration rather than seeded records — the plan defines no
- * data file for them, and their prices must stay coherent with `FREE_SHIPPING_THRESHOLD_MINOR` and
- * `FREE_SHIPPING_METHOD_ID` below — so this list is their single home. `src/data/repositories.ts`
+ * These are immutable configuration rather than seeded records — no data module owns them, and their
+ * prices must stay coherent with `FREE_SHIPPING_THRESHOLD_MINOR` and `FREE_SHIPPING_METHOD_ID` below
+ * — so this list is their single home. `src/data/repositories.ts`
  * imports `SHIPPING_METHODS` and returns it from the data source that answers
  * `GET /api/shipping-methods`, rather than declaring a second list.
  *
@@ -286,6 +330,18 @@ export const RELATED_PRODUCTS_LIMIT = 4;
  * rather than left in a half-authenticated state.
  */
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * How long the read credential of an order placed without an account stays usable, in milliseconds:
+ * thirty days.
+ *
+ * Consumers: `src/utils/orderPlacements.ts`, which records each placement's own expiry with the
+ * credential and hands one back only while that window is open, and `src/lib/apiOrders.ts`, which
+ * verifies a presented credential against the same record. A guest's confirmation therefore reopens
+ * after a reload and a browser restart, and stops being readable with a credential this old rather than
+ * remaining open forever.
+ */
+export const ORDER_PLACEMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Report and export limits ---------------------------------------------------------------------
 

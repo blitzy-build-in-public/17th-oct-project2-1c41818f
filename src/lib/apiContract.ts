@@ -242,8 +242,8 @@ export type OrderCreationRequest = Omit<Commerce.CreateOrderRequest, "payment"> 
  * request targets from them, so the vocabulary a request is named with has a single home and a path
  * change is a change to this table alone.
  *
- * A pattern is the path as §0.6.3 states it, with a captured segment written `:name` — the name a
- * handler reads out of `RouteContext.params` and the name a caller fills through {@link fillApiPath}.
+ * A pattern is an endpoint path with a captured segment written `:name` — the name a handler reads
+ * out of `RouteContext.params` and the name a caller fills through {@link fillApiPath}.
  * Two methods that share one path (`GET` and `POST /api/orders`, the two
  * `/api/products/:id/reviews` and the two `/api/customers/:id/addresses` forms) share one entry,
  * because the pattern is what is written here and the method belongs to the route that answers it.
@@ -404,9 +404,9 @@ export interface RouteDefinition<TId extends string = string> {
  *
  * `src/data/repositories.ts` implements it over the seeded collections, `src/main.tsx` binds that
  * implementation before the first render and `tests/testUtils.tsx` binds a double for the integration
- * tests. The seam declares the contract and imports no implementation of it: the transport is written
- * four phases before the data module exists, and the two are joined at the composition root rather
- * than by an import. A method that can fail says why through a `Result`, which the seam passes to the
+ * tests. The seam declares the contract and imports no implementation of it: the two are joined at
+ * the composition root rather than by an import, so the transport serves whatever implements the
+ * contract. A method that can fail says why through a `Result`, which the seam passes to the
  * surface unchanged.
  *
  * The four analytics and report members answer with a promise of one: the modules they run over — the

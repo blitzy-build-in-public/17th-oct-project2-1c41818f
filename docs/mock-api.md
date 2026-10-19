@@ -1,7 +1,7 @@
 <!--
 Path: docs/mock-api.md
 Purpose: The endpoint contract with the demonstration credentials and the latency and failure switches
-Lines: 212
+Lines: 242
 -->
 
 # The SalesPro mock API
@@ -34,8 +34,8 @@ sits behind any path below.
   into a field-keyed error or a user-facing message, and a component renders an error state with a retry action.
 - Success carries no status: a request that answers with no body — a removal, a sign-out — arrives as `{ ok: true, value: undefined }`, and `status` appears
   only on a failure.
-- A request carries a JSON body where its method allows one, a session token in the `x-session-token` header where the caller has one, and paging as `page` and
-  `pageSize`.
+- A request carries a JSON body where its method allows one, a session token in the `x-session-token` header where the caller has one, an order's placement credential in the
+  `x-order-token` header where the caller is reading an account-less order it placed (see §7), and paging as `page` and `pageSize`.
 - Path parameters are prefixed identifiers (`prod_1`, `ord_9`), never positions.
 
 **Response wrappers follow the payload.** A paged endpoint returns `PageResult<T>`; a computed collection carrying its own metadata (`/api/analytics/revenue`,
@@ -63,11 +63,11 @@ come from `src/utils/strings.ts` (`prod_`, `cat_`, `brd_`, `cus_`, `adr_`, `ord_
 | `GET /api/categories`                                  | Category tree with product counts                                                                  | —                                                                                                                  | `CategoryNode[]`, each node carrying its `children` and its `productCount`                                                                                                                                                                                                                                                                      |
 | `GET /api/brands`                                      | Brands with product counts                                                                         | —                                                                                                                  | `Brand[]`                                                                                                                                                                                                                                                                                                                                       |
 | `POST /api/cart/price`                                 | Price a basket: line totals, discounts, shipping, tax, grand total                                 | `lines`, `promoCode`, `shippingMethodId`                                                                           | `PricedCart`; `409` with the rejection reason as its code when the promo no longer applies, `422` when a line cannot be priced                                                                                                                                                                                                                  |
-| `POST /api/cart/validate-promo`                        | Validate a code before applying it                                                                 | `code`, `lines`                                                                                                    | `PromoCode`; `409` with `field: "promoCode"` and the reason as its code (`unknown`, `inactive`, `not-started`, `expired`, `below-minimum`, `usage-limit`, `already-applied`, `ineligible-category`); `422` with `field: "promoCode"` when the code's shape is not 4–16 upper-case alphanumerics                                                 |
+| `POST /api/cart/validate-promo`                        | Validate a code before applying it                                                                 | `code`, `lines`                                                                                                    | `PromoCode`; `409` with `field: "promoCode"` and the reason as its code (`unknown`, `inactive`, `not-started`, `expired`, `below-minimum`, `usage-limit`, `already-applied`, `ineligible-category`); `422` with `field: "promoCode"` when the code's shape is not 4–16 upper-case alphanumerics, the sentence naming the fault                  |
 | `GET /api/shipping-methods`                            | The delivery methods and their prices                                                              | —                                                                                                                  | `ShippingMethod[]`                                                                                                                                                                                                                                                                                                                              |
-| `POST /api/orders`                                     | Create an order from a basket snapshot; a guest may submit one                                     | `snapshot`, `email`, `shippingAddress`, `billingAddress`, `shippingMethodId`, `payment`, `idempotencyKey`          | `Order`; `402` on a declined card, `409` when the key arrives with a differing body, `422` on validation                                                                                                                                                                                                                                        |
+| `POST /api/orders`                                     | Create an order from a basket snapshot; a guest may submit one                                     | `snapshot`, `email`, `shippingAddress`, `billingAddress`, `shippingMethodId`, `payment`, `idempotencyKey`          | `Order`; `402` on a declined card, `409` when the key arrives with a differing body or a submitted promo cannot be applied, `422` naming the offending control in `field` (`snapshot`, `lines`, `payment`, `promoCode` or an address member)                                                                                                    |
 | `GET /api/orders`                                      | The signed-in customer's own order history — scoped to the session, so it takes **no customer id** | `page`, `pageSize`, `status`, `from`, `to`                                                                         | `PageResult<Order>`; `401` without a session                                                                                                                                                                                                                                                                                                    |
-| `GET /api/orders/:id`                                  | Order detail                                                                                       | —                                                                                                                  | `Order`; `401` when the order belongs to an account and no session was sent, `404` for an unknown id or another account's order — a foreign id is never `403` — an account-less order is answered to the caller presenting the `x-order-token` credential minted when it was placed and to nobody else, and an administrator may read any order |
+| `GET /api/orders/:id`                                  | Order detail                                                                                       | —                                                                                                                  | `Order`; `401` without a usable credential, an identifier no order holds reading the same as one that does; with a session, `404` for another account's order and an unknown id — never a `403` — an account-less order only for the caller presenting the `x-order-token` credential minted at its placement; an administrator reads any order |
 | `POST /api/auth/register`                              | Create an account and open a session with it                                                       | `email`, `password`, `firstName`, `lastName`, `marketingOptIn`                                                     | `{ customer: Customer, session: Session }`; `409` duplicate email, `422` validation                                                                                                                                                                                                                                                             |
 | `POST /api/auth/login`                                 | Sign in                                                                                            | `email`, `password`                                                                                                | `Session`; `401` with one generic sentence that does not reveal which member was wrong                                                                                                                                                                                                                                                          |
 | `POST /api/auth/logout`                                | End the session a token names                                                                      | —                                                                                                                  | an empty payload                                                                                                                                                                                                                                                                                                                                |
@@ -95,17 +95,32 @@ come from `src/utils/strings.ts` (`prod_`, `cat_`, `brd_`, `cus_`, `adr_`, `ord_
 | `administrator` | The `admin` role             | every analytics endpoint, every report endpoint, and any customer record                                                                                                               | `401` without a session, `403` for a session without the role                              |
 
 Order detail is registered `anonymous` because a guest's confirmation carries no session, yet an order that names no account is answered only to the caller
-presenting the `x-order-token` credential minted at its placement — a caller presenting neither a session nor that credential meets the `401` the session lookup
-already answers, and one presenting another session meets the same `404` a foreign order answers.
+presenting the `x-order-token` credential minted at its placement. Every caller who cannot present a usable credential is refused **identically** — with
+the refusal the session lookup earned, which for a request that presented nothing is the `401 unauthenticated` — so an identifier that holds an order and
+one that holds none are answered alike and existence cannot be read off the status. A caller whose session the store resolved is answered by ownership
+instead: its own order, or any order for an administrator, and the one `404 order-not-found` for every other combination — another account's order and an
+identifier no order holds alike — because a foreign id is never `403`, which would tell the caller the record exists.
+
+Order creation is registered `anonymous` for the same reason — a guest may submit one — but the level decides only what a **missing** session costs: a submission that
+presents a session token the store cannot resolve (expired, unknown or revoked) is refused with the `401` the lookup produced rather than placed as a guest's order, so a
+signed-in buyer whose session lapsed is told to sign in again instead of being handed a confirmation their history will never hold. A submission presenting no token at all
+is a guest's and is placed as one.
 
 The three checks run in that order: no token sent to a protected endpoint is `401`, a valid token without the required role is `403`, and ownership is compared
 against the session's `customerId`, so changing an id in a URL cannot reach another account's data. All three are enforced in the seam and its route handlers,
 **never in the UI**: `src/Router.tsx` guards the account and administrator routes and the navigation hides what a visitor cannot use, but the guard is
 convenience and the service check is the control.
 
-Sessions are opaque tokens carrying a role claim and an expiry, and a password is checked against a salted digest built and verified by the single helper in
-`src/utils/strings.ts`. This is a **demonstration boundary, not a production one**: a real deployment would move session issue and verification behind the
-server `src/lib/apiClient.ts` is designed to be repointed at.
+Sessions are opaque tokens carrying a role claim and an expiry, each minted from the browser's random source when a sign-in issues one, so no two issues share a token and a value a
+reader has seen is rotated away by the next sign-in, and a password is checked against a salted digest built and verified by the single helper in
+`src/utils/strings.ts`. The durable record of an issued session (`salespro.sessions`) is sealed under a secret this browser keeps for itself (`salespro.session-seal`), so a record
+this browser did not write — or one whose account, role or window was edited after it was written — is refused with the `401 session-unknown` a token no session was issued for
+answers with. That check is **demonstration-grade rather than a boundary**: the secret lives in the same browser store the records do, so whoever can write one can write the other, and only the server this
+section names could hold a control the page cannot supply, and a sign-out marks its record revoked rather than dropping it, so the refusal outlives the reload that would otherwise revive it. A sign-out also rotates that secret — the browser mints a fresh one and re-seals the records that still
+stand — so a copy of the table taken before the sign-out proves nothing afterwards and cannot revive the session. A session lookup re-reads the durable
+record, so a sign-out is seen by a document that is already open rather than only after a reload, and a write composes the table from the durable records
+and this document's own, so two documents cannot drop each other's sessions. This is a **demonstration boundary,
+not a production one**: a real deployment would move session issue and verification behind the server `src/lib/apiClient.ts` is designed to be repointed at.
 
 ## 5. The data-source binding, and the unbound path
 
@@ -133,11 +148,16 @@ identical repeat, so a double submission cannot create a second order. The same 
 `idempotency-key-conflict`. The client holds a submitting state that disables the control as well, because a front-end-only guard is not sufficient on its own —
 and a successful call is a created order, not proof of payment. The store and the card decision live in `src/lib/apiOrders.ts`.
 
-The same submission also leaves the seam holding the **placement credential** of an account-less order: the idempotency key that created it is remembered against
-the order it created, and `GET /api/orders/:id` answers such an order to the caller that presents that value in the `x-order-token` header. The client keeps the
-same pair in the storage entry `salespro.order-tokens` (`STORAGE_KEYS.ORDER_TOKENS`), so the buyer's own confirmation can be reopened after a reload by the
-browser that placed the order, and a shared link opens nothing. This is a **demonstration-grade capability, not a production credential**: a real deployment would
-return an unguessable confirmation reference from its server rather than have the client present the key it minted.
+The same submission also leaves the seam holding the **placement credential** of an account-less order: the credential the submission presented in the `x-order-token` header is
+remembered against the order it created, and `GET /api/orders/:id` answers such an order to the caller that presents that value. The credential is **not** the submission's idempotency
+key: the client mints one per attempt with `placementToken()` — `plc_` followed by sixteen random bytes from `crypto.getRandomValues` — and the key, which is derived from the clock
+and a counter and whose shape is published beside the code that mints it, names the attempt rather than proving a placement. The **first** credential recorded for an order stands, so
+a replayed submission leaves the seam and the client holding the same value, and the record carries its own expiry — thirty days, `ORDER_PLACEMENT_TTL_MS` — so a credential that old is
+refused. Every record is sealed
+under a secret this browser keeps for itself (`salespro.placement-seal`), so an entry a script wrote into `salespro.order-tokens` is refused as one the product
+never recorded rather than read as a credential, and a write merges with the list already held, so two documents cannot drop each other's placements. The client keeps the same record in the storage entry `salespro.order-tokens` (`STORAGE_KEYS.ORDER_TOKENS`), so the buyer's own confirmation can be reopened after a reload by
+the browser that placed the order, and a shared link opens nothing. This is a **demonstration-grade capability, not a production credential**: a real deployment would return an
+unguessable confirmation reference from its server rather than have the client present a value it minted.
 
 ## 8. Protections that stand in for rate limiting
 
@@ -169,14 +189,24 @@ The field rules a `422` comes from, and where each is enforced:
 | Email         | non-empty, one `@`, a valid domain shape, at most 254 characters; unique across accounts                                                                   | `src/utils/validation.ts`; a duplicate is refused by the seam with `409`          |
 | Password      | at least 8 characters with one letter and one digit, per `PASSWORD_POLICY`; never stored in clear                                                          | `src/utils/validation.ts`, digested in `src/utils/strings.ts`                     |
 | Quantity      | an integer from 1 to the line's stock ceiling                                                                                                              | `src/state/cartReducer.ts` clamps; `src/utils/validation.ts` judges the stepper   |
-| Card          | 13–19 digits passing the Luhn check, a future expiry and a 3–4 digit CVC                                                                                   | `src/utils/validation.ts`; the approve-or-decline decision belongs to the seam    |
+| Card          | 13–19 digits passing the Luhn check, not one digit repeated throughout, a future expiry and a 3–4 digit CVC                                                | `src/utils/validation.ts`; the approve-or-decline decision belongs to the seam    |
 | Address       | full name, line 1, city, region, postal code and country required; the postal code matches its country's pattern; the country is one this product supports | `src/utils/validation.ts`, reused unchanged by checkout and the address book      |
 | Promo code    | 4–16 upper-case alphanumeric characters, then active, in date, above its minimum subtotal, under its usage limit and not already applied                   | `src/utils/validation.ts` for the shape, `src/lib/pricingService.ts` for the rest |
+| Search term   | at most 120 characters and free of control characters; a blank term is no filter                                                                           | `src/utils/validation.ts`, applied by the transport and the routes                |
 | Review        | an integer rating from 1 to 5, a title of 3–80 characters and a body of 10–1,200                                                                           | `src/utils/validation.ts`                                                         |
 | Price range   | both bounds inside the catalogue's bounds; **an inverted range is swapped, not rejected**                                                                  | `src/utils/queryParams.ts`                                                        |
 | Rating filter | an integer from 1 to 5, or absent                                                                                                                          | `src/utils/queryParams.ts`                                                        |
 | Paging        | page ≥ 1, clamped to the page count; page size from `PAGE_SIZE_OPTIONS`, `{12, 24, 48}`                                                                    | `src/utils/collections.ts` and `src/lib/catalogService.ts`                        |
 | Date range    | not inverted, not in the future, and no longer than `MAX_REPORT_RANGE_DAYS` (366) days; defaulted to the trailing 30                                       | `src/utils/dates.ts`, applied by the report range control                         |
+
+Free text is bounded, and a control character is refused in any member carrying one: an address line accepts up to 120 characters, a city
+or region up to 80, a label up to 40, and a search term up to 120 — the same bound the search controls carry as their own `maxLength`. A name a
+profile, an address or a card carries is bounded at `NAME_MAX_LENGTH` (80) and refuses a control character too.
+
+Every amount an order is placed at is the catalogue's: the seam re-prices each submitted line from the store before it prices the basket, so a
+line's `unitPriceMinor` records what the client last saw rather than a figure the order can be placed at, and a line the catalogue cannot price
+answers `422` with `field: "lines"`. An amount that is not a whole number of minor units the product can represent is refused rather than read
+as zero.
 
 ## 10. The demonstration store and the seeded data
 

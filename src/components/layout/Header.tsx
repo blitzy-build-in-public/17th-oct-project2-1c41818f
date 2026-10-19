@@ -20,6 +20,7 @@ import {
 } from "@/constants/routes";
 import type { ActiveDestination, RoutePath } from "@/constants/routes";
 import { useFocusHandoff } from "@/components/ui/focusHandoff";
+import { FREE_TEXT_LIMITS } from "@/utils/validation";
 
 /*
  * Class contract. Every class rendered below is defined in `src/styles/` and none of it is defined here:
@@ -28,16 +29,15 @@ import { useFocusHandoff } from "@/components/ui/focusHandoff";
  * panel, and the cart and account triggers with their panels; `src/styles/catalog.css` owns the search row
  * the collapsed slot grows into (`sp-search-bar__form`, `sp-search-bar__input`, `sp-search-bar__submit`)
  * with `sp-input` and the button family of `src/styles/controls.css`; `src/styles/base.css` owns
- * `sp-visually-hidden`. No stylesheet is imported here — `src/main.tsx` is the only importer of
- * `src/styles/**` — and no colour, length, radius or breakpoint of this file's own appears below.
+ * `sp-visually-hidden`. No stylesheet is imported here, and
+ * no colour, length, radius or breakpoint of this file's own appears below.
  */
 
 /**
- * The query-string key a header search writes its term into.
- *
- * Declared here rather than spelled at the call site because the key is a contract with the search route:
- * `src/utils/queryParams.ts` owns that end of it and `src/state/CatalogContext.tsx` derives the filter state
- * from it, so the header's `q` and the route's `q` are one word, and this file imports neither of them.
+ * The query-string key a header search writes its term into. Declared here rather than spelled at the call
+ * site because the key is a contract with the search route: `src/utils/queryParams.ts` owns that end of it
+ * and `src/state/CatalogContext.tsx` derives the filter state from it, so the header's `q` and the route's
+ * `q` are one word, and this file imports neither of them.
  */
 const SEARCH_QUERY_KEY = "q";
 
@@ -176,13 +176,12 @@ function HeaderNavList({ items }: { readonly items: readonly HeaderNavItem[] }):
 }
 
 /**
- * The header's search field: the form the search slot grows into at and above the medium stop.
- *
- * Private to this file, because it is not a control another surface composes. The search page has a bar of its
- * own — `src/features/search/SearchBar.tsx`, with type-ahead, recent terms and a clear action — and this field
- * deliberately holds none of that: it submits a term to the search route and stops, so the route's concern
- * keeps one home. The term is read from the control when the form is submitted rather than held in state,
- * because the field has no dependent UI here and a keystroke should re-render nothing.
+ * The header's search field: the form the search slot grows into at and above the medium stop. Private to
+ * this file, because it is not a control another surface composes: the search page has a bar of its own —
+ * `src/features/search/SearchBar.tsx`, with type-ahead, recent terms and a clear action — and this field
+ * deliberately holds none of that. The term is read from the control on submission rather than held in state,
+ * since a keystroke here should re-render nothing; the field carries the search term's own bound as its
+ * `maxLength`, so no term it sends can be one the seam refuses.
  *
  * @returns The search landmark: a labelled field and its submit control.
  */
@@ -226,6 +225,7 @@ function HeaderSearchForm(): ReactElement {
         className="sp-input sp-search-bar__input"
         enterKeyHint="search"
         id={inputId}
+        maxLength={FREE_TEXT_LIMITS.SEARCH_TERM_MAX}
         placeholder={HEADER_COPY.SEARCH_PLACEHOLDER}
         ref={inputRef}
         type="search"

@@ -1,7 +1,7 @@
 /**
  * Path: tests/components/charts.test.tsx
  * Purpose: Scale mathematics, rendered geometry and the data-table alternative
- * Lines: 597
+ * Lines: 599
  */
 
 import { describe, expect, it } from "vitest";
@@ -243,7 +243,9 @@ describe("the chart scales", () => {
   it("anchors the axis labels and the grid lines on the ticks they belong to", () => {
     const area = scales.computePlotArea({ width: 720, height: 280 });
     expect(area).toEqual({ x: 56, y: 16, width: 640, height: 232 });
-    const label = scales.axisLabelTransform("vertical", "value", area, 42);
+    // The members keep their literal types, so the object is the transform's own input.
+    const args = { orientation: "vertical", axis: "value", plotArea: area, position: 42 } as const;
+    const label = scales.axisLabelTransform(args);
     expect(label).toEqual({ x: 48, y: 42, textAnchor: "end", dominantBaseline: "middle" });
     expect(scales.gridLineFor("vertical", area, 42)).toEqual({ x1: 56, y1: 42, x2: 696, y2: 42 });
     expect(scales.gridLineFor("horizontal", area, 42)).toEqual({ x1: 42, y1: 16, x2: 42, y2: 248 });

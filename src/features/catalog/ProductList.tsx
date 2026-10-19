@@ -15,8 +15,8 @@ import type { Product } from "@/types/catalog";
 import type { ApiError, AsyncStatus } from "@/types/common";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class below is consumed by name. `src/styles/catalog.css` owns the results area: `sp-product-grid`,
+ * Class contract. This list is what the sheets owe the list, each class named with the sheet that declares
+ * it. `src/styles/catalog.css` owns the results area: `sp-product-grid`,
  * whose tracks are one column at the narrowest width and two, three and four columns from --breakpoint-sm,
  * --breakpoint-md and --breakpoint-lg; `sp-product-list`, the single-column list variant whose rows become a
  * fixed media column with the body beside it from --breakpoint-sm; and `sp-no-results`, the recovery block

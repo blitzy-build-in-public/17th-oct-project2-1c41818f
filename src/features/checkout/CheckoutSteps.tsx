@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutSteps.tsx
  * Purpose: The ordered step indicator with aria-current and per-step headings
- * Lines: 226
+ * Lines: 224
  */
 
 import type { ReactElement } from "react";
@@ -18,10 +18,8 @@ import type { CheckoutStep } from "@/state/checkoutReducer";
 
 /*
  * Class contract. `src/styles/commerce-steps.css` is the sole definition site of this family — the sheet
- * `src/styles/commerce.css` loads with `@import "./commerce-steps.css";` — and no file under
- * `src/features/**` may import a stylesheet, because `src/main.tsx` is the only importer of
- * `src/styles/**`, so every class below is consumed by name, and this comment is the list that sheet
- * owes the file: `sp-steps` for the ordered list; `sp-steps__item` for one step, with
+ * `src/styles/commerce.css` loads with `@import "./commerce-steps.css";` — and this comment is the list that
+ * sheet owes the file: `sp-steps` for the ordered list; `sp-steps__item` for one step, with
  * `sp-steps__item--current` and `sp-steps__item--done` for the two marked states, the sheet styling
  * the current item by that modifier and by the `[aria-current="true"]` attribute this component sets,
  * exactly as `src/components/layout/PageHeader.tsx` pairs a crumb's modifier with its attribute;

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/PaymentForm.tsx
  * Purpose: The payment step: demonstration card entry with Luhn, expiry and CVC validation
- * Lines: 254
+ * Lines: 265
  */
 
 import type { ChangeEvent, FormEvent, ReactElement } from "react";
@@ -15,19 +15,18 @@ import { COMMON_ACTIONS } from "@/constants/content";
 import { useCheckout } from "@/state/CheckoutContext";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only
- * importer of `src/styles/**` — so every class below is consumed by name, and this is the list the
- * sheets owe the file. `src/styles/commerce.css` owns the payment family: `sp-payment` for the form
- * itself, the step body's own grid and rhythm; `sp-payment__note` for the demonstration notice, which
- * the markup composes with `.sp-alert .sp-alert--info` and which the sheet holds to the prose measure;
- * `sp-payment__card` for the panel the card controls sit on; `sp-payment__row` for the field grid the
- * address form and the confirmation's meta block also use — one column on a phone, two from
- * --breakpoint-md; `sp-step__actions` for the row the step's two controls take, which the sheet swaps
- * at --breakpoint-md so the first control in the DOM sits on the right and the second on the left,
- * while a phone stacks them in that same DOM order; and `sp-summary__note`, the muted caption register
- * the submitting line reads in, which `src/styles/summary-panel.css` owns. Earlier sheets supply the
- * rest, reached through the components rather than written here: `sp-field` with its `__label`,
- * `__control`, `__hint` and `__error` parts, and `sp-input`, all from `src/styles/controls.css`.
+ * Class contract. These are the classes the sheets owe the file. `src/styles/commerce.css` owns the
+ * payment family: `sp-payment` for the form itself, the step body's own grid and rhythm;
+ * `sp-payment__note` for the demonstration notice, which the markup composes with
+ * `.sp-alert .sp-alert--info` and which the sheet holds to the prose measure; `sp-payment__card` for
+ * the panel the card controls sit on; `sp-payment__row` for the field grid the address form and the
+ * confirmation's meta block also use — one column on a phone, two from --breakpoint-md;
+ * `sp-step__actions` for the row the step's two controls take, which the sheet swaps at
+ * --breakpoint-md so the first control in the DOM sits on the right and the second on the left, while
+ * a phone stacks them in that same DOM order; and `sp-summary__note`, the muted caption register the
+ * submitting line reads in, which `src/styles/summary-panel.css` owns. Earlier sheets supply the rest,
+ * reached through the components rather than written here: `sp-field` with its `__label`, `__control`,
+ * `__hint` and `__error` parts, and `sp-input`, all from `src/styles/controls.css`.
  *
  * Two boundaries hold this file to collecting and judging, and neither is stated here: the card's own
  * rules are `src/utils/validation.ts`', run by the checkout context when the step is left, and the
@@ -56,6 +55,8 @@ interface CardField {
   readonly autoComplete: string;
   /** The keypad a touch device offers: digits for everything but the holder's name. */
   readonly inputMode: "text" | "numeric";
+  /** The platform type the control takes: `password` masks the two members never echoed back. */
+  readonly type: "text" | "password";
 }
 
 /**
@@ -71,6 +72,11 @@ interface CardField {
  * than a card's notation, and the rule files a fault on the half in fault: a blank half is required on
  * its own control, while a pair that has already passed is the year's. Every control is required — a
  * card is judged by its holder's name, its number, its expiry and its security code together.
+ *
+ * The number and the security code are masked as they are typed, so neither is echoed back to the
+ * screen: the number's own hint promises the data is validated in the browser and then discarded, and
+ * only the last four digits survive into the order's payment summary. The holder's name and the
+ * expiry's two halves are ordinary text.
  */
 const CARD_FIELDS: readonly CardField[] = [
   {
@@ -78,6 +84,7 @@ const CARD_FIELDS: readonly CardField[] = [
     label: CHECKOUT_COPY.NAME_ON_CARD_LABEL,
     autoComplete: "cc-name",
     inputMode: "text",
+    type: "text",
   },
   {
     member: "number",
@@ -85,18 +92,21 @@ const CARD_FIELDS: readonly CardField[] = [
     hint: CHECKOUT_COPY.CARD_NUMBER_HINT,
     autoComplete: "cc-number",
     inputMode: "numeric",
+    type: "password",
   },
   {
     member: "expiryMonth",
     label: CHECKOUT_COPY.CARD_EXPIRY_MONTH_LABEL,
     autoComplete: "cc-exp-month",
     inputMode: "numeric",
+    type: "text",
   },
   {
     member: "expiryYear",
     label: CHECKOUT_COPY.CARD_EXPIRY_YEAR_LABEL,
     autoComplete: "cc-exp-year",
     inputMode: "numeric",
+    type: "text",
   },
   {
     member: "cvc",
@@ -104,6 +114,7 @@ const CARD_FIELDS: readonly CardField[] = [
     hint: CHECKOUT_COPY.CARD_SECURITY_CODE_HINT,
     autoComplete: "cc-csc",
     inputMode: "numeric",
+    type: "password",
   },
 ];
 
@@ -221,7 +232,7 @@ export function PaymentForm(): ReactElement {
               name={field.member}
               onChange={changeCardField(field.member)}
               required
-              type="text"
+              type={field.type}
               value={values.payment[field.member]}
             />
           ))}

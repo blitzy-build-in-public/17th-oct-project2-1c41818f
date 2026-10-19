@@ -1,22 +1,23 @@
 /* Path: src/styles/chart-series.css
  * Purpose: Styles for the chart series paint: the shared mark treatment, the twelve per-series rules and the legend swatch, split out of src/styles/admin-reports.css, which loads this sheet with @import
- * Lines: 154
+ * Lines: 155
  */
 
 /* The chart-series family, and the sole definition site of the .sp-chart__series-1..12 classes
  * src/components/charts/chartGeometry.ts emits: what paints a mark, and what tells one series from
- * another. Split out of src/styles/admin-reports.css, which stood at exactly 600 lines — the request's
- * ceiling — and could take no rule of its own, while the series paint had to grow from eight rules to
- * twelve: the product's revenue breaks into twelve categories, and two series that differ in neither
- * hue nor rhythm are one series to a reader. The plan's remedy for a concern that cannot fit is the
- * split, never the ceiling. admin-reports.css loads this sheet with @import above its first rule, so
+ * another. The series paint is a family of its own — the shared mark treatment, the twelve
+ * `.sp-chart__series-N` rules and the legend swatch — because the product's revenue breaks into twelve
+ * categories and two series that differ in neither hue nor rhythm are one series to a reader, so the report
+ * register gives it up whole and the rule behind that is this:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * admin-reports.css loads this sheet with @import above its first rule, at the position the moved rules held, so
  * these rules hold the cascade position they held inside it: the sheet sets a series' colour, its
  * stroke rhythm and its bar opacity, and the .sp-chart__point, .sp-chart__bar and .sp-chart__slice
  * rules that follow read those declarations to reset the dash a slice or a bar does not carry.
  *
  * Every value is a var() from tokens.css, which is the only file in the folder that declares one, and
  * every class here is consumed by name: no file under src/components/** imports a stylesheet, and the
- * eight mapped sheets src/main.tsx imports are unchanged.
+ * entry point imports the same eight mapped stylesheets with no ninth path anywhere.
  *
  * Separation is one concern in two channels, and this sheet holds both. Hue is the first: twelve
  * --chart-series-N tokens spaced in hue and in lightness, each clearing 3:1 on the surface. Rhythm is

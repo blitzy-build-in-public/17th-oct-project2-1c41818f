@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/lineChartModel.ts
  * Purpose: The line chart's plot model: its scales, axis ticks, series paths, pointer areas and readout placement
- * Lines: 256
+ * Lines: 255
  */
 
 import type { CSSProperties } from "react";
@@ -45,12 +45,11 @@ import { DATE_RANGE_COPY } from "@/constants/content-reports";
 import type { ChartSeries } from "@/types/analytics";
 
 /**
- * Why this file exists beside `LineChart.tsx`: the line renderer's coordinate work is one concern but
- * more than one file may hold under the request's 600-line ceiling, so the plan's §0.5.5 split rule is
- * applied here as it already is to `chartScales.ts` and `chartGeometry.ts`. This half builds the model a
- * render is drawn from — the scales, the axis ticks, the series paths, the pointer areas and the readout's
- * placement — and `LineChart.tsx` turns that model into elements. Nothing here imports the renderer, so
- * the dependency runs one way.
+ * Why this file exists beside `LineChart.tsx`: the line renderer's coordinate work is one concern, and one
+ * file may hold no more than 600 lines, so the concern is split as it already is for `chartScales.ts` and
+ * `chartGeometry.ts`. This half builds the model a render is drawn from — the scales, the axis ticks, the
+ * series paths, the pointer areas and the readout's placement — and `LineChart.tsx` turns that model into
+ * elements. Nothing here imports the renderer, so the dependency runs one way.
  *
  * Every coordinate comes from `@/components/charts/chartScales` over the caller's own data, and nothing
  * here reads an element's size, the document or the clock, so the geometry is a pure function of its

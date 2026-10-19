@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderConfirmation.tsx
  * Purpose: Confirmation route showing the order number, itemised lines, delivery estimate and address
- * Lines: 558
+ * Lines: 557
  */
 
 import type { ReactElement } from "react";
@@ -45,8 +45,7 @@ import { formatMoney, formatQuantity } from "@/utils/format";
 import { capitalise } from "@/utils/strings";
 
 /*
- * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns the confirmation
+ * Class contract. `src/styles/commerce.css` owns the confirmation
  * family: `sp-confirmation` with its `__header`, `__meta` (the pair grid the address form and the payment
  * row also use), `__number` (monospaced, selectable in one gesture), `__estimate`, `__lines` (the itemised
  * band, ruled off above and below) and `__actions`. That band reuses the review step's form —

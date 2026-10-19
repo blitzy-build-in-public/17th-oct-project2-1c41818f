@@ -29,7 +29,7 @@ import { Header, type HeaderProps } from "./Header";
  * `sp-app__main` is the element carrying the page region's opening padding — so a page that cancels it, the
  * landing hero's `sp-page--flush`, cancels this file's padding rather than a second copy of it — and, in the
  * administrator variant, the measure and inline gutter that every other route takes from `.sp-container`. No
- * stylesheet is imported here, because `src/main.tsx` is the only importer of `src/styles/**`, and no colour,
+ * stylesheet is imported here, and no colour,
  * length, radius, shadow or breakpoint of this file's own appears below.
  */
 
@@ -206,12 +206,12 @@ export function AppLayout({ children, ...headerProps }: AppLayoutProps): ReactEl
    * The region is a way station, not the destination, and the heading of the new screen is what the focus
    * finishes on. A ring is painted outside its element's box, and the region's box begins exactly at the
    * header band's bottom edge, so the ring of a region that keeps the focus is drawn under the opaque header
-   * and outside the viewport's columns: the reader who navigated by keyboard is announced into the new screen
-   * with no indicator anywhere on it — measured on every route of the product before this rule existed. The
+   * and outside the viewport's columns: a keyboard user is announced into the new screen with no visible
+   * indicator anywhere on it — the reason the move is carried through to the heading. The
    * screen's own `<h1>` is drawn inside the page, below the band, and it names where the reader has arrived,
    * which is why the move is carried through to it. `focusScreenHeading` documents the move and the ring
    * correction that goes with it; a screen that renders no heading — the placeholder a route shows while its
-   * code is fetched is one — keeps the focus on the region, exactly as it did before.
+   * code is fetched is one — keeps the focus on the region.
    */
   useEffect(() => {
     if (previousPathRef.current === pathname) return undefined;

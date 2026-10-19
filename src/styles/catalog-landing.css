@@ -1,14 +1,15 @@
 /* Path: src/styles/catalog-landing.css
  * Purpose: Styles for the landing page's bands: the hero with its illustration, the promotional banner, the trust strip, the category showcase and the featured strip
- * Lines: 346
+ * Lines: 347
  */
 
 /* The landing surface: the hero band with its drawing, the promotional band, the trust strip, the category
  * showcase with its chips, and the section header the featured strip shares with the related strip in
- * catalog-detail.css. Split out of src/styles/catalog.css, which the plan maps, because the catalogue and search
- * family does not fit one file inside the request's 600-line ceiling; catalog.css loads this sheet with @import
- * ahead of its own rules, so the entry point still imports the eight mapped stylesheets and the cascade order is
- * unchanged. It composes the primitives the component sheets own (.sp-btn, .sp-card) and restates none
+ * catalog-detail.css. A split of src/styles/catalog.css, and the rule that settled it is this:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * catalog.css loads this sheet with @import ahead of its own rules, at the position the moved rules held, so the
+ * cascade order is unchanged and the entry point still imports the same eight mapped stylesheets, with no ninth
+ * path anywhere. It composes the primitives the component sheets own (.sp-btn, .sp-card) and restates none
  * of their rules, and every value is a var() from tokens.css.
  *
  * The hero, trust and promotional names are the ones the committed src/features/home/HeroSection.tsx and

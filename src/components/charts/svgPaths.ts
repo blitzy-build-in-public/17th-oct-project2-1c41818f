@@ -1,14 +1,13 @@
 /**
  * Path: src/components/charts/svgPaths.ts
  * Purpose: The SVG path text a chart’s marks are drawn from, in the frame’s own coordinate system
- * Lines: 140
+ * Lines: 139
  */
 
 /**
- * Why this file exists beside `chartGeometry.ts`: the charts' geometry is one concern the plan's 600-line
- * ceiling splits, and the mark, path and table half outgrew the room left once the destination branch's donut
- * work and this checkpoint's axis work landed together. The path half moved here whole — the coordinate
- * rounding, the polyline and area builders, the polar mapping and the ring segment — and `chartGeometry.ts`
+ * Why this file exists beside `chartGeometry.ts`: the charts' geometry is one concern split by what each
+ * file owns rather than by size, because one file may not exceed 600 lines. This file owns the coordinate
+ * rounding, the polyline and area builders, the polar mapping and the ring segment, and `chartGeometry.ts`
  * imports it and publishes it again, so nothing that draws a chart changed the path it imports.
  *
  * The contract: pure, `readonly` input it never mutates, a fresh string out, and no read of the document, the

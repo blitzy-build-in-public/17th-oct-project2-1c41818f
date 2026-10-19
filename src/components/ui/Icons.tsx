@@ -1,5 +1,5 @@
 /**
- * Path: src/components/ui/icons.tsx
+ * Path: src/components/ui/Icons.tsx
  * Purpose: The decorative glyphs the primitives and the feature surfaces render inside the controls that own their accessible names
  * Lines: 41
  */
@@ -7,12 +7,12 @@
 import type { ReactElement } from "react";
 
 /*
- * Why the glyphs live here rather than in the file that first drew one: three surfaces on two layers paint the
- * same close glyph — the modal and drawer family, the catalogue's filter chips and the search slice's
- * active-filter chips — and §0.3.2 lets a feature import a shared component but never another feature, so a
- * glyph two features need belongs in the shared presentation layer. Each caller keeps the class its own
- * stylesheet selects (the modal's `sp-modal__close` on the `IconButton`, the chip's remove-control classes), so
- * the sheet still sizes and positions the glyph and nothing here invents a class, a width or a height.
+ * Why the glyphs live here: three surfaces on two layers paint the same close glyph — the modal and drawer
+ * family, the catalogue's filter chips and the search slice's active-filter chips — and shared presentation
+ * may not import a feature slice, so a glyph two features need belongs in the shared presentation layer.
+ * Each caller keeps the class its own stylesheet selects (the modal's `sp-modal__close` on the `IconButton`,
+ * the chip's remove-control classes), so the sheet still sizes and positions the glyph and nothing here
+ * invents a class, a width or a height.
  */
 
 /**

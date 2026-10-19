@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/SalesReport.tsx
  * Purpose: The sales report: bucketed table, totals row, summary metrics and paired chart
- * Lines: 312
+ * Lines: 311
  */
 
 import { useCallback } from "react";
@@ -30,9 +30,8 @@ import { formatCellValue } from "@/utils/format";
 import { ReportTable } from "./ReportTable";
 
 /*
- * Class contract. `src/styles/admin-reports.css` is the sole definition site of the report shell, and no file
- * under `src/features/**` may import a stylesheet — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class below is adopted by name, and this comment is the list the sheet owes the file:
+ * Class contract. `src/styles/admin-reports.css` is the sole definition site of the report shell, and this
+ * comment is the list the sheet owes the file, each class named with the sheet that declares it:
  * `sp-report__body` is the grid this view stacks its period sentence, its figures, its chart and its table in;
  * `sp-report__summary` is that figures block, one column on a phone, two from the small stop and four from the
  * large one, with `sp-report__summary-item`, `sp-report__summary-label` and `sp-report__summary-value` for one

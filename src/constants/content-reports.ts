@@ -5,12 +5,12 @@
  */
 
 /*
- * A §0.5.5 split of `src/constants/content.ts`. The back-office register is one concern: the copy the admin-only
- * surfaces share — the refusal a visitor without the role is told, the range control the dashboard and the reports
- * are both read over, the dashboard's own labels and the reports' headings and export note. The file that held it
- * had grown past the request's 600-line ceiling, and §0.5.5 answers that by splitting a concern into a second file
- * rather than raising the ceiling. `src/constants/content.ts` re-exports this module, so no consumer's import path
- * and no exported name changed, and the dependency runs one way: this file imports nothing from content.ts.
+ * The back-office register, kept beside `src/constants/content.ts` rather than inside it, is one concern:
+ * the copy the admin-only surfaces share — the refusal a visitor without the role is told, the range control
+ * the dashboard and the reports are read over, the dashboard's labels and the reports' headings. The copy
+ * grew past the 600 lines one file may hold, so the register is split by surface rather than the ceiling
+ * raised: this file owns the back-office sections, `src/constants/content.ts` re-exports it, no consumer's
+ * import path changes, and the dependency runs one way — this file imports nothing from content.ts.
  */
 
 // Back-office access ---------------------------------------------------------------------------

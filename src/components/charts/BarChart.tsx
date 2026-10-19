@@ -370,13 +370,13 @@ export function BarChart({
               className="sp-chart__readout"
               role="status"
               aria-live="polite"
-              style={readoutStyle(
+              style={readoutStyle({
                 geometry,
-                activeRow.key,
-                plotHeight,
+                bandKey: activeRow.key,
+                height: plotHeight,
                 horizontal,
-                activeRowText.length,
-              )}
+                characters: activeRowText.length,
+              })}
             >
               {activeRowText}
             </div>

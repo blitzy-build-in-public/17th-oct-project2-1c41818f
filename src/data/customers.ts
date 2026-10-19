@@ -321,7 +321,7 @@ function uniqueEmail(
 
 /** Plans the account at `index`: the two documented positions take their profiles from
  *  {@link DEMO_PROFILES} and every other account composes a name from the pools by its position.
- *  `taken` holds the addresses already handed out, so the plan's own is new. */
+ *  `taken` holds the addresses already handed out, so the account's own is new. */
 function planCustomer(index: number, taken: ReadonlySet<string>, rand: SeededRandom): CustomerPlan {
   const role: Role = index === 0 || index === SECOND_ADMIN_INDEX ? "admin" : "customer";
   const documented = DEMO_PROFILES.at(index);

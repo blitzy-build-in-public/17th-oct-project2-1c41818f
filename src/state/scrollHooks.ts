@@ -7,11 +7,11 @@
 import { useEffect } from "react";
 
 /*
- * The view-position half of the shared hooks, split out of `src/state/hooks.ts` because that file stood one
- * line inside the request's "No file over 600 lines" ceiling and could not take another export, which §0.5.5
- * answers with a second file rather than a raised ceiling — the same remedy that gave the date foundation its
- * `src/utils/isoInstants.ts` and the overlay family its `src/components/ui/overlayEngine.ts`. Nothing is
- * duplicated: the hooks `hooks.ts` owns stay exactly where they are, and neither file imports the other.
+ * The view-position half of the shared hooks, split out of `src/state/hooks.ts` because that module may hold
+ * no more than 600 lines and could not take another export, so a second file is the answer rather than a raised
+ * ceiling — the same remedy that gave the date foundation its `src/utils/isoInstants.ts` and the overlay
+ * family its `src/components/ui/overlayEngine.ts`. Nothing is duplicated: the hooks `hooks.ts` owns stay
+ * exactly where they are, and neither file imports the other.
  */
 
 // View position ----------------------------------------------------------------------------------

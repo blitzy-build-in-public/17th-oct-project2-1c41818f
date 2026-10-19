@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Rating.tsx
  * Purpose: Rating display and input, the price tag with discount, and the quantity stepper
- * Lines: 585
+ * Lines: 599
  */
 
 import { useId, useState } from "react";
@@ -35,8 +35,8 @@ import {
 /**
  * The class contract this family renders against.
  *
- * No stylesheet may be imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every class
- * below is consumed by name, and this list is what the sheets owe the file: `sp-rating` with its `__stars`,
+ * No stylesheet may be imported here, so every class below is consumed by name, and this list is what the
+ * sheets owe the file: `sp-rating` with its `__stars`,
  * `__star`, `__star--empty`, `__value` and `__count` for the display row; `sp-price` with its `__current`,
  * `__list` and `__discount` for the price tag; and `sp-quantity` with its `__button` and `__input` for the
  * stepper. `sp-rating__count` is declared in `src/styles/controls.css`, which owns the shared caption register
@@ -121,10 +121,9 @@ function textOr(candidate: string | undefined, fallback: string): string {
 
 /** The whole units a ceiling holds, or `null` when it holds nothing purchasable.
  *
- * A bound below the floor is not a ceiling: flooring one to a single unit is what made the quantity control
- * announce a quantity the data never held, so a ceiling that is not a finite number and one that truncates to
- * less than {@link MIN_QUANTITY} both read as no ceiling here — the same "nothing on hand means nothing to
- * choose" answer `src/state/cartReducer.ts#stockCeilingOf` and
+ * A bound below the floor is not a ceiling: a ceiling that is not a finite number, or that truncates to less
+ * than {@link MIN_QUANTITY}, reads as no ceiling here — the same "nothing on hand means nothing to choose"
+ * answer `src/state/cartReducer.ts#stockCeilingOf` and
  * `src/features/cart/cartSelectors.ts#selectAvailability` give a count of zero, restated privately because
  * shared presentation never imports a feature slice. A caller that has nothing to bound renders nothing.
  *
@@ -442,11 +441,13 @@ export interface QuantityStepperProps {
  * range keeps the value it holds and states the bound, which is what makes the bound perceivable without taking
  * the keyboard user's focus away from the field they were stepping.
  *
- * A typed entry is committed as it is typed and normalised when the field is left or Enter is pressed: text
- * holding no whole number — an empty field, letters, a fraction, a sign — commits nothing and the field falls
- * back to the value it is holding, so the control never reports a quantity that is not a whole number. While a
- * figure is typed the field shows what was typed even where the committed value was clamped, so the field never
- * fights the typist; the caller's own clamp remains the enforcement, and this control's is what the shopper sees.
+ * A typed entry is committed as it is typed, and normalised when the field is left or Enter is pressed. Every
+ * path is confined by the bounds, so the figure the caller is handed always lies inside them: a typed figure the
+ * bounds will not take is committed as the bound it passes, and text holding no whole number — an empty field,
+ * letters, a fraction, a sign, an exponent — commits nothing at all. Either one states the bound, so the field
+ * never shows a figure the cart was not given without the range stated with it. While a figure is typed the field
+ * shows what was typed, so the field never fights the typist; the caller's own clamp is the enforcement, and this
+ * control's is what the shopper sees.
  * The bound is carried twice: the field's own minimum and maximum state the range as the platform announces it,
  * and a described-by line the library phrases says it in words, so the ceiling is never implicit. The control
  * states no quantity of its own beyond what it is given: line totals, discounts and every other figure belong to
@@ -455,9 +456,11 @@ export interface QuantityStepperProps {
  * The announced range always agrees with the data. A ceiling that holds nothing purchasable renders no control
  * at all: there is no quantity to choose, and the surface's own availability copy — the cart line's warning, the
  * product detail's stock line — is what carries the state, so nothing offers a range of one unit beside two
- * controls that cannot move it, and nothing is announced about a quantity the data does not have. A refused step
- * leaves the value as it was and writes the bound into a polite status region, so the press is stated rather
- * than dropped in silence; a step the control accepts withdraws that sentence.
+ * controls that cannot move it, and nothing is announced about a quantity the data does not have. A refusal — a
+ * step the bounds will not take, or a typed entry that is not a whole number inside them — is written into a
+ * polite status region, so it is stated rather than dropped in silence: a refused step keeps the value it holds,
+ * text holding no whole number commits nothing, and a typed figure the bounds will not take is committed as the
+ * bound it passes — with that sentence standing beside it. A change the control accepts withdraws the sentence.
  *
  * @param props - The current quantity and its change handler, the ceiling stock sets, the field's label, the
  *   disabled state and the control's extra classes.
@@ -475,7 +478,7 @@ export function QuantityStepper({
   const inputId = useId();
   const boundsId = `${inputId}-bounds`;
   const [draft, setDraft] = useState<string | null>(null);
-  // What a refused step states, empty at rest so the status region below is present from the first render and a
+  // What a refusal states, empty at rest so the status region below is present from the first render and a
   // sentence written into it is a change to a live region rather than a region arriving with text already in it.
   const [refusal, setRefusal] = useState("");
   const ceiling = purchasableCeiling(max);
@@ -510,12 +513,23 @@ export function QuantityStepper({
     commit(next);
   };
 
-  /** Keeps what was typed, and commits it when it is a whole number: anything else falls back to the value. */
+  /** Keeps what was typed and hands every whole-digit figure to `commit`, which confines it to the bounds — a
+   *  figure past the ceiling is committed as the ceiling. Text holding no whole number commits nothing, and the
+   *  bound is stated for either, so the field never shows a figure the cart was not given without the range. */
   const handleInput = (event: ChangeEvent<HTMLInputElement>): void => {
     const typed = event.target.value;
     setDraft(typed);
-    if (!WHOLE_DIGITS.test(typed)) return;
-    commit(Number(typed));
+    // Only whole digits are read as a quantity, so text such as `1e6` — a valid number to the platform, a
+    // million to `Number` — is never read as a count: it commits nothing and states the bound instead.
+    if (!WHOLE_DIGITS.test(typed)) {
+      setRefusal(boundsSentence);
+      return;
+    }
+    // A whole figure the bounds will not take is still a figure the shopper meant: `commit` clamps it to the
+    // bound, which is the enforcement the quantity rule names, and the sentence stands beside it.
+    const parsed = Number(typed);
+    commit(parsed);
+    setRefusal(parsed >= MIN_QUANTITY && parsed <= ceiling ? "" : boundsSentence);
   };
 
   /** Leaving the field normalises it, so what it shows is what it holds. */
@@ -575,8 +589,8 @@ export function QuantityStepper({
       <span className={VISUALLY_HIDDEN} id={boundsId}>
         {boundsSentence}
       </span>
-      {/* A refused step is stated here: the region is polite, and it is present from the first render (empty)
-       * so a sentence written into it is announced as a change. An accepted change clears it. */}
+      {/* A refusal is stated here: the region is polite, and it is present from the first render (empty) so a
+       * sentence written into it is announced as a change. An accepted change clears it. */}
       <span className={VISUALLY_HIDDEN} role="status">
         {refusal}
       </span>

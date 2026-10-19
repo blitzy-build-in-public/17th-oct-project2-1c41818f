@@ -1,19 +1,20 @@
 /* Path: src/styles/admin-reports.css
  * Purpose: Styles for the dashboard, the report tables and the chart frames
- * Lines: 592
+ * Lines: 593
  */
 /* The administrator register: denser than the storefront, one question answered in a screenful. This sheet
  * owns the administrator content column, the dashboard and KPI grids, the chart frame with its axes, series,
  * legend, readout, centre total and paired data table, the report shell with its range control, summary
  * strip, export action and scrolling table, and the two notes those screens owe the reader.
  * It loads seventh, after components.css and before account.css, composes the primitives rather than
- * restating them, and publishes the class contract the three chart renderers (phases 19-20) and the
- * administrator and report views (phases 30-32) adopt verbatim. Every series colour is a
- * var(--chart-series-N) reference, so no colour literal is written here and none exists in a TypeScript file.
- * The series paint itself — the shared mark treatment, the twelve .sp-chart__series-N rules and the legend
- * swatch — lives in chart-series.css, which this sheet loads below, because twelve series no longer fit the
- * request's 600-line ceiling beside everything else here; the rules that reset a mark's dash and
- * fill-opacity stay in this sheet so they still follow the series rules they override. */
+ * restating them, and publishes the class contract the three chart renderers and the administrator and report
+ * views adopt verbatim. Every series colour is a var(--chart-series-N) reference, so no colour literal is
+ * written here and none exists in a TypeScript file.
+ * The series paint is a family of its own — the shared mark treatment, the twelve `.sp-chart__series-N` rules
+ * and the legend swatch — so it lives in `src/styles/chart-series.css`, which this sheet loads with `@import`:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised. The rules
+ * that reset a mark's dash and fill-opacity stay in this sheet so they still follow the series rules they
+ * override. */
 
 @import "./chart-series.css";
 

@@ -1,14 +1,16 @@
 /* Path: src/styles/sidebar.css
  * Purpose: The administrator sidebar's skeleton, split out of src/styles/layout.css, which loads this sheet with @import
- * Lines: 127
+ * Lines: 129
  */
 /* The column every administrator screen is navigated from, and the sole definition site of the `.sp-sidebar*` classes
  * `src/components/layout/AdminSidebar.tsx` renders. The frame that places it — the administrator grid and its two stops —
- * stays in `src/styles/layout.css`; everything the column itself paints is here. Split out to hold the 600-line ceiling
- * the request sets, which the frame's rules and the sidebar's together had crossed: the rules below are the ones that
- * crossed it, moved verbatim rather than trimmed, and this sheet is loaded at layout.css's import position so the cascade
- * order the two sheets shared is unchanged. It consumes tokens.css properties and declares no colour, length, radius,
- * shadow, z-index or duration of its own. */
+ * stays in `src/styles/layout.css`; everything the column itself paints is here, split out of that sheet, and the rule
+ * that settled it is this:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * The rules below moved verbatim rather than trimmed, and layout.css loads this sheet with `@import` at the position
+ * the moved rules held, so the cascade order the two sheets shared is unchanged; the entry point imports the same
+ * eight mapped stylesheets, with no ninth path anywhere. It consumes tokens.css properties and declares no colour,
+ * length, radius, shadow, z-index or duration of its own. */
 
 /* ==== Administrator sidebar ==== The column the administrator grid reserves: a sticky rail of icons at every
  * width below --breakpoint-lg, which widens into the labelled sidebar at --breakpoint-lg. */

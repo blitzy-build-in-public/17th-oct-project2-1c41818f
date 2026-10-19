@@ -9,15 +9,15 @@ import { createPortal } from "react-dom";
 import type { KeyboardEventHandler, ReactElement, ReactNode, RefObject } from "react";
 
 import { Button, IconButton } from "@/components/ui/Button";
-import { CloseIcon } from "@/components/ui/icons";
+import { CloseIcon } from "@/components/ui/Icons";
 import { useOverlay } from "@/components/ui/overlayEngine";
 import { A11Y_COPY, COMMON_ACTIONS } from "@/constants/content";
 
 /*
  * Class contract. `src/styles/data-display.css` — reached through the `@import` at the top of
  * `src/styles/components.css` — is the sole definition site of this family, and no file under
- * `src/components/**` imports a stylesheet because `src/main.tsx` is the only importer of
- * `src/styles/**`; every class below is consumed by name. The sheet owes this file `sp-backdrop` with
+ * `src/components/**` imports a stylesheet; every class below is consumed by name. The sheet owes
+ * this file `sp-backdrop` with
  * `--modal` and `--drawer`, `sp-modal` with `--sm|--md|--lg` and its `__header`, `__title`, `__close`,
  * `__body` and `__footer` parts, `sp-drawer` with `--start|--end`, `is-open` and its four parts, and
  * `sp-confirm` with `sp-confirm__actions`. State is carried by the attribute the sheet reads — the
@@ -340,8 +340,8 @@ interface DrawerPanelProps {
  * `src/styles/data-display.css` declares that entrance as a transition on `.sp-drawer` from the resting
  * offset the side class sets to the `translateX(0)` that `.is-open` resolves, so the travel needs one frame
  * in which the resting transform is the panel's computed style: a panel whose very first style is already
- * the settled one has nothing to start from and pops into place, which is what the review measured. The
- * class therefore arrives on the frame after the mount, and it is deliberately not state the drawer carries
+ * the settled one has nothing to start from and pops into place. The class therefore arrives on the frame
+ * after the mount, and it is deliberately not state the drawer carries
  * across cycles — a panel mounted once per open holds the flag itself, so closing and reopening travels
  * again without a second write. The write happens in the frame callback and not in the effect body, because
  * an effect that writes state synchronously is the `set-state-in-effect` failure mode this codebase's lint

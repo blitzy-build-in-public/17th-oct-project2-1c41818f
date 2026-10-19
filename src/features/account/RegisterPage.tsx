@@ -42,8 +42,8 @@ import {
 } from "@/utils/validation";
 
 /*
- * Class contract. `src/styles/account.css` is the sole definition site of the sign-in and registration block
- * and no file under `src/features/**` imports a stylesheet, so every class here is consumed by name:
+ * Class contract. `src/styles/account.css` is the sole definition site of the sign-in and registration block,
+ * and this list is what the sheets owe the file, each class named with the sheet that declares it:
  * `sp-container` with `sp-container--narrow` is `src/styles/layout.css`'s one geometry rule for the page's
  * width and inline gutter, which the route carries itself because the shell's main region pads the block flow
  * only; `section.sp-auth` — named through `aria-labelledby` by the heading of whichever of the three states

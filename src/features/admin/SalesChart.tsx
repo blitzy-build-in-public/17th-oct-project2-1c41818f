@@ -25,9 +25,8 @@ import { bucketCount, formatDateRange } from "@/utils/dates";
 
 /*
  * Class contract. `src/styles/admin-reports.css` is the sole definition site of the chart and dashboard
- * families and no file under `src/features/**` may import a stylesheet — `src/main.tsx` is the only importer
- * of `src/styles/**` — so every class below is adopted by name, and this comment is the list the sheet owes
- * the file: `sp-dashboard__section` is the block a dashboard stacks and spaces its heading and its chart
+ * families, and this comment is the list the sheet owes the file, each class named with the sheet that
+ * declares it: `sp-dashboard__section` is the block a dashboard stacks and spaces its heading and its chart
  * with; `sp-chart__title` is the chart family's heading type, `sp-chart__header` the wrapping row that pairs
  * a sentence with the controls, `sp-chart__controls` the row those controls sit in, and `sp-chart__frame` the
  * bordered, token-height plot area the chart draws in and the failure is stated in. The block this file
@@ -300,8 +299,9 @@ function ChartControls({
  * `baselineLabel`, `from` and `to` are the context the sentence under the heading is built from, and each is
  * optional: a page that states neither still gets a chart, with no sentence.
  *
- * The revenue read's failure is handed in rather than decided here, because §0.6.4's four states belong to the
- * surface that owns the query: this chart renders the failure in its own frame, directly under the heading row
+ * The revenue read's failure is handed in rather than decided here, because the four states a read passes
+ * through belong to the surface that owns the query: this chart renders the failure in its own frame, directly
+ * under the heading row
  * and the two controls, so the bucket or the split can still be changed while the failure is on screen and the
  * alert's retry re-runs that one read.
  */

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutPage.tsx
  * Purpose: The checkout route: step indicator, the current step's view and the order summary panel
- * Lines: 395
+ * Lines: 391
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -27,18 +27,19 @@ import type { CheckoutStep } from "@/state/checkoutReducer";
 import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useDocumentTitle } from "@/state/hooks";
 import { useScrollToTop } from "@/state/scrollHooks";
+import { assertNever } from "@/utils/exhaustive";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class below is consumed by name, and this list is what the sheets owe the file.
+ * Class contract. This list is what the sheets owe the page, each class named with the sheet that declares
+ * it.
  *
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in, `sp-page`
  * the column of blocks at one rhythm, `sp-page__body` the region the route's own content lands in, `sp-split`
  * the frame whose aside track is `--layout-aside-width` from the large stop, and `sp-stack` the rhythm the
  * summary's figures sit in. `src/styles/commerce.css` owns the checkout's register: `sp-checkout` widens that
  * frame's row gap and `sp-checkout__main` narrows the step column, while `sp-checkout__aside` — the summary
- * column, sticky below the header from the large stop — is declared in `src/styles/cart.css` beside the summary
- * panel it holds, whose register `src/styles/summary-panel.css` owns.
+ * column, sticky below the header from the large stop — is declared in `src/styles/cart.css` beside the cart's
+ * own register, and the summary panel it holds is drawn by `src/styles/summary-panel.css`.
  *
  * The step shell is `sp-step` for the region, with `sp-step__header`, `sp-step__title` and `sp-step__count`
  * for the heading block, and `sp-step__body` for the region the current step renders in — the class the
@@ -48,9 +49,9 @@ import { useScrollToTop } from "@/state/scrollHooks";
  * `sp-step__actions`, rendered by that step's own file, and the indicator is `CheckoutSteps`' family.
  *
  * The order summary panel the aside renders is `OrderSummaryPanel.tsx`'s, and that file's own comment holds its
- * class contract: the register the cart's own summary also draws, declared in `src/styles/cart.css`. Of that
- * register this file carries one class: `sp-summary__note`, the caption the step's supporting line is painted
- * in, which is why the table below keeps `note`.
+ * class contract: the panel's register, which the cart's own summary also draws, is declared in
+ * `src/styles/summary-panel.css`. Of that register this file carries one class: `sp-summary__note`, the caption
+ * the step's supporting line is painted in, which is why the table below keeps `note`.
  */
 
 /** The classes this route puts on the page, written once so a rename is one edit. */
@@ -99,11 +100,6 @@ function pageTitle(step: CheckoutStep): string {
   return `${PAGE_TITLES.CHECKOUT} · ${stepProgressLabel(position, CHECKOUT_FORM_STEPS.length)}`;
 }
 
-/** Proof at compile time that every step was handled: a step added to the union fails to type-check here. */
-function assertNever(value: never): never {
-  throw new Error(`Unhandled checkout step: ${String(value)}`);
-}
-
 /**
  * The current step's own view, one file per step. Exactly one is mounted at a time, so a step the shopper is
  * not standing on holds no controls and no state of its own: every value it collected lives in the checkout's
@@ -121,7 +117,7 @@ function stepView(step: CheckoutFormStep): ReactElement {
     case "review":
       return <ReviewOrder />;
     default:
-      return assertNever(step);
+      return assertNever(step, "checkout step");
   }
 }
 

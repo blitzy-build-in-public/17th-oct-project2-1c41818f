@@ -13,8 +13,8 @@ import { ReportTablePlaceholder } from "@/features/reports/ReportTable";
 import type { ReportDefinition } from "@/types/analytics";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class below is consumed by name. The three blocks are the report body's own, taken from
+ * Class contract. This list is what the sheets owe the placeholder, each class named with the sheet that
+ * declares it. The three blocks are the report body's own, taken from
  * `src/styles/admin-reports.css`: `sp-report__summary` is the four-column summary grid, `sp-report__summary-item`
  * an entry in it, and the two figures inside are `sp-report-placeholder__summary-label` and
  * `__summary-value` from `src/styles/placeholders.css`, which is the sheet that owns the shape of every

@@ -1,13 +1,13 @@
 /**
  * Path: src/data/collectionStore.ts
  * Purpose: The store half of the data source: the seeded collections, the indexes built over them once, and the account, session and address writes they carry
- * Lines: 576
+ * Lines: 617
  */
 
-// This is not a path the plan maps on its own: it is the store half of `src/data/repositories.ts`, split out
-// under the plan's over-budget rule because the data source's whole concern — a 33-member contract with the
+// This is not a path the tree maps on its own: it is the store half of `src/data/repositories.ts`, split out
+// under the over-budget rule because the data source's whole concern — a 33-member contract with the
 // collections, their indexes, a session registry and the writes over them — cannot be held in one file under
-// the request's 600-line ceiling, and the ceiling is never raised. Everything here is state and the operations
+// the 600-line ceiling, and the ceiling is never raised. Everything here is state and the operations
 // on it; `src/data/repositories.ts` holds the contract that composes the domain rules, and nothing else
 // imports this module.
 
@@ -30,7 +30,13 @@ import {
   rememberProfile,
 } from "@/data/clientWrites";
 import { ADDRESSES, CREDENTIALS, CUSTOMERS, type StoredCredential } from "@/data/customers";
-import { readSessionTable, writeSessionTable } from "@/data/sessionTable";
+import {
+  type SessionMembers,
+  readSessionTable,
+  recordSession,
+  resolveSessionRecord,
+  revokeSession,
+} from "@/data/sessionTable";
 import { ORDERS } from "@/data/orders";
 import { PRODUCTS } from "@/data/products";
 import { REVIEWS, ratingAggregateFor } from "@/data/reviews";
@@ -44,6 +50,7 @@ import type {
   ProfileUpdateInput,
   RegistrationInput,
   RegistrationResult,
+  Role,
   Session,
 } from "@/types/account";
 import type { Category, CategoryNode, Product } from "@/types/catalog";
@@ -75,6 +82,7 @@ import {
   createCredentialDigest,
   createSalt,
   customerId as newCustomerId,
+  randomHexText,
   sessionToken as mintSessionToken,
 } from "@/utils/strings";
 
@@ -139,12 +147,6 @@ export function rejectPromo(reason: PromoRejectionReason): Result<never> {
 /** The key one account-and-product pair of the verified-purchase index is held under. */
 export function purchaseKey(customerId: CustomerId, productId: ProductId): string {
   return `${customerId}|${productId}`;
-}
-
-/** The token an account signs in with, minted from the account's own identifier, so it is opaque and the
- * account it names is recoverable from the account store after a reload. */
-function sessionTokenFor(customer: Customer): SessionToken {
-  return mintSessionToken(`account ${customer.id}`);
 }
 
 /** The tree of the seeded categories, each node carrying its children and its product count in position order.
@@ -231,8 +233,9 @@ function countByDay(orders: readonly Order[]): Map<IsoDateString, number> {
  * member needs — by identifier, by email, by customer, by account-and-product, together with the position each
  * product and each account holds in its collection — is built here, so a read and a replacement are both a map
  * lookup rather than a scan of 2,255 orders or 140 products. The session registry is read from its durable
- * table: a session's own issue instant is what that table is for. Nothing in the seeds is written: this store
- * holds copies.
+ * table, and every record the table holds is proved against this browser's seal before it is admitted: a
+ * session's own issue instant is what that table is for, and a record this browser did not write is not a
+ * session. Nothing in the seeds is written: this store holds copies.
  *
  * @returns The collections and indexes one data source reads and writes.
  */
@@ -249,9 +252,6 @@ export function createStore() {
   const books = mergeAddressBooks(ADDRESSES, customers, writes);
   const orders = sortByIso([...writes.orders, ...ORDERS], (order) => order.placedAt, "desc");
   const ordersByCustomer = ordersByOwner(orders);
-  const tokenByCustomer = new Map(
-    customers.map((customer) => [customer.id, sessionTokenFor(customer)]),
-  );
   const verifiedPurchases = new Set<string>();
   for (const [owner, rows] of ordersByCustomer) {
     for (const order of rows) {
@@ -278,8 +278,6 @@ export function createStore() {
     nextOrderIndex: Math.max(writes.orderMint.nextIndex, orders.length + 1),
     orderSequenceByDay: countByDay(orders),
     sessions: readSessionTable(),
-    revokedTokens: new Set<string>(),
-    tokenByCustomer,
     verifiedPurchases,
     categories: buildCategoryTree(),
     brands: BRANDS,
@@ -289,46 +287,55 @@ export function createStore() {
 
 /** The collections and indexes one data source reads and writes, as {@link createStore} returns them: the
  * served catalogue, the reviews and their grouping, the account store, the order history newest first, the
- * session registry read from its durable table, the verified-purchase index and the catalogue's own lookups.
+ * session registry read back from its durable table, the verified-purchase index and the catalogue's own
+ * lookups.
  * `productIndexById` and `customerIndexById` hold each record's slot, and every writer keeps them in step. */
 export type DataStore = ReturnType<typeof createStore>;
 
 // The account store ---------------------------------------------------------------------------------
 // Demonstration boundary, stated plainly: this is an in-browser account store, not a security boundary. No
 // password is stored — only the salted digest the shared helper produces and verifies — and a session is an
-// opaque token carrying a role claim and an expiry, re-checked by the transport on every privileged request.
+// opaque token carrying a role claim and an expiry, minted from this browser's random source at each issue and
+// re-checked by the transport on every privileged request. What that buys is honesty rather than force: a
+// record a script writes for itself cannot be one this browser sealed, a token a reader has seen is rotated
+// away by the next sign-in, and the seal a sign-out rotates puts every copy of the table taken before it — a
+// record's revocation mark included — out of reach; while a script that reads the seal secret beside the table
+// it proves can still make a record that passes, so a real deployment moves issue and verification behind the
+// server `src/lib/apiClient.ts` is built to be repointed at.
 
-/** Opens a session for an account and records it: the token is the account's own, so opening one again replays
- * it rather than accumulating, and the expiry is the product's single expiry rule. Recording it also lifts any
- * revocation the account's last sign-out left, because that is what signing in again means, and it writes the
- * table, so the instant this session was issued is durable. The single mint site: registration and sign-in both
- * arrive here. */
+/** Opens a session for an account and records it: the token is minted from this browser's own random source,
+ * one fresh value per issue, so no sign-in replays the token an earlier one was issued — a token a reader has
+ * seen, by a screenshot, a copied store or a shared machine, is rotated away by the next sign-in rather than
+ * standing as a permanent credential for the account — and the expiry is the product's single expiry rule.
+ * Handing the session to the table records it: it is sealed under the secret standing now and written, so the
+ * instant this session was issued is durable and the record is one only this browser can have written. The
+ * single mint site: registration and sign-in both arrive here. */
 function openSession(store: DataStore, customer: Customer, at: IsoDateTimeString): Session {
-  const token = store.tokenByCustomer.get(customer.id) ?? sessionTokenFor(customer);
   const session: Session = {
-    token,
+    token: mintSessionToken(randomHexText()),
     customerId: customer.id,
     role: customer.role,
     issuedAt: at,
     expiresAt: sessionExpiresAt(at),
   };
-  store.revokedTokens.delete(token);
-  store.sessions.set(token, session);
-  writeSessionTable(store.sessions);
+  recordSession(store.sessions, session);
   return session;
 }
 
 /**
- * Ends the session a token names: the record is dropped, the token is refused and the table is rewritten, so a
- * sign-out outlives the document that asked for it rather than leaving a record a later page reads back as a
- * live session. The refusal is this store's own because a token is derived from the account it names, so a
- * record dropped alone could be revived by a write that rebuilt the registry. Beyond this page the client ends
- * the session too, by clearing the copy it persisted.
+ * Ends the session a token names: the record is marked revoked and this browser's seal secret rotated, so a
+ * token a visitor has given up is refused for the life of the record rather than only for the life of the
+ * document that ended it, and no copy of the table taken before that instant can put it back — every record
+ * sealed under the replaced secret, the copy's own record included, stops verifying. `src/data/sessionTable.ts`
+ * owns that mechanism.
+ *
+ * The record is kept rather than dropped so the refusal travels with the record it belongs to, and the registry
+ * keeps it too, so this document refuses the token without re-reading the table. A token no record stands for
+ * changes nothing here, and the client ends the session on its own side as well, by clearing the copy it
+ * persisted.
  */
 export function endSession(store: DataStore, token: SessionToken): void {
-  store.sessions.delete(token);
-  store.revokedTokens.add(token);
-  writeSessionTable(store.sessions);
+  revokeSession(store.sessions, token);
 }
 
 /** Replaces one account in the store with the record that stands for it now, in the collection and in the
@@ -340,10 +347,10 @@ function replaceAccount(store: DataStore, customer: Customer): void {
 }
 
 /** Creates an account and opens its session: registration signs the customer in, so the digest the shared
- * helper produces is the same shape the seed stores, and the token the account signs in with is registered
- * here, so a second sign-in replays it rather than minting another, and the account and its digest are written
- * to the durable record before the session is opened, so the token names an account a later document rebuilds
- * from that record rather than refusing. */
+ * helper produces is the same shape the seed stores, and the session it opens is minted the one way every
+ * session is — a fresh token from this browser's random source, never a value registered beside the account.
+ * The account and its digest are written to the durable record before the session is opened, so the token the
+ * session carries names an account a later document rebuilds from that record rather than refusing. */
 export function registerAccount(
   store: DataStore,
   input: RegistrationInput,
@@ -372,8 +379,6 @@ export function registerAccount(
   const digest = createCredentialDigest(input.password, createSalt(customer.email));
   store.credentials.set(emailKey(customer.email), { customer, digest });
   store.books.set(customer.id, []);
-  const token = sessionTokenFor(customer);
-  store.tokenByCustomer.set(customer.id, token);
   // The account and its digest reach the durable record before its session is opened, so the token the
   // session carries names an account the next document rebuilds from that record.
   rememberAccount({ customer, digest });
@@ -396,28 +401,46 @@ export function signInAccount(store: DataStore, credentials: Credentials): Resul
   return accept(openSession(store, customer, now));
 }
 
+/** The session one record stands for once its account has been resolved: the members the client and the
+ * transport are given, read without the seal the record is written with or the revocation mark it may carry,
+ * because neither is a member of the session contract and neither is the client's business. */
+function sessionOf(record: SessionMembers, role: Role): Session {
+  return {
+    token: record.token,
+    customerId: record.customerId,
+    role,
+    issuedAt: record.issuedAt,
+    expiresAt: record.expiresAt,
+  };
+}
+
 /**
  * The session a token still names, whether or not it has expired, because expiry is the transport's decision
  * and only the transport can tell an expired session from an unknown one.
  *
- * A session is read from the registry and never rebuilt: it keeps the record's own dates, so one presented
- * after its window has passed answers as the lapsed record it is, not a fresh one. Its role, though, is
- * stamped from the account the record names, not from the record's own claim — written here at the one mint
- * site — because the account is the store's authority on what a token reaches: a claim edited outside the
- * store must not widen what the token does. Two tokens are therefore `unknown` — nothing at all, a refusal
- * the transport words: one the registry holds no session for, never issued or signed out of, with revocation
- * checked first so a leftover record cannot revive it; and one naming an account the store no longer holds,
- * because ownership is decided from the session's `customerId` and a gone account authenticates nobody. A
- * registered account does not fall in that second case: `src/data/clientWrites.ts` holds it, so the store a
- * reload builds holds it too and the session it minted resolves here.
+ * A record is honoured only when it is one this browser wrote and still stands: the durable table admits records
+ * whose seal verifies, and this function refuses a record a sign-out revoked, so a token the store never minted,
+ * a record whose authority members or window were edited outside the store, a record sealed before a sign-out
+ * rotated the seal away, and a token a visitor has given up all answer as sessions the store knows nothing
+ * about — the one refusal the transport words for them. The durable record is read again on every lookup rather
+ * than answered from this document's memory of it, so a sign-out in another document, a rotation, or a session
+ * another document opened reaches a document that is already open and is refused or honoured there without a
+ * reload. A session that is still live is read as it was written and never rebuilt: it keeps the record's own
+ * dates, so one presented after its window has passed answers as the lapsed record it is, not a fresh one. Its
+ * role, though, is stamped from the account the record names, not from the record's own claim — written at the
+ * one mint site and sealed with it — because the account is the store's authority on what a token reaches. Two
+ * tokens are therefore `unknown` as well: one naming an account the store no longer holds, because ownership is
+ * decided from the session's `customerId` and a gone account authenticates nobody; and one no record stands for,
+ * which the guard that reads a table back has dropped when the record could not be proved. A registered account
+ * does not fall in the first case: `src/data/clientWrites.ts` holds it, so the store a reload builds holds it
+ * too and the session it minted resolves here.
  */
 export function lookUpSession(store: DataStore, token: string | undefined): Session | undefined {
   if (token === undefined || token.trim() === "") return undefined;
-  if (store.revokedTokens.has(token)) return undefined;
-  const session = store.sessions.get(token);
-  if (session === undefined) return undefined;
-  const account = store.customerById.get(session.customerId);
-  return account === undefined ? undefined : { ...session, role: account.role };
+  const record = resolveSessionRecord(store.sessions, token);
+  if (record === undefined || record.revokedAt !== undefined) return undefined;
+  const account = store.customerById.get(record.customerId);
+  return account === undefined ? undefined : sessionOf(record, account.role);
 }
 
 /** The session a stored token restores, or the refusal it earns: an unknown token and one past its expiry are
@@ -510,14 +533,23 @@ export function addBookAddress(
   return accept(address);
 }
 
+/** Everything {@link updateBookAddress} reads: the store holding the account's book, the account, the address
+ *  to replace and the members it is replaced with. */
+export interface UpdateBookAddressInput {
+  /** The store holding the account's address book. */
+  readonly store: DataStore;
+  /** The account whose address is replaced. */
+  readonly id: CustomerId;
+  /** The address to replace, which the account's book must hold. */
+  readonly addressId: AddressId;
+  /** The members the address is replaced with, which leave its default flags as they are. */
+  readonly input: AddressInput;
+}
+
 /** Replaces an address's members, leaving the flags that make it a default as they are: a default moves only
  * through the operation that sets one. */
-export function updateBookAddress(
-  store: DataStore,
-  id: CustomerId,
-  addressId: AddressId,
-  input: AddressInput,
-): Result<Address> {
+export function updateBookAddress(update: UpdateBookAddressInput): Result<Address> {
+  const { store, id, addressId, input } = update;
   const book = store.books.get(id);
   if (book === undefined) return refuse("forbidden", FEEDBACK_COPY.ERROR_STATE_BODY);
   const existing = book.find((address) => address.id === addressId);
@@ -557,14 +589,23 @@ export function removeBookAddress(
   return accept(undefined);
 }
 
+/** Everything {@link setBookDefault} reads: the store holding the account's book, the account, the address to
+ *  make default and the kind of default it is made. */
+export interface SetBookDefaultInput {
+  /** The store holding the account's address book. */
+  readonly store: DataStore;
+  /** The account whose address is made default. */
+  readonly id: CustomerId;
+  /** The address to make the default of the given kind, which the account's book must hold. */
+  readonly addressId: AddressId;
+  /** The kind of default the address is made: shipping or billing. */
+  readonly kind: AddressKind;
+}
+
 /** Makes one address the default of the kind the request names, clearing the previous default of that kind
  * through `src/utils/accountRules.ts`'s own rule. */
-export function setBookDefault(
-  store: DataStore,
-  id: CustomerId,
-  addressId: AddressId,
-  kind: AddressKind,
-): Result<Address> {
+export function setBookDefault(request: SetBookDefaultInput): Result<Address> {
+  const { store, id, addressId, kind } = request;
   const book = store.books.get(id);
   if (book === undefined) return refuse("forbidden", FEEDBACK_COPY.ERROR_STATE_BODY);
   const updated = applyDefaultAddressRule(book, addressId, kind);

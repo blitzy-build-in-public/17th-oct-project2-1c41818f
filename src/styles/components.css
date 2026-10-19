@@ -1,19 +1,19 @@
 /* Path: src/styles/components.css
- * Purpose: Styles for the shared primitives this sheet keeps — rating, price and quantity, tooltip and popover, and the data-page feedback states — with the other nine families loaded through controls.css and data-display.css
- * Lines: 512
+ * Purpose: Styles for the shared primitives: buttons, fields, cards, tables, overlays, badges and feedback states
+ * Lines: 510
  */
 
 /* The twelve primitive families every page composes are defined across the four sheets this chain loads:
  * this file keeps rating, price and quantity, the tooltip and popover, and the data-page feedback states,
  * and imports src/styles/controls.css (buttons, form fields and selection controls) and
- * src/styles/data-display.css (cards and badges, the data table, pagination, overlays and toasts, whose tab
- * and accordion families are src/styles/tabs-accordion.css, which data-display.css loads in turn) above
- * every rule it declares. A CSS @import is inlined at the position it occupies, so the built sheet still
+ * src/styles/data-display.css (cards and badges, the data table, pagination and overlays, whose tab and
+ * accordion families are src/styles/tabs-accordion.css and whose toast family is src/styles/toasts.css, both
+ * loaded by data-display.css in turn) above every rule it declares. A CSS @import is inlined, so the built sheet
  * reads in one order — tokens, base, layout, controls, data-display, components, then the four area sheets —
  * and every rule holds the cascade position it held when one file carried all twelve families, apart from
- * the page-header family and the tab and accordion family, which the later splits moved to the head of their
- * own parent sheet's contribution: each is still behind base.css and ahead of every later sheet, and no rule
- * of another family meets either there. Loading the two sheets from this mapped path, and not from the entry
+ * the page-header families and the tab, accordion and toast families, contributed at the head of their
+ * parent sheet's own contribution: each is still behind base.css and ahead of every later sheet, and no rule
+ * of another family meets them there. Loading the two sheets from this mapped path, and not from the entry
  * point, is what keeps the eight-sheet load contract: the application imports the same eight mapped paths it
  * always did, and no other file imports either of the two. This file defines no shell class (layout.css owns
  * .sp-container, .sp-app*, .sp-page*, .sp-header*, .sp-footer* and .sp-sidebar*, and .sp-page-header* is
@@ -31,17 +31,15 @@
  * state is aria-checked. Every value comes from tokens.css, in whichever of these sheets it is written:
  * no sheet invents a colour, a size, a radius, a shadow, a duration or a breakpoint of its own.
  *
- * BLITZY [BUDGET]: the twelve families are 1,291 lines, past the 500-line budget and the 600-line ceiling
- * the plan sets. The ceiling is never raised and no line was cut to reach a number, so the plan's remedy for
- * a concern that cannot fit — split the concern and record the split — was applied instead: the families are
- * split by primitive family into the two sheets imported above, every rule, declaration and comment moved
- * verbatim and in its original order, and the split is recorded in generation-manifest.md, in its Part 1
- * rows and its Part 4 ledger. Both new sheets are inside the ceiling, this file is inside it again, and the
- * three together hold exactly what the one file held, so the plan's 50,000-line allocation is unchanged; a
- * later split of the tab and accordion family out of data-display.css was recorded the same way.
- * The two objections this note first raised against a second stylesheet are answered by that direction: the
- * plan maps no ninth path and the application loads exactly the eight sheets it lists, and an @import from
- * this mapped path loads the additions without adding an entry to anyone's import list.
+ * BLITZY [BUDGET]: the twelve families' contract is larger than one file holds, and so
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised. Split by
+ * primitive family across the chain this sheet loads: controls.css keeps the buttons, the form fields and
+ * the selection controls; data-display.css keeps cards and badges, the data table, pagination and overlays
+ * and loads the tab and accordion family from src/styles/tabs-accordion.css and the toast family from
+ * src/styles/toasts.css; this file keeps rating, price and quantity, the tooltip and popover, and the
+ * data-page feedback states. The application loads the same eight mapped paths it always did, and no ninth
+ * path is added: an @import from a mapped path brings its sheets in without an entry in anyone's import
+ * list.
  */
 
 @import "./controls.css";

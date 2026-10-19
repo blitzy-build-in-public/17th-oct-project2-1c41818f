@@ -1,19 +1,19 @@
 /**
  * Path: src/data/repositories.ts
  * Purpose: The only reader of the seeded collections, implementing the data-source interface the transport registers
- * Lines: 522
+ * Lines: 554
  */
 
 // This file is the contract half of the data source: every member the transport calls, each one a composition of
 // a domain service's own rules over the collections `src/data/collectionStore.ts` holds. That store is a path
-// this plan does not map on its own — it is the store half of this file, split out under the plan's over-budget
-// rule because the whole concern cannot be held in one file under the request's 600-line ceiling, and the
-// ceiling is never raised. The rules are not here: filtering, faceting, search scoring, pricing, order
+// this tree does not map on its own — it is the store half of this file, split out under the over-budget rule
+// because the whole concern cannot be held in one file under the 600-line ceiling, and the ceiling is never
+// raised. The rules are not here: filtering, faceting, search scoring, pricing, order
 // construction, aggregation and report building each have exactly one home in `src/lib`, and this file composes
 // them rather than restating any of them.
 
 import { MAX_REPORT_RANGE_DAYS, SHIPPING_METHODS } from "@/constants/config";
-import { CART_COPY, VALIDATION_MESSAGES } from "@/constants/content";
+import { VALIDATION_MESSAGES } from "@/constants/content";
 import { DATE_RANGE_COPY, rangeTooLongMessage } from "@/constants/content-reports";
 import { REPORT_DEFINITIONS } from "@/constants/taxonomy";
 import { BRANDS, CATEGORIES } from "@/data/categories";
@@ -41,7 +41,7 @@ import {
 import { PROMO_CODES } from "@/data/orders";
 import { ratingAggregateFor } from "@/data/reviews";
 // The deferred analytics and report graph — its loader, the shape it resolves to and the refusal a failed
-// fetch answers with — is this file's §0.5.5 split path `src/data/analyticsGraph.ts`.
+// fetch answers with — is this file's split path `src/data/analyticsGraph.ts`.
 import {
   loadAnalyticsGraph,
   overAnalyticsGraph,
@@ -92,7 +92,7 @@ import {
   type DateRangeErrorCode,
 } from "@/utils/dates";
 import { DEFAULT_FILTER_STATE, readFilterState, writeFilterState } from "@/utils/queryParams";
-import { reviewId as newReviewId, sequenceId as newSequenceId } from "@/utils/strings";
+import { displayName, reviewId as newReviewId, sequenceId as newSequenceId } from "@/utils/strings";
 
 /** The wording for each rule a dated range can break, so a range refused here reads as the same range refused
  * by the transport before a request leaves. */
@@ -179,9 +179,11 @@ function insertReview(store: DataStore, input: NewProductReviewInput): Review {
     id: newReviewId(`${input.productId} ${input.customerId} ${store.reviews.length + 1}`),
     productId: input.productId,
     customerId: input.customerId,
-    // Denormalised onto the row so the review list renders without a second lookup, as the seed does; an
-    // account the store does not hold contributes an empty name rather than failing a value-typed read.
-    customerName: customer === undefined ? "" : `${customer.firstName} ${customer.lastName}`,
+    // Denormalised onto the row so the review list renders without a second lookup, as the seed does; the
+    // name published is the reviewer's display name rather than their full name, because anyone may read a
+    // review; and an account the store does not hold contributes an empty name rather than failing a
+    // value-typed read.
+    customerName: customer === undefined ? "" : displayName(customer.firstName, customer.lastName),
     rating: input.rating,
     title: input.title,
     body: input.body,
@@ -256,8 +258,24 @@ function promoRefusal(
   return reason === undefined ? null : rejectPromo(reason);
 }
 
-/** A basket priced through the product's one pricing implementation: the lines priced, the code applied and the
- * method charged for, with every amount the cart, the checkout and the placed order copy from. */
+/** The lines a request submits, re-priced from the catalogue the store holds: each line's unit price, sku and
+ * name are the product's own, and every other member — its identity, its quantity, its ceiling, its image and
+ * the instant it was added — stays the line's, so the one pricing service prices what the catalogue charges
+ * rather than a figure the caller named beside it. A line naming a product the store does not hold is returned
+ * as it arrived, and the shelf check below owns that refusal. */
+function cataloguePricedLines(store: DataStore, lines: readonly CartLine[]): readonly CartLine[] {
+  return lines.map((line) => {
+    const product = store.productById.get(line.productId);
+    return product === undefined
+      ? line
+      : { ...line, unitPriceMinor: product.priceMinor, sku: product.sku, name: product.name };
+  });
+}
+
+/** A basket priced through the product's one pricing implementation: the lines priced from the catalogue, the
+ * code applied and the method charged for, with every amount the cart, the checkout and the placed order copy
+ * from. A code's floor and a code's eligible goods are judged against those same catalogue prices, because
+ * both paths price the same lines rather than a snapshot's memory of them. */
 function priceRequest(
   store: DataStore,
   request: {
@@ -266,20 +284,21 @@ function priceRequest(
     readonly shippingMethodId: string | null;
   },
 ): Result<PricedCart> {
-  if (unpriceableLine(request.lines)) {
+  const lines = cataloguePricedLines(store, request.lines);
+  if (unpriceableLine(lines)) {
     return refuse("insufficient-stock", VALIDATION_MESSAGES.QUANTITY_RANGE, "lines");
   }
   // The pricing read checks the real shelf, not only the ceiling each line declares, so a basket prices only
   // while the catalogue can still cover it and an order placed from the priced cart cannot be refused for stock.
-  if (!request.lines.every((line) => canFulfil(store, line))) {
+  if (!lines.every((line) => canFulfil(store, line))) {
     return refuse("insufficient-stock", VALIDATION_MESSAGES.QUANTITY_RANGE, "lines");
   }
   const promo = findPromoCode(request.promoCode);
-  const refusal = promoRefusal(store, request.promoCode, promo, request.lines);
+  const refusal = promoRefusal(store, request.promoCode, promo, lines);
   if (refusal !== null) return refusal;
   return accept(
     priceCartLines({
-      lines: request.lines,
+      lines,
       promo,
       shippingMethodId: request.shippingMethodId,
       shippingMethods: SHIPPING_METHODS,
@@ -314,16 +333,29 @@ function canFulfil(
   return product !== undefined && product.stockOnHand >= line.quantity;
 }
 
-/** Builds and stores an order from the settled request: its lines are the snapshot's, so a later catalogue edit
- * cannot rewrite what it bought or what it cost, and its status opens with the entry a freshly placed order
- * carries. The order is written to this browser's durable record as it is created, so it is not lost with the
- * document that placed it. A repeat of one submission never reaches here twice: the transport's idempotency
- * store answers the second one from the first order. */
+/** The code a reviewed snapshot was priced with, recovered from the promos it carries — the first code it
+ * applied, or `null` when it applied none. Recovering it here rather than reading it off the body is what makes
+ * the order path price a code its own quote priced, and refuse one that no longer applies with the same
+ * decision the quote takes. */
+function snapshotPromoCode(snapshot: PricedCart): string | null {
+  return snapshot.appliedPromos[0]?.code ?? null;
+}
+
+/** Builds and stores an order from the settled request: its money is priced at the seam — the lines the
+ * snapshot carries, re-priced from the catalogue through the one pricing service with the code the snapshot was
+ * priced with and the delivery method the buyer chose — so the amounts an order stores are the catalogue's
+ * prices at purchase time and never a total the submitted body named. Its lines keep that snapshot's own names,
+ * skus and prices, so a later catalogue edit cannot rewrite what it bought or what it cost, and its status opens
+ * with the entry a freshly placed order carries. The order is written to this browser's durable record as it is
+ * created, so it is not lost with the document that placed it. A repeat of one submission never reaches here
+ * twice: the transport's idempotency store answers the second one from the first order. */
 function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<Order> {
-  const lines = toOrderLines(request.snapshot);
-  if (!lines.every((line) => canFulfil(store, line))) {
-    return refuse("insufficient-stock", CART_COPY.AVAILABILITY_WARNING, "snapshot");
-  }
+  const priced = priceRequest(store, {
+    lines: request.snapshot.lines,
+    promoCode: snapshotPromoCode(request.snapshot),
+    shippingMethodId: request.shippingMethodId,
+  });
+  if (!priced.ok) return priced;
   const placedAt = toIsoDateTime(new Date());
   const day = startOfDay(placedAt);
   // The marks are read here rather than derived from this store alone, because the store was rebuilt from the
@@ -335,12 +367,12 @@ function createOrderIn(store: DataStore, request: OrderCreationRequest): Result<
     customerId: request.customerId,
     email: request.email,
     status: "pending",
-    lines,
+    lines: toOrderLines(priced.value),
     shippingAddress: request.shippingAddress,
     billingAddress: request.billingAddress,
     shippingMethodId: request.shippingMethodId,
     payment: request.payment,
-    pricedCart: request.snapshot,
+    pricedCart: priced.value,
     placedAt,
     updatedAt: placedAt,
     statusHistory: [],
@@ -381,10 +413,10 @@ function listCustomerOrders(store: DataStore, query: CustomerOrderQuery): PageRe
 // Analytics and reports -----------------------------------------------------------------------------
 
 // The graph the readings below run over — the reduction that builds a sales fact table, the aggregation rules
-// and the report composition, fetched on first use — is this file's §0.5.5 split path
+// and the report composition, fetched on first use — is this file's split path
 // `src/data/analyticsGraph.ts`, which holds the loader, the shape it resolves to and the refusal a failed fetch
-// answers with, because this file's own 33-member contract and that concern cannot both be held inside the
-// request's 600-line ceiling. The members below reach it through `overAnalyticsGraph` and, for a report run,
+// answers with, because this file's own 33-member contract and that concern cannot both be held in one file
+// under the 600-line ceiling. The members below reach it through `overAnalyticsGraph` and, for a report run,
 // `loadAnalyticsGraph`.
 
 /** The refusal a dated range earns, or `null` when it can run: the rules are `src/utils/dates.ts`'s and the
@@ -413,16 +445,16 @@ function runReportOver(
     return refuse("validation-failed", VALIDATION_MESSAGES.REQUIRED, "kind");
   }
   return accept(
-    graph.runReportDefinition(
-      query.kind,
-      {
+    graph.runReportDefinition({
+      kind: query.kind,
+      input: {
         orders: store.orders,
         salesRecords: graph.salesRecordsFor(store.orders),
         customers: store.customers,
       },
       query,
       definition,
-    ),
+    }),
   );
 }
 
@@ -474,10 +506,10 @@ export function createSalesProDataSource(): SalesProDataSource {
     updateCustomer: (id, input) => updateProfile(store, id, input),
     listAddresses: (id) => store.books.get(id) ?? [],
     addAddress: (id, input) => addBookAddress(store, id, input),
-    updateAddress: (id, addressId, input) => updateBookAddress(store, id, addressId, input),
+    updateAddress: (id, addressId, input) => updateBookAddress({ store, id, addressId, input }),
     removeAddress: (id, addressId) => removeBookAddress(store, id, addressId),
     setDefaultAddress: (id, addressId, request) =>
-      setBookDefault(store, id, addressId, request.kind),
+      setBookDefault({ store, id, addressId, kind: request.kind }),
     // Analytics and reports: the fact rows of the orders this store serves, reduced from that same collection
     // by the analytics module, so an order placed in this browser moves the KPIs, the chart and the sales
     // report together with the order collection they are checked against — the first read of either fetches

@@ -1,32 +1,25 @@
 /* Path: src/styles/commerce.css
- * Purpose: Styles for the checkout steps, forms and confirmation panels, with the cart, the mini-cart and the order summary panel loaded from src/styles/cart.css and the register the integrated branch moved into the sheets its own imports name
- * Lines: 253
+ * Purpose: Styles for the cart, the mini-cart and the checkout steps and summary panels
+ * Lines: 246
  */
 /* The checkout's steps, forms and summary, and the registers this sheet gave up whole: it composes the
  * primitives the six sheets before it own — buttons, fields, choices, cards, badges, the drawer, the alert, the
  * empty state, the progress register and the quantity stepper — and restates none of them. It loads sixth; the
  * cart and checkout roots also carry layout.css's `.sp-split`, whose track gives them their two columns.
  *
- * BLITZY [BUDGET]: this sheet's concern passed the request's 600-line ceiling — at 607, and at 647 once the
- * cart-presentation checkpoint's rules had joined it — and §0.5.5's remedy for a concern that cannot fit is the
- * split rather than the ceiling. Every register below left the sheet whole and is loaded here with `@import`
- * ahead of this sheet's own rules, so a CSS `@import` is inlined where it sits, the entry point still imports
- * the same eight mapped paths in the same order, and no ninth path appears anywhere:
- *  - `src/styles/cart.css` carries the cart page, the mini-cart and the order summary panel the cart and the
- *    checkout share, moved order-preserving, so the cart's rules still precede the checkout's and the
- *    medium-stop block at the end of this sheet still restates the cart row's wider form after the base rule
- *    `cart.css` declares;
- *  - `src/styles/commerce-cart.css` carries the cart and mini-cart register as the integrated branch moved it
- *    verbatim, `src/styles/commerce-steps.css` the checkout's ordered step indicator with that family's own
+ * BLITZY [BUDGET]: every register below left the sheet whole and is loaded here with `@import` ahead of this
+ * sheet's own rules, so a CSS `@import` is inlined where it sits, the cascade order the single sheet declared is
+ * unchanged, the application still imports the same eight mapped paths in their existing order, and no ninth path
+ * appears anywhere:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ *  - `src/styles/cart.css` carries the cart page with its rows and the mini-cart, moved order-preserving, so the
+ *    cart's rules still precede the checkout's;
+ *  - `src/styles/commerce-steps.css` carries the checkout's ordered step indicator with that family's own
  *    medium-stop override, and `src/styles/summary-panel.css` the order summary panel register with the promo
  *    band's grid and the applied-code row.
- * The two registers cover the same three families — the cart, the mini-cart and the order summary panel — and
- * where both state a property of one name the sheet loaded last holds it, so neither register's rules are lost
- * from the cascade and every value is still a var() from tokens.css.
  */
 
 @import "./cart.css";
-@import "./commerce-cart.css";
 @import "./commerce-steps.css";
 @import "./summary-panel.css";
 

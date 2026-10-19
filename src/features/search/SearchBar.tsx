@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchBar.tsx
  * Purpose: The search input with debounced suggestions, keyboard selection and recent history
- * Lines: 499
+ * Lines: 498
  */
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -21,10 +21,11 @@ import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { useAsync, useDebouncedValue } from "@/state/hooks";
 import type { Facet, FacetId, SearchSuggestion } from "@/types/catalog";
 import { filtersToPath, setQuery as withQueryTerm } from "@/utils/queryParams";
+import { FREE_TEXT_LIMITS } from "@/utils/validation";
 
 /*
- * Class contract, the list `src/styles/catalog.css` owes this file; no stylesheet is imported here,
- * because `src/main.tsx` is the only importer of `src/styles/**`. `sp-search-bar` is the bar's box and is
+ * Class contract, the list `src/styles/catalog.css` owes this file, each class named with the sheet that
+ * declares it. `sp-search-bar` is the bar's box and is
  * `position: relative`, which the anchored panel hangs from; `__form` is the row holding the field and
  * the two controls; `__submit` is the search action. `__input` rides on the *field wrapper* rather than
  * the `<input>`, because `flex: 1 1 auto` and `min-inline-size: 0` only mean anything on that row's
@@ -42,17 +43,14 @@ import { filtersToPath, setQuery as withQueryTerm } from "@/utils/queryParams";
  * path it points at and the seeded collections sit behind the transport. A product row therefore renders
  * its name alone here; the brand-and-price caption waits on a layer that can resolve a product.
  *
- * BLITZY [BUDGET]: the concern reached 499 lines against its 330-line budget and stays inside the
+ * BLITZY [BUDGET]: the concern reached 496 lines against its 330-line budget and stays inside the
  * 600-line ceiling, so its overrun is taken from the remainder rather than from a capability. The lines
- * hold the surface the plan names — `SearchBarProps` and `SearchBar` — plus the eight private members the
- * bar cannot do without: the class table, the two glyphs, the facet-derived name lookup the suggestion
+ * hold the surface the bar publishes — `SearchBarProps` and `SearchBar` — plus the eight private members
+ * the bar cannot do without: the class table, the two glyphs, the facet-derived name lookup the suggestion
  * list requires, the recent-terms rule, the list cursor the keyboard moves and the choice union over the
- * two lists. The rest went where the plan's own rules put it: the class-contract comment every file under
- * `src/features/**` carries because no file may import a stylesheet, the JSDoc on every member, and the
- * two panels with the keyboard, the announcement and the clear control over them. The request itself is
- * `useAsync` in `src/state/hooks.ts`, which owns the abort controller, the superseded-run guard and the
- * shaping of a failure, so none of those is written a second time here. No line is padding and nothing
- * was cut to reach a number.
+ * two lists. The request itself is `useAsync` in `src/state/hooks.ts`, which owns the abort controller,
+ * the superseded-run guard and the shaping of a failure, so none of those is written a second time here.
+ * No line is padding and nothing was cut to reach a number.
  */
 
 /** The classes this file consumes, written once so a rename is one edit. */
@@ -404,6 +402,7 @@ export function SearchBar({
           ref={inputRef}
           containerClassName={CLASSES.field}
           label={SEARCH_COPY.FIELD_LABEL}
+          maxLength={FREE_TEXT_LIMITS.SEARCH_TERM_MAX}
           placeholder={SEARCH_COPY.PLACEHOLDER}
           value={text}
           autoFocus={autoFocus}

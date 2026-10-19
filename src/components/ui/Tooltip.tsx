@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Tooltip.tsx
  * Purpose: Tooltip and popover triggered by keyboard or pointer and wired through `aria-describedby`
- * Lines: 404
+ * Lines: 403
  */
 
 import { cloneElement, useCallback, useEffect, useId, useRef, useState } from "react";
@@ -15,13 +15,12 @@ import type {
 import { useOnClickOutside } from "@/components/ui/hooks";
 
 /*
- * Class contract. `src/styles/components.css` is the sole definition site of this family and no file under
- * `src/components/**` may import a stylesheet, so every class below is consumed by name: `sp-tooltip` for
- * the bubble, `sp-popover` for the panel, and `is-open` on whichever is revealed — the sheet paints the
- * closed state `opacity: 0` with `visibility: hidden`, so a surface rendered without `is-open` is rendered
- * invisible. `sp-tooltip-anchor` and `sp-popover-anchor` sit on the wrapper and are what make it the
- * containing block the absolutely positioned surface is measured against, and the four placement
- * modifiers (`sp-tooltip--top|--bottom|--start|--end`, `sp-popover--top|--bottom|--start|--end`) position
+ * Class contract. `src/styles/components.css` is the sole definition site of this family, so every class below is
+ * consumed by name: `sp-tooltip` for the bubble, `sp-popover` for the panel, and `is-open` on whichever is
+ * revealed — the sheet paints the closed state `opacity: 0` with `visibility: hidden`, so a surface rendered
+ * without `is-open` is rendered invisible. `sp-tooltip-anchor` and `sp-popover-anchor` sit on the wrapper and
+ * are what make it the containing block the absolutely positioned surface is measured against, and the four
+ * placement modifiers (`sp-tooltip--top|--bottom|--start|--end`, `sp-popover--top|--bottom|--start|--end`) position
  * it against that anchor. `sp-visually-hidden`, owned by `src/styles/base.css`, carries the panel's label.
  *
  * State is carried by attributes and by that one class, the way the three primitive sheets agree: the

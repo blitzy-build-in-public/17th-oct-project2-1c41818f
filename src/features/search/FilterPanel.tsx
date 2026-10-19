@@ -30,8 +30,8 @@ import { formatNumber } from "@/utils/format";
 import { activeFilterEntries, countActiveFilters, facetValueMatches } from "@/utils/queryParams";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class is consumed by name from `src/styles/catalog.css`, which owns this surface; `src/styles/base.css`
+ * Class contract. `src/styles/catalog.css` owns this surface, each class named with the sheet that declares
+ * it; `src/styles/base.css`
  * and `src/styles/components.css` are reached only through the primitives composed here, which apply their own
  * names (`.sp-visually-hidden`, `.sp-field`, `.sp-choice`, `.sp-alert`, `.sp-empty`, `.sp-skeleton`).
  *
@@ -278,10 +278,10 @@ export interface FilterPanelProps {
  * @returns The column from the extra-large stop up, or the trigger with its drawer below it — or nothing at all
  *   while the read that fills the panel stands failed, because neither placement then has anything to offer.
  *
- * BLITZY [BUDGET]: 488 lines against the plan's 470-line budget, and inside the 600-line ceiling — no line was
+ * BLITZY [BUDGET]: 488 lines against its 470-line budget, and inside the 600-line ceiling — no line was
  * added to reach a number and none was cut to leave one. The five data-driven groups, the three controls they
- * dispatch to, the class contract and the four data states are what the surface needs, and the plan's own
- * remedy — a second file — would break the path this slice's page imports.
+ * dispatch to, the class contract and the four data states are what the surface needs, and the remedy a split
+ * offers — a second file — would break the path this slice's page imports.
  */
 export function FilterPanel({
   facets: facetsProp,

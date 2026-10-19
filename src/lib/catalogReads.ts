@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/catalogReads.ts
  * Purpose: The catalogue's reads that are not a filtered listing — the category tree and the walk over it, the brands, the product a route's segment names, and a product's reviews
- * Lines: 239
+ * Lines: 240
  */
 
 import { PAGE_SIZE_OPTIONS } from "@/constants/config";
@@ -28,11 +28,12 @@ import type { PageResult, ProductId, Result, SessionToken } from "@/types/common
 import { DEFAULT_FILTER_STATE } from "@/utils/queryParams";
 
 /*
- * A §0.5.5 split of `src/lib/catalogService.ts`, kept beside it rather than inside it: that file holds the
- * catalogue's rules — what a filter means, which values a facet offers and how their counts are computed, what
- * each sort key orders by, which products are related — and the reads that are not a filtered listing live
- * here. Every one of them is reached through `src/lib/apiClient.ts`, so a feature calls a function of the
- * catalogue's service surface and never names a request path itself, which is the read path §0.3.2 states.
+ * The catalogue's reads, kept beside `src/lib/catalogService.ts` rather than inside it: filtering and reading a
+ * catalogue is one concern, and one file may not exceed 600 lines, so that file holds the catalogue's rules —
+ * what a filter means, which values a facet offers and how their counts are computed, what each sort key orders
+ * by, which products are related — and the reads that are not a filtered listing live here. Every one of them is
+ * reached through `src/lib/apiClient.ts`: a module imports only from its own layer or a layer below, so a
+ * feature calls a function of the catalogue's service surface and never names a request path itself.
  *
  * Deliberately not re-exported from `catalogService.ts`, unlike `src/lib/reportSeries.ts`: the slug read below
  * is built on that module's `listProducts`, so a re-export would close an import cycle between the two. The

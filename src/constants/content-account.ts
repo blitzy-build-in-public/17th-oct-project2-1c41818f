@@ -8,12 +8,12 @@ import type { LoyaltyTier } from "@/types/account";
 import type { PaymentMethod } from "@/types/commerce";
 
 /*
- * A §0.5.5 split of `src/constants/content.ts`. The account register is one concern: the copy the sign-in page,
- * the registration page, the account shell and its profile, orders and addresses pages render. The file that held
- * it had grown past the request's 600-line ceiling again as the destination branch's landings added copy of their
- * own, and §0.5.5 answers that by splitting a concern into a second file rather than raising the ceiling.
- * `src/constants/content.ts` re-exports this module, so no consumer's import path and no exported name changed,
- * and the dependency runs one way: this file imports nothing from content.ts.
+ * The account register, kept beside `src/constants/content.ts` rather than inside it, is one concern: the
+ * copy the sign-in page, the registration page, the account shell and its profile, orders and addresses
+ * pages render. The account copy grew past the 600 lines one file may hold, so the register is split by
+ * surface rather than the ceiling raised: this file owns the account sections and `src/constants/content.ts`
+ * re-exports it, so no consumer's import path changes and no exported name changes. The dependency
+ * runs one way — this file imports nothing from content.ts, so the account copy has one home.
  */
 
 // Accounts --------------------------------------------------------------------------------------

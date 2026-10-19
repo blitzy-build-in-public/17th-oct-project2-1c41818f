@@ -14,8 +14,8 @@ import type { RoutePath } from "@/constants/routes";
 import { useAuth } from "@/state/AuthContext";
 
 /*
- * Class contract. `src/styles/account.css` is the sole definition site of the account shell, and no file
- * under `src/features/**` imports a stylesheet, so every class below is consumed by name: `sp-account` is the
+ * Class contract. `src/styles/account.css` is the sole definition site of the account shell, and this list
+ * is what the sheets owe the file, each class named with the sheet that declares it: `sp-account` is the
  * grid that is one column on a phone and the section column beside the view from 768, `sp-account__nav` the
  * strip that scrolls sideways until that stop turns it into the sticky column, `sp-account__nav-list` the
  * list the sheet flattens (`role="list"` in this markup is what keeps its semantics once `list-style: none`

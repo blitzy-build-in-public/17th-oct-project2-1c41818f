@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/sessionLifecycle.test.tsx
  * Purpose: The session's lifecycle: the stored token revalidated on mount, the refusal, the lapse and the sign-out that end it and announce it, and the durable issuance table the endpoints answer from.
- * Lines: 461
+ * Lines: 565
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,12 +10,13 @@ import { DEMO_ACCOUNTS, STORAGE_KEYS } from "@/constants/config";
 import { ACCOUNT_COPY, A11Y_COPY, COMMON_ACTIONS, FEEDBACK_COPY } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { createSalesProDataSource } from "@/data/repositories";
+import type { SessionRecord } from "@/data/sessionTable";
 import { getJson, postJson } from "@/lib/apiClient";
 import { API_PATHS, registerDataSource } from "@/lib/mockServer";
 import type { Session } from "@/types/account";
 import type { ApiError, Result, SessionToken } from "@/types/common";
 import { defaultReportRange, toIsoDateTime } from "@/utils/dates";
-import { sessionToken } from "@/utils/strings";
+import { customerId, sessionToken } from "@/utils/strings";
 import { readStored, writeStored } from "@/utils/storage";
 
 import { failNext, renderApp, resetApiState, screen, waitFor } from "../testUtils";
@@ -29,9 +30,10 @@ import type { UserEvent } from "../testUtils";
  * error state and its retry, the redirect to sign-in, the entry still in the store or gone, and the
  * sentence announced in a live region. The second binds the store's data source and asks the endpoints
  * directly, so what it observes is what the durable table behind them answers — the reload it exists
- * for. Nothing here stands in for a service, a reducer, a context or a data module, and no case asserts
- * on an internal structure: every assertion is about rendered text, a persisted entry or an endpoint's
- * answer.
+ * for — including what the table refuses: a record this browser did not write or that was edited after it
+ * was, and one a sign-out ended. Nothing here stands in for a service, a reducer, a context or a data
+ * module, and no case asserts on an internal structure: every assertion is about rendered text, a
+ * persisted entry or an endpoint's answer.
  *
  * The two halves share their helpers rather than each spelling them out: the token both use when no
  * store has issued a session, the shopper's credentials, the unwrappers a case reads an endpoint's
@@ -122,26 +124,26 @@ async function readSession(token: string): Promise<Result<Session>> {
   return await getJson<Session>(API_PATHS.AUTH_SESSION, { sessionToken: token });
 }
 
-/** The session table as it stands in the store. */
-function storedTable(): readonly Session[] {
-  return readStored<Session[]>(STORAGE_KEYS.SESSIONS, []);
+/** The session table as it stands in the store: the records the seam's durable table holds, each carrying the
+ *  seal this browser writes beside it. */
+function storedTable(): readonly SessionRecord[] {
+  return readStored<SessionRecord[]>(STORAGE_KEYS.SESSIONS, []);
 }
 
-/** Moves one token's record into the past by whole days, keeping the seven-day window it was issued with
- *  coherent, and writes the table back — the state a visitor reloads into a day after their session lapsed. */
-function backdate(token: string, days: number): void {
-  const shift = days * DAY_MS;
-  const moved = storedTable().map((session) =>
-    session.token === token
-      ? {
-          ...session,
-          issuedAt: toIsoDateTime(new Date(Date.parse(session.issuedAt) - shift)),
-          expiresAt: toIsoDateTime(new Date(Date.parse(session.expiresAt) - shift)),
-        }
-      : session,
-  );
-  expect(moved.some((session) => session.token === token)).toBe(true);
-  expect(writeStored(STORAGE_KEYS.SESSIONS, moved)).toBe(true);
+/** The row of one token as the table holds it, or a failure naming the token the table does not hold. */
+function storedRow(token: string): SessionRecord {
+  const row = storedTable().find((session) => session.token === token);
+  if (row === undefined) throw new Error("The session table holds no record for the token.");
+  return row;
+}
+
+/** Moves the clock the seam judges a session's window against, so a case reaches a lapsed window without
+ *  editing a sealed record: the store seals a record's own dates, so a record whose window was moved by hand
+ *  is one the store refuses outright rather than an older session. Only `Date` is faked, so the seam's own
+ *  request timers still run and a `findBy*` still resolves. */
+function moveClockTo(instant: string): void {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(instant));
 }
 
 describe("the session read's refusals", () => {
@@ -378,9 +380,9 @@ describe("durable session issuance at the seam", () => {
 
   it("refuses a token whose window has passed with 401 session-expired", async () => {
     const minted = await mintSession();
-    // Eight days back: the record's seven-day window ended a day before now, so the token it names has
-    // lapsed, and the reload below refuses it with 401 session-expired.
-    backdate(minted.token, 8);
+    // Eight days on: the record's seven-day window ended a day before the clock the read is judged against,
+    // so the token it names has lapsed — the reload case the declared refusal was unreachable for.
+    moveClockTo(toIsoDateTime(new Date(Date.parse(minted.issuedAt) + 8 * DAY_MS)));
 
     openDocument();
 
@@ -397,14 +399,101 @@ describe("durable session issuance at the seam", () => {
     expect(refused.code).toBe("session-unknown");
   });
 
-  it("drops the record on sign-out, so the next document refuses the token", async () => {
+  it("issues a fresh token on each sign-in, so a token a reader has seen is rotated away", async () => {
+    const first = await mintSession();
+    const second = await mintSession();
+
+    // One account, two sign-ins, two credentials: signing in again mints a new token rather than replaying
+    // the one the account was issued, which is what makes a value that leaked recoverable — and both sessions
+    // stand, because a sign-in is not a sign-out of the session another document holds.
+    expect(second.token).not.toBe(first.token);
+    expect(first.token).toMatch(/^ses_[0-9a-f]{16}$/);
+    expect(second.token).toMatch(/^ses_[0-9a-f]{16}$/);
+    expect(valueOf(await readSession(first.token)).token).toBe(first.token);
+    expect(valueOf(await readSession(second.token)).token).toBe(second.token);
+
+    // The token is not a function of the account either: a value computed from what any reader can see — the
+    // identifier the account is published under — names no session this store issued.
+    const derived = sessionToken(`account ${first.customerId}`);
+    expect(refusalOf(await readSession(derived)).code).toBe("session-unknown");
+  });
+
+  it("refuses a hand-written record naming an administrator, however sound its window", async () => {
+    const minted = await mintSession();
+
+    // The record a script in the page can write: a token the store never minted, naming the seeded
+    // administrator and carrying that account's role and a live window, with the seal copied from a record
+    // this browser really wrote. The one member it cannot produce for its own members is that seal.
+    const forged: SessionRecord = {
+      ...storedRow(minted.token),
+      token: sessionToken("a token this store never minted"),
+      customerId: customerId(DEMO_ACCOUNTS.ADMIN_EMAIL),
+      role: "admin",
+    };
+    expect(writeStored(STORAGE_KEYS.SESSIONS, [...storedTable(), forged])).toBe(true);
+
+    openDocument();
+
+    // The row cannot be proved, so it is dropped and its token answers as one no session was ever issued for;
+    // the honest record written beside it is unaffected by the row that was added over the table.
+    const refused = refusalOf(await readSession(forged.token));
+    expect(refused.status).toBe(401);
+    expect(refused.code).toBe("session-unknown");
+
+    // The administrator read the dashboard makes, asked for with the forged token, is refused where honouring
+    // the record would have answered it with other customers' orders and emails.
+    const range = defaultReportRange();
+    const denied = refusalOf(
+      await getJson<unknown>(`${API_PATHS.ANALYTICS_KPIS}?from=${range.from}&to=${range.to}`, {
+        sessionToken: forged.token,
+      }),
+    );
+    expect(denied.status).toBe(401);
+
+    expect(valueOf(await readSession(minted.token)).token).toBe(minted.token);
+  });
+
+  it("refuses a record whose role was edited after it was written", async () => {
+    const minted = await mintSession();
+
+    // The edit an outsider can make to the durable table: the row's role claim, with the token, the account
+    // it names and the window left exactly as this store wrote them. The record is sealed over its own
+    // members, so the edited row cannot pass for one this browser wrote — the token is refused outright
+    // rather than honoured with the account's own role stamped over the raised claim.
+    const widened: SessionRecord[] = storedTable().map((session) =>
+      session.token === minted.token ? { ...session, role: "admin" } : session,
+    );
+    expect(writeStored(STORAGE_KEYS.SESSIONS, widened)).toBe(true);
+
+    openDocument();
+
+    const refused = refusalOf(await readSession(minted.token));
+    expect(refused.status).toBe(401);
+    expect(refused.code).toBe("session-unknown");
+
+    // A protected administrator read, asked for the way the dashboard asks: the token the rewritten claim
+    // rides on reaches nothing at all, not even the account's own role.
+    const range = defaultReportRange();
+    const denied = refusalOf(
+      await getJson<unknown>(`${API_PATHS.ANALYTICS_KPIS}?from=${range.from}&to=${range.to}`, {
+        sessionToken: minted.token,
+      }),
+    );
+    expect(denied.status).toBe(401);
+  });
+
+  it("marks the record revoked on sign-out, so the next document refuses the token", async () => {
     const minted = await mintSession();
 
     const ended = await postJson<void>(API_PATHS.AUTH_LOGOUT, undefined, {
       sessionToken: minted.token,
     });
     expect(valueOf(ended)).toBeUndefined();
-    expect(storedTable().some((session) => session.token === minted.token)).toBe(false);
+    // The record stays in the table carrying the instant the sign-out ended it, and the seal secret the table
+    // is written under is rotated with it, so a copy of the table taken while the session was live is sealed
+    // under the secret that has just been replaced. The write-back that copy makes is driven at the seam in
+    // `tests/unit/lib/sessionTableDurability.test.ts`.
+    expect(storedRow(minted.token).revokedAt).toBeTypeOf("string");
 
     openDocument();
 
@@ -414,30 +503,45 @@ describe("durable session issuance at the seam", () => {
     expect(refused.code).toBe("session-unknown");
   });
 
-  it("keeps the account's own role and refuses the widened administrator read", async () => {
+  it("keeps a signed-out token refused when the record is written back", async () => {
     const minted = await mintSession();
+    await postJson<void>(API_PATHS.AUTH_LOGOUT, undefined, { sessionToken: minted.token });
 
-    // The edit an outsider can make to the durable table: the row's role claim, with the token, the account
-    // it names and the window left exactly as this store wrote them.
-    const widened: Session[] = storedTable().map((session) =>
-      session.token === minted.token ? { ...session, role: "admin" } : session,
-    );
-    expect(writeStored(STORAGE_KEYS.SESSIONS, widened)).toBe(true);
+    // A later sign-in writes the table again — the union of what it holds and what this document has — so the
+    // revoked record travels with it rather than being dropped by that write.
+    const second = await mintSession();
+    const rewritten = storedTable();
+    expect(rewritten.some((session) => session.token === minted.token)).toBe(true);
 
+    // The write-back an outsider can make: the table as it stands, put back through the product's own writer.
+    expect(writeStored(STORAGE_KEYS.SESSIONS, rewritten)).toBe(true);
     openDocument();
+    const refused = refusalOf(await readSession(minted.token));
+    expect(refused.status).toBe(401);
+    expect(refused.code).toBe("session-unknown");
 
-    const restored = valueOf(await readSession(minted.token));
-    expect(restored.role).toBe("customer");
-
-    // A protected administrator read, asked for the way the dashboard asks: the token a rewritten claim
-    // rides on reaches nothing the account does not hold.
-    const range = defaultReportRange();
-    const denied = refusalOf(
-      await getJson<unknown>(`${API_PATHS.ANALYTICS_KPIS}?from=${range.from}&to=${range.to}`, {
-        sessionToken: minted.token,
-      }),
+    // And the same row with the mark taken off — the revival a write-back would attempt — is refused too,
+    // because the mark is one of the record's own members and the seal is over them.
+    const stripped = rewritten.map((session) =>
+      session.token === minted.token
+        ? {
+            token: session.token,
+            customerId: session.customerId,
+            role: session.role,
+            issuedAt: session.issuedAt,
+            expiresAt: session.expiresAt,
+            seal: session.seal,
+          }
+        : session,
     );
-    expect(denied.status).toBe(403);
+    expect(writeStored(STORAGE_KEYS.SESSIONS, stripped)).toBe(true);
+    openDocument();
+    const unmarked = refusalOf(await readSession(minted.token));
+    expect(unmarked.status).toBe(401);
+    expect(unmarked.code).toBe("session-unknown");
+
+    // The sign-in that followed the sign-out is untouched: a revocation is a fact about one record.
+    expect(valueOf(await readSession(second.token)).token).toBe(second.token);
   });
 });
 

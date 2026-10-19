@@ -1,9 +1,10 @@
 /**
  * Path: src/state/checkoutReducer.ts
  * Purpose: Checkout step transitions, validation errors, submission and success
- * Lines: 598
+ * Lines: 594
  */
 
+import { assertNever } from "@/utils/exhaustive";
 import { FORM_ERROR_KEY, hasErrors } from "@/utils/validation";
 import type { AddressInput } from "@/types/account";
 import type { Order, PricedCart } from "@/types/commerce";
@@ -379,7 +380,7 @@ export function checkoutReducer(state: CheckoutState, action: CheckoutAction): C
     }
 
     default: {
-      return assertNever(action);
+      return assertNever(action, "checkout action");
     }
   }
 }
@@ -457,11 +458,6 @@ function isReturnStep(from: CheckoutStep, to: CheckoutStep): boolean {
     CHECKOUT_FORM_STEPS.some((formStep) => formStep === to) &&
     stepIndex(to) < stepIndex(from)
   );
-}
-
-/** Proof at compile time that every action was handled: a new member fails to type-check here. */
-function assertNever(value: never): never {
-  throw new Error(`Unhandled checkout action: ${JSON.stringify(value)}`);
 }
 
 /** Shallow comparison, so an identical map arriving again keeps its identity. */

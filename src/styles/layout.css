@@ -1,5 +1,5 @@
 /* Path: src/styles/layout.css
- * Purpose: Page shell, containers, grid, and the header and footer skeletons
+ * Purpose: Page shell, containers, grid, and the header, footer and sidebar skeletons
  * Lines: 493
  */
 /* The application frame, the container and page rhythm, three layout primitives and the component skeletons — AppLayout, Header, Footer and PageHeader, the last declared in src/styles/page-header.css and the sidebar's own in src/styles/sidebar.css, both loaded here with @import. Every class below is defined here alone, rendered verbatim by its component; loaded third, it consumes tokens.css properties and base.css's two utilities, declaring no colour, length, radius, shadow, z-index or duration. No component primitive

@@ -1,6 +1,6 @@
 /**
  * Path: src/lib/searchService.ts
- * Purpose: The search and type-ahead seam — the transport-backed reads and the rule names re-exported from src/utils/searchRules.ts
+ * Purpose: Tokenising, weighted scoring and type-ahead suggestions for product search
  * Lines: 127
  */
 

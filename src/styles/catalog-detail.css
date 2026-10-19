@@ -1,13 +1,15 @@
 /* Path: src/styles/catalog-detail.css
  * Purpose: Styles for the product detail surfaces: the two-column layout, the gallery, the specification and feature lists, the related strip and the reviews with their form
- * Lines: 301
+ * Lines: 303
  */
 
 /* One product's own page: its gallery and buy column, its specifications and features, the related strip under it
- * and its reviews with the form a signed-in customer submits. Split out of src/styles/catalog.css, which the plan
- * maps, because the catalogue and search family does not fit one file inside the request's 600-line ceiling;
- * catalog.css loads this sheet with @import ahead of its own rules, so the entry point still imports the eight
- * mapped stylesheets and the cascade order is unchanged. It composes the primitives the component sheets own
+ * and its reviews with the form a signed-in customer submits. A split of src/styles/catalog.css, and the rule that
+ * settled it is this:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * catalog.css loads this sheet with @import ahead of its own rules, at the position the moved rules held, so the
+ * cascade order is unchanged and the entry point still imports the same eight mapped stylesheets, with no ninth
+ * path anywhere. It composes the primitives the component sheets own
  * (.sp-tabs, .sp-rating, .sp-price, .sp-quantity, .sp-input, .sp-select, .sp-alert) and restates none of their
  * rules; every value is a var() from tokens.css.
  *

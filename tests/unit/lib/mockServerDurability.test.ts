@@ -1,13 +1,17 @@
 /**
  * Path: tests/unit/lib/mockServerDurability.test.ts
- * Purpose: The seam's durability across a document load: what a document writes is what the next reads, the
- * placement credential of an account-less order and a published review's own row included, and two documents open at once never mint one order identifier between them
- * Lines: 238
+ * Purpose: The seam's durability across a document load: what a document writes is what the next reads, the sealed placement credential of an account-less order and a published review's own row included, two documents placing orders keep each other's records and never mint one order identifier between them, and a record whose window has run out is dropped rather than carried
+ * Lines: 360
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEMO_ACCOUNTS, DEMO_CARD_NUMBERS, STORAGE_KEYS } from "@/constants/config";
+import {
+  DEMO_ACCOUNTS,
+  DEMO_CARD_NUMBERS,
+  ORDER_PLACEMENT_TTL_MS,
+  STORAGE_KEYS,
+} from "@/constants/config";
 import { createSalesProDataSource } from "@/data/repositories";
 import { getJson, postJson } from "@/lib/apiClient";
 import { registerDataSource } from "@/lib/mockServer";
@@ -15,6 +19,9 @@ import type { RegistrationResult, Session } from "@/types/account";
 import type { Product, Review } from "@/types/catalog";
 import type { PageResult } from "@/types/common";
 import type { Order } from "@/types/commerce";
+import { isValidIso } from "@/utils/dates";
+import { placementTokenFor } from "@/utils/orderPlacements";
+import { placementToken } from "@/utils/strings";
 
 import {
   ORDER_SAMPLE,
@@ -62,6 +69,17 @@ function meanRating(ratings: readonly number[]): number {
   return Math.round((total / ratings.length) * 10) / 10;
 }
 
+/** The store a case reads the durable payload through, as the harness hands it back. */
+type FakeStore = ReturnType<typeof installFakeStorage>;
+
+/** The rows the store holds for the placements, read exactly as they were written. */
+function durableRows(store: FakeStore): Record<string, unknown>[] {
+  const raw = store.getValue(STORAGE_KEYS.ORDER_TOKENS);
+  if (raw === null) return [];
+  const payload = JSON.parse(raw) as { readonly value?: readonly Record<string, unknown>[] };
+  return [...(payload.value ?? [])];
+}
+
 describe("durability across a document load", () => {
   beforeEach(() => {
     startSeam();
@@ -73,6 +91,7 @@ describe("durability across a document load", () => {
   afterEach(() => {
     storage?.restore();
     storage = null;
+    vi.useRealTimers();
   });
 
   it("carries a placed order and a registered account into the next document", async () => {
@@ -148,10 +167,12 @@ describe("durability across a document load", () => {
 
   it("records the placement credential of an account-less order, so a later document can read it back", async () => {
     storage = installFakeStorage();
+    const orderToken = placementToken();
     const placed = await valueOf(
       postJson<Order>(
         "/api/orders",
         await orderBody("key-placement-durable", DEMO_CARD_NUMBERS.APPROVED),
+        { orderToken },
       ),
     );
     expect(placed.customerId).toBeNull();
@@ -161,9 +182,110 @@ describe("durability across a document load", () => {
     const written = storage.keys();
     expect(written).toContain(STORAGE_KEYS.ORDER_TOKENS);
     const stored = JSON.parse(storage.getValue(STORAGE_KEYS.ORDER_TOKENS) ?? "{}") as {
-      readonly value?: readonly { readonly orderId?: string; readonly token?: string }[];
+      readonly value?: readonly {
+        readonly orderId?: string;
+        readonly token?: string;
+        readonly expiresAt?: string;
+        readonly seal?: string;
+      }[];
     };
-    expect(stored.value).toEqual([{ orderId: placed.id, token: "key-placement-durable" }]);
+    expect(stored.value?.map((entry) => entry.orderId)).toEqual([placed.id]);
+    // What is recorded is the credential the submission presented — the random value the placing client
+    // minted for the attempt — and never the idempotency key it submitted under, whose shape the client
+    // publishes beside the code that mints it.
+    expect(orderToken).toMatch(/^plc_\S+$/);
+    expect(stored.value?.[0]?.token).toBe(orderToken);
+    expect(stored.value?.[0]?.token).not.toBe("key-placement-durable");
+    // The seal beside the members is what proves this browser recorded them: a payload a script wrote carries
+    // no such value, and one whose credential or window was edited no longer verifies against it.
+    expect(stored.value?.[0]?.seal).toMatch(/^[0-9a-f]{16}$/);
+    // The record carries the instant its credential stops being usable, one placement window after the order
+    // was placed, so the read it authorises is bounded rather than open for ever.
+    const expiresAt = stored.value?.[0]?.expiresAt ?? "";
+    expect(isValidIso(expiresAt)).toBe(true);
+    expect(Date.parse(expiresAt)).toBe(Date.parse(placed.placedAt) + ORDER_PLACEMENT_TTL_MS);
+    expect((await valueOf(getJson<Order>(`/api/orders/${placed.id}`, { orderToken }))).id).toBe(
+      placed.id,
+    );
+  });
+
+  it("keeps the placement another document recorded when it writes one of its own", async () => {
+    const store = installFakeStorage();
+    storage = store;
+    // The first document places its order: the record it leaves behind is the durable half a later document
+    // reads, and the credential it minted is the only thing its own confirmation can come back with.
+    const firstCredential = placementToken();
+    const first = await valueOf(
+      postJson<Order>(
+        "/api/orders",
+        await orderBody("key-merge-first", DEMO_CARD_NUMBERS.APPROVED),
+        { orderToken: firstCredential },
+      ),
+    );
+    // The second document is built over the same storage and places an order of its own. The list it writes is
+    // composed from the durable records the store holds at that moment — a fresh read, not a list the document
+    // took with it — so the first document's record is still in it: neither placement replaces the other's.
+    const second = createSalesProDataSource();
+    registerDataSource(second);
+    const secondCredential = placementToken();
+    const later = await valueOf(
+      postJson<Order>(
+        "/api/orders",
+        await orderBody("key-merge-second", DEMO_CARD_NUMBERS.APPROVED),
+        { orderToken: secondCredential },
+      ),
+    );
+    expect(later.id).not.toBe(first.id);
+    expect(durableRows(store).map((row) => row.orderId)).toEqual([later.id, first.id]);
+    expect(placementTokenFor(first.id)).toBe(firstCredential);
+    expect(placementTokenFor(later.id)).toBe(secondCredential);
+    // Both credentials read their own order back, which is what losing a record would have taken away.
+    for (const [id, credential] of [
+      [first.id, firstCredential],
+      [later.id, secondCredential],
+    ] as const) {
+      expect(
+        (await valueOf(getJson<Order>(`/api/orders/${id}`, { orderToken: credential }))).id,
+      ).toBe(id);
+    }
+  });
+
+  it("drops a record whose window has run out rather than carrying it forward", async () => {
+    const realNow = Date.now();
+    const store = installFakeStorage();
+    storage = store;
+    // The order was placed a window and a day ago, so the record the product wrote for it is genuine and out
+    // of its own window by the time the next placement composes the list.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(realNow - ORDER_PLACEMENT_TTL_MS - 24 * 60 * 60 * 1000));
+    const lapsedCredential = placementToken();
+    const lapsed = await valueOf(
+      postJson<Order>(
+        "/api/orders",
+        await orderBody("key-merge-lapsed", DEMO_CARD_NUMBERS.APPROVED),
+        {
+          orderToken: lapsedCredential,
+        },
+      ),
+    );
+    vi.setSystemTime(new Date(realNow));
+    expect(durableRows(store).map((row) => row.orderId)).toEqual([lapsed.id]);
+
+    const freshCredential = placementToken();
+    const fresh = await valueOf(
+      postJson<Order>(
+        "/api/orders",
+        await orderBody("key-merge-fresh", DEMO_CARD_NUMBERS.APPROVED),
+        {
+          orderToken: freshCredential,
+        },
+      ),
+    );
+    // The write kept the live record it was composing from and left the lapsed one behind, so a credential
+    // nothing can be read with is not carried into every later write of the list.
+    expect(durableRows(store).map((row) => row.orderId)).toEqual([fresh.id]);
+    expect(placementTokenFor(fresh.id)).toBe(freshCredential);
+    expect(placementTokenFor(lapsed.id)).toBeNull();
   });
 
   it("keeps two documents open at once from minting one identifier between them", async () => {

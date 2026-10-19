@@ -1,28 +1,29 @@
 /**
  * Path: src/utils/dateDisplay.ts
  * Purpose: The locale, the formatter cache and the day, month and relative-time formatters a date is shown through
- * Lines: 102
+ * Lines: 103
  */
 
 import type { IsoDateString, IsoDateTimeString } from "@/types/common";
+import { LOCALE } from "@/utils/formatPrimitives";
 import { parseIso } from "@/utils/isoInstants";
 
 /**
- * Why this file exists beside `src/utils/dates.ts`: that module's display surface is one concern but more than
- * one file may hold under the request's 600-line ceiling, so the plan's §0.5.5 split rule is applied here as it
- * already is to `src/utils/isoInstants.ts`, `src/utils/formatPrimitives.ts` and `src/lib/reportSeries.ts`. This
- * half owns the machinery a date shown on a surface is written with — the one locale, the `Intl.DateTimeFormat`
- * cache, the relative-time formatters and the day, month and calendar formatters — while `src/utils/dates.ts`
- * owns the wording that resolves a bucket against a range, the range arithmetic, the buckets and the validator.
- * Nothing here imports that module, so the dependency runs one way, and every name a consumer reaches through it
- * is re-exported from `src/utils/dates.ts`, so no consumer's import path changes.
+ * Why this file exists beside `src/utils/dates.ts`: that module's display surface is one concern, and one file
+ * may not exceed 600 lines, so the concern is split along its own seam — the display half here, the arithmetic
+ * and wording half in the module named — rather than the ceiling raised. This half owns the machinery a date
+ * shown on a surface is written with — the one locale, the `Intl.DateTimeFormat` cache, the relative-time
+ * formatters and the day, month and calendar formatters — while `src/utils/dates.ts` owns the wording that
+ * resolves a bucket against a range, the range arithmetic, the buckets and the validator. Nothing here imports
+ * that module, so the dependency runs one way, and every name a consumer reaches through it is re-exported from
+ * `src/utils/dates.ts`, so no consumer's import path changes.
  */
 
 // The locale and the formatter cache ------------------------------------------------------------------
 
-/** The one locale dates render in; the product ships one language and one currency, as `formatPrimitives.ts`
- * declares for the figure side. */
-export const LOCALE = "en-US";
+/** The locale is declared once, in `src/utils/formatPrimitives.ts`, imported here so the figure and date
+ *  families cannot drift apart, and re-exported so this path still resolves it. */
+export { LOCALE };
 
 /** How much of a date {@link formatDate} spells out. */
 export type DateDisplayStyle = "short" | "medium" | "long";

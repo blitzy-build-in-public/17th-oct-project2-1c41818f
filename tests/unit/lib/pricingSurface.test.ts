@@ -1,15 +1,21 @@
 /**
  * Path: tests/unit/lib/pricingSurface.test.ts
  * Purpose: The pricing service's transport-backed surface: promo validation, the delivery methods, a basket
- * priced over the seam and the shelf each line is checked against.
- * Lines: 224
+ * priced over the seam, the shelf each line is checked against and the catalogue's price a line is priced at.
+ * Lines: 261
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DEFAULT_CURRENCY, PAGE_SIZE_OPTIONS, SHIPPING_METHODS } from "@/constants/config";
+import {
+  DEFAULT_CURRENCY,
+  DEMO_CARD_NUMBERS,
+  PAGE_SIZE_OPTIONS,
+  SHIPPING_METHODS,
+} from "@/constants/config";
 import { PROMO_REJECTION_MESSAGES } from "@/constants/content";
 import { salesProDataSource } from "@/data/repositories";
+import { postJson } from "@/lib/apiClient";
 import { API_PATHS, failNext, registerDataSource, resetMockServer } from "@/lib/mockServer";
 // The module under test is imported as a namespace, as formatting.test.ts imports src/utils/format.ts:
 // this file exercises five of its exports, and five specifiers named singly cost seven lines.
@@ -19,7 +25,9 @@ import { makeCartLine, makePromoCode } from "../../fixtures";
 
 import type { Product } from "@/types/catalog";
 import type { ApiError, Result } from "@/types/common";
-import type { CartLine, PricedCart } from "@/types/commerce";
+import type { CartLine, Order, PricedCart } from "@/types/commerce";
+
+import { orderBody } from "./mockServerHarness";
 
 // The contract these cases hold: promo validation, the delivery methods, a basket priced over the seam and
 // the shelf each line is checked against. Every case answers through the real transport over the seeded data
@@ -109,14 +117,15 @@ describe("the pricing surface the cart and the checkout call", () => {
   const SEEDED_CODE = "SAVE10";
 
   /** The basket every case here prices: a product the catalogue serves and holds stock for — the shelf the
-   *  pricing read checks a line against — at 4,999 minor units and quantity one, so its subtotal, its
-   *  discount and its tax stay arithmetic to check by hand. */
+   *  pricing read checks a line against — at the catalogue's own price for it and quantity one, so its
+   *  subtotal, its discount and its tax stay arithmetic to check by hand. The `unitPriceMinor` a case states
+   *  is not a price the seam reads: the pricing read re-prices every line from the catalogue. */
   const basket = [
     makeCartLine({
       productId: SELLABLE.id,
       sku: SELLABLE.sku,
       name: SELLABLE.name,
-      unitPriceMinor: 4_999,
+      unitPriceMinor: SELLABLE.priceMinor,
     }),
   ];
 
@@ -157,10 +166,12 @@ describe("the pricing surface the cart and the checkout call", () => {
     const second = valueOf(await pricing.priceCart(basket, SEEDED_CODE, null));
     const equivalent = makePromoCode({ code: SEEDED_CODE, value: 10, minSubtotalMinor: 0 });
     expect(second).toEqual(first);
-    expect(first.subtotalMinor).toBe(4_999);
-    expect(first.discountTotalMinor).toBe(500);
-    expect(first.taxMinor).toBe(371);
-    expect(first.grandTotalMinor).toBe(4_870);
+    // The catalogue's own price, a tenth off it and the configured tax rate: a hand-set unit price is not a
+    // figure the pricing read prices, which is what makes these four the seam's answer rather than a case's.
+    expect(first.subtotalMinor).toBe(SELLABLE.priceMinor);
+    expect(first.discountTotalMinor).toBe(1_860);
+    expect(first.taxMinor).toBe(1_381);
+    expect(first.grandTotalMinor).toBe(18_120);
     expect(first).toEqual(
       pricing.priceCartLines({ lines: basket, promo: equivalent, shippingMethodId: null }),
     );
@@ -203,6 +214,32 @@ describe("the pricing surface the cart and the checkout call", () => {
     expect(error.status).toBe(409);
     expect(error.field).toBe("promoCode");
     expect(pricing.promoRejectionReason(error)).toBe("expired");
+  });
+
+  it("prices a line at the catalogue's price and keeps a submitted total out of the order it places", async () => {
+    // A submission the seam itself priced, then doctored: a hand-made body may name any line price and any
+    // total, so the quote and the order are both asked what the catalogue charges for the same basket.
+    const submitted = (await orderBody("key-catalogue-priced", DEMO_CARD_NUMBERS.APPROVED)) as {
+      readonly snapshot: PricedCart;
+    } & Record<string, unknown>;
+    const [cataloguePriced] = submitted.snapshot.lines;
+    if (cataloguePriced === undefined) throw new Error("The priced snapshot holds no line.");
+    const doctored = [
+      { ...cataloguePriced, unitPriceMinor: 1, lineSubtotalMinor: 1, lineTotalMinor: 1 },
+    ];
+    const quoted = valueOf(await pricing.priceCart(doctored, undefined, null));
+    expect(quoted.lines[0]?.unitPriceMinor).toBe(cataloguePriced.unitPriceMinor);
+    expect(quoted.subtotalMinor).toBe(cataloguePriced.lineSubtotalMinor);
+    const order = valueOf(
+      await postJson<Order>(API_PATHS.ORDERS, {
+        ...submitted,
+        snapshot: { ...submitted.snapshot, grandTotalMinor: 1, lines: doctored },
+      }),
+    );
+    expect(order.pricedCart.grandTotalMinor).toBe(submitted.snapshot.grandTotalMinor);
+    expect(order.lines.map((line) => line.unitPriceMinor)).toEqual([
+      cataloguePriced.unitPriceMinor,
+    ]);
   });
 
   it("hands an injected failure back as a value, so no caller needs a try/catch", async () => {

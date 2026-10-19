@@ -1,15 +1,14 @@
 /**
  * Path: src/utils/queryParams.ts
  * Purpose: Reads and writes filter, sort and page state to the URL, normalising defaults away
- * Lines: 598
+ * Lines: 600
  */
 
 /**
- * The URL is the store of every catalogue and search query: this module is its only reader and writer, and no
- * component mirrors a filter value into React state, which is what makes a filtered, sorted and searched URL
- * reload to the identical result set. Reading is tolerant — an unknown sort key, a malformed number, a
- * repeated parameter, an out-of-range page and an inverted price range all resolve to a usable state — while
- * writing is canonical, so two equivalent selections serialise to one URL instead of multiplying it.
+ * The URL is the store of every catalogue and search query: this module is its only reader and writer, and a
+ * filtered, sorted and searched URL therefore reloads to the identical result set. Reading is tolerant — an
+ * unknown sort key, a malformed number, a repeated parameter, an out-of-range page and an inverted price range
+ * all resolve to a usable state — while writing is canonical, so equivalent selections serialise to one URL.
  *
  * Per-key contract. `Default` is what `readFilterState` restores when a key is absent and what
  * `DEFAULT_FILTER_STATE` holds; `Omitted when` is what `writeFilterState` leaves out.
@@ -29,8 +28,7 @@
  * | `pageSize`    | `pageSize`      | one of the configured sizes, 12/24/48  | `12`    | the default size | an unconfigured size becomes the default |
  *
  * Money stays in minor units in the URL and is rounded only through `src/utils/format.ts`; the page size is
- * validated only through `src/utils/collections.ts`, and the page's ceiling is applied by
- * `src/lib/catalogService.ts`, which knows the result total. No user-facing sentence is written here.
+ * validated through `src/utils/collections.ts` and the page's ceiling applied by `src/lib/catalogService.ts`.
  */
 
 import { CATALOGUE_PRICE_CEILING_MINOR, DEFAULT_PAGE_SIZE } from "@/constants/config";
@@ -85,8 +83,7 @@ export const FILTER_PARAMS = {
 
 /**
  * The lowest price a filter can express, in minor units: a price is never negative, so a lower bound at this
- * floor excludes nothing and is read and written as no bound at all. `src/lib/catalogService.ts` filters from
- * the same floor.
+ * floor excludes nothing and is read and written as no bound. `src/lib/catalogService.ts` filters from it.
  */
 export const PRICE_FILTER_FLOOR_MINOR = 0;
 
@@ -101,8 +98,8 @@ const TRUE_LITERAL = "true";
 
 /**
  * The canonical empty selection, and the reference every omission is measured against: no query term, no
- * facet, no price bound, no rating, the default sort for an empty query, the first page and the default page
- * size. A listing at this state writes an empty query string, so `/catalog` and `/catalog?` name one listing.
+ * facet, no price bound, no rating, the default sort, the first page and the default page size, so a listing
+ * at this state writes an empty query string and `/catalog` and `/catalog?` name one listing.
  */
 export const DEFAULT_FILTER_STATE: FilterState = {
   q: "",
@@ -126,8 +123,9 @@ const FACET_VOCABULARY: readonly FacetDefinition[] = FACET_DEFINITIONS;
 /** The sort keys the URL accepts, read from the taxonomy so it cannot carry a key the control cannot show. */
 const SORT_KEYS: readonly string[] = SORT_OPTIONS.map((option) => option.value);
 
-/** Reports whether a sort key is one the sort control offers. */
-const isSortKey = (value: string): value is SortKey => SORT_KEYS.includes(value);
+/** The vocabulary's one reading of the sort member, which the URL reader and the transport's request reader
+ * both judge a `sort` key by: whether it is one the sort control offers. */
+export const isConfiguredSortKey = (value: string): value is SortKey => SORT_KEYS.includes(value);
 
 /** The values a facet declares, or none when the catalogue supplies its terms instead. */
 function facetOptions(facetId: FacetId): readonly FacetDefinitionOption[] {
@@ -171,10 +169,18 @@ function parseNumber(text: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** The vocabulary's one reading of a flag member, shared by the URL reader and the transport: `true` and `1`
+ * turn it on, `false` and `0` off, `undefined` for nothing supplied and `null` for a spelling of neither. */
+export function readFlagMember(text: string | null | undefined): boolean | null | undefined {
+  const normalised = (text ?? "").trim().toLowerCase();
+  if (normalised === TRUE_LITERAL || normalised === "1") return true;
+  if (normalised === "false" || normalised === "0") return false;
+  return normalised === "" ? undefined : null;
+}
+
 /** The flag a parameter carries: `true` or `1` turns it on, and nothing else does. */
 function parseBoolean(params: URLSearchParams, key: string): boolean {
-  const raw = (params.get(key) ?? "").trim().toLowerCase();
-  return raw === TRUE_LITERAL || raw === "1";
+  return readFlagMember(params.get(key)) === true;
 }
 
 /** A rating filter value: a whole star on the scale, or `null` for no rating filter. */
@@ -212,7 +218,7 @@ function defaultSortKeyFor(query: string): SortKey {
 
 /** The sort a query resolves to: the named key when it is meaningful, otherwise the query's own default. */
 function normaliseSort(named: string, query: string): SortKey {
-  if (!isSortKey(named)) return defaultSortKeyFor(query);
+  if (!isConfiguredSortKey(named)) return defaultSortKeyFor(query);
   return named === "relevance" && query.trim() === "" ? DEFAULT_SORT_KEY : named;
 }
 
@@ -300,9 +306,9 @@ interface FacetAccessor {
 }
 
 /**
- * The five facets' accessors, stated once per facet. Every matcher, writer and chip reads this table rather
- * than switching over the facet ids itself, so the panel, the chips and the services cannot disagree about
- * what a facet holds; a single-valued facet — the price range and the rating — reports at most one value.
+ * The five facets' accessors, stated once per facet: every matcher, writer and chip reads this table rather
+ * than switching over the facet ids, so the panel, the chips and the services cannot disagree about what a
+ * facet holds. A single-valued facet — the price range and the rating — reports at most one value.
  */
 const FACET_ACCESSORS: Readonly<Record<FacetId, FacetAccessor>> = {
   category: {
@@ -345,12 +351,9 @@ const FACET_ACCESSORS: Readonly<Record<FacetId, FacetAccessor>> = {
 // Reading -----------------------------------------------------------------------------------------
 
 /**
- * Reads query state from a URL query string, tolerating anything a hand-made URL can carry: an unknown sort
- * key falls back to the query's default, ids are de-duplicated and sorted, numbers are parsed defensively, a
- * rating off the scale is dropped, an inverted price range is swapped, and the page size is normalised.
- *
- * `pageCount`, when the caller knows it, clamps the page to the pages that exist. An unset field reads as
- * `null` or as its documented default, never as `undefined`.
+ * Reads query state from a URL query string through the vocabulary's one reading of each member, tolerating
+ * anything a hand-made URL can carry as the per-key contract above states and clamping the page to the pages
+ * that exist when the caller knows `pageCount`. An unset field reads as `null` or as its default.
  *
  * @param params - The query string, with or without a leading `?`, or already-parsed parameters.
  */
@@ -383,8 +386,7 @@ export function readFilterState(params: URLSearchParams | string, pageCount?: nu
 /**
  * Writes query state as canonical, default-free parameters: keys sorted, list values de-duplicated and sorted
  * into one comma-separated value, and every field holding its default left out, so an empty string means the
- * default selection. The state is normalised again here, is never mutated, and yields new parameters carrying
- * only what differs from the defaults.
+ * default selection. The state is normalised again here and is never mutated.
  */
 export function writeFilterState(state: FilterState): URLSearchParams {
   const params = new URLSearchParams();

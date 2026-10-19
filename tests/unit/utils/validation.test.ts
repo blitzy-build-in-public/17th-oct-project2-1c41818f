@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/validation.test.ts
  * Purpose: Each validator's accept and reject cases, and the form-level error maps
- * Lines: 598
+ * Lines: 559
  */
 
 // A pure-function suite: it runs in the node project, reaches no DOM, mocks no module and touches no
@@ -14,6 +14,7 @@ import {
   VALIDATION_MESSAGES,
   nameLengthMessage,
   postalCodeFormatMessage,
+  promoCodeLengthMessage,
   quantityRangeMessage,
   reviewBodyLengthMessage,
   reviewTitleLengthMessage,
@@ -23,7 +24,10 @@ import type { FieldErrors } from "@/types/common";
 import { addDays, validateDateRange } from "@/utils/dates";
 import {
   FORM_ERROR_KEY,
+  FREE_TEXT_LIMITS,
   NAME_MAX_LENGTH,
+  PROMO_CODE_MAX_LENGTH,
+  PROMO_CODE_MIN_LENGTH,
   REVIEW_LIMITS,
   clearFieldError,
   fieldErrored,
@@ -31,13 +35,9 @@ import {
   fieldErrorsFromResult,
   firstError,
   hasErrors,
-  isLuhnValid,
   isRatingValue,
   mergeErrors,
   validateAddress,
-  validateCardExpiry,
-  validateCardNumber,
-  validateCvc,
   validateEmail,
   validateName,
   validatePassword,
@@ -53,9 +53,9 @@ import {
   validateReview,
   validateReviewBody,
   validateReviewTitle,
+  validateSearchTerm,
   validateShippingSubmission,
   validateSignIn,
-  type CardExpiryInput,
   type CardValidationInput,
 } from "@/utils/validation";
 import { FIXED_DATE, FIXED_LATER_DATE, FIXED_NOW, makeApiError } from "../../fixtures";
@@ -175,6 +175,25 @@ describe("field rules", () => {
     expect(validateName("firstName", "Dana", "Enter your first name.")).toEqual({});
   });
 
+  it("refuses a name carrying a control character, which no control could display", () => {
+    for (const refused of ["Ctrl\u0000Name\nLine", "Dana\tOkafor", "Dana\u007f"]) {
+      expect(validateName("firstName", refused)).toEqual({
+        firstName: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+      });
+    }
+  });
+
+  it("judges the search term by the free-text rule, keyed by the parameter it travels under", () => {
+    expect(validateSearchTerm("waxed jacket")).toEqual({});
+    expect(validateSearchTerm("")).toEqual({});
+    expect(validateSearchTerm("j\u0000acket")).toEqual({
+      q: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+    });
+    expect(validateSearchTerm("x".repeat(FREE_TEXT_LIMITS.SEARCH_TERM_MAX + 1))).toEqual({
+      q: nameLengthMessage(FREE_TEXT_LIMITS.SEARCH_TERM_MAX),
+    });
+  });
+
   it("accepts a quantity at the lower bound and at the caller's ceiling, typed or numeric", () => {
     expect(validateQuantity(1, 4)).toEqual({});
     expect(validateQuantity(4, 4)).toEqual({});
@@ -196,6 +215,28 @@ describe("field rules", () => {
     for (const field of ["fullName", "line1", "city", "region", "postalCode", "country"]) {
       expectRejectedWith(validateAddress({ ...VALID_ADDRESS, [field]: "" }), [field]);
     }
+  });
+
+  it("refuses a control character in a free-text address field", () => {
+    expect(validateAddress({ ...VALID_ADDRESS, line1: "1120 NW\u0000 Marshall" })).toEqual({
+      line1: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+    });
+    expect(validateAddress({ ...VALID_ADDRESS, city: "Port\nland" })).toEqual({
+      city: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+    });
+    expect(validateAddress({ ...VALID_ADDRESS, label: "Ho\u0000me" })).toEqual({
+      label: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+    });
+  });
+
+  it("refuses a free-text address field past the bound its own control declares", () => {
+    const past = (limit: number): string => "x".repeat(limit + 1);
+    expect(validateAddress({ ...VALID_ADDRESS, line1: past(FREE_TEXT_LIMITS.LINE_MAX) })).toEqual({
+      line1: nameLengthMessage(FREE_TEXT_LIMITS.LINE_MAX),
+    });
+    expect(validateAddress({ ...VALID_ADDRESS, label: past(FREE_TEXT_LIMITS.LABEL_MAX) })).toEqual({
+      label: nameLengthMessage(FREE_TEXT_LIMITS.LABEL_MAX),
+    });
   });
 
   it("rejects a postal code that does not match the pattern its country declares", () => {
@@ -273,109 +314,29 @@ describe("field rules", () => {
   });
 });
 
-describe("card rules", () => {
-  it("accepts the standard test card numbers", () => {
-    expect(isLuhnValid("4242424242424242")).toBe(true);
-    expect(isLuhnValid("4012888888881881")).toBe(true);
-  });
-
-  it("fails a mutated number, an empty one, a non-digit and a value that is not a string", () => {
-    expect(isLuhnValid("4242424242424241")).toBe(false);
-    expect(isLuhnValid("4242 4242 4242 4242")).toBe(false);
-    expect(isLuhnValid("")).toBe(false);
-    expect(isLuhnValid(undefined as unknown as string)).toBe(false);
-  });
-
-  it("accepts a card number at each end of the documented thirteen to nineteen digits", () => {
-    expect(validateCardNumber("4222222222222")).toEqual({});
-    expect(validateCardNumber("4000000000000000006")).toEqual({});
-    expect(validateCardNumber("4242 4242 4242 4242")).toEqual({});
-    expect(validateCardNumber("4242-4242-4242-4242")).toEqual({});
-  });
-
-  it("rejects a card number of the wrong length, a wrong check digit or a non-numeric one", () => {
-    for (const rejected of ["424242424242", "42424242424242424242", "4242424242424241", "4242x"]) {
-      expect(validateCardNumber(rejected)).toEqual({ number: VALIDATION_MESSAGES.CARD_NUMBER });
-    }
-    expect(validateCardNumber("")).toEqual({ number: VALIDATION_MESSAGES.REQUIRED });
-  });
-
-  it("accepts a card expiring in the month it is used or later", () => {
-    expect(
-      validateCardExpiry({ expiryMonth: CURRENT_MONTH, expiryYear: CURRENT_YEAR }, NOW),
-    ).toEqual({});
-    expect(validateCardExpiry({ expiryMonth: CURRENT_MONTH, expiryYear: NEXT_YEAR }, NOW)).toEqual(
-      {},
-    );
-  });
-
-  it("files each expiry half on its own control, and both when neither holds a value", () => {
-    const rejected: readonly (readonly [Partial<CardExpiryInput> | undefined, FieldErrors])[] = [
-      // Nothing entered in either half: both are missing, so both are named.
-      [
-        undefined,
-        { expiryMonth: VALIDATION_MESSAGES.REQUIRED, expiryYear: VALIDATION_MESSAGES.REQUIRED },
-      ],
-      [{}, { expiryMonth: VALIDATION_MESSAGES.REQUIRED, expiryYear: VALIDATION_MESSAGES.REQUIRED }],
-      [
-        { expiryMonth: "", expiryYear: "" },
-        { expiryMonth: VALIDATION_MESSAGES.REQUIRED, expiryYear: VALIDATION_MESSAGES.REQUIRED },
-      ],
-      // One half blank while the other is acceptable: the blank one is the fault.
-      [{ expiryYear: NEXT_YEAR }, { expiryMonth: VALIDATION_MESSAGES.REQUIRED }],
-      [{ expiryMonth: CURRENT_MONTH }, { expiryYear: VALIDATION_MESSAGES.REQUIRED }],
-      // A half holding something the rule cannot read: impossible, or not a number at all.
-      [
-        { expiryMonth: 0, expiryYear: CURRENT_YEAR },
-        { expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY },
-      ],
-      [
-        { expiryMonth: 13, expiryYear: CURRENT_YEAR },
-        { expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY },
-      ],
-      [
-        { expiryMonth: "x", expiryYear: NEXT_YEAR },
-        { expiryMonth: VALIDATION_MESSAGES.CARD_EXPIRY },
-      ],
-      [
-        { expiryMonth: CURRENT_MONTH, expiryYear: 1999 },
-        { expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY },
-      ],
-      [
-        { expiryMonth: CURRENT_MONTH, expiryYear: "x" },
-        { expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY },
-      ],
-      // Readable but passed: the year's complaint, the coarser half a correction changes.
-      [
-        { expiryMonth: PREVIOUS_MONTH.getMonth() + 1, expiryYear: PREVIOUS_MONTH.getFullYear() },
-        { expiryYear: VALIDATION_MESSAGES.CARD_EXPIRY },
-      ],
+describe("promo code shape", () => {
+  it("accepts a promo code at each end of its configured bounds", () => {
+    const accepted = [
+      "SAVE",
+      "1234",
+      "SAVE2025SPRING10",
+      "A".repeat(PROMO_CODE_MIN_LENGTH),
+      "A".repeat(PROMO_CODE_MAX_LENGTH),
     ];
-    for (const [pair, expected] of rejected) {
-      expect(validateCardExpiry(pair, NOW)).toEqual(expected);
+    for (const code of accepted) {
+      expect(validatePromoCodeShape(code)).toEqual({});
     }
   });
 
-  it("accepts a three or four digit security code", () => {
-    expect(validateCvc("123")).toEqual({});
-    expect(validateCvc("1234")).toEqual({});
-  });
-
-  it("rejects a security code that is too short, too long or not numeric", () => {
-    for (const rejected of ["12", "12345", "12a", " 1 2"]) {
-      expect(validateCvc(rejected)).toEqual({ cvc: VALIDATION_MESSAGES.CARD_SECURITY_CODE });
+  it("reports a promo code outside those bounds as a length fault, disclosing them", () => {
+    const message = promoCodeLengthMessage(PROMO_CODE_MIN_LENGTH, PROMO_CODE_MAX_LENGTH);
+    for (const rejected of ["SAV", "SAVE2025SPRING101", "1".repeat(PROMO_CODE_MAX_LENGTH + 1)]) {
+      expect(validatePromoCodeShape(rejected)).toEqual({ promoCode: message });
     }
-    expect(validateCvc("")).toEqual({ cvc: VALIDATION_MESSAGES.REQUIRED });
   });
 
-  it("accepts a promo code from four to sixteen upper-case alphanumerics", () => {
-    expect(validatePromoCodeShape("SAVE")).toEqual({});
-    expect(validatePromoCodeShape("SAVE2025SPRING10")).toEqual({});
-    expect(validatePromoCodeShape("1234")).toEqual({});
-  });
-
-  it("rejects a promo code of the wrong length, in lower case or punctuated", () => {
-    for (const rejected of ["SAV", "SAVE2025SPRING101", "save10", "SAVE 10", "SAVE-10"]) {
+  it("reports a code of the right length carrying another character as a character fault", () => {
+    for (const rejected of ["save10", "SAVE 10", "SAVE-10"]) {
       expect(validatePromoCodeShape(rejected)).toEqual({
         promoCode: VALIDATION_MESSAGES.PROMO_CODE_FORMAT,
       });

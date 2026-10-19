@@ -22,8 +22,8 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
 /*
  * Class contract. `src/styles/data-display.css` — the sheet `src/styles/components.css` loads through
  * `@import` — owns the card and the data table this file composes, and `src/styles/controls.css` the control
- * group, so every class below is adopted by name and no stylesheet is imported here: `src/main.tsx` is the
- * only importer of `src/styles/**`. The card brings `sp-card` with its `sp-card__header`, `sp-card__heading`,
+ * group, so this list is what the sheets owe the file, each class named with the sheet that declares it.
+ * The card brings `sp-card` with its `sp-card__header`, `sp-card__heading`,
  * `sp-card__title` and `sp-card__action` regions and the `sp-card__body--flush` body a card holding a table
  * gives no padding to, so the table meets the frame; the group brings `sp-btn-group` and the `sp-btn` family,
  * and the table brings `sp-table-wrap` (the scroll container, so a narrow viewport scrolls these five columns
@@ -47,7 +47,7 @@ import { formatOrdinal, formatScaledPercent } from "@/utils/format";
  * inferred: the column the read ranked by declares it through `orderInForce`, so its header announces the
  * direction to assistive technology while no header is a control — the toggle above the table is what changes
  * the ranking, and the table itself cannot. There is no paging, because the read is a `limit`-bounded ranking.
- * And no state is fetched or held here: the four-state contract of §0.6.4 belongs to each dashboard surface,
+ * And no state is fetched or held here: the four states a read passes through belong to each dashboard surface,
  * so the page hands the ranking read's own failure in and this card renders it in its body, beside the retry,
  * with the metric control left live above it.
  *

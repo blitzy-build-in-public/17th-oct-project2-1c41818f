@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 379
+ * Lines: 377
  */
 
 import { useEffect } from "react";
@@ -36,13 +36,12 @@ import type { LineId } from "@/types/common";
 import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
- * of `src/styles/**` — so every class this page renders is consumed by name, and this list is what the
- * sheets owe it.
+ * Class contract. This list is what the sheets owe the page, each class named with the sheet that declares
+ * it.
  *
  * `src/styles/layout.css` owns the page: `sp-container` is the width and gutter every route sits in,
  * `sp-page` the column of blocks at one rhythm, `sp-page__body` the region the page's own content lands in,
- * and `sp-split` the frame whose aside track is `--layout-aside-width` from the large stop. `src/styles/
+ * and `sp-split` the frame whose aside track is `--layout-aside-width` from the large stop.
  * `src/styles/cart.css` owns the cart's register: `sp-cart` widens that frame's row gap, so a summary
  * stacking below the rows on a phone is separated from them; `sp-cart__lines` is the grid frame the
  * rows sit in, each row being a `sp-cart-row` item of it, a family `CartItemRow.tsx` owns and this file
@@ -50,8 +49,8 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * stop; `sp-cart__empty` tightens the shared empty state to this panel; and `sp-summary__actions`, the
  * stacked action block the summary's own file does not render, is `src/styles/summary-panel.css`'s —
  * the panel belongs to `CartSummary.tsx`, so the page's two navigation controls compose that block
- * here, each carrying `sp-btn--block` as its contract asks. `src/styles/
- * controls.css` owns the button family, whose classes reach both controls this page draws that are not
+ * here, each carrying `sp-btn--block` as its contract asks. `src/styles/controls.css` owns the
+ * button family, whose classes reach both controls this page draws that are not
  * `Button`'s: a control that navigates is an anchor carrying `sp-btn` with its variant and the block
  * modifier, never a `<button>`, and the clear control is `Button` in its link variant.
  *
@@ -78,14 +77,13 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * held it — the clear control when the cart empties, the retry when a price arrives — so neither route
  * drops a keyboard user at the top of the document.
  *
- * Three concerns are reported rather than worked around. `sp-summary__actions` declares its rule above a
- * block that follows the summary, so that hairline meets the panel's own bottom edge where the two sit
- * flush; the composition is left as the sheet's comment states it rather than given a spacing class the
- * sheet does not name for it. The line list carries `role="list"` although `sp-cart__lines` strips no
- * marker: its rows are grid items and therefore paint no marker box, which is the pairing `src/styles/
- * base.css` documents as what keeps list semantics without a visible marker. And `src/constants/content.ts`
- * holds no cart-scoped label for the clear control, so that control reads the copy library's generic
- * `Clear` — see the gap flag below.
+ * Three boundaries are deliberate. `sp-summary__actions` declares its rule above a block that follows the
+ * summary, so that hairline meets the panel's own bottom edge where the two sit flush; the composition is
+ * left as the sheet's comment states it rather than given a spacing class the sheet does not name for it.
+ * The line list carries `role="list"` although `sp-cart__lines` strips no marker: its rows are grid items
+ * and therefore paint no marker box, which is the pairing `src/styles/base.css` documents as what keeps
+ * list semantics without a visible marker. And `src/constants/content.ts` holds no cart-scoped label for
+ * the clear control, so that control reads the copy library's generic `Clear` — see the gap flag below.
  */
 
 /*

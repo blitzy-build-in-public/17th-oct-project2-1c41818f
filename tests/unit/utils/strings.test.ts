@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/strings.test.ts
  * Purpose: The text, identifier-generator and credential-digest contracts of src/utils/strings.ts
- * Lines: 512
+ * Lines: 569
  */
 
 import { describe, expect, it } from "vitest";
@@ -83,6 +83,23 @@ describe("normaliseWhitespace: every run of whitespace collapses to one space", 
 
   it.each(CASES)("reads $input as $expected", ({ input, expected }) => {
     expect(strings.normaliseWhitespace(input)).toBe(expected);
+  });
+});
+
+describe("the control-character rule: hasControlCharacters and stripControlCharacters", () => {
+  it("reports any C0 or DEL character, and leaves plain text and an empty value alone", () => {
+    expect(strings.hasControlCharacters("Aurora Desk Lamp")).toBe(false);
+    expect(strings.hasControlCharacters("")).toBe(false);
+    for (const value of ["Da\u0000na", "two\nlines", "tab\there", "del\u007f", "\u0001"]) {
+      expect(strings.hasControlCharacters(value), JSON.stringify(value)).toBe(true);
+    }
+  });
+
+  it("strips every control character but the tab, CR and LF a value may legitimately carry", () => {
+    expect(strings.stripControlCharacters("Da\u0000na\u0001")).toBe("Dana");
+    expect(strings.stripControlCharacters("a\tb\nc\rd")).toBe("a\tb\nc\rd");
+    expect(strings.stripControlCharacters("plain text")).toBe("plain text");
+    expect(strings.stripControlCharacters("\u0000\u001f\u007f")).toBe("");
   });
 });
 
@@ -244,6 +261,31 @@ describe("initials: the one or two letters an avatar shows", () => {
   });
 });
 
+describe("displayName: the name a surface others read may carry", () => {
+  /** Names in one field or two, and the display name each reduces to. */
+  const CASES: { readonly first: string; readonly last: string; readonly expected: string }[] = [
+    { first: "Dana", last: "Okafor", expected: "Dana O." },
+    { first: "  Dana  ", last: " Okafor ", expected: "Dana O." },
+    { first: "Dana Okafor", last: "", expected: "Dana O." },
+    { first: "Dana Ada", last: "Okafor", expected: "Dana O." },
+    { first: "Dana", last: "Ada Okafor", expected: "Dana O." },
+    { first: "Dana", last: "", expected: "Dana" },
+    { first: "émile", last: "Zola", expected: "émile Z." },
+    { first: "Dana", last: "123", expected: "Dana" },
+    { first: "123", last: "456", expected: "123" },
+    { first: "!", last: "?", expected: "!" },
+    { first: "", last: "", expected: "" },
+  ];
+
+  it.each(CASES)('reads "$first" and "$last" as "$expected"', ({ first, last, expected }) => {
+    expect(strings.displayName(first, last)).toBe(expected);
+  });
+
+  it("reads one full name in a single field exactly as it reads two fields", () => {
+    expect(strings.displayName("Dana Okafor")).toBe(strings.displayName("Dana", "Okafor"));
+  });
+});
+
 // Identifiers -----------------------------------------------------------------------------------
 
 describe("prefixedId: an identifier that says what it names", () => {
@@ -339,12 +381,27 @@ describe("sequenceId: an index padded to a fixed width", () => {
 });
 
 describe("the per-entity generators: one documented prefix each", () => {
-  it.each(GENERATORS)(
+  /** The one generator whose suffix is a digest rather than a slug: a customer identifier is derived
+   *  from the account's email address and is carried in payloads anyone may read — the anonymous review
+   *  list for one — so its suffix must not disclose the address it came from. */
+  const OPAQUE_IDENTIFIER = "customerId";
+
+  it.each(GENERATORS.filter((generator) => generator.name !== OPAQUE_IDENTIFIER))(
     "$name carries the $prefix prefix before the source's slug",
     ({ generate, prefix }) => {
       expect(generate(SOURCE)).toBe(`${prefix}aurora-desk-lamp`);
     },
   );
+
+  it("customerId carries the cus_ prefix before the source's digest, so it discloses nothing", () => {
+    const identifier = strings.customerId("dana.okafor@inbox.test");
+    expect(identifier).toMatch(/^cus_[0-9a-f]{16}$/);
+    expect(identifier).not.toContain("dana");
+    expect(identifier).not.toContain("inbox");
+    // Stable, so one address derives one identifier in the seed, in a registration and in a fixture.
+    expect(strings.customerId("dana.okafor@inbox.test")).toBe(identifier);
+    expect(strings.customerId("shopper@salespro.test")).not.toBe(identifier);
+  });
 
   it.each(GENERATORS)("$name rejects a blank source", ({ generate }) => {
     expect(() => generate("   ")).toThrow(TypeError);

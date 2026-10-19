@@ -1,7 +1,7 @@
 /**
  * Path: src/state/cartReducer.ts
  * Purpose: Cart transitions with stock clamping and an exhaustive action union
- * Lines: 539
+ * Lines: 535
  */
 
 import type { Product } from "@/types/catalog";
@@ -10,6 +10,7 @@ import type { CurrencyCode, IsoDateTimeString, LineId, ProductId } from "@/types
 import { DEFAULT_CURRENCY, STORAGE_VERSION } from "@/constants/config";
 import { clampNumber } from "@/utils/collections";
 import { isValidIso, toIsoDateTime } from "@/utils/dates";
+import { assertNever } from "@/utils/exhaustive";
 import { cartLineId } from "@/utils/strings";
 
 // State ----------------------------------------------------------------------------------------
@@ -221,7 +222,7 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
     }
 
     default: {
-      return assertNever(action);
+      return assertNever(action, "cart action");
     }
   }
 }
@@ -418,11 +419,6 @@ export function fromCart(cart: Cart): CartState {
 }
 
 // Internal helpers -----------------------------------------------------------------------------
-
-/** Proof at compile time that every action was handled: a member added later fails to build here. */
-function assertNever(value: never): never {
-  throw new Error(`Unhandled cart action: ${JSON.stringify(value)}`);
-}
 
 /**
  * A stock count as a line's ceiling: the whole units on hand, and 0 when there is nothing

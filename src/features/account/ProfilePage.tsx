@@ -41,8 +41,8 @@ import {
 } from "@/utils/validation";
 
 /*
- * Class contract. `src/styles/account.css` is the sole definition site of the profile family and no file
- * under `src/features/**` imports a stylesheet, so every class below is consumed by name: `sp-profile` for the
+ * Class contract. `src/styles/account.css` is the sole definition site of the profile family, and this list
+ * is what the sheets owe the file, each class named with the sheet that declares it: `sp-profile` for the
  * section, `sp-profile__header` and `sp-profile__meta` for the identity line above the form,
  * `sp-profile__form` for the form itself, and `sp-profile__success` for the confirmation the form writes into
  * an aria-live region. The two markup hooks that sheet publishes for what a fixed class list cannot carry are

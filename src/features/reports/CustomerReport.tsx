@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/CustomerReport.tsx
  * Purpose: The customer report: new against returning customers, order frequency and value
- * Lines: 340
+ * Lines: 339
  */
 
 import { useCallback } from "react";
@@ -27,10 +27,9 @@ import { bucketCount, formatBucketLabel } from "@/utils/dates";
 import { formatCellValue, formatCompactNumber, formatInteger } from "@/utils/format";
 
 /*
- * Class contract. `src/styles/admin-reports.css` is the sole definition site of the report and chart families
- * and no file under `src/features/**` may import a stylesheet — `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class below is adopted by name, and this comment is the list the sheet owes the
- * file: `sp-report__body` is the block a report stacks its figures, its chart and its table in;
+ * Class contract. `src/styles/admin-reports.css` is the sole definition site of the report and chart families,
+ * and this comment is the list the sheet owes the file, each class named with the sheet that declares it:
+ * `sp-report__body` is the block a report stacks its figures, its chart and its table in;
  * `sp-report__summary` with `__summary-item`, `__summary-label` and `__summary-value` is the summary-metrics
  * block; `sp-report__empty` is the block a range that recorded no activity composes `.sp-empty` inside; and
  * `sp-range-note` is the caption-sized line stating the period the figures cover.

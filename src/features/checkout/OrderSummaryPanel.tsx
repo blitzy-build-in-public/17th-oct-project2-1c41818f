@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/OrderSummaryPanel.tsx
  * Purpose: The checkout's order summary panel: the basket's priced figures and the states they arrive in
- * Lines: 283
+ * Lines: 280
  */
 
 import { useId } from "react";
@@ -23,18 +23,15 @@ import { sumQuantities } from "@/utils/collections";
 import { formatFreeShippingRemaining, formatMoney } from "@/utils/format";
 
 /**
- * Why this file exists beside `CheckoutPage.tsx`: the route's section component — the panel, the amount rows
- * and the states the figures arrive in — is more than that file can hold under the request's "No file over
- * 600 lines" ceiling once this checkpoint's step-change fix lands in it, so the ceiling splits the concern
- * instead of being raised, the way `src/components/ui/overlayEngine.ts` stands beside `Modal.tsx`. The move
- * is verbatim: the panel keeps its own class contract, its own states and its single importer, which is
- * `CheckoutPage.tsx`.
+ * Why this file exists beside `CheckoutPage.tsx`: the route file may hold no more than 600 lines, and the
+ * panel — its amount rows and the states the figures arrive in — does not fit beside the checkout's steps
+ * and forms, so the concern is split rather than the ceiling raised, the way
+ * `src/components/ui/overlayEngine.ts` stands beside `Modal.tsx`. The move is verbatim: the panel keeps its
+ * own class contract, its own states and its single importer, which is `CheckoutPage.tsx`.
  */
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
- * of `src/styles/**` — so every class below is consumed by name, and this list is what the sheets owe the
- * file.
+ * Class contract. This list is what the sheets owe the file, each class named with the sheet that declares it.
  *
  * `src/styles/layout.css` supplies `sp-stack`, the rhythm the panel's figures sit in, and the panel itself is
  * `src/styles/commerce.css`'s: `sp-summary` with `sp-summary__title`, the `sp-summary__row` register and its

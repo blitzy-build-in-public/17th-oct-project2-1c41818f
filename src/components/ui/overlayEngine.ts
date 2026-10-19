@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/overlayEngine.ts
  * Purpose: The overlay engine Modal, Drawer and ConfirmDialog share: focus movement, Tab containment, Escape, the inert background and outside-pointer dismissal.
- * Lines: 210
+ * Lines: 211
  */
 
 import { useCallback, useEffect, useId, useRef } from "react";
@@ -53,7 +53,8 @@ function focusableElements(panel: HTMLElement): readonly HTMLElement[] {
  * outside pointer belongs to, so one gesture closes one overlay and the root comes back to life last. */
 const openOverlays: string[] = [];
 
-/** The root's own `inert` state before this file first took it over, restored on the last close. */
+/** The root's own `inert` state as this module found it, captured on the first open and restored on the
+ * last close. */
 let rootWasInert: boolean | null = null;
 
 /** Makes the application root inert while any overlay is open, capturing its prior state for the restore.

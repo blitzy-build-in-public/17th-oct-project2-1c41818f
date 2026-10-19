@@ -24,8 +24,8 @@ import { sumQuantities } from "@/utils/collections";
 import { formatDateTime } from "@/utils/dates";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer
- * of `src/styles/**` — so every class named here is adopted from the sheet that declares it. The card's frame
+ * Class contract. This list is what the sheets owe the table, each class named with the sheet that declares
+ * it. The card's frame
  * and its four regions belong to `src/styles/data-display.css` (`sp-card`, `sp-card__header`,
  * `sp-card__body`, and `sp-card__body--flush`, which is what lets a table meet the frame), the status pill is
  * that sheet's badge family (`sp-badge`, its variant modifiers and `sp-badge--sm` for a dense cell), the table
@@ -55,8 +55,8 @@ import { formatDateTime } from "@/utils/dates";
  * its text, so no status rests on colour alone and no second status-to-variant mapping exists to drift from
  * the dashboard's other surfaces.
  *
- * No row links to an order. `src/constants/routes.ts` offers `accountOrderPath`, but the plan declares no
- * administrator order route and `GET /api/orders/:id` is scoped to the session's own customer, answering
+ * No row links to an order. `src/constants/routes.ts` offers `accountOrderPath`, but no administrator order
+ * route exists, and `GET /api/orders/:id` is scoped to the session's own customer, answering
  * `401`, `403` or `404` for anyone else, so a link from here would open a route that cannot load for an
  * administrator reading another customer's order. The order number is plain text, and no route string is
  * written in this file.

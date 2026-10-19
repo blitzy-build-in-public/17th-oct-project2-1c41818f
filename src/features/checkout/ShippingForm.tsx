@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ShippingForm.tsx
  * Purpose: The shipping step: address entry or reuse of a saved address, with per-field validation
- * Lines: 535
+ * Lines: 534
  */
 
 import { useEffect, useRef } from "react";
@@ -32,8 +32,7 @@ import type { CurrencyCode, MinorUnits, Result, SelectOption } from "@/types/com
 import { formatMoney } from "@/utils/format";
 
 /*
- * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this step's
+ * Class contract. `src/styles/commerce.css` owns this step's
  * register: `sp-step__body` for the step's grid, `sp-address-form` for the field grid, `sp-address-picker`
  * with `__body` for the saved-address radios and the lines beneath them, and `sp-step__actions` for the row the
  * step's two controls share, which it places primary-first in markup and trailing from the medium stop. The
@@ -42,7 +41,7 @@ import { formatMoney } from "@/utils/format";
  * primitives, controls.css and layout.css.
  *
  * `ROUTES` is imported although `src/constants/routes.ts` sits outside this file's dependency set: the
- * step's return control links to the cart, §0.6.1 and §0.6.4 make that module the single home of every
+ * step's return control links to the cart, that module is the single home of every
  * route path, and `src/state/checkoutReducer.ts` documents the cart as reached by the link the step
  * renders rather than by a step transition. A path written here would give one route two homes.
  */

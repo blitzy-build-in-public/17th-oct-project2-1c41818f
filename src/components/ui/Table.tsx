@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Table.tsx
  * Purpose: Sortable data table with column definitions, empty state, sticky header and the pagination contract
- * Lines: 513
+ * Lines: 512
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -16,8 +16,8 @@ import { sortByKey } from "@/utils/collections";
 import { formatCellValue } from "@/utils/format";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class below is consumed by name. `src/styles/data-display.css`, loaded through
+ * Class contract. No stylesheet is imported here, so every class below is consumed by name.
+ * `src/styles/data-display.css`, loaded through
  * `src/styles/components.css`, owns the data table: `sp-table-wrap` is its scroll container, `sp-table` the
  * table, `sp-table--compact` the dense row, `sp-table__caption` the caption, `sp-table__num` a column whose
  * figures line up on their digits (qualified by `.sp-table` in the sheet so that it also beats the sticky
@@ -52,10 +52,9 @@ import { formatCellValue } from "@/utils/format";
  *   - No clickable rows. There is no `onRowClick`, because a row that answers a pointer but cannot be
  *     reached by a keyboard is an accessibility defect; every navigating table in the product renders a real
  *     link inside its `cell` instead, as the order history and the recent-orders table both do.
- *   - The empty state is a slot rather than a composed component. `src/components/ui/Feedback.tsx` is
- *     written later in the same phase, so importing it would break this phase's compile gate, and a table's
- *     empty state is a table row rather than a block-level panel — a different rendering context, not a
- *     duplicate. A caller that wants the panel treatment passes `EmptyState` into `emptyState`.
+ *   - The empty state is a slot rather than a composed component, because a table's empty state is a table
+ *     row — a different rendering context, not a duplicate — while a caller that wants the panel treatment
+ *     passes `EmptyState` into `emptyState`.
  *   - The control of `src/components/ui/Pagination.tsx` is composed here and that file never imports this
  *     one, so the two share one paging implementation without a cycle between them.
  *

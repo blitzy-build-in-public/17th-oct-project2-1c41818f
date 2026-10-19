@@ -1,25 +1,26 @@
 /**
  * Path: src/utils/formatPrimitives.ts
  * Purpose: The locale, the formatter cache and the figure primitives every formatter in src/utils/format.ts is built from
- * Lines: 111
+ * Lines: 112
  */
 
 import type { ReportCellValue } from "@/types/analytics";
 
 /**
- * Why this file exists beside `src/utils/format.ts`: that module's formatting surface is one concern but more than
- * one file may hold under the request's 600-line ceiling, so the plan's §0.5.5 split rule is applied here as it
- * already is to `src/components/charts/chartGeometry.ts` and `src/lib/reportSeries.ts`. This half owns the machinery
- * every formatter in the other half is written with — the one locale, the `Intl.NumberFormat` cache, the coercions a
- * figure is read through, and the machine-readable writers a CSV cell and a form field take their text from — while
+ * Why this file exists beside `src/utils/format.ts`: that module's formatting surface is one concern, and one
+ * file may not exceed 600 lines, so the concern is split along its own seam — the primitives half here, the
+ * display half in the module named — rather than the ceiling raised. This half owns the machinery every formatter
+ * in the other half is written with — the one locale, the `Intl.NumberFormat` cache, the coercions a figure is
+ * read through, and the machine-readable writers a CSV cell and a form field take their text from — while
  * `src/utils/format.ts` owns the display formatters a surface shows. Nothing here imports that module, so the
- * dependency runs one way, and the three members a consumer reaches by name through `format.ts` — the two sentinels
- * and {@link DisplayNumber} — are re-exported there, so every existing import path still resolves them.
+ * dependency runs one way, and the three members a consumer reaches by name through `format.ts` — the two
+ * sentinels and {@link DisplayNumber} — are re-exported there, so every existing import path still resolves them.
  */
 
 // Configuration -----------------------------------------------------------------------------------
 
-/** The one locale numbers render in; the product ships one language and one currency. */
+/** The one locale numbers render in; the date family reads this same declaration, so the product's single
+ *  language and currency cannot drift between the two formatting families. */
 export const LOCALE = "en-US";
 
 /** The most fraction digits `Intl.NumberFormat` accepts, which bounds every digits argument below. */

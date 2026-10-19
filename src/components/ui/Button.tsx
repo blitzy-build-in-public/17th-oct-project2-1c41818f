@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Button.tsx
  * Purpose: Button, icon button and button group with their variants, sizes, loading and disabled states
- * Lines: 459
+ * Lines: 458
  */
 
 import { useId } from "react";
@@ -11,9 +11,8 @@ import { FEEDBACK_COPY } from "@/constants/content";
 
 /*
  * Class contract. `src/styles/controls.css` is the sole definition site of this family — it is the sheet
- * `src/styles/components.css` loads through `@import` — and no file under `src/components/**` may import a
- * stylesheet, because `src/main.tsx` is the only importer of `src/styles/**`. Every class below is
- * therefore consumed by name, and this comment is the list the sheet owes the file: `sp-btn` for the base
+ * `src/styles/components.css` loads through `@import`. No stylesheet is imported here, so every class below is
+ * consumed by name, and this comment is the list the sheet owes the file: `sp-btn` for the base
  * control; `sp-btn--primary`, `sp-btn--secondary`, `sp-btn--ghost`, `sp-btn--danger` and `sp-btn--link` for
  * the five variants; `sp-btn--sm` and `sp-btn--lg` for the two sizes that differ from the base rule (`md`
  * is the base rule itself and carries no modifier); `sp-btn--icon` for the square target of a glyph-only

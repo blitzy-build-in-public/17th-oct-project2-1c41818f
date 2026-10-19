@@ -1,7 +1,7 @@
 /**
  * Path: src/features/reports/ReportTable.tsx
  * Purpose: The report table with sortable columns, a totals row and the CSV export action
- * Lines: 530
+ * Lines: 529
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -37,9 +37,8 @@ import { formatBucketCell, formatDateRange } from "@/utils/dates";
 import { formatCellValue } from "@/utils/format";
 
 /*
- * Class contract. `src/styles/admin-reports.css` is the sole definition site of this block, and no file under
- * `src/features/**` may import a stylesheet — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class below is adopted by name, and this comment is the list the sheet owes the file:
+ * Class contract. `src/styles/admin-reports.css` is the sole definition site of this block, and this comment
+ * is the list the sheet owes the file, each class named with the sheet that declares it:
  * `sp-report-table` is the block stacking the export action over the table and spacing the two apart;
  * `sp-report-table__scroll` is the horizontal scroll container `DataTable` appends to its own, floored to the
  * sheet's table width so a wide report travels sideways instead of squeezing its columns below legibility;

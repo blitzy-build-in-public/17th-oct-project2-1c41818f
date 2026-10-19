@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog.css
  * Purpose: Styles for the catalogue and search surfaces: result grid, facet panel, chips and product detail
- * Lines: 596
+ * Lines: 594
  */
 
 /* The catalogue and search surfaces: the result grid and its list variant, the product tile with its quick-add,
@@ -18,23 +18,21 @@
  * delegates to this sheet. Two shared rules are kept here because they belong to both catalogue surfaces and the
  * single-product surfaces: the availability text state, and the treatment every image in a fixed box takes.
  *
- * BLITZY [BUDGET]: the concern this path owns is about 1,120 lines — the landing bands, the browse surfaces and the
- * single-product surfaces — against the plan's 400-line budget and the request's 600-line ceiling. The ceiling is
- * never raised and no line was cut to reach a number, so the plan's remedy for a concern that cannot fit was
- * applied instead, as it was for the shared primitives and the chart mathematics: the concern is split by surface,
- * order-preserving, into two further sheets — catalog-landing.css (the landing page's bands) and
- * catalog-detail.css (one product's gallery, specifications, related strip and reviews) — while this mapped path
- * keeps the catalogue and search surfaces and loads the other two with @import ahead of its own rules. A CSS
- * @import is inlined where it sits, so the built cascade still reads tokens, base, layout, controls, data-display,
- * components, landing, detail, catalogue; the eight-sheet load contract is unchanged, because the entry point
- * imports the same eight mapped paths it always did and no other file imports either new sheet. Both additions and
- * this split are recorded in generation-manifest.md.
+ * This mapped path owns the catalogue and search surfaces; the landing bands, the browse surfaces and the
+ * single-product surfaces are one concern, and the rule that settled it is this:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * It is split by surface, order-preserving, into two further sheets — catalog-landing.css (the landing page's
+ * bands) and catalog-detail.css (one product's gallery, specifications, related strip and reviews) — while this
+ * mapped path keeps the catalogue and search surfaces and loads the other two with @import ahead of its own rules,
+ * at the position the moved rules held. A CSS @import is inlined where it sits, so the built cascade still reads
+ * tokens, base, layout, controls, data-display, components, landing, detail, catalogue; the eight-sheet load
+ * contract is unchanged, because the entry point imports the same eight mapped paths with no ninth path anywhere
+ * and no other file imports either new sheet.
  *
- * The tile's loading geometry followed the same remedy later, for the same reason: this sheet stood at 658 lines
- * when `ProductCardPlaceholder`'s blocks had to be reconciled with the loaded tile's own sizes, so they moved
- * whole into `src/styles/placeholders.css` — the one home of every data page's placeholder shape, loaded last of
- * the eight — and left this sheet at 590. Every rule moved selects the placeholder's own classes, so no rule here
- * depends on which of the two sheets loads first.
+ * The tile's loading geometry lives in `src/styles/placeholders.css`, the one home of every data page's
+ * placeholder shape and the last of the eight to load: the blocks that size `ProductCardPlaceholder` belong with
+ * the sheet that owns every placeholder shape rather than in this one. Every rule moved there selects the
+ * placeholder's own classes, so no rule here depends on which of the two sheets loads first.
  */
 
 @import "./catalog-landing.css";

@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiOrders.ts
- * Purpose: The submission half of `POST /api/orders` — the demonstration card decision, the idempotency store and the reading of an order request.
- * Lines: 325
+ * Purpose: The submission half of `POST /api/orders` — the demonstration card decision, the idempotency store, the placement credential and the reading of an order request.
+ * Lines: 332
  */
 
 import { paymentDeclinedNote } from "@/constants/checkoutCopy";
@@ -28,7 +28,12 @@ import {
   type OrderCreationRequest,
   type RouteContext,
 } from "@/lib/apiContract";
-import { clearPlacements, placementTokenFor, rememberPlacement } from "@/utils/orderPlacements";
+import {
+  clearPlacements,
+  placementAdmitsCredential,
+  placementFor,
+  rememberPlacement,
+} from "@/utils/orderPlacements";
 import {
   invalidFields,
   isMembers,
@@ -110,28 +115,38 @@ interface RememberedSubmission {
  * double-submission guard still holds. */
 const rememberedOrders = new Map<string | null, Map<string, RememberedSubmission>>();
 
-/** The credential of every account-less order this process created, keyed by the identifier: this
- * document's own record of what it placed, kept beside the durable one `src/utils/orderPlacements.ts`
- * writes so a read is answered even where there is no store to read (a build with Web Storage refused,
- * a unit case running without one). */
-const guestOrderCredentials = new Map<Common.OrderId, string>();
-
-/** The read credential of every account-less order this browser created, keyed by the order's
- * identifier: the idempotency key of the submission that placed it, which is the one value the placing
- * client mints and holds. Only an account-less order is recorded, because an order that names an
- * account is read through the session that owns it — which is why a seeded account-less order holds no
- * entry and is readable by an administrator alone. It is a demonstration-grade capability rather than a
- * production credential, the note `src/utils/strings.ts` carries for the digest applying here too, and
- * it is held in the durable store `src/utils/orderPlacements.ts` writes through `src/utils/storage.ts`,
- * so the confirmation of an order placed here reopens after a reload rather than only in the document
- * that placed it. */
+/**
+ * Whether a caller may read an account-less order: it presents the credential recorded against that order
+ * when the order was placed, so a caller that cannot present it is refused exactly as a foreign
+ * account-owned order is.
+ *
+ * The record read is the one `src/utils/orderPlacements.ts` holds — what this document wrote first, and
+ * the durable list a document that has since been reloaded reads back — which is what reopens a guest's own
+ * confirmation after a reload, while a shared link opens nothing.
+ *
+ * The match is judged against the credential that module recorded and never against the order's
+ * `idempotencyKey` member, so a payload that a reader already legitimately holds — an order returned to its
+ * own customer or to an administrator — cannot be replayed as the credential of an order that reader was
+ * refused, and a seeded account-less order, which no submission here ever recorded a credential for,
+ * matches nothing.
+ *
+ * @param orderId - The identifier the request asks for.
+ * @param presented - The credential the request presented, `undefined` when it presented none.
+ * @returns `true` only when that order was created here and the text presented is the credential it was
+ * recorded with.
+ */
+export function holdsGuestOrderCredential(
+  orderId: Common.OrderId,
+  presented: string | undefined,
+): boolean {
+  return placementAdmitsCredential(placementFor(orderId), presented);
+}
 
 /** Forgets every remembered placement: the orders a submission created here, so no case replays one an
- * earlier case created, and the credential each account-less order was recorded with — in this document
- * and in the durable record alike — so no case reads one an earlier case placed. */
+ * earlier case created, and the credential each account-less order was recorded with — what this document
+ * wrote and the durable record alike — so no case reads one an earlier case placed. */
 export function clearRememberedOrders(): void {
   rememberedOrders.clear();
-  guestOrderCredentials.clear();
   clearPlacements();
 }
 
@@ -141,65 +156,44 @@ export function forgetRememberedOrders(scope: string | null): void {
   rememberedOrders.delete(scope);
 }
 
-/**
- * Whether a caller may read an account-less order: it proves that this browser placed that order
- * without an account and that the credential presented is the one recorded against it when it was
- * placed, so a caller that cannot present it is refused exactly as a foreign account-owned order is.
- *
- * The decision reads what this document recorded first and, when it recorded nothing for that order,
- * the durable record a document that has since been reloaded reads back — which is what reopens a
- * guest's own confirmation after a reload, while a shared link opens nothing.
- *
- * The match is judged against this module's own record and never against the order's
- * `idempotencyKey` member, so a payload that a reader already legitimately holds — an order
- * returned to its own customer or to an administrator — cannot be replayed as the credential of
- * an order that reader was refused, and a seeded account-less order, which no submission here
- * ever minted a credential for, matches nothing.
- *
- * @param orderId - The identifier the request asks for.
- * @param presented - The credential the request presented, `undefined` when it presented none.
- * @returns `true` only when that order was created here and the text presented equals the credential it
- * was recorded with.
- */
-export function holdsGuestOrderCredential(
-  orderId: Common.OrderId,
-  presented: string | undefined,
-): boolean {
-  if (presented === undefined || presented.trim() === "") return false;
-  // This document's own record first, then the durable one a later document reads: the credential is the
-  // same value in both, and the durable half is what makes a reload's read succeed.
-  const recorded = guestOrderCredentials.get(orderId) ?? placementTokenFor(orderId);
-  return recorded !== undefined && recorded !== null && recorded === presented;
-}
-
 /** The scope a request's submissions are remembered under: the token of the live session it carries, or
  * `null` when it carries none, which is the guest checkout's one session-less scope. */
 function orderScope(context: RouteContext): string | null {
   return context.session === null ? null : (context.token ?? null);
 }
 
-/** A submission the order endpoint has read: the order it asks for and the digest of the card that came
- * with it. The card itself is not kept — {@link settlePayment} has already reduced it to the payment
- * summary an order records — so the digest is its only trace, and it is what lets
- * {@link orderFingerprint} tell two submissions under one key apart when only the card differs. */
+/** A submission the order endpoint has read: the order it asks for and the fingerprint
+ * {@link cardDigestOf} takes of the card members that are not payment secrets, which is what lets
+ * {@link orderFingerprint} tell two submissions under one key apart when only the cardholder's name or
+ * the card's expiry differs. The card itself is not kept: {@link settlePayment} has already reduced it
+ * to the payment summary an order records, and the PAN and the security code leave this module with the
+ * request that carried them. */
 interface OrderSubmission {
   readonly request: OrderCreationRequest;
   readonly cardDigest: string | null;
 }
 
-/** The digest of the card a submission carried, or `null` for an `invoice` or card-less payment: the
- * five members as read, joined into one stable text and hashed through the codebase's single digest
- * implementation, so any card that differs in any member hashes differently. Only the digest leaves
- * this call: no member of the card is retained beside it, and a digest does not reverse. */
+/** The fingerprint of the non-sensitive card members a submission carried — the cardholder's name and
+ * the expiry, which are not payment secrets — or `null` for an `invoice` or card-less payment: those
+ * three members as read, joined into one stable text and hashed through the codebase's single digest
+ * implementation, so two submissions differing in any of them fingerprint differently.
+ *
+ * No payment secret enters the input: the PAN and the security code are never digested, retained or
+ * compared here, and nothing else about them leaves this call. The fingerprint exists to spot a
+ * repeated submission under one idempotency key, not to stand for the card or to be a secret in its own
+ * right, and it is held for the life of the document by {@link rememberedOrders}. A submission whose
+ * number differs is still told from the first by {@link orderFingerprint}, which carries the payment
+ * summary {@link settlePayment} reduced that number to: two numbers sharing a brand and last four
+ * digits are one card as far as this store is concerned. */
 function cardDigestOf(payment: PaymentValidationInput): string | null {
   const card = payment.card;
   if (payment.method !== "card" || card === undefined) return null;
-  const submitted = [card.number, card.nameOnCard, card.expiryMonth, card.expiryYear, card.cvc];
+  const submitted = [card.nameOnCard, card.expiryMonth, card.expiryYear];
   return createCredentialDigest(JSON.stringify(submitted)).hash;
 }
 
 /** The identity of a submission for the idempotency store: everything an order is built from, plus the
- * digest of the card it carried, which is the only trace of that card there is — and not the
+ * {@link cardDigestOf} fingerprint of the card members that are not payment secrets — and not the
  * authorisation instant, which differs between two identical submissions. */
 function orderFingerprint(submission: OrderSubmission): string {
   const { request, cardDigest } = submission;
@@ -243,9 +237,23 @@ function billingAddressErrors(address: Account.Address): Common.FieldErrors {
 /** The submission the order endpoint was handed: the order it asks for — both address halves judged by
  * the one address rule, the shipping half through the shipping submission and the billing half under
  * the group it sits in, the payment by the payment rule, the snapshot by its amounts and the key by its
- * presence, with the customer taken from the session and never the body — beside the digest of the card
- * it carried, taken here because nothing downstream keeps the card. */
+ * presence, with the customer taken from the session and never the body — beside the
+ * {@link cardDigestOf} fingerprint of the card members that are not payment secrets, taken here because
+ * nothing downstream keeps the card.
+ *
+ * The session decides first: a submission that presented a token the store could not resolve is refused
+ * before its body is read, because the order it asks for cannot be attributed to the buyer it was meant for. */
 function readOrderRequest(context: RouteContext): Common.Result<OrderSubmission> {
+  // A submission carrying a session token the store could not resolve — expired, unknown or revoked — is
+  // refused with the dispatcher's own refusal rather than placed as a guest's: an account-less order is one
+  // the signed-in buyer's history will never hold, so they are told to sign in again instead of being handed a
+  // confirmation they cannot come back to. A submission that presented no token at all still places a guest
+  // order, because the endpoint is anonymous and guest checkout is part of the product. The dispatcher
+  // resolves every request's token before a handler runs, so a token seen here beside no session is exactly
+  // that case, and `sessionProblem` is the refusal it earned.
+  if (context.token !== undefined && context.session === null) {
+    return { ok: false, error: context.sessionProblem as Common.ApiError };
+  }
   // The submitted body as members, or nothing when the request carried something that is not an object:
   // the readers give every member a value the rule that owns it can judge.
   const body = isMembers(context.body) ? context.body : undefined;
@@ -289,7 +297,8 @@ function readOrderRequest(context: RouteContext): Common.Result<OrderSubmission>
  * replays the order it created instead of placing a second, a body that differs from the first under
  * the same key is the `409` the endpoint states, and every other submission is created by the data
  * source and remembered once it has been. A token naming a session that has since ended drops what
- * that session remembered before anything is read. */
+ * that session remembered before anything is read, and the submission is then refused for want of that
+ * session ({@link readOrderRequest}) rather than placed as a guest's. */
 export function createOrder(context: RouteContext): Common.Result<unknown> {
   // A token that named a session which has since ended: what that session remembered is dropped here,
   // so the session-less request still carrying its token inherits none of it.
@@ -310,14 +319,12 @@ export function createOrder(context: RouteContext): Common.Result<unknown> {
   }
   const created = context.source.createOrder(request);
   if (created.ok) {
-    // The credential the placing client holds for an account-less order — the key this submission was
-    // sent under — which is the only proof of placement a session-less buyer can present later. It is
-    // written durably as well as remembered here, so the proof survives the document that minted it and
-    // a read made after a reload is still verified against the credential that order was placed with.
-    if (created.value.customerId === null) {
-      guestOrderCredentials.set(created.value.id, key);
-      rememberPlacement(created.value, key);
-    }
+    // The credential the request presented for the account-less order it just created — the value the placing
+    // client minted for this attempt, which is the only proof of placement a session-less buyer can offer
+    // later. `src/utils/orderPlacements.ts` records it and keeps the first record held for an order, so a
+    // repeat of one submission leaves the seam and the client holding the same value; an order that names an
+    // account gets none, because it is read through the session that owns it.
+    if (created.value.customerId === null) rememberPlacement(created.value, context.orderToken);
     entries.set(key, { fingerprint, outcome: created });
     rememberedOrders.set(scope, entries);
   }

@@ -1,7 +1,14 @@
 /**
  * Path: src/constants/content-feedback.ts
  * Purpose: The empty, error and outcome copy every surface renders: the shared feedback and toast sentences, the per-surface empty states and the not-found view. Split out of src/constants/content.ts, which re-exports it.
- * Lines: 111
+ * Lines: 118
+ */
+
+/*
+ * This module is the feedback register's one home: the loading, failure and outcome sentences, the
+ * per-surface empty states and the not-found copy. `src/constants/content.ts` re-exports every name
+ * below, so a consumer's path resolves the whole vocabulary there; nothing here imports the module
+ * that publishes this one, so the direction is one-way and no cycle exists.
  */
 
 // Feedback, empty states and the error boundary -------------------------------------------------

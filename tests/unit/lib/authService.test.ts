@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/authService.test.ts
  * Purpose: Registration, duplicate email, sign-in, session expiry and role checks
- * Lines: 530
+ * Lines: 535
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -282,12 +282,17 @@ describe("signIn: the session each demonstration account receives", () => {
     expect(Date.parse(session.expiresAt)).toBe(Date.parse(sessionExpiresAt(session.issuedAt)));
   });
 
-  it("replays the account's own token on a second sign-in, which is what survives a reload", async () => {
+  it("mints a different token on a second sign-in, and both sessions stay readable", async () => {
     const first = valueOf(await signIn(CUSTOMER_CREDENTIALS));
     const second = valueOf(await signIn(CUSTOMER_CREDENTIALS));
 
-    expect(second.token).toBe(first.token);
+    // A sign-in issues a fresh opaque token rather than replaying the account's own: the token is a fact
+    // about the session it names, so one that leaked cannot be reissued to every later sign-in, and the
+    // account's earlier session — the one another document may still be holding — stays readable until its
+    // own window lapses.
+    expect(second.token).not.toBe(first.token);
     expect(valueOf(await restoreSession(second.token)).customerId).toBe(first.customerId);
+    expect(valueOf(await restoreSession(first.token)).customerId).toBe(first.customerId);
   });
 });
 

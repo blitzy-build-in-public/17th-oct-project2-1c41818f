@@ -39,8 +39,8 @@ import { useDocumentTitle } from "@/state/hooks";
 import { hasActiveFilters } from "@/utils/queryParams";
 
 /*
- * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class is consumed by name. `src/styles/layout.css` owns the page shell (`sp-container`, `sp-page`,
+ * Class contract. This list is what the sheets owe the page, each class named with the sheet that declares
+ * it. `src/styles/layout.css` owns the page shell (`sp-container`, `sp-page`,
  * `sp-page__body`); `src/styles/catalog.css` owns this surface's own family: `sp-catalog-layout` is the frame
  * whose first child is the filter panel and whose second is this page's column, `sp-result-meta` is the
  * toolbar row the count and the sort share, `sp-result-count` is the register both of the surface's outcome

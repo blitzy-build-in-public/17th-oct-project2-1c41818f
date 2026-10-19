@@ -1,7 +1,7 @@
 /**
  * Path: src/utils/strings.ts
  * Purpose: Slug, case, truncation and initial helpers, the prefixed identifier generators, and the credential digest
- * Lines: 541
+ * Lines: 620
  */
 
 import type { CredentialDigest } from "@/types/account";
@@ -18,6 +18,16 @@ import type {
   ReviewId,
   SessionToken,
 } from "@/types/common";
+import {
+  HASH_DOMAIN_CUSTOMER,
+  HASH_DOMAIN_IDENTIFIER,
+  HASH_DOMAIN_PASSWORD,
+  HASH_DOMAIN_SALT,
+  HASH_DOMAIN_SEAL,
+  HASH_DOMAIN_SESSION,
+  hashesMatch,
+  shortHash,
+} from "@/utils/hashing";
 
 // Text ------------------------------------------------------------------------------------------
 
@@ -45,6 +55,15 @@ const WORD_START_PATTERN = /(^|[\s\-/])(\p{L})/gu;
 /** The combining marks a compatibility decomposition leaves behind. */
 const COMBINING_MARK_PATTERN = /\p{M}+/gu;
 
+/** Every C0 and DEL control character. No `g` flag: a `g` pattern carries `lastIndex` between calls, so it
+ * would let one value pass the test below and the next identical one fail. */
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
+
+/** The class {@link stripControlCharacters} removes: the set difference `[^\P{Cc}\t\n\r]`, read as "a
+ * control character that is not a tab, a CR or a LF", the three a value may legitimately carry as
+ * whitespace — `src/utils/csv.ts` quotes a field holding one rather than losing it. */
+const STRIPPED_CONTROL_CHARACTER_PATTERN = /[^\P{Cc}\t\n\r]/gu;
+
 /**
  * Folds a value to its unaccented form — `é` to `e`, a ligature to its letters, a full-width character
  * to its ASCII one — so two spellings of the same text compare equal. Compatibility decomposition is
@@ -66,6 +85,31 @@ function foldDiacritics(value: string): string {
  */
 export function normaliseWhitespace(value: string): string {
   return value.replace(WHITESPACE_PATTERN, " ").trim();
+}
+
+/**
+ * Whether a value carries a control character — a C0 or a DEL one. This is the product's only statement of
+ * that rule: `src/utils/validation.ts` refuses a free-text field by it, because a NUL or a newline inside a
+ * name or an address line is text no control displays whatever the escaping at render, and `src/utils/csv.ts`
+ * strips a cell's text by {@link stripControlCharacters}, its sibling here.
+ *
+ * @param value - The text to inspect.
+ * @returns True when the value holds at least one control character.
+ */
+export function hasControlCharacters(value: string): boolean {
+  return CONTROL_CHARACTER_PATTERN.test(value);
+}
+
+/**
+ * The same value with every control character removed, so text that arrived from a hand-made request cannot
+ * reach a file or a store carrying one. A tab, a CR and a LF are kept: they are whitespace a line of text
+ * may legitimately hold, and the export quotes a field carrying one rather than losing the break.
+ *
+ * @param value - The text to clean.
+ * @returns The text without its control characters.
+ */
+export function stripControlCharacters(value: string): string {
+  return value.replace(STRIPPED_CONTROL_CHARACTER_PATTERN, "");
 }
 
 /**
@@ -191,81 +235,59 @@ export function initials(firstName: string, lastName = ""): string {
   return `${first}${last}`.toUpperCase();
 }
 
-// Hashing ---------------------------------------------------------------------------------------
-// One implementation of the digest arithmetic, shared by the identifier generators below and by the
-// credential digest at the end of this file. It is demonstration-grade rather than cryptographic, and
-// each caller states what that means for it.
+/**
+ * Reduces a person's name to the one a surface read by others may carry: the given name with the last name
+ * cut to its initial, so `displayName("Dana", "Okafor")` reads `"Dana O."`.
+ *
+ * The name may be given in two parts or as one full name — `displayName("Dana Okafor")` reads exactly as
+ * `displayName("Dana", "Okafor")` does, the way {@link initials} reads them — and only the first and the
+ * last word count, so a middle name does not lengthen the result. Nothing is invented for a name that
+ * cannot carry an initial: a single-word name and a blank second part both come back as the given name
+ * alone, with no dot left hanging off it, and a second part holding no letter is left off rather than
+ * rendered as an initial it does not have. An initial keeps its own letter and is uppercased, so an
+ * accented name reads as it is written, and the given name is returned as it was stored rather than
+ * capitalised, because the spelling of a person's own name is theirs.
+ *
+ * @param firstName - The first name, or the whole name when no second part is supplied.
+ * @param lastName - The last name, when the name is supplied in two parts.
+ * @returns The given name and the last name's initial, or as much of the name as can be said when no
+ *   initial can be taken from it.
+ */
+export function displayName(firstName: string, lastName = ""): string {
+  const parts = normaliseWhitespace(`${firstName} ${lastName}`).split(" ");
+  const given = parts.at(0) ?? "";
+  const initial = parts.length > 1 ? firstLetterOf(parts.at(-1) ?? "") : "";
+  return initial === "" ? given : `${given} ${initial.toUpperCase()}.`;
+}
 
-/** Domain separators: one text hashes differently in each role it is used for. */
-const HASH_DOMAIN_IDENTIFIER = "identifier";
-const HASH_DOMAIN_SESSION = "session";
-const HASH_DOMAIN_SALT = "salt";
-const HASH_DOMAIN_PASSWORD = "password";
+// The digest arithmetic --------------------------------------------------------------------------
+// One implementation of it, shared by the identifier generators below, the seal, the random source and the
+// credential digest at the end of this file: `src/utils/hashing.ts` holds the FNV-1a core and the domain
+// separators, and this module publishes the values the product derives from it. It is demonstration-grade
+// rather than cryptographic, and each caller states what that means for it.
 
-/** FNV-1a's 32-bit offset basis and prime. */
-const FNV_OFFSET_BASIS = 0x811c9dc5;
-const FNV_PRIME = 0x01000193;
+// Randomness ------------------------------------------------------------------------------------
+// One source of unpredictable text, for the values that must not be derivable from anything a reader can
+// see: the issue marker a session token is minted from, a durable record's seal, and the placement
+// credential this browser holds for an order it placed without an account.
+
+/** How many random bytes a token is minted from when its caller names none: sixteen, or 128 bits. */
+const RANDOM_TOKEN_BYTES = 16;
 
 /**
- * Hashes one text with FNV-1a over its code units and returns the 32-bit result unsigned.
+ * Reads random bytes from the browser's own generator as lowercase hexadecimal text. `crypto.getRandomValues`
+ * is the only source used: a host without it fails loudly rather than minting a value a reader could guess.
  *
- * `Math.imul` is what keeps the multiplication inside 32 bits: a plain `*` would exceed the range a
- * JavaScript number represents exactly, and every digest would then depend on floating-point rounding.
- * Hashing code units rather than code points keeps the function allocation-free, which matters because
- * the seed generators run it tens of thousands of times.
- *
- * @param value - The text to hash.
- * @returns The hash as an unsigned 32-bit integer.
+ * @param byteLength - How many random bytes to read; a whole count of one or more.
+ * @returns Twice that many lowercase hexadecimal characters.
+ * @throws TypeError - When the length is not a whole count of one or more bytes.
  */
-function fnv1a32(value: string): number {
-  let hash = FNV_OFFSET_BASIS;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, FNV_PRIME);
+export function randomHexText(byteLength: number = RANDOM_TOKEN_BYTES): string {
+  if (!Number.isInteger(byteLength) || byteLength < 1) {
+    throw new TypeError(`A random byte count must be whole and positive: ${byteLength}.`);
   }
-  return hash >>> 0;
-}
-
-/**
- * Renders a 32-bit hash as exactly eight lowercase hexadecimal characters, so a digest assembled from
- * two of them always has the same length.
- *
- * @param hash - An unsigned 32-bit value.
- * @returns Its eight-character hexadecimal form.
- */
-function toHex32(hash: number): string {
-  return hash.toString(16).padStart(8, "0");
-}
-
-/**
- * Digests a domain and a value into 16 hexadecimal characters — 64 bits, from two FNV-1a passes over
- * pass- and domain-separated inputs — so a disambiguator, a session token, a salt and a password digest
- * each get a full-width result and the same text hashes differently in each role.
- *
- * @param domain - What the value is being hashed for.
- * @param value - The text to hash.
- * @returns Sixteen lowercase hexadecimal characters, identical for identical arguments.
- */
-function shortHash(domain: string, value: string): string {
-  const seed = `${domain}:${value}`;
-  return `${toHex32(fnv1a32(`1:${seed}`))}${toHex32(fnv1a32(`2:${seed}`))}`;
-}
-
-/**
- * Compares two hash strings in a single pass that does not stop at the first differing character, and
- * rejects a length mismatch up front because the length of a recomputed digest is not a secret.
- *
- * @param left - The hash recomputed from the supplied password.
- * @param right - The hash the stored digest holds.
- * @returns True when the two are equal.
- */
-function hashesMatch(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return difference === 0;
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 // Identifiers -----------------------------------------------------------------------------------
@@ -302,6 +324,30 @@ type PrefixedBrand<TBrand extends string> = TBrand extends `${infer _TPrefix}_`
 function prefixWithSeparator(prefix: string): string {
   if (prefix.trim() === "") throw new TypeError("An identifier prefix cannot be blank.");
   return prefix.endsWith(ID_SEPARATOR) ? prefix : `${prefix}${ID_SEPARATOR}`;
+}
+
+/**
+ * Builds an identifier whose suffix is its source's digest rather than its slug: the one way an identifier is made
+ * when the text behind it must not be readable out of it. The digest is stable, so a seed, a registration and a
+ * fixture derive one identifier for one source, and domain-separated, so no identifier of this kind can collide
+ * with a token, a salt or a password digest.
+ *
+ * @param prefix - The identifier's prefix, with or without its separator.
+ * @param domain - What the source is being hashed for.
+ * @param source - The text the identifier is derived from; it may not be blank.
+ * @returns The prefixed identifier.
+ * @throws TypeError - When the source is blank.
+ */
+function opaqueId<TPrefix extends string>(
+  prefix: TPrefix,
+  domain: string,
+  source: string,
+): Brand<string, PrefixedBrand<TPrefix>> {
+  if (source.trim() === "") throw new TypeError("An identifier source cannot be blank.");
+  return `${prefixWithSeparator(prefix)}${shortHash(domain, source)}` as Brand<
+    string,
+    PrefixedBrand<TPrefix>
+  >;
 }
 
 /**
@@ -413,9 +459,13 @@ export function brandId(source: string): BrandId {
   return prefixedId("brd_", source);
 }
 
-/** The `cus_`-prefixed identifier for the account whose email address or name is `source`. */
+/**
+ * The `cus_`-prefixed identifier for the account whose email address or name is `source`, suffixed with that
+ * source's digest ({@link opaqueId}): every caller derives it from the email address and a customer identifier
+ * travels in payloads anyone may read, so a readable suffix would publish the address itself.
+ */
 export function customerId(source: string): CustomerId {
-  return prefixedId("cus_", source);
+  return opaqueId("cus_", HASH_DOMAIN_CUSTOMER, source);
 }
 
 /** The `adr_`-prefixed identifier for the address keyed by `source`, its owner and label together. */
@@ -447,12 +497,10 @@ export function promoCodeId(source: string): PromoCodeId {
 /**
  * Mints an opaque session token from a source the sign-in path controls.
  *
- * The token carries the `ses_` prefix and discloses nothing else: the source — an account id together
- * with the issue marker `src/lib/mockServer.ts` chooses — is hashed rather than embedded, so a token
- * cannot be read to learn which account it belongs to or when it was issued, which is the opacity the
- * session contract in `src/types/account.ts` requires. It is deterministic like every other generator
- * here, so the transport and the tests mint the same token for the same source in every process rather
- * than a fresh one per call.
+ * The token carries the `ses_` prefix and discloses nothing else: its source — the issue marker the account store
+ * draws from {@link randomHexText}, one per session it opens — is hashed rather than embedded, so a token cannot be
+ * read to learn which account it belongs to or when it was issued, which is the opacity the session contract in
+ * `src/types/account.ts` requires. The store mints each session's from fresh randomness, never from the account.
  *
  * @param source - The text the token is derived from; it may not be blank.
  * @returns The `ses_`-prefixed session token.
@@ -461,6 +509,21 @@ export function promoCodeId(source: string): PromoCodeId {
 export function sessionToken(source: string): SessionToken {
   if (source.trim() === "") throw new TypeError("A session token source cannot be blank.");
   return `${prefixWithSeparator("ses_")}${shortHash(HASH_DOMAIN_SESSION, source)}` as SessionToken;
+}
+
+/**
+ * Mints the read credential this browser holds for an order it placed without an account.
+ *
+ * The read it authorises returns the buyer's own confirmation — the name, email address, telephone number and
+ * delivery address that order carries — so the credential is unpredictable rather than derived: it comes from the
+ * browser's random source and never from the submission's clock, counter or idempotency key, each of which a reader
+ * of this repository could recompute. It is a bearer credential rather than an entity identifier, so no collection
+ * holds one and `src/utils/orderPlacements.ts` is where one lives.
+ *
+ * @returns A fresh placement credential, prefixed `plc_`.
+ */
+export function placementToken(): string {
+  return `${prefixWithSeparator("plc_")}${randomHexText()}`;
 }
 
 // Credential digest -----------------------------------------------------------------------------
@@ -531,6 +594,22 @@ export function verifyCredential(password: string, digest: unknown): boolean {
  */
 function digestHash(password: string, salt: string): string {
   return shortHash(HASH_DOMAIN_PASSWORD, `${salt}:${password}`);
+}
+
+/**
+ * Seals a text with a secret its caller holds: the integrity value an item of durable state is written with, so
+ * a record this browser did not write can be told from one it did. Demonstration-grade, like the credential
+ * digest beside it: one FNV-1a digest over the secret and the sealed text, domain-separated so a seal can never
+ * equal a password digest, a salt or an identifier, and never written beside the value it seals.
+ *
+ * @param secret - The secret the text is sealed with; it may not be blank.
+ * @param value - The text to seal.
+ * @returns Sixteen lowercase hexadecimal characters.
+ * @throws TypeError - When the secret is blank: a seal with no secret proves nothing.
+ */
+export function keyedDigest(secret: string, value: string): string {
+  if (secret.trim() === "") throw new TypeError("A seal secret cannot be blank.");
+  return shortHash(HASH_DOMAIN_SEAL, `${secret}:${value}`);
 }
 
 /** Narrows a value read from storage to a digest whose salt and hash are both present and non-empty. */

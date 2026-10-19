@@ -4,9 +4,9 @@
  * Lines: 107
  */
 
-// This is not a path the plan maps on its own: it is a second §0.5.5 split of the durable record
-// `src/data/clientWrites.ts` holds, taken under the plan's over-budget rule because that file stands
-// within a few lines of the 600-line ceiling and the ceiling is never raised. A published review is the
+// This is not a path the tree maps on its own: it is a second split of the durable record
+// `src/data/clientWrites.ts` holds, taken under the over-budget rule because that file cannot take another
+// export under the 600-line ceiling, which is never raised. A published review is the
 // fourth collection this browser adds to a seeded one, and the only one the seed holds as a list of rows
 // rather than as a record indexed by identifier: the member's own guard, the append that records an
 // accepted review and the fold that lays the record's rows over the seeded ones live here, while the

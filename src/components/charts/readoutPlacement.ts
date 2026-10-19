@@ -11,10 +11,10 @@ import type { PlotArea } from "@/components/charts/chartScales";
 /**
  * Why this file exists beside the three renderers: where the readout of a hovered band or wedge sits, how
  * wide a reserve its own words ask for and how it is held inside the plot area is one concern all three of
- * them need and none of them owns. Each renderer used to carry its own copy of the arithmetic, and the bar
- * renderer's copy was incomplete — it published no width, so the stylesheet's clamp had nothing to hold the
- * box back with and the readout left the frame. The plan's §0.5.5 rule is why the placement is written once
- * here and imported rather than repeated: a second implementation of a shared concern is a defect.
+ * them need and none of them owns. The placement arithmetic must have one home, because three
+ * renderers computing it separately is how a readout leaves its frame: the clamp that holds the box
+ * inside the plot reads a width the placement publishes, and a second implementation of a shared
+ * concern is a defect rather than a convenience.
  *
  * The contract: pure, `readonly` input it never mutates, a fresh style object out, and no read of the
  * document, the clock or the platform — so a placement is checkable without mounting SVG and without a

@@ -1,16 +1,17 @@
 /* Path: src/styles/tabs-accordion.css
  * Purpose: Styles for the tab and disclosure families src/components/ui/Tabs.tsx renders, split out of src/styles/data-display.css, which loads this sheet with @import
- * Lines: 169
+ * Lines: 170
  */
 
 /* The tabs and disclosure families, and the sole definition site of the .sp-tabs* and .sp-accordion* classes
- * src/components/ui/Tabs.tsx renders. Split out of src/styles/data-display.css, which loads this sheet with
- * @import ahead of its own rules, because that sheet could not take the interactive-state rules these controls
- * owe a user — a pressed state for every reachable control, and hover plus a dimmed, refusing cursor for a
- * disabled disclosure — and still stay inside the request's 600-line ceiling; the plan's remedy for a concern
- * that cannot fit is the split, never the ceiling. A CSS @import is inlined where it sits, so these rules hold
- * the cascade position they held inside data-display.css: src/main.tsx still imports the eight mapped
- * stylesheets, no file under src/components/** imports a stylesheet, and every class here is consumed by name.
+ * src/components/ui/Tabs.tsx renders. It is a split of src/styles/data-display.css, which loads this sheet
+ * with `@import` ahead of its own rules, at the position these rules held inside that sheet:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * What came here is the interactive states these controls owe a user — a pressed state for every reachable
+ * control, and hover plus a dimmed, refusing cursor for a disabled disclosure. A CSS `@import` is inlined
+ * where it sits, so these rules hold the cascade position they held inside data-display.css: src/main.tsx
+ * still imports the eight mapped stylesheets, no file under src/components/** imports a stylesheet, and
+ * every class here is consumed by name.
  * State is carried by the attribute and the pseudo-class, as the other sheets carry it: the selected tab by
  * [aria-selected="true"], the open disclosure by [aria-expanded="true"], hover inside @media (hover: hover) so
  * a touch device cannot leave a control painted as hovered, and press outside that query, because press

@@ -1,6 +1,6 @@
 /* Path: src/styles/placeholders.css
  * Purpose: The shape each data-page placeholder takes while its region is loading
- * Lines: 199
+ * Lines: 197
  */
 
 /* The loading states' geometry, in one home rather than in each area sheet that renders one: the product tile,
@@ -10,9 +10,8 @@
  * because the entry point still imports the same eight mapped paths — and it is loaded by the last of the eight
  * so that a placeholder's shape lands after every sheet that sizes a `.sp-skeleton` itself. The shapes have
  * their home here rather than in `src/styles/admin-reports.css`, whose register every one of them is written
- * against: that sheet stands at the 600 lines the request's ceiling allows and could take no addition, so
- * §0.5.5's remedy — a second file rather than a raised ceiling — was applied, as it was for the earlier splits
- * this repository records.
+ * against and beside whose rules they belong rather than pushing that register past one file's 600 lines:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
  *
  * What is here is the *space* each block occupies, never its paint: the surface, radius and shimmer belong to
  * `.sp-skeleton` in `src/styles/components.css`, and every block below is a `Skeleton` the component hands one
@@ -135,9 +134,8 @@
  * into — and the saving pill leaves the price row's flow in the grid placements exactly as the loaded pill does.
  * The rest is a var() from tokens.css.
  *
- * The tile itself is styled in `src/styles/catalog.css`, and its loading geometry is here for the reason this
- * sheet exists at all: that sheet had reached the request's 600-line ceiling when the two had to be reconciled,
- * and the remedy for a concern that cannot fit is the second file rather than a raised ceiling. Every rule below
+ * The tile itself is styled in `src/styles/catalog.css`, and its loading geometry is here because this sheet is
+ * the one home of every data page's placeholder shape rather than the sheet that paints the tile. Every rule below
  * selects the placeholder's own classes, so the order the two sheets load in decides nothing between them. */
 .sp-product-card--placeholder .sp-product-card__media > .sp-skeleton {
   inline-size: 100%;

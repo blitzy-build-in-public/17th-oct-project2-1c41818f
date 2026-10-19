@@ -1,6 +1,6 @@
 /**
  * Path: src/data/orders.ts
- * Purpose: The generated order history, spanning the widest accepted range and the year before it, with 60 orders in its trailing year attributed to the seeded customers
+ * Purpose: The generated 365-day order history, with 60 orders attributed to the seeded customers
  * Lines: 595
  */
 
@@ -206,14 +206,14 @@ function planDays(anchorDay: IsoDateString): readonly { date: IsoDateString; vol
 // Planning the two eras ---------------------------------------------------------------------------
 
 /** The history's two eras, oldest first: the earlier one, which precedes the trailing window and whose orders
- *  are all guests'; and the trailing window itself, which holds the plan's sixty attributed orders. */
+ *  are all guests'; and the trailing window itself, which holds the sixty orders attributed to seeded accounts. */
 interface PlannedHistory {
   readonly earlier: readonly PlannedOrder[];
   readonly recent: readonly PlannedOrder[];
 }
 
 /** One order the history is about to place: the day it belongs to, its position within that day — which is what
- *  its order number is built from — how old it is, and the account it belongs to when the plan reaches it. */
+ *  its order number is built from — how old it is, and the account it belongs to when the attribution places it. */
 interface PlannedOrder {
   readonly date: IsoDateString;
   readonly sequence: number;
@@ -244,7 +244,7 @@ function planSlots(
  * The two are planned separately because attribution is spread over one era's slots: `planAttribution` places
  * sixty orders evenly through whatever order count it is given, so planning the history in one pass would
  * space them across both eras and move every account, day and status the trailing window holds today. The
- * earlier era's days are the only ones the window's own plan does not see.
+ * earlier era's days are the only ones the trailing window's own attribution does not see.
  */
 function planOrders(anchorDay: IsoDateString): PlannedHistory {
   const days = planDays(anchorDay);
@@ -550,7 +550,7 @@ function buildOrder(
 
 /**
  * Builds the entire seeded order history in one deterministic pass: the trailing year's orders, priced through
- * `src/lib/pricingService.ts` and numbered and moved on through `src/lib/orderService.ts`, with exactly the plan's
+ * `src/lib/pricingService.ts` and numbered and moved on through `src/lib/orderService.ts`, with exactly the
  * sixty attributed to seeded accounts and the rest placed by guests, after the year that precedes them.
  *
  * The earlier era is generated first and from a stream of its own, so that the trailing window is drawn from

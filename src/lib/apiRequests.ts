@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRequests.ts
  * Purpose: Reads a request for the in-process API: the members a query carries, the vocabularies they are validated against and the refusals they produce
- * Lines: 600
+ * Lines: 599
  */
 
 import { MAX_REPORT_RANGE_DAYS } from "@/constants/config";
@@ -17,21 +17,24 @@ import {
   GRANULARITY_OPTIONS,
   ORDER_STATUS_OPTIONS,
   REPORT_DEFINITIONS,
-  SORT_OPTIONS,
 } from "@/constants/taxonomy";
 import type * as Account from "@/types/account";
 import type * as Analytics from "@/types/analytics";
 import type * as Catalog from "@/types/catalog";
 import type * as Commerce from "@/types/commerce";
 import type * as Common from "@/types/common";
-import { clampNumber, normalisePageSize } from "@/utils/collections";
+import { clampNumber } from "@/utils/collections";
 import { toFieldErrors, validateDateRange, type DateRangeErrorCode } from "@/utils/dates";
 import { isValidIso } from "@/utils/dates";
-import { FILTER_PARAMS } from "@/utils/queryParams";
+import { FILTER_PARAMS, PRICE_FILTER_FLOOR_MINOR, isConfiguredSortKey } from "@/utils/queryParams";
+import { readFilterState as readUrlFilterState, readFlagMember } from "@/utils/queryParams";
+import { toFacetQuery } from "@/utils/queryParams";
 import {
   FORM_ERROR_KEY,
   firstError,
+  hasErrors,
   isRatingValue,
+  validateSearchTerm,
   type PaymentValidationInput,
   type ReviewDraft,
 } from "@/utils/validation";
@@ -70,8 +73,7 @@ export function fieldProblem(field: string, message?: string): Common.Result<nev
   return failure(API_ERROR_CODES.VALIDATION_FAILED, wording, field);
 }
 
-/** A `404` for a path, a product, an order or an address that does not exist, worded by the
- * not-found copy. */
+/** A `404` for a path, a product, an order or an address that does not exist. */
 export function missing(code: ApiErrorCode): Common.Result<never> {
   return failure(code, NOT_FOUND_COPY.BODY);
 }
@@ -139,19 +141,14 @@ export function memberBoolean(
   key: string,
 ): boolean | null | undefined {
   const value = members?.[key];
-  if (typeof value === "boolean") return value;
-  const text = memberText(members, key)?.trim().toLowerCase();
-  if (text === undefined || text === "") return undefined;
-  if (text === "true" || text === "1") return true;
-  if (text === "false" || text === "0") return false;
-  return null;
+  return typeof value === "boolean" ? value : readFlagMember(memberText(members, key));
 }
 
-/** One member read as an amount: a whole non-negative number of minor units, or `undefined`. Every
- * price, total and quantity a request carries has to pass this. */
+/** One member read as an amount: a whole non-negative number of minor units the product can represent, or
+ * `undefined`; `1e308` cannot, being no money amount any figure derived from it would survive. */
 export function memberAmount(members: RequestMembers | undefined, key: string): number | undefined {
   const value = members?.[key];
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 /** One member read as an object with named members, or `undefined`. */
@@ -214,7 +211,6 @@ export function splitRequest(
 
 // Vocabularies -----------------------------------------------------------------------------------
 
-const SORT_KEYS: readonly Catalog.SortKey[] = SORT_OPTIONS.map((option) => option.value);
 const ORDER_STATUSES: readonly Commerce.OrderStatus[] = ORDER_STATUS_OPTIONS.map((o) => o.value);
 const GRANULARITIES: readonly Analytics.BucketGranularity[] = GRANULARITY_OPTIONS.map(
   (option) => option.value,
@@ -265,23 +261,48 @@ function readVocabulary<TValue extends string>(
   return isOneOf(text, allowed) ? text : null;
 }
 
-/** One numeric filter member read from a query: `undefined` when absent, the whole number when it is
- * one, and `null` when present but unreadable — which a filter refuses rather than reading as absent. */
-function readFilterNumber(query: QueryRecord, key: string): number | null | undefined {
-  const text = memberText(query, key)?.trim();
-  return text === undefined || text === "" ? undefined : (memberInteger(query, key) ?? null);
+/** The query a request carries, as the URL the vocabulary reads: every occurrence of a member appended, so
+ * a repeated parameter, a comma-joined list and a single value are read exactly as an address bar is. */
+function asSearchParams(query: QueryRecord): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of Object.keys(query)) {
+    for (const value of memberTextList(query, key)) params.append(key, value);
+  }
+  return params;
 }
 
-/** A page and a page size read from a query, the size falling back to the configured default. */
+/** The refusal a filter member the request supplied earns where it cannot be read, or `null` when every
+ * member it supplied is one that can: a member has to be a whole signed integer inside the domain
+ * `src/utils/queryParams.ts` and `src/utils/validation.ts` declare for it — the search term included, whose
+ * bound no query-string reader applies. This is the one policy the transport adds to the URL reader. */
+function filterRefusal(query: QueryRecord): Common.Result<never> | null {
+  const rangeProblem = (field: string) => fieldProblem(field, VALIDATION_MESSAGES.OUT_OF_RANGE);
+  const wholeNumber = (key: string): number | null | undefined =>
+    (memberText(query, key)?.trim() ?? "") === "" ? undefined : (memberInteger(query, key) ?? null);
+  const rating = wholeNumber(FILTER_PARAMS.MIN_RATING);
+  if (rating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
+  if (rating !== undefined && !isRatingValue(rating)) return rangeProblem(FILTER_PARAMS.MIN_RATING);
+  const minPrice = wholeNumber(FILTER_PARAMS.MIN_PRICE);
+  if (minPrice === null) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
+  const maxPrice = wholeNumber(FILTER_PARAMS.MAX_PRICE);
+  if (maxPrice === null) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
+  if (minPrice !== undefined && minPrice < PRICE_FILTER_FLOOR_MINOR)
+    return rangeProblem(FILTER_PARAMS.MIN_PRICE);
+  if (maxPrice !== undefined && maxPrice < PRICE_FILTER_FLOOR_MINOR)
+    return rangeProblem(FILTER_PARAMS.MAX_PRICE);
+  const inStock = readFlagMember(memberText(query, FILTER_PARAMS.IN_STOCK));
+  if (inStock === null) return fieldProblem(FILTER_PARAMS.IN_STOCK);
+  const termProblem = validateSearchTerm(memberText(query, FILTER_PARAMS.QUERY)?.trim() ?? "");
+  if (hasErrors(termProblem)) return invalidFields(termProblem);
+  return null;
+}
+
+/** A page and a page size read from a query by the vocabulary's own paging rule. */
 export function readPaging(query: QueryRecord): {
   readonly page: number;
   readonly pageSize: number;
 } {
-  const page = memberInteger(query, FILTER_PARAMS.PAGE);
-  return {
-    page: page !== undefined && page > 0 ? page : 1,
-    pageSize: normalisePageSize(memberInteger(query, FILTER_PARAMS.PAGE_SIZE)),
-  };
+  return readUrlFilterState(asSearchParams(query));
 }
 
 /** The dated range a query carries, refused by the range rules, a half-given pair included. */
@@ -296,44 +317,22 @@ export function readRange(
     : invalidFields(toFieldErrors(validation, RANGE_MESSAGES));
 }
 
-/** The filter half of a catalogue or facet query, refused when a member is outside the domain it
- * declares. Paging and sort are absent because `GET /api/facets` takes neither. */
+/** The filter half of a catalogue or facet query, refused where a supplied member cannot be read: the
+ * transport's one policy, which the URL reader does not have, since paging and sort are absent from facets. */
 export function readFilterFields(query: QueryRecord): Common.Result<Catalog.FacetQuery> {
-  const rangeProblem = (field: string) => fieldProblem(field, VALIDATION_MESSAGES.OUT_OF_RANGE);
-  const rawRating = readFilterNumber(query, FILTER_PARAMS.MIN_RATING);
-  if (rawRating === null) return fieldProblem(FILTER_PARAMS.MIN_RATING);
-  const minRating: Catalog.RatingValue | null = isRatingValue(rawRating) ? rawRating : null;
-  if (rawRating !== undefined && minRating === null) return rangeProblem(FILTER_PARAMS.MIN_RATING);
-  const minPriceMinor = readFilterNumber(query, FILTER_PARAMS.MIN_PRICE);
-  if (minPriceMinor === null) return fieldProblem(FILTER_PARAMS.MIN_PRICE);
-  const maxPriceMinor = readFilterNumber(query, FILTER_PARAMS.MAX_PRICE);
-  if (maxPriceMinor === null) return fieldProblem(FILTER_PARAMS.MAX_PRICE);
-  if ((minPriceMinor ?? 0) < 0) return rangeProblem(FILTER_PARAMS.MIN_PRICE);
-  if ((maxPriceMinor ?? 0) < 0) return rangeProblem(FILTER_PARAMS.MAX_PRICE);
-  // An inverted pair is swapped, not refused, the reading src/utils/queryParams.ts gives the same pair.
-  const descending =
-    minPriceMinor !== undefined && maxPriceMinor !== undefined && minPriceMinor > maxPriceMinor;
-  const inStockOnly = memberBoolean(query, FILTER_PARAMS.IN_STOCK);
-  if (inStockOnly === null) return fieldProblem(FILTER_PARAMS.IN_STOCK);
-  return ok({
-    q: memberText(query, FILTER_PARAMS.QUERY) ?? "",
-    categoryIds: memberTextList(query, FILTER_PARAMS.CATEGORY_IDS) as readonly Common.CategoryId[],
-    brandIds: memberTextList(query, FILTER_PARAMS.BRAND_IDS) as readonly Common.BrandId[],
-    minPriceMinor: descending ? (maxPriceMinor ?? null) : (minPriceMinor ?? null),
-    maxPriceMinor: descending ? (minPriceMinor ?? null) : (maxPriceMinor ?? null),
-    minRating,
-    inStockOnly: inStockOnly ?? false,
-    tags: memberTextList(query, FILTER_PARAMS.TAGS),
-  });
+  const refusal = filterRefusal(query);
+  if (refusal !== null) return refusal;
+  return ok(toFacetQuery(readUrlFilterState(asSearchParams(query))));
 }
 
-/** A listing's whole query: the filter half, the sort — relevance with a term — and the page. */
+/** A listing's whole query: the filter half, the sort — one of the keys the taxonomy offers, or the
+ * vocabulary's own default for the query — and the page, each read as the URL reader reads it. */
 export function readFilterState(query: QueryRecord): Common.Result<Catalog.FilterState> {
-  const fields = readFilterFields(query);
-  if (!fields.ok) return fields;
-  const sort = readVocabulary(query, FILTER_PARAMS.SORT, SORT_KEYS);
-  if (sort === null) return fieldProblem(FILTER_PARAMS.SORT);
-  return ok({ ...fields.value, ...readPaging(query), sort: sort ?? "relevance" });
+  const refusal = filterRefusal(query);
+  if (refusal !== null) return refusal;
+  const sort = (memberText(query, FILTER_PARAMS.SORT) ?? "").trim();
+  if (sort !== "" && !isConfiguredSortKey(sort)) return fieldProblem(FILTER_PARAMS.SORT);
+  return ok(readUrlFilterState(asSearchParams(query)));
 }
 
 /** The window an order history filters on: absent ends stay absent, a half-given pair is refused. */
@@ -573,9 +572,9 @@ const LINE_AMOUNT_KEYS = [
   "lineTotalMinor",
 ] as const;
 
-/** The priced cart an order is built from, or `undefined` when it is not usable. Every amount is
- * checked and every line read by the shared cart-line reader, but the totals pass on as submitted: an
- * order keeps the amounts the buyer reviewed, which stops a later price change from moving it. */
+/** The priced cart an order is built from, or `undefined` when it is not usable. Every amount the
+ * endpoint's contract declares is checked on shape and every line read by the shared cart-line reader; the
+ * amounts are re-derived from the catalogue at the seam, so a submitted total cannot reach an order. */
 export function readOrderSnapshot(value: unknown): Commerce.OrderSnapshot | undefined {
   if (!isMembers(value)) return undefined;
   if (!SNAPSHOT_AMOUNT_KEYS.every((key) => memberAmount(value, key) !== undefined))

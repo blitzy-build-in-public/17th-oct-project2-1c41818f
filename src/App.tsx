@@ -1,7 +1,7 @@
 /**
  * Path: src/App.tsx
  * Purpose: Provider composition in its required order, the error boundary and the layout around the routed content
- * Lines: 338
+ * Lines: 339
  */
 
 import { Component, Suspense, lazy, useCallback, useMemo } from "react";
@@ -90,12 +90,13 @@ const MiniCart = lazy(async () => ({
 /**
  * The home path the failure state's one destination points at.
  *
- * It is written here rather than read from `src/constants/routes.ts`, which owns every other path in the
- * product, because that module is outside this file's dependency set: the composition root composes what
- * already exists, and the list of modules it may reach is fixed by the plan. It is the router's root, it is
- * the only path string in the tree outside its owner, and the link it feeds is a document-level one on
- * purpose — the way out of a screen that failed to render has to hold even when the application's own state
- * is what failed.
+ * It is written here rather than read from `src/constants/routes.ts`, which owns every other path
+ * in the product, because this composition root reaches only the modules it composes: the layers
+ * run one way — a file imports only from its own layer or a layer below it — and the one path a
+ * document-level link needs is not worth widening that reach for a module the file does not
+ * otherwise use. It is the router's root, it is the only path string in the tree outside its owner,
+ * and the link it feeds is a document-level one on purpose — the way out of a screen that failed to
+ * render has to hold even when the application's own state is what failed.
  */
 const HOME_PATH = "/";
 

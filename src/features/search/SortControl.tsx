@@ -13,8 +13,8 @@ import { useCatalogFilters } from "@/state/CatalogContext";
 import type { SortKey } from "@/types/catalog";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of
- * `src/styles/**` — so the classes below are consumed by name. `sp-sort`, declared in
+ * Class contract. This list is what the sheets owe the control, each class named with the sheet that declares
+ * it. `sp-sort`, declared in
  * `src/styles/catalog.css`, is the row-saving arrangement of a labelled select: its own base rule stacks
  * the label above the select, and from `--breakpoint-md` it places the label beside a select capped at the
  * facet column's width, which is the shape `.sp-result-meta > .sp-sort` closes to the end of its own row.

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/CheckoutErrorSummary.tsx
  * Purpose: The step's summary of what is wrong: how many fields are at fault and which, each naming its field
- * Lines: 141
+ * Lines: 140
  */
 
 import { useRef } from "react";
@@ -17,8 +17,7 @@ import { useRefusalFocus } from "@/state/focusHooks";
 import type { FieldErrors } from "@/types/common";
 
 /*
- * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/commerce.css` owns this register:
+ * Class contract. `src/styles/commerce.css` owns this register:
  * `sp-step__errors` sets the summary's smaller type and spans the title and the body across the alert's own
  * grid, so the class is what keeps the count, the list and the links inside one full-width column.
  */

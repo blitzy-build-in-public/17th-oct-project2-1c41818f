@@ -16,7 +16,7 @@ import { Drawer } from "@/components/ui/Modal";
 import { NotFoundView } from "@/components/ui/NotFoundView";
 import { Pagination } from "@/components/ui/Pagination";
 import { Select } from "@/components/ui/Select";
-import { CloseIcon } from "@/components/ui/icons";
+import { CloseIcon } from "@/components/ui/Icons";
 import { BREAKPOINTS, PAGE_SIZE_OPTIONS } from "@/constants/config";
 import {
   CATALOG_COPY,
@@ -51,10 +51,10 @@ import {
 import type { ActiveFilterEntry } from "@/utils/queryParams";
 
 /*
- * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class below is consumed by name from the sheet that owns it: `layout.css` the shell, `catalog.css` and the
- * `catalog-landing.css` it loads the catalogue's own blocks, and `base.css` the visually-hidden one. Every
- * primitive below paints itself, so no colour, radius, shadow or media query is here.
+ * Class contract. This list is what the sheets owe the page, each class named with the sheet that declares
+ * it: `layout.css` the shell, `catalog.css` and the `catalog-landing.css` it loads the catalogue's own
+ * blocks, and `base.css` the visually-hidden one. Every primitive below paints itself, so no colour, radius,
+ * shadow or media query is here.
  */
 
 /** The stop the filter panel is a sticky column from and a drawer below, built from the configured token: the

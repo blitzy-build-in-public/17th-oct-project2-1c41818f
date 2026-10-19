@@ -1,22 +1,18 @@
 /**
  * Path: src/data/clientWrites.ts
  * Purpose: The durable record of this browser's own writes to the seeded collections, and the folds that replay it onto the seeds
- * Lines: 586
+ * Lines: 598
  */
 
-// This is not a path the plan maps on its own: it is a second §0.5.5 split of the concern
-// `src/data/collectionStore.ts` already splits out of `src/data/repositories.ts`, taken under the
-// plan's over-budget rule because the seeded collections are rebuilt from the frozen seed on every
-// document load. Everything this browser writes itself would otherwise live only inside the document
-// that wrote it — the order a checkout placed, the account a registration created together with the
-// digest that verifies it, the profile a customer edited, the address book they wrote and the review
-// they published — so §0.8.1's reload-safe confirmation route and its session restore on reload could
-// not hold. This module owns the shape of the durable record, the writes that extend it and the pure
-// folds that lay it over the seeds, with the review member's own guard, append and fold split into
-// `src/data/reviewWrites.ts` under the same rule rather than being pushed past the file ceiling here;
-// `src/utils/storage.ts` remains the product's only store, under the key `src/constants/config.ts`
-// declares, and the store's own collections stay the source of truth for a running document — a refused
-// write changes nothing about them.
+// The seeded collections are rebuilt from the frozen seed on every document load, so everything this
+// browser writes for itself would otherwise live only in the document that wrote it: a reload would forget
+// the order a checkout placed, the account a registration created with the digest that verifies it, the
+// profile a customer edited, the address book they wrote and the review they published. This module owns
+// the shape of that durable record, the writes that extend it and the pure folds that lay it over the
+// seeds. The review member's guard, append and fold live in `src/data/reviewWrites.ts`, because a review is
+// the one write the record holds as a list of rows rather than keyed by an identifier. `src/utils/storage.ts`
+// is the only store, under the key `src/constants/config.ts` declares, and the store's own collections stay
+// the source of truth for a running document — a refused write changes nothing about them.
 
 import { STORAGE_KEYS } from "@/constants/config";
 import type { StoredCredential } from "@/data/customers";
@@ -203,9 +199,10 @@ function isAddress(value: unknown): value is Address {
   );
 }
 
-/** Whether a stored member is a customer record: the identifier and email the account store is keyed
- * by, the role every privileged path re-checks, the references to the book, and the members the
- * account surfaces render. */
+/** Whether a stored member is a customer record: the identifier and email the account store is keyed by,
+ * the role every privileged path re-checks, the references to the book, and the members the account
+ * surfaces render. The role is read here as one of the three the product has and is never authority: the
+ * folds below resolve an account the seed holds to the seed's own role and one it does not to a customer. */
 function isCustomer(value: unknown): value is Customer {
   if (!isRecord(value)) return false;
   return (
@@ -345,10 +342,10 @@ function isClientWrites(value: unknown): value is ClientWrites {
  *
  * Reads from the store. Anything unusable — no store at all, a private window that refuses the write,
  * a payload this build will not read, a full quota that left an older copy behind — answers the empty
- * record, so a data source built without a store behaves exactly as it did before this module existed:
- * the seeds alone. This is what makes persistence an addition rather than a dependency. The review list
- * is completed on the way out, so a payload written before the record carried reviews is read with the
- * empty list rather than with an absent member every reader would have to resolve for itself.
+ * record, so a data source built without a store behaves as if nothing had ever been written: reads
+ * answer from the seeds and writes are dropped. This is what makes persistence an addition rather than a
+ * dependency. The review list is completed on the way out, so a payload written before the record carried
+ * reviews is read as the empty list rather than as an absent member each reader would have to resolve.
  *
  * @returns The writes to replay onto the seeds, or {@link NO_CLIENT_WRITES}.
  */
@@ -487,54 +484,67 @@ export function nextOrderMint(
 
 // Replaying the record onto the seeds ---------------------------------------------------------------
 
-/** Lays a list of customer records over a copy of the seed, replacing the record of every account they
- * name and appending the accounts the seed does not hold. The seed is never written. */
-function foldCustomers(seed: readonly Customer[], records: readonly Customer[]): Customer[] {
-  const merged = [...seed];
-  const positions = new Map<CustomerId, number>(
-    merged.map((customer, index) => [customer.id, index]),
-  );
-  for (const customer of records) {
-    const position = positions.get(customer.id);
-    if (position === undefined) {
-      positions.set(customer.id, merged.length);
-      merged.push(customer);
-    } else {
-      merged[position] = customer;
-    }
-  }
-  return merged;
-}
+/** The role an account this browser registered is taken with: registration only creates a customer. */
+const REGISTERED_ROLE: Role = "customer";
 
 /**
- * The account store a document loads: the seeded accounts, then the accounts this browser registered,
- * then the profile edits it made.
+ * The account store a document loads: the seeded accounts, then the accounts this browser registered, then
+ * the profile edits it made, laid over in that order so an edit outlasts the registration it followed.
  *
- * The order is what makes an edit outlast the registration it followed — a registered account's record
- * is written at registration and its edited record afterwards, and the edit is the one that stands.
+ * The seed is the authority for the identity and the authority of every account it already holds: a
+ * record naming one of them — by identifier, or by the email an account is looked up and compared by —
+ * contributes only the members the product's own writes change for an account: `firstName`, `lastName`,
+ * `phone`, `marketingOptIn`, `lastLoginAt` and `addressIds`. The `id`, `email`, `createdAt`, `loyaltyTier`
+ * and `role` are the seed's whatever the record claims: the role decides which paths a session opens.
+ *
+ * A record naming no account is one this browser registered, and registration only ever makes a customer:
+ * it is honoured for the same six members and its role is {@link REGISTERED_ROLE}, so a written record can
+ * never mint an administrator — the two administrators are the seed's — and never `guest`, which
+ * authenticates nobody.
  *
  * @param seed - `CUSTOMERS`, the accounts the seed holds.
  * @param writes - The record read from the store.
  * @returns A new array; `seed` itself is never mutated.
  */
 export function mergeCustomers(seed: readonly Customer[], writes: ClientWrites): Customer[] {
-  return foldCustomers(
-    foldCustomers(
-      seed,
-      writes.accounts.map((account) => account.customer),
-    ),
-    writes.profiles,
+  const merged = [...seed];
+  const byId = new Map<CustomerId, number>(merged.map((customer, index) => [customer.id, index]));
+  const byEmail = new Map(
+    merged.map((customer, index): [string, number] => [emailKey(customer.email), index]),
   );
+  const records = [...writes.accounts.map((account) => account.customer), ...writes.profiles];
+  for (const written of records) {
+    const position = byId.get(written.id) ?? byEmail.get(emailKey(written.email));
+    if (position === undefined) {
+      byId.set(written.id, merged.length);
+      byEmail.set(emailKey(written.email), merged.length);
+      merged.push({ ...written, role: REGISTERED_ROLE });
+    } else {
+      const { firstName, lastName, phone, marketingOptIn, lastLoginAt, addressIds } = written;
+      merged[position] = {
+        ...merged[position],
+        firstName,
+        lastName,
+        phone,
+        marketingOptIn,
+        lastLoginAt,
+        addressIds,
+      };
+    }
+  }
+  return merged;
 }
 
 /**
  * The credential map a document loads, keyed by {@link emailKey}: the seeded credentials, then the
- * credentials this browser registered.
+ * credentials of the accounts this browser registered for itself.
  *
- * Both properties of the account store depend on it: a re-registration of an email this browser
- * already registered is still a `409` duplicate email, and the password a registration was created
- * with still verifies, because the digest written beside the account is the one the sign-in path
- * compares against.
+ * A written account supplies a credential only for an email the seed does not hold, because the seed is the
+ * authority for the identities it holds and a digest this browser wrote must not displace the one that
+ * verifies a seeded password. Both properties of the account store depend on the map: a re-registration of
+ * an email this browser already registered is still a `409` duplicate email, and the password a
+ * registration was created with still verifies, because the digest written beside the account is the one
+ * the sign-in path compares against.
  *
  * @param seed - `CREDENTIALS`, the digests the seed holds.
  * @param writes - The record read from the store.
@@ -548,7 +558,9 @@ export function mergeCredentials(
     seed.map((entry) => [emailKey(entry.customer.email), entry]),
   );
   for (const account of writes.accounts) {
-    credentials.set(emailKey(account.customer.email), account);
+    const key = emailKey(account.customer.email);
+    if (credentials.has(key)) continue;
+    credentials.set(key, account);
   }
   return credentials;
 }

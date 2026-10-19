@@ -1,7 +1,7 @@
 /**
  * Path: src/components/layout/PageHeader.tsx
  * Purpose: Breadcrumbs with page title, description and action slot
- * Lines: 239
+ * Lines: 238
  */
 
 import type { ReactElement, ReactNode } from "react";
@@ -166,9 +166,8 @@ function renderCrumb(item: BreadcrumbItem, isCurrent: boolean): ReactElement {
  * family's sole definition site, and `src/styles/layout.css` — which loads that sheet with
  * `@import "./page-header.css";` — names the two parts carrying no rule of their own:
  * `sp-page-header__breadcrumbs`, a plain wrapper, and `sp-page-header__title`, whose heading-1 type
- * `src/styles/base.css` paints on the `h1` element. `src/main.tsx` is the only file to import a
- * stylesheet and no file under `src/components/**` imports one, so nothing here reads the stylesheets or
- * adds a class of its own.
+ * `src/styles/base.css` paints on the `h1` element. Nothing here imports a stylesheet, so nothing here
+ * reads the stylesheets or adds a class of its own.
  */
 export function PageHeader({
   breadcrumbs,

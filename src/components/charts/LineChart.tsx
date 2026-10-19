@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/LineChart.tsx
  * Purpose: Accessible line and area chart with grid, axis ticks, hover readout and a data-table alternative
- * Lines: 478
+ * Lines: 483
  */
 
 import { useCallback, useId, useMemo, useState } from "react";
@@ -362,7 +362,12 @@ export function LineChart({
                 <text
                   key={`value-${String(tick.value)}`}
                   className="sp-chart__tick"
-                  {...axisLabelTransform("vertical", "value", model.plotArea, tick.position)}
+                  {...axisLabelTransform({
+                    orientation: "vertical",
+                    axis: "value",
+                    plotArea: model.plotArea,
+                    position: tick.position,
+                  })}
                 >
                   {tick.label}
                 </text>
@@ -371,12 +376,12 @@ export function LineChart({
                 <text
                   key={`band-${tick.key}`}
                   className="sp-chart__tick"
-                  {...axisLabelTransform(
-                    "vertical",
-                    "band",
-                    model.plotArea,
-                    bandCentre(model.bandScale, tick.key),
-                  )}
+                  {...axisLabelTransform({
+                    orientation: "vertical",
+                    axis: "band",
+                    plotArea: model.plotArea,
+                    position: bandCentre(model.bandScale, tick.key),
+                  })}
                 >
                   {tick.label}
                 </text>

@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/barGeometry.ts
  * Purpose: The bar renderer's own geometry: its scales, its marks, its value labels and its readout placement
- * Lines: 455
+ * Lines: 467
  */
 
 import { readoutPlacement } from "@/components/charts/readoutPlacement";
@@ -87,8 +87,8 @@ const VERTICAL_PADDING: Padding = { ...DEFAULT_PADDING, top: 28 };
 
 /**
  * The gutter a horizontal chart's band labels are written in when they are short: the leading inset a run of
- * bucket or segment names such as "Week of Jan 27" has always been drawn in, so a chart whose labels fit it
- * renders exactly as it did and {@link bandLabelGutter} widens it only for a label that needs the room.
+ * bucket or segment names such as "Week of Jan 27" is drawn in, so a chart whose labels fit the inset keeps
+ * it, and {@link bandLabelGutter} widens it only for a label that needs the room.
  */
 const MIN_BAND_LABEL_GUTTER = 120;
 
@@ -175,6 +175,21 @@ export interface BarGeometryOptions {
   readonly formatValue: ValueFormatter;
   readonly formatAxisValue: AxisValueFormatter;
   readonly formatLabel: LabelFormatter;
+}
+
+/** Everything {@link readoutStyle} reads: the marks the active band was drawn as, the band it reports and the
+ *  frame's own box, in the drawing's user units. */
+export interface ReadoutStyleInput {
+  /** The geometry the active band was drawn from. */
+  readonly geometry: BarGeometry;
+  /** The band the readout is reporting. */
+  readonly bandKey: string;
+  /** The frame's height in user units, the readout's own percentage basis. */
+  readonly height: number;
+  /** Whether the bars run sideways, which swaps the two offsets. */
+  readonly horizontal: boolean;
+  /** The readout's words as a character count, which its reserved width is measured from. */
+  readonly characters: number;
 }
 
 // Helpers -----------------------------------------------------------------------------------------
@@ -369,7 +384,12 @@ export function buildGeometry(options: BarGeometryOptions): BarGeometry {
       id: tick.id,
       className: "sp-chart__tick",
       text: tick.text,
-      transform: axisLabelTransform(orientation, tick.axis, plotArea, tick.position),
+      transform: axisLabelTransform({
+        orientation,
+        axis: tick.axis,
+        plotArea,
+        position: tick.position,
+      }),
     })),
     ...rects
       .filter((rect) => labelsBars && hasLabelRoom(rect, orientation))
@@ -416,20 +436,12 @@ export function buildGeometry(options: BarGeometryOptions): BarGeometry {
  * the placement from one shared module is what stops this renderer's copy from drifting out of step with the
  * other two — and it is why the box can neither reach the value axis' gutter nor the label row under it.
  *
- * @param geometry - The geometry the active band was drawn from.
- * @param bandKey - The band the readout is reporting.
- * @param height - The frame's height in user units, the readout's own percentage basis.
- * @param horizontal - Whether the bars run sideways, which swaps the two offsets.
- * @param characters - The readout's words as a character count, which its reserved width is measured from.
+ * @param input - The geometry the active band was drawn from, the band it reports, the frame's height, the
+ *  direction the bars run and the readout's own length in characters.
  * @returns The readout's placement, as the custom properties it is positioned and bounded by.
  */
-export function readoutStyle(
-  geometry: BarGeometry,
-  bandKey: string,
-  height: number,
-  horizontal: boolean,
-  characters: number,
-): ReadoutStyle {
+export function readoutStyle(input: ReadoutStyleInput): ReadoutStyle {
+  const { geometry, bandKey, height, horizontal, characters } = input;
   const centre = geometry.bandScale.scale(bandKey) + geometry.bandScale.bandwidth / 2;
   const edges = geometry.bars
     .filter((mark) => mark.bandKey === bandKey)

@@ -12,9 +12,9 @@ import type { RefObject } from "react";
  * behaves alike: the checkout's step summary, the review step's refusal, the sign-in and registration screens
  * and the address dialog all call this hook rather than each moving focus their own way.
  *
- * A §0.5.5 split of `src/state/hooks.ts`'s shared-hook concern — that file stood at 599 lines of the 600 the
- * request allows when this behaviour was needed, so the concern was split rather than the ceiling raised, and
- * it holds nothing else: no state, no storage, no request, and no import but React.
+ * A split of `src/state/hooks.ts`'s shared-hook concern: that module may hold no more than 600 lines, so this
+ * concern was split rather than the ceiling raised, and it holds nothing else: no state, no storage, no
+ * request, and no import but React.
  */
 
 /** How a control that a rule has refused marks itself, which is how this hook finds the first one at fault. */

@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/DateRangeControl.tsx
  * Purpose: The range control both administrator surfaces render: presets, the two date fields, the range rules' wording and the named comparison
- * Lines: 396
+ * Lines: 395
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,10 +36,9 @@ import {
 import type { DateRangeErrorCode, DateRangeErrorField, ReportRangePreset } from "@/utils/dates";
 
 /*
- * Class contract. `src/styles/admin-reports.css` is the sole definition site of this control, and neither this
- * file nor any file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class below is consumed by name, and this comment is the list that sheet owes the
- * control: `sp-date-range` for the control, a column the sheet spaces; `sp-date-range__presets` for the row of
+ * Class contract. `src/styles/admin-reports.css` is the sole definition site of this control. No stylesheet is
+ * imported here, so every class below is consumed by name, and this comment is the list that sheet owes the control:
+ * `sp-date-range` for the control, a column the sheet spaces; `sp-date-range__presets` for the row of
  * presets, each of which composes `.sp-btn--secondary` and `.sp-btn--sm` from controls.css and takes the pill
  * shape the sheet names here; `sp-date-range__fields` for the two date fields, one column below the small stop
  * and two above it; `sp-date-range__summary` for a range stated in words, under the applied range and again

@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/apiRoutes.ts
  * Purpose: The in-process API's endpoints: the route table, one handler per endpoint and the reading of the bodies they take
- * Lines: 507
+ * Lines: 533
  */
 
 import { RELATED_PRODUCTS_LIMIT, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
@@ -10,6 +10,7 @@ import type * as Account from "@/types/account";
 import type * as Analytics from "@/types/analytics";
 import type * as Catalog from "@/types/catalog";
 import type * as Common from "@/types/common";
+import { FILTER_PARAMS } from "@/utils/queryParams";
 import { verifyCredential } from "@/utils/strings";
 import {
   firstError,
@@ -20,6 +21,7 @@ import {
   validateRating,
   validateRegistration,
   validateReview,
+  validateSearchTerm,
   validatePromoCodeShape,
   validateShippingMethod,
   validateSignIn,
@@ -202,10 +204,15 @@ function listFacets(context: RouteContext): Common.Result<unknown> {
 
 /** Answers `GET /api/search/suggest`, parsing the request into `Catalog.SuggestionQuery` — the one shape
  * `src/types/catalog.ts` declares for this endpoint's parameters and both sides of the seam read — with
- * its optional `limit` resolved from the endpoint's declared default for the data source it asks. */
+ * its optional `limit` resolved from the endpoint's declared default for the data source it asks. The term
+ * it carries is the listing read's own `q`, judged by the same free-text rule the catalogue's filter member
+ * is judged by, so one term cannot be served here where the listing refuses it. */
 function listSuggestions(context: RouteContext): Common.Result<unknown> {
+  const term = memberTextOrEmpty(context.query, FILTER_PARAMS.QUERY);
+  const termProblem = validateSearchTerm(term, FILTER_PARAMS.QUERY);
+  if (hasErrors(termProblem)) return invalidFields(termProblem);
   const query: Catalog.SuggestionQuery = {
-    q: memberText(context.query, "q") ?? "",
+    q: term,
     limit: readLimit(context.query, "limit", SEARCH_SUGGESTION_LIMIT, SEARCH_SUGGESTION_LIMIT),
   };
   const response: Catalog.SearchSuggestionResponse = {
@@ -271,28 +278,47 @@ function listOrders(context: RouteContext): Common.Result<unknown> {
   return query.ok ? ok(context.source.listOrders(query.value)) : query;
 }
 
-/** The order an identifier names, decided in the order the answers matter: an identifier no order answers is
- * `404` before any credential or session is judged, because the session's own refusal would misdirect a
- * mistyped confirmation address to a sign-in and would let a response be read to learn whether an identifier
- * exists. An order that names no account is then answered to the caller holding the credential minted when it
- * was placed ({@link holdsGuestOrderCredential}), which is all a session-less buyer's own confirmation holds,
- * or to an administrator; every other caller is refused exactly as a foreign account-owned order is — the
- * dispatcher's own `sessionProblem` for a caller whose session cannot be resolved, and the same `404` an
- * identifier no order holds answers for a caller the order does not belong to. A foreign id is therefore
- * `404`, never `403`, and the level admits a session-less caller. */
+/** The order an identifier names, decided in the order the answers matter rather than the order the facts are
+ * known in, so that no answer tells a caller who cannot present a usable credential whether an identifier
+ * exists at all:
+ *
+ * 1. An account-less order presented with the credential recorded for it when it was placed is answered. That
+ *    credential is all a session-less buyer's own confirmation holds, and it is the only caller answered
+ *    without a session.
+ * 2. A caller whose session the store resolved is answered by ownership: its own order, or any order for an
+ *    administrator. Every other combination — another account's order, and an identifier no order holds — is
+ *    the one `404`, so a response cannot be read to learn which order identifiers exist.
+ * 3. Every other caller — one presenting no credential at all, one presenting a session token the store could
+ *    not resolve, and one presenting a foreign or lapsed placement credential — is refused identically, with
+ *    the refusal the session lookup earned. For a request that presented nothing that is the `401`
+ *    `unauthenticated` this endpoint answers a session-less caller, so an identifier an order holds and one it
+ *    does not are answered alike; a foreign id is never `403`.
+ *
+ * The answers are exactly the `401`, `403` and `404` the endpoint's contract allows: the `403` belongs to the
+ * routes that gate a level before a handler runs, and answering a foreign order with it here would tell the
+ * caller the record exists. */
 function getOrder(context: RouteContext): Common.Result<unknown> {
   const orderId = context.params.id as Common.OrderId;
   const order = context.source.getOrder(orderId);
-  if (order === undefined) return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
-  // The placement credential is judged before the session, because it is all a session-less buyer's own
-  // confirmation holds; it proves the order was created here and refuses everyone else just as below.
-  if (order.customerId === null && holdsGuestOrderCredential(orderId, context.orderToken)) {
+  // The placement credential is judged before the session: it is all a session-less buyer's own confirmation
+  // holds, and it proves the order was created here.
+  if (
+    order !== undefined &&
+    order.customerId === null &&
+    holdsGuestOrderCredential(orderId, context.orderToken)
+  ) {
     return ok(order);
   }
-  if (context.sessionProblem !== null) return { ok: false, error: context.sessionProblem };
-  const session = sessionOf(context);
-  if (session.role === "admin" || order.customerId === session.customerId) return ok(order);
-  return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
+  if (context.session !== null) {
+    const session = sessionOf(context);
+    if (order === undefined) return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
+    if (session.role === "admin" || order.customerId === session.customerId) return ok(order);
+    return missing(API_ERROR_CODES.ORDER_NOT_FOUND);
+  }
+  // The refusal the lookup earned, which for a caller that presented no token is the `401 unauthenticated` it
+  // is answered with either way; the dispatcher resolves every request's token before a handler runs, so a
+  // request with no session beside it always carries that refusal.
+  return { ok: false, error: context.sessionProblem as Common.ApiError };
 }
 function registerCustomer(context: RouteContext): Common.Result<unknown> {
   const input = readRegistration(bodyOf(context));

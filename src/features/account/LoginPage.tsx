@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/LoginPage.tsx
  * Purpose: Sign-in form with inline validation and return-path preservation
- * Lines: 367
+ * Lines: 370
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -32,9 +32,9 @@ import type { ApiError, FieldErrors, SessionToken } from "@/types/common";
 import { FORM_ERROR_KEY, clearFieldError, hasErrors, validateSignIn } from "@/utils/validation";
 
 /*
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only
- * importer of `src/styles/**` — so every class below is consumed by name. `src/styles/account.css` owns
- * the sign-in family: `sp-auth` for the centred region, `sp-auth__panel` for the single panel on the
+ * Class contract. The sheets owe this screen the sign-in family it renders, the geometry its route sits in
+ * and the primitives' skins. `src/styles/account.css` owns the sign-in family: `sp-auth` for the centred
+ * region, `sp-auth__panel` for the single panel on the
  * `sp-card` frame `src/styles/data-display.css` declares, `sp-auth__header`, `sp-auth__title` (this
  * screen's `<h1>`), `sp-auth__lede`, `sp-auth__form` for the field grid, `sp-auth__alert` for the slot the
  * form-level failure sits in, and `sp-auth__switch` for the line across to registration. The panel carries
@@ -264,6 +264,9 @@ export function LoginPage(): ReactElement {
       // Both halves of the refusal come from `src/lib/authService.ts`: the field map places a complaint on
       // the control the store named, and the canonical sentence is what the form-level alert shows. A
       // refused sign-in names no member, so the sentence belongs to the form rather than to a field.
+      // The refusal drops the password, so no refused attempt leaves a credential readable in the form, and
+      // keeps the address for the visitor to correct; the path that succeeds unmounts the form, so the two agree.
+      setCredentials((current) => ({ ...current, password: "" }));
       setFailure(answer.error);
       setErrors(toAuthFieldErrors(answer.error));
       return;

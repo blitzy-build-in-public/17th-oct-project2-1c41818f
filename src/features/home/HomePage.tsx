@@ -25,9 +25,9 @@ import { DEFAULT_FILTER_STATE, filtersToPath, toggleFacetValue } from "@/utils/q
 /*
  * Class contract.
  *
- * No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every class
- * below is consumed by name, and this comment is the list the sheets owe this file. `src/styles/layout.css`
- * owns the page: `sp-page` is a route's column of blocks at one rhythm, `sp-page--flush` cancels the application
+ * This comment is the list the sheets owe this file, each class named with the sheet that declares it.
+ * `src/styles/layout.css` owns the page: `sp-page` is a route's column of blocks at one rhythm,
+ * `sp-page--flush` cancels the application
  * region's opening padding so the hero band meets the header — the one page whose first band is full-bleed —
  * and `sp-container` is the width and gutter the two data bands between them sit in. `sp-stack` is the shared
  * rhythm this file gives the band's two actions.
@@ -195,8 +195,8 @@ function categoryTilesFrom(facets: readonly Facet[]): readonly CategoryTile[] {
  * read that met it, rather than being turned into a second request that fails the same way. The signal travels
  * into both, so a navigation away from the route cancels whichever request is outstanding.
  *
- * The strip is cut to `RELATED_PRODUCTS_LIMIT`, the configured small-count literal nearest this use: the plan
- * declares no home-specific strip length, `src/constants/config.ts` owns every configured number, and the
+ * The strip is cut to `RELATED_PRODUCTS_LIMIT`, the configured small-count literal nearest this use: no
+ * home-specific strip length is configured, `src/constants/config.ts` owns every configured number, and the
  * endpoint accepts only the configured page sizes — so the request is paged at the state's default size and the
  * page keeps its leading products, which is a choice about what to display rather than a figure computed here.
  *

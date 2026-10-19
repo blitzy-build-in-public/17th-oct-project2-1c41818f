@@ -1,12 +1,13 @@
 /**
  * Path: tests/unit/utils/queryParams.test.ts
  * Purpose: Filter state to URL and back, with normalisation and default omission
- * Lines: 508
+ * Lines: 537
  */
 
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "@/constants/config";
+import { readFilterState as readRequestFilterState, splitRequest } from "@/lib/apiRequests";
 import { FACET_DEFINITIONS, SORT_OPTIONS, type FacetDefinition } from "@/constants/taxonomy";
 import type { FacetId, FilterState } from "@/types/catalog";
 import {
@@ -504,5 +505,33 @@ describe("the applied-filter chips", () => {
       expect(countActiveFilters(without)).toBe(before - 1);
       expect(activeFilterEntries(without)).not.toContainEqual(entry);
     }
+  });
+});
+
+// The reading the transport shares with the URL reader -----------------------------------------------
+
+/** The query record the seam reads a listing request's members from, built the way the seam's own path
+ *  splitter builds it: a repeated key becomes the list of its occurrences. */
+function requestQuery(search: string): Record<string, unknown> {
+  return splitRequest(`/api/products${search}`, undefined).query;
+}
+
+/** Addresses a hand-made listing may carry, each holding only members the vocabulary can read, so the
+ *  transport's own reader has to answer with the state the URL reader answers with. A member the vocabulary
+ *  cannot read is refused by the transport instead, which its own suite asserts. */
+const SHARED_READINGS = [
+  "?q=lamp&categoryIds=cat_laptops%2Ccat_audio&brandIds=brd_northcrest&minPrice=5000&maxPrice=9999&minRating=4&inStock=true&tags=lighting&sort=price-asc&page=3&pageSize=24",
+  "?q=%20%20lamp%20%20&categoryIds=cat_audio&categoryIds=cat_audio&tags=%20lighting%20&sort=",
+  "?minPrice=0&maxPrice=0&inStock=false&page=0&pageSize=7",
+  "?minPrice=999999999&maxPrice=5000&minRating=5&inStock=1&page=2.7&pageSize=48",
+  "?q=&minRating=1&sort=relevance",
+  "",
+];
+
+describe("the reading the transport and the URL reader share", () => {
+  it.each(SHARED_READINGS)("reads %s as the URL reader reads it", (search) => {
+    const read = readRequestFilterState(requestQuery(search));
+    if (!read.ok) throw new Error(`The transport refused ${search} with ${read.error.code}.`);
+    expect(read.value).toEqual(readFilterState(search));
   });
 });

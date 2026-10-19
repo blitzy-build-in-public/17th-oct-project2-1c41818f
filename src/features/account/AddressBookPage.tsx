@@ -44,8 +44,8 @@ import type { AddressId, FieldErrors, Result } from "@/types/common";
 import { FORM_ERROR_KEY, hasErrors, validateAddress } from "@/utils/validation";
 
 /*
- * Class contract. `src/styles/account.css` is the sole definition site of the address-book family and no
- * file under `src/features/**` imports a stylesheet, so every class here is consumed by name:
+ * Class contract. `src/styles/account.css` is the sole definition site of the address-book family, and this
+ * list is what the sheets owe the file, each class named with the sheet that declares it:
  * `sp-address-grid` for the card grid, which holds as many label-wide cards as its column fits, and
  * `sp-address-card` with its `__header`, `__label`, `__badges`, `__body`, `__defaults` and `__actions` parts on
  * the `sp-card` frame.

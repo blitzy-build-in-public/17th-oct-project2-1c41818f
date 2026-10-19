@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/apiRoutes.test.ts
- * Purpose: The route table's own decisions, driven through the bound seam: the order submission's card and body reading, and the refusals a hand-made request is answered with.
- * Lines: 598
+ * Purpose: The route table's own decisions, driven through the bound seam: the order submission's card and body reading, what a submission is remembered under, and the refusals a hand-made request is answered with.
+ * Lines: 597
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -346,31 +346,29 @@ describe("a body the order endpoint refuses", () => {
 // The session a submission is remembered under -------------------------------------------------------
 
 describe("what a submission is remembered under", () => {
-  it("forgets a token's submissions once the token names no live session", async () => {
-    const session = await signIn(SHOPPER_EMAIL);
-    const snapshot = await pricedSnapshot();
-    const body = submission(snapshot, "key-token", CARDS[0].number);
-    const carried = as(session);
+  it("refuses a token no session answers, and drops a lapsed session's memory of its keys", async () => {
+    const carried = as(await signIn(SHOPPER_EMAIL));
+    const body = submission(await pricedSnapshot(), "key-token", CARDS[0].number);
     const placed = await valueOf(postJson<Order>(ORDERS, body, carried));
-    expect(placed.customerId).toBe(session.customerId);
-    // While the session is live, the same key under the same token replays the order it created rather
-    // than placing a second: that is what the memory the endpoint keeps is for.
+    // While the session is live the same key under the same token replays the order it created, and a token
+    // no session answers is refused without placing anything: a buyer whose session lapsed is told to sign in
+    // again rather than handed an account-less order their history will never hold.
     expect((await valueOf(postJson<Order>(ORDERS, body, carried))).id).toBe(placed.id);
-
-    // The session passes its expiry without anyone signing out, and the same token arrives again: the
-    // submission is read as the guest submission it has become, and because the token names no live
-    // session, what it remembered is dropped as that request is read.
+    const refused = await refusalOf(
+      postJson(ORDERS, body, { sessionToken: "ses_absent" }),
+      "a token no session answers",
+    );
+    expect([refused.status, refused.code]).toEqual([401, API_ERROR_CODES.SESSION_UNKNOWN]);
+    expect(firstOf(source.getRecentOrders(1)).id).toBe(placed.id);
+    // The session passes its expiry without anyone signing out: the same token is refused for want of it, and
+    // what it remembered is dropped as the request is read; with the clock back, it is placed afresh.
     const live = Date.now();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(live + SESSION_TTL_MS + 1);
-    const asGuest = await valueOf(postJson<Order>(ORDERS, body, carried));
-    expect([asGuest.customerId, asGuest.id === placed.id]).toEqual([null, false]);
-
-    // The clock returns to the instant the session is live at once more: the identical submission is
-    // placed afresh rather than replayed from the memory the expired request found keyed by this token.
+    const expired = await refusalOf(postJson(ORDERS, body, carried), "an expired session");
+    expect([expired.status, expired.code]).toEqual([401, API_ERROR_CODES.SESSION_EXPIRED]);
     vi.setSystemTime(live);
     const afterExpiry = await valueOf(postJson<Order>(ORDERS, body, carried));
-    expect(afterExpiry.customerId).toBe(session.customerId);
     expect(afterExpiry.id).not.toBe(placed.id);
     vi.useRealTimers();
   });
@@ -578,7 +576,8 @@ describe("the reads the same routes answer", () => {
       REVIEW_TITLE,
       REVIEW_BODY,
     ]);
-    expect(written.customerId).toBe(customer.customerId);
+    // The review list is public, so the row carries the reviewer's display name and never their full name.
+    expect([written.customerId, written.customerName]).toEqual([customer.customerId, "Dana O."]);
     const after = await valueOf(getJson<PageResult<Review>>(pathFor(REVIEWS, product.id)));
     expect(after.total).toBe(before.total + 1);
   });

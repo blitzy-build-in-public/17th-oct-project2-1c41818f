@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartSummary.tsx
  * Purpose: Totals panel with promo-code entry, discount lines and free-shipping progress
- * Lines: 435
+ * Lines: 434
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -38,9 +38,8 @@ import {
 } from "@/utils/validation";
 
 /*
- * Class contract, consumed by name because no file under `src/features/**` imports a stylesheet —
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/summary-panel.css` owns this
- * panel's register, split out of `src/styles/commerce.css`, which loads it with `@import`: `sp-summary`
+ * Class contract. `src/styles/summary-panel.css` owns this panel's register, split out of
+ * `src/styles/commerce.css`, which loads it with `@import`: `sp-summary`
  * with its padding and rhythm, `sp-summary__title`, `sp-summary__promo` (the field, its apply control,
  * the reason, the applied code's row and the notice, each placed as a row of the band — the label and the
  * control of the field and the apply control on the band's own two columns, and the reason, the applied row

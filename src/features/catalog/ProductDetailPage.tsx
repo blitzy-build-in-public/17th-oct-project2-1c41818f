@@ -52,8 +52,8 @@ import { indexBy } from "@/utils/collections";
 import { formatAvailability, formatRating } from "@/utils/format";
 
 /*
- * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every
- * class below is consumed by name. `src/styles/catalog-detail.css`, loaded by `src/styles/catalog.css` with
+ * Class contract. This list is what the sheets owe the page, each class named with the sheet that declares it.
+ * `src/styles/catalog-detail.css`, loaded by `src/styles/catalog.css` with
  * `@import`, is the sole definition site of this surface: `sp-product-detail` with its `__main`, `__aside`,
  * `__meta`, `__rating`, `__price`, `__stock`, `__actions` and `__sections` parts, the `sp-specs` definition list
  * with its `__row`, `__term` and `__value`, the `sp-features` list with its `__item` marker, and the `sp-related`

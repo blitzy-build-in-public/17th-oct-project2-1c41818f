@@ -14,8 +14,8 @@ import { HEADER_COPY, NOT_FOUND_COPY } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class below is consumed by name. `src/styles/layout.css` owns the page geometry the view is laid
+ * Class contract. No stylesheet is imported here, so every class below is consumed by name.
+ * `src/styles/layout.css` owns the page geometry the view is laid
  * out in (`sp-container`, `sp-page`); `src/styles/controls.css` owns the button family its two ways out take,
  * as `sp-btn` with the `--primary` and `--secondary` modifiers, and the `sp-btn-group--align-center` rule that
  * packs the group to the middle of the page; and the empty state's own parts (`sp-empty`, `sp-empty__title`,

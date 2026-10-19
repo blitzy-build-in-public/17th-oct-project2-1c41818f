@@ -92,8 +92,8 @@ export interface ChartDataTableProps {
  *
  * @param props - The caption and the ids that describe the drawing, the column headings and their keys, the
  * rows to render and the collection the paging caption counts.
- * @returns The table, in the markup the three renderers drew inline before this component held it, and the
- * paging control beneath it once its rows need more than one page.
+ * @returns The table, as real table markup, and the paging control beneath it once its rows need
+ * more than one page.
  */
 export const ChartDataTable = memo(function ChartDataTable({
   caption,

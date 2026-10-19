@@ -4,12 +4,12 @@
  * Lines: 126
  */
 
-// Not a path the plan maps on its own: it is a §0.5.5 split path of `src/data/repositories.ts`, the same way
+// Not a path the tree maps on its own: it is a split path of `src/data/repositories.ts`, the same way
 // `src/data/collectionStore.ts` is that file's store half. The data source's own 33-member contract plus this
-// concern cannot both sit inside the request's 600-line ceiling, and the ceiling is never raised, so the concern
-// was split out rather than the file trimmed: it is the part of the data source's reach that no store state
-// touches, which is exactly what makes it movable. Nothing here knows about a store — it resolves three modules
-// and hands their members to the read that asked for them.
+// concern cannot both be held in one file under the 600-line ceiling, and the ceiling is never raised, so the
+// concern was split out rather than the file trimmed: it is the part of the data source's reach that no store
+// state touches, which is exactly what makes it movable. Nothing here knows about a store — it resolves three
+// modules and hands their members to the read that asked for them.
 
 import { FEEDBACK_COPY } from "@/constants/content";
 import { accept } from "@/data/collectionStore";

@@ -46,8 +46,8 @@ import { formatNumber } from "@/utils/format";
  *
  * The page-size wording and the collection noun are supplied rather than invented: `PAGE_SIZE_LABEL` names the
  * selector for what it changes, and `PAGING_NOUNS` names the collection a caption counts, both from
- * `src/constants/content.ts`. The selector therefore no longer answers to the pagination area's own name, and
- * no order history, reviews list or report table counts "products".
+ * `src/constants/content.ts`. The selector's label and the collection noun come from the caller, so no
+ * surface counts another surface's noun.
  */
 
 /** The gap between two runs of page buttons: an ellipsis to sighted readers, hidden from assistive technology. */

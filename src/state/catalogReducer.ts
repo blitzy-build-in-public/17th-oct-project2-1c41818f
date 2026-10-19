@@ -1,11 +1,12 @@
 /**
  * Path: src/state/catalogReducer.ts
  * Purpose: Catalogue load transitions tagged with the query fingerprint that produced them
- * Lines: 259
+ * Lines: 255
  */
 
 import type { Facet, FilterState, Product } from "@/types/catalog";
 import type { ApiError, AsyncStatus, IsoDateTimeString, PageResult } from "@/types/common";
+import { assertNever } from "@/utils/exhaustive";
 import { writeFilterState } from "@/utils/queryParams";
 
 // State -----------------------------------------------------------------------------------------
@@ -196,7 +197,7 @@ export function catalogReducer(state: CatalogState, action: CatalogAction): Cata
     }
 
     default: {
-      return assertNever(action);
+      return assertNever(action, "catalogue action");
     }
   }
 }
@@ -251,9 +252,4 @@ function isSameApiError(current: ApiError | null, candidate: ApiError): boolean 
     current.message === candidate.message &&
     current.field === candidate.field
   );
-}
-
-/** Proof at compile time that every action was handled: a member added later fails to build here. */
-function assertNever(value: never): never {
-  throw new Error(`Unhandled catalogue action: ${JSON.stringify(value)}`);
 }

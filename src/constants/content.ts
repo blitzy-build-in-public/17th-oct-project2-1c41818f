@@ -141,6 +141,8 @@ export const CATALOG_COPY = {
   REVIEW_FORM_TITLE_LABEL: "Review title",
   REVIEW_FORM_BODY_LABEL: "Your review",
   REVIEW_FORM_SUBMIT_LABEL: "Submit review",
+  REVIEW_FORM_NAME_NOTICE:
+    "Your review is public: it shows your first name and your last initial, not your full name.",
   WRITE_REVIEW_LABEL: "Write a review",
   SIGN_IN_TO_REVIEW_LABEL: "Sign in to write a review",
   ANY_RATING_LABEL: "Any rating",
@@ -329,13 +331,13 @@ export const cartItemCountLabel = (count: number): string =>
     ? "Nothing in your cart yet"
     : `${count} ${countNoun(count, "item", "items")} in your cart`;
 
-// Checkout and confirmation: §0.5.5 split into checkoutCopy.ts ----------------------------------
+// Checkout and confirmation copy, split out to checkoutCopy.ts -----------------------------------
 export * from "./checkoutCopy";
 
-// Accounts: §0.5.5 split into content-account.ts ------------------------------------------------
+// Accounts copy, split out to content-account.ts -------------------------------------------------
 export * from "./content-account";
 
-// Dashboard and reports: §0.5.5 split into content-reports.ts -----------------------------------
+// Dashboard and reports copy, split out to content-reports.ts ------------------------------------
 export * from "./content-reports";
 
 // Shared actions --------------------------------------------------------------------------------
@@ -366,15 +368,12 @@ export const COMMON_ACTIONS = {
 } as const;
 
 // Feedback, empty states and the error boundary -------------------------------------------------
-// The outcome messages, `EMPTY_STATES` and `NOT_FOUND_COPY` are written in
-// `src/constants/feedbackCopy.ts` and re-exported below, because that concern carried this file past
-// the request's 600-line ceiling, which is never raised. Every consumer's path stays this one. The
-// same concern also lives in `src/constants/content-feedback.ts`, star-exported at the foot of this
-// file; `FEEDBACK_COPY` itself is taken from there, because that copy is the one carrying the
-// review-submitted toast, so a sentence a consumer reads through this path always resolves.
+// The register lives in `src/constants/content-feedback.ts` and is re-exported below, so this file
+// stays inside the 600-line ceiling while every consumer's path stays this one.
 
 export {
   EMPTY_STATES,
+  FEEDBACK_COPY,
   NOT_FOUND_COPY,
   addedToCartMessage,
   orderPlacedMessage,
@@ -382,8 +381,7 @@ export {
   signedInMessage,
   type EmptyStateCopy,
   type EmptyStateKey,
-} from "@/constants/feedbackCopy";
-export { FEEDBACK_COPY } from "@/constants/content-feedback";
+} from "./content-feedback";
 
 // Accessibility, validation and promo-code messages ---------------------------------------------
 /** Words assistive technology reads and sighted visitors do not. Consumers: the landmark owners. */
@@ -432,6 +430,7 @@ export const VALIDATION_MESSAGES = {
   REVIEW_TITLE_LENGTH: "Give the review a title, or shorten the one you wrote.",
   REVIEW_BODY_LENGTH: "Write a review long enough to be useful, or shorten it.",
   PROMO_CODE_FORMAT: "Enter a code made of letters and numbers only.",
+  CONTROL_CHARACTERS: "Remove the control characters from this field.",
 } as const;
 /** One rule a field can break, derived from {@link VALIDATION_MESSAGES}. */
 export type ValidationMessageKey = keyof typeof VALIDATION_MESSAGES;
@@ -449,7 +448,11 @@ export const reviewTitleLengthMessage = (minValue: number, maxValue: number): st
 /** States the length a review body must fall between, from both bounds. */
 export const reviewBodyLengthMessage = (minValue: number, maxValue: number): string =>
   `Write between ${minValue} and ${maxValue} characters.`;
-/** States the ceiling a name may not pass, from the bound `src/utils/validation.ts` owns. */
+/** States the length a promo code must fall between, from both bounds. */
+export const promoCodeLengthMessage = (minValue: number, maxValue: number): string =>
+  `Use between ${minValue} and ${maxValue} characters for the code.`;
+/** States the ceiling any bounded field may not pass — a name, an address part, a label or the search term —
+ * from the bound `src/utils/validation.ts` owns. */
 export const nameLengthMessage = (max: number): string => `Use ${max} characters or fewer.`;
 
 /** What a shopper is told when a promo code will not apply, per `PromoRejectionReason`. */
@@ -474,6 +477,3 @@ export const promoMinimumShortfallMessage = (formattedShortfall: string): string
  */
 export const IDEMPOTENCY_CONFLICT_MESSAGE =
   "That submission key was already used for a different order.";
-
-// Feedback and empty states: §0.5.5 split into content-feedback.ts ---------------------------------
-export * from "./content-feedback";

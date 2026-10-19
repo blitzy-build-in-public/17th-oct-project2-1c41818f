@@ -9,13 +9,12 @@
  * progress label, the promo band that places the field's label, control and message on the band's own grid
  * beside the apply control, the applied-code row, the progress and shipping bands, the method rows and the
  * actions block. Split out of src/styles/commerce.css, which loads this sheet with @import ahead of its own
- * rules, because that sheet's register no longer fitted the request's 600-line ceiling; the plan's remedy for a
- * concern that cannot fit is the split, never the ceiling. A CSS @import is inlined where it sits, so these
- * rules hold the cascade position they held inside commerce.css — no rule left in that sheet meets a
- * .sp-summary* or .sp-address-picker__option selector — and src/main.tsx still imports the eight mapped
- * stylesheets in their existing order, no ninth path added. The two `.sp-address-picker__option` rules travel
- * with the panel, because the checkout's saved-address row and its shipping-method row are one frame shared by
- * two surfaces. Every value is a var() from tokens.css.
+ * rules; the concern is split because one file may not exceed 600 lines, and the ceiling is never raised.
+ * A CSS @import is inlined where it sits, so these rules hold the cascade position they held inside
+ * commerce.css — no rule left in that sheet meets a .sp-summary* or .sp-address-picker__option selector — and
+ * src/main.tsx still imports the eight mapped stylesheets in their existing order, no ninth path added. The two
+ * `.sp-address-picker__option` rules travel with the panel, because the checkout's saved-address row and its
+ * shipping-method row are one frame shared by two surfaces. Every value is a var() from tokens.css.
  */
 
 /* ==== Order summary panel ==== */
@@ -89,6 +88,7 @@
   grid-area: 2 / 2;
 }
 .sp-summary__promo > .sp-field > .sp-field__error,
+.sp-summary__promo > .sp-field__error,
 .sp-summary__promo > .sp-summary__applied,
 .sp-summary__promo > .sp-alert {
   grid-column: 1 / -1;

@@ -16,8 +16,8 @@ import type { AsyncStatus, ApiError } from "@/types/common";
 /*
  * Class contract.
  *
- * No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every class
- * below is consumed by name. `src/styles/catalog-landing.css` owns the band: `sp-category-showcase` for the
+ * This list is what the sheets owe the band, each class named with the sheet that declares it.
+ * `src/styles/catalog-landing.css` owns the band: `sp-category-showcase` for the
  * section's own rhythm, `sp-category-showcase__subtitle` for the supporting line under its heading, which is
  * the muted register the same role takes on every other surface, `sp-category-tiles` for the grid that draws
  * two columns on a phone, three from --breakpoint-sm and four from --breakpoint-md, and the tile's

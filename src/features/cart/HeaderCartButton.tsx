@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/HeaderCartButton.tsx
  * Purpose: The header's cart trigger: the basket's count and the mini-cart disclosure, composed into the header by the shell
- * Lines: 89
+ * Lines: 100
  */
 
 import type { ReactElement } from "react";
@@ -26,10 +26,9 @@ import { useCart, useCartDispatch, useMiniCartOpen } from "@/state/CartContext";
  * quantity edit, a removal — re-renders this button alone: the wordmark, the primary navigation, the search row
  * and the account menu beside it are not re-rendered, and neither is the routed page under the shell.
  *
- * Class contract. No file under `src/features/**` imports a stylesheet — `src/main.tsx` is the only importer of
- * `src/styles/**` — so the two classes below are consumed by name and are `src/styles/layout.css`'s:
- * `.sp-cart-button` is the trigger itself, and `.sp-cart-badge` is the count it carries, which the sheet renders
- * only beside a non-empty basket. No colour, length, radius or breakpoint of this file's own appears here.
+ * Class contract. Both classes below are `src/styles/layout.css`'s: `.sp-cart-button` is the trigger itself, and
+ * `.sp-cart-badge` is the count it carries, which the sheet renders only beside a non-empty basket. No colour,
+ * length, radius or breakpoint of this file's own appears here.
  */
 
 /**
@@ -61,6 +60,19 @@ export function HeaderCartButton(): ReactElement {
   const itemCount = selectItemCount(lines);
 
   return (
+    /*
+     * Why this control is a raw button rather than one of the shared primitives. A feature file composes the
+     * controls in `src/components/ui`, and this one is the exception, because `src/styles/layout.css` declares
+     * the whole of its appearance in the rule it shares with the account menu's trigger beside it: the
+     * trigger's box, the corner the badge is anchored in and the inline-end padding that pays for that badge
+     * are all that sheet's, and it reaches the page before the primitive family does — the family's
+     * `src/styles/controls.css` arrives through the `@import` in `src/styles/components.css`. Both rules are
+     * one class deep, so the later one wins: a composed control would take `sp-btn`'s padding shorthand over
+     * the sheet's inline-end padding, the family's label type size and a variant's colour over the sheet's own
+     * type and colour, and the badge would print over the label it is paid to sit beside. The two classes stay
+     * on the element itself, which keeps the sheet the single definition site of the trigger's look and this
+     * file to its behaviour and its labels.
+     */
     <button
       aria-expanded={isMiniCartOpen}
       aria-haspopup="dialog"
@@ -74,8 +86,7 @@ export function HeaderCartButton(): ReactElement {
       {HEADER_COPY.NAV_CART_LABEL}
       {/* A real separator text node, not layout: the WCAG 2.5.3 audit compares the accessible name with the
           element's own text nodes concatenated, and the absolutely positioned badge would otherwise read as
-          "Cart1" beside the name "Cart 1 item". A whitespace-only text run is not rendered by a flex container,
-          so the button looks exactly as it did. */}
+          "Cart1" beside the name "Cart 1 item". A whitespace-only text run is not rendered by a flex container. */}
       {itemCount > 0 ? (
         <>
           {" "}

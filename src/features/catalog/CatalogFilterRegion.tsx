@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogFilterRegion.tsx
  * Purpose: Catalogue facet panel: the five facet groups over the catalogue's own facet response, as the sticky column or the drawer body
- * Lines: 261
+ * Lines: 260
  */
 
 import type { ReactElement, ReactNode, RefObject } from "react";
@@ -28,10 +28,9 @@ import { activeFilterEntries, facetValueMatches } from "@/utils/queryParams";
 import type { ActiveFilterEntry } from "@/utils/queryParams";
 
 /*
- * Class contract: no stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so
- * every class below is consumed by name from the sheet that owns it: `catalog.css`, and the `catalog-landing.css`
- * it loads, style the catalogue's own facet blocks. Every primitive below paints itself, so no colour, radius,
- * shadow or media query is here.
+ * Class contract. The classes below belong to the sheets that declare them — `catalog.css`, and the
+ * `catalog-landing.css` it loads — which style the catalogue's own facet blocks. Every primitive below paints
+ * itself, so no colour, radius, shadow or media query is here.
  */
 
 /** The classes used more than once, written once so a sheet rename is one edit. */

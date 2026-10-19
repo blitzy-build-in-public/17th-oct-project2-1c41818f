@@ -14,8 +14,8 @@ import type { FieldErrors, OptionGroup, SelectOption } from "@/types/common";
 /**
  * The class contract this family renders against.
  *
- * No stylesheet may be imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every
- * class below is consumed by name, and this list is what `src/styles/controls.css` owes the file: `sp-field`
+ * No stylesheet may be imported here, so every class below is consumed by name, and this list is what
+ * `src/styles/controls.css` owes the file: `sp-field`
  * and its `__label`, `__hint` and `__error` for the field anatomy — the label `FormField` renders and the
  * hint and error rows `src/components/ui/Input.tsx` renders through `FieldHint` and `FieldError` for this
  * file's controls as well; `sp-select` and `sp-select__wrap` for the native list and the element that hosts

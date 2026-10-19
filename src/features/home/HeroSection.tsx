@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/HeroSection.tsx
  * Purpose: The landing hero: headline, supporting copy and the primary calls to action
- * Lines: 197
+ * Lines: 196
  */
 
 import type { ReactElement } from "react";
@@ -14,9 +14,8 @@ import { ROUTES } from "@/constants/routes";
 /**
  * The class contract this section renders against.
  *
- * No stylesheet may be imported here — `src/main.tsx` is the only importer of `src/styles/**`
- * — so every class below is consumed by name, and this comment is the list the stylesheets owe
- * the file: `sp-hero`, `sp-hero__inner`, `sp-hero__copy`, `sp-hero__eyebrow`, `sp-hero__title`,
+ * This comment is the list the stylesheets owe the file, each class named with the sheet that declares
+ * it: `sp-hero`, `sp-hero__inner`, `sp-hero__copy`, `sp-hero__eyebrow`, `sp-hero__title`,
  * `sp-hero__body`, `sp-hero__actions`, `sp-hero__action` and `sp-hero__media` (catalog.css) for
  * the hero band, its centred container, its copy and its two-column reflow; the `sp-hero__art*`
  * classes below for the illustration; `sp-btn` with `sp-btn--primary` and `sp-btn--secondary`
@@ -133,7 +132,7 @@ function HeroArtwork(): ReactElement {
  * It takes no props and reads no context, because it renders the same for every visitor: the
  * landing page's own read of the catalogue supplies the featured products and the category tiles,
  * and this section is static copy above them. That is also why the route's single `<h1>` lives
- * here — §0.6.4 allows one heading level 1 per page, and the landing page has no page header to
+ * here — one page carries one heading level 1, and the landing page has no page header to
  * carry one.
  *
  * Both calls to action are `Link`s rather than buttons: they navigate, so they keep a link's

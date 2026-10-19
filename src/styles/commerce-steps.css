@@ -1,16 +1,15 @@
 /* Path: src/styles/commerce-steps.css
  * Purpose: Styles for the checkout's ordered step indicator, split out of src/styles/commerce.css, which loads this sheet with @import
- * Lines: 122
+ * Lines: 121
  */
 
 /* The step indicator family, and the sole definition site of the .sp-steps* classes
  * src/features/checkout/CheckoutSteps.tsx renders. Split out of src/styles/commerce.css, which loads this sheet
- * with @import and holds the family's responsive override in its medium-stop block, because the sheet had reached
- * 607 lines and cannot hold this family and the rest of the cart and checkout contract inside the request's
- * 600-line ceiling; the plan's remedy for a concern that cannot fit is the split, never the ceiling, and this
+ * with @import at the position the moved rules held and holds the family's responsive override in its medium-stop
+ * block: the concern is split because one file may not exceed 600 lines, and the ceiling is never raised. This
  * family is the one its sheet gives up whole. A CSS @import is inlined where it sits, so these rules hold the
- * cascade position they held inside commerce.css: src/main.tsx still imports the eight mapped stylesheets, no file
- * under src/features/** imports a stylesheet, and every class here is consumed by name.
+ * cascade position they held inside commerce.css: src/main.tsx still imports the same eight mapped stylesheets with
+ * no ninth path anywhere, no file under src/features/** imports a stylesheet, and every class here is consumed by name.
  * State is carried by the attribute and the modifier the component writes, as the other sheets carry it: the
  * current step by `[aria-current="true"]` and by `.sp-steps__item--current`, the completed one by
  * `.sp-steps__item--done`. Every value is a var() from tokens.css, except inside a forced-colours block, where a

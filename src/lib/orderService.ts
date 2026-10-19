@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/orderService.ts
- * Purpose: Builds orders from a cart snapshot, numbers them and applies the status transitions
- * Lines: 373
+ * Purpose: Builds orders from a cart snapshot, numbers them, applies the status transitions and carries the placement credential of an account-less one
+ * Lines: 389
  */
 
 import { DEFAULT_PAGE_SIZE } from "@/constants/config";
@@ -22,7 +22,7 @@ import type {
   QueryParams,
   Result,
 } from "@/types/common";
-import { prefixedId } from "@/utils/strings";
+import { placementToken, prefixedId } from "@/utils/strings";
 import {
   FORM_ERROR_KEY,
   firstError,
@@ -72,15 +72,17 @@ const DEFAULT_ORDER_HISTORY: OrderHistoryQuery = { page: 1, pageSize: DEFAULT_PA
  * guest's, and `GET /api/orders` answers only with one, because the history it hands back belongs to
  * whoever the token authenticates. `GET /api/orders/:id` needs it for an order that names an account;
  * an account-less order is read with the credential this client remembers for it, which `orderToken`
- * overrides. `signal` cancels a request a newer one supersedes, so a page that navigates away
- * mid-request leaves nothing queued behind it.
+ * overrides. A submission needs neither member: {@link createOrder} mints the placement credential the
+ * attempt carries itself, and reads it back through this client rather than through an option. `signal`
+ * cancels a request a newer one supersedes, so a page that navigates away mid-request leaves nothing
+ * queued behind it.
  */
 export interface OrderServiceOptions {
   readonly sessionToken?: string;
   /**
-   * The order credential the caller supplies for an account-less order, overriding the one this client
-   * remembers for it: what the seam compares when it decides whether the read may be answered, absent
-   * for every caller that holds none.
+   * The order credential a read presents for an account-less order, overriding the one this client
+   * remembers for it: what the seam compares when it decides whether the read may be answered, absent for
+   * every caller that holds none.
    */
   readonly orderToken?: string;
   readonly signal?: AbortSignal;
@@ -112,10 +114,14 @@ let mintedKeys = 0;
 /**
  * Mints the key one checkout attempt is submitted under.
  *
+ * This is an **idempotency key and nothing else**: it names one attempt, and the only thing it authorises
+ * is the replay of the order that attempt created. It is deliberately readable — the order prefix, the
+ * instant the attempt was made and its counter — because a stored order's key says which placement it came
+ * from; a key is not a credential, and the credential a guest's confirmation is read with is the random
+ * value {@link createOrder} mints for the attempt, never this.
+ *
  * One key per attempt rather than per click: a retry after a failure sends the same key, so an attempt
- * that did reach the seam replays the order it created instead of placing a second. The prefix is the
- * order prefix and the suffix reads as what it is, so a stored order's key says which placement it came
- * from.
+ * that did reach the seam replays the order it created instead of placing a second.
  *
  * Two keys cannot collide — the instant separates attempts made in different milliseconds and the
  * counter below separates attempts made in the same one — and no randomness is used, so a failed case
@@ -269,11 +275,19 @@ function refusedSubmission(errors: FieldErrors): Result<never> {
  * the contact email, both address snapshots, the delivery method and the payment, and the shorthand could
  * carry none of them.
  *
- * Three things it deliberately does not do. It does not re-read or re-price the cart, because the
+ * Four things it deliberately does not do. It does not re-read or re-price the cart, because the
  * snapshot was taken before completion and an order records what the buyer reviewed. It does not decide
  * who the order belongs to, because the seam takes the owner from the session the request carries — so a
- * signed-in buyer's order lands in their history and a guest's is placed without an account. And it does
- * not build the key, which {@link createIdempotencyKey} mints per attempt and a retry sends unchanged.
+ * signed-in buyer's order lands in their history and a guest's is placed without an account. It does not
+ * build the key, which {@link createIdempotencyKey} mints per attempt and a retry sends unchanged. And it
+ * keeps the placement credential out of the request body: the credential travels as the request's own
+ * `orderToken`, so no order, payload or stored body ever carries it.
+ *
+ * The credential itself is minted here, one per attempt, by {@link placementToken} — sixteen random bytes
+ * from the browser's own generator, which no reader of the key the attempt submits under can recompute.
+ * Recording it is {@link rememberPlacement}'s decision: an order that names an account is read through its
+ * session and is given no placement, and a replayed submission leaves the first credential recorded for the
+ * order standing, so this client and the seam go on holding the same value.
  *
  * Every outcome is a value: `402` for a declined demonstration card, `409` for a key repeated with a
  * different body, `422` naming the offending control in `field` for a body that broke a field rule, and
@@ -291,14 +305,16 @@ export async function createOrder(
   if (hasErrors(errors)) {
     return refusedSubmission(errors);
   }
+  const orderToken = placementToken();
   const placed = await postJson<Order, CreateOrderRequest>(API_PATHS.ORDERS, input, {
     sessionToken: options.sessionToken,
+    orderToken,
     signal: options.signal,
   });
-  // The credential the placing client holds for an account-less order it just placed, remembered under
-  // the key the submission carried, so a later read of that order can present it.
-  if (placed.ok && placed.value.customerId === null) {
-    rememberPlacement(placed.value, input.idempotencyKey);
+  // The credential this browser holds for an account-less order it just placed, remembered under the order
+  // it created, so a later read — the confirmation after a reload, most of all — can present it.
+  if (placed.ok) {
+    rememberPlacement(placed.value, orderToken);
   }
   return placed;
 }
@@ -311,9 +327,9 @@ export async function createOrder(
  * the read carries depends on the order. An order that names an account is read with `sessionToken`,
  * and one belonging to another customer and an identifier no order holds both answer `404`,
  * deliberately the same answer, so a response cannot be read to learn which orders exist. An
- * account-less order is read with the placement credential this client holds and remembers for it —
- * the key its submission carried — which is what lets a guest's confirmation reopen after a reload;
- * an explicit `orderToken` overrides the remembered one.
+ * account-less order is read with the placement credential this client holds and remembers for it — the
+ * random value the submission that created it minted — which is what lets a guest's confirmation reopen
+ * after a reload; an explicit `orderToken` overrides the remembered one.
  *
  * @param id - The order's identifier, prefixed `ord_`.
  * @param options - The session token and the order credential, if the caller holds either.

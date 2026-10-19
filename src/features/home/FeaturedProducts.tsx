@@ -1,7 +1,7 @@
 /**
  * Path: src/features/home/FeaturedProducts.tsx
  * Purpose: The featured-products strip drawn from the seeded catalogue, with a link into the catalogue
- * Lines: 335
+ * Lines: 334
  */
 
 import type { FocusEvent, ReactElement } from "react";
@@ -20,9 +20,9 @@ import type { AsyncStatus, ApiError } from "@/types/common";
 /*
  * Class contract.
  *
- * No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` — so every class
- * below is consumed by name. `src/styles/catalog-landing.css` owns the band's own rhythm: `sp-featured` is the
- * section, which stacks its heading row, its supporting line and its strip with the sheet's gap,
+ * `src/styles/catalog-landing.css` owns the band's own rhythm, each class named with the sheet that
+ * declares it: `sp-featured` is the section, which stacks its heading row, its supporting line and its
+ * strip with the sheet's gap,
  * `sp-featured__subtitle` is that supporting line in the muted register the same role takes on every other
  * surface, and `sp-featured__header` is the heading row that closes its action to the end — the same row the
  * related strip on a product's page wears. `src/styles/catalog.css` owns the strip: `sp-product-grid` is the
@@ -127,15 +127,14 @@ interface FeaturedTilesProps {
 /**
  * Brings a tile that has just taken focus wholly inside the strip.
  *
- * The browser's own focus scroll cannot manage this alone, and the measurement at 375x800 says why: an engine
- * scrolls a focused element into view only once it lies entirely outside the scrollport. A control inside a tile
- * that is still partly on screen therefore draws no scroll at all, and the strip's `proximity` snapping does not
- * then pull the tile to the `start` position its `scroll-snap-align` declares — so a Tab walk reaches the second
- * tile's link with 35.61px of its 194.77px box showing and its quick add with 14.8% of its 240.39px box showing,
- * and the fourth tile's pair with a sliver of about 36px each. No `scroll-margin-inline` on the tiles or on the
- * controls inside them, and no `scroll-padding-inline` on the strip, changes that: the scroll such a margin would
- * correct is never issued. Scrolling the tile is what brings the whole card in, because the tile — not the control
- * inside it — is the box the strip clips.
+ * The browser's own focus scroll cannot manage this alone: an engine scrolls a focused element into view only
+ * once it lies entirely outside the scrollport. A control inside a tile that is still partly on screen therefore
+ * draws no scroll at all, and the strip's `proximity` snapping does not then pull the tile to the `start`
+ * position its `scroll-snap-align` declares, so a Tab walk reaches a tile's link and its quick add with only
+ * part of each box in view. No `scroll-margin-inline` on the tiles or on the controls inside them, and no
+ * `scroll-padding-inline` on the strip, changes that: the scroll such a margin would correct is never issued.
+ * Scrolling the tile is what brings the whole card in, because the tile — not the control inside it — is the
+ * box the strip clips.
  *
  * `inline: "start"` is the alignment that leaves the snap nothing to correct: the tile's own
  * `scroll-snap-align: start`, from the sheet, already makes its start edge the offset the strip rests at, so the
@@ -248,8 +247,8 @@ function FeaturedTiles({ products }: FeaturedTilesProps): ReactElement {
  * the strip is a selection from the catalogue rather than a result set a shopper is refining — the catalogue
  * and search pages own the announcement their filters need, and a second one here would interrupt the page a
  * visitor has just opened. Nothing is memoised: the parent hands over a handful of tiles, and the bookkeeping a
- * `useMemo` would add to derive what `Array.prototype.map` already does in a pass is the cost the plan reserves
- * memoisation for avoiding on the expensive aggregations, not on this one. And no count is rendered beside the
+ * `useMemo` would add to derive what `Array.prototype.map` already does in a pass is the cost memoisation is
+ * reserved for avoiding on the expensive aggregations, not on this one. And no count is rendered beside the
  * heading, because the band shows what it was given rather than the size of a result set — the catalogue's own
  * pages own the result count and its page-size control.
  *

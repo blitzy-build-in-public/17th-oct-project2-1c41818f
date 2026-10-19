@@ -1,21 +1,18 @@
 /* Path: src/styles/cart.css
- * Purpose: Styles for the cart, the mini-cart and the order summary panel the cart and the checkout share
- * Lines: 306
+ * Purpose: Styles for the cart page and its rows and the mini-cart, split out of src/styles/commerce.css, which loads this sheet with @import
+ * Lines: 280
  */
-/* The cart, the mini-cart and the order summary panel, split out of src/styles/commerce.css, which loads this
- * sheet with @import ahead of its own rules: that sheet's concern reached 607 lines against the request's
- * 600-line ceiling, and the plan's remedy for a concern that cannot fit is the split, never the ceiling — as
- * src/styles/controls.css, src/styles/data-display.css, src/styles/catalog-landing.css, src/styles/catalog-detail.css,
- * src/styles/tabs-accordion.css, src/styles/page-header.css and src/styles/placeholders.css already record.
- * A CSS @import is inlined where it sits, so every rule below holds the cascade position it held inside
- * commerce.css: the cart's rules still precede the checkout's, which is the order the single sheet declared
- * them in. The eight-sheet load contract is unchanged — src/main.tsx still imports the same eight mapped
- * paths, and commerce.css is this sheet's only importer.
- *
- * This sheet composes the primitives the sheets before it own — buttons, fields, choices, cards, badges, the
- * drawer, the alert, the empty state, the progress register and the quantity stepper — and restates none of
- * them; the cart and the checkout roots also carry layout.css's `.sp-split`, whose track gives them their two
- * columns.
+/* The cart register: the cart page with its rows, and the mini-cart. It is a split of src/styles/commerce.css,
+ * which loads it with `@import` ahead of its own rules, at the position these rules held inside that sheet:
+ * the concern is split because one file may not exceed 600 lines, and the ceiling is never raised. The
+ * order-summary panel register is src/styles/summary-panel.css, which commerce.css loads in turn, so this
+ * sheet declares no `.sp-summary*` rule and no `.sp-address-picker__option` rule. A CSS `@import` is inlined
+ * where it sits, so every rule below holds the cascade position it held inside commerce.css — the cart's
+ * rules still precede the checkout's — and src/main.tsx still imports the same eight mapped stylesheets in
+ * the same order, with no ninth path. This sheet composes the primitives the sheets before it own — buttons,
+ * fields, choices, cards, badges, the drawer, the alert, the empty state, the progress register and the
+ * quantity stepper — and restates none of them; the cart and the checkout roots also carry layout.css's
+ * `.sp-split`, whose track gives them their two columns.
  */
 
 /* ==== Cart layout ==== */
@@ -23,12 +20,16 @@
 .sp-cart {
   row-gap: var(--space-8);
 }
-/* One frame around the rows, each row drawing its own separator, so a list of one row or of none shows no rule. */
+/* One frame around the rows, each row drawing its own separator, so a list of one row or of none shows no rule.
+ * The frame is the summary panel's peer in the same `.sp-split`, and the two already share their surface, their
+ * hairline and their radius, so they take the card register's first elevation alike: measured, the summary
+ * computed rgba(16, 24, 40, 0.12) 0 1px 2px against this frame's none. */
 .sp-cart__lines {
   display: grid;
   background-color: var(--color-surface);
   border: var(--border-width) solid var(--color-border-subtle);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
 }
 /* The cart's and the checkout's summary column: the aside track's width, and a panel that sticks below the header at
  * the large stop, bounded to the viewport so its actions never fall past the fold. */
@@ -44,6 +45,15 @@
     inset-block-start: calc(var(--layout-header-height) + var(--space-4));
     max-block-size: calc(100dvh - var(--layout-header-height) - var(--space-8));
     overflow-y: auto;
+  }
+  /* A sticky box is confined by its containing block, which is its grid area here: with the aside the frame's own
+   * tallest child, the travel left to it was exactly zero and the panel scrolled away instead of pinning —
+   * measured, a 495.17px aside in a 495.17px frame moved from top 296.69 to -76.31 over a 373px scroll. A frame a
+   * viewport tall below the header gives that column somewhere to pin; measured with this rule, the aside held top
+   * 80px through 308.83px of scrolling. Scoped to the cart: the checkout's frame outruns its aside already, and the
+   * sticky declaration above stays shared between them. */
+  .sp-cart {
+    min-block-size: calc(100dvh - var(--layout-header-height) - var(--space-8));
   }
 }
 /* The empty cart and the empty drawer: the shared empty-state primitive, tightened to the panel and the drawer. */
@@ -69,11 +79,14 @@
 .sp-cart-row + .sp-cart-row {
   border-block-start: var(--border-width) solid var(--color-border-subtle);
 }
-/* The square thumbnail: an <img> the row sizes, with object-fit holding the product image inside it. */
+/* The thumbnail: an <img> the row sizes at the ratio the catalogue card and the detail sheet present the same
+ * 800x600 art in. A square cover window over it showed only the middle band, so the rows rendered sliced
+ * fragments of the mark ("J" of "SJ", "TL", "NT"), where the 4:3 box fits it whole. */
 .sp-cart-row__media {
   grid-area: media;
   inline-size: calc(var(--space-20) + var(--space-4));
-  block-size: calc(var(--space-20) + var(--space-4));
+  block-size: auto;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: var(--radius-sm);
 }
@@ -83,7 +96,9 @@
   gap: var(--space-1);
   min-inline-size: 0;
 }
-/* One line with an ellipsis, so a long name stays inside its column and every row keeps one height. */
+/* One line with an ellipsis: the drawer's compact item wears this name too, and that panel has the room the
+ * ellipsis needs and none for a second line, so the single-line register stays the base and the cart's own row
+ * overrides it below. */
 .sp-cart-row__name {
   overflow: hidden;
   color: var(--color-text);
@@ -93,6 +108,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color var(--duration-fast) var(--ease-standard);
+}
+/* In the cart's own row the name wraps instead of being cut, because the row has the height for a second line and
+ * every seeded name begins with its brand, so a truncated one cannot separate two lines of the same brand:
+ * measured at 375, 240px of text in a 130px box rendered "Summit Gear Ewe…" and the laptop line 254px in 130px;
+ * at 768, 254px in 245px. Scoped through the row's own class so the drawer's compact item keeps the single-line
+ * register above. */
+.sp-cart-row .sp-cart-row__name {
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .sp-cart-row__sku {
   color: var(--color-text-subtle);
@@ -116,10 +140,21 @@
   font-size: var(--text-body-sm-size);
   font-variant-numeric: tabular-nums;
 }
+/* The price family's heading-3 register belongs to the detail page, where the figure is the whole message; inside
+ * a row the unit price is the supporting figure, so it takes this part's own body-sm register at the medium
+ * weight — measured before, 18px/600 muted against the line total's 16px/600 primary. Scoped to the row, so
+ * `.sp-price__current` keeps its register everywhere else. */
+.sp-cart-row__price .sp-price__current {
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-weight-medium);
+}
+/* The figure the shopper reads, in the row's own register: the body size at the semibold weight, so the two
+ * figures swap places in size and weight and the money hierarchy reads total first, unit price second. */
 .sp-cart-row__line-total {
   grid-area: total;
   align-self: end;
   justify-self: end;
+  font-size: var(--text-body-size);
   font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
@@ -156,106 +191,6 @@
   block-size: var(--space-4);
 }
 
-/* ==== Order summary panel ==== */
-/* The card register — surface, hairline, radius, first elevation — as one grid, for cart and checkout alike. */
-.sp-summary {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  background-color: var(--color-surface);
-  border: var(--border-width) solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1);
-}
-.sp-summary__title {
-  font-size: var(--text-heading-3-size);
-  font-weight: var(--text-heading-3-weight);
-}
-.sp-summary__row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding-block-end: var(--space-2);
-  border-block-end: var(--border-width) dashed var(--color-border-subtle);
-  color: var(--color-text-muted);
-  font-size: var(--text-body-sm-size);
-}
-.sp-summary__row > :last-child {
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-/* The saving stays legible as text: the success pair on the value, with the minus sign the row itself carries. */
-.sp-summary__row--discount > :last-child {
-  color: var(--color-success-text);
-}
-.sp-summary__row--total {
-  padding-block-start: var(--space-2);
-  border-block-start: var(--border-width-thick) solid var(--color-border);
-  border-block-end: 0;
-  color: var(--color-text);
-  font-size: var(--text-heading-3-size);
-  font-weight: var(--font-weight-semibold);
-}
-.sp-summary__note,
-.sp-summary__progress-label {
-  color: var(--color-text-muted);
-  font-size: var(--text-caption-size);
-}
-/* The promo entry: the field first, the apply button second, and a rejected code's reason spanning both columns. */
-.sp-summary__promo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--space-2);
-}
-.sp-summary__promo > .sp-field__error,
-.sp-summary__promo > .sp-alert {
-  grid-column: 1 / -1;
-}
-/* The free-shipping band and the shipping-method list: the band's well, fill and sentence, and one row per method. */
-.sp-summary__progress,
-.sp-summary__shipping {
-  display: grid;
-  gap: var(--space-2);
-}
-.sp-summary__progress-track {
-  block-size: var(--progress-height);
-  background-color: var(--color-surface-sunken);
-  border-radius: var(--radius-pill);
-}
-.sp-summary__progress-fill {
-  display: block;
-  block-size: 100%;
-  background-color: var(--color-accent);
-  border-radius: var(--radius-pill);
-}
-/* One card frame for the methods and the addresses; the selected row's accent frame and its filled radio agree. */
-.sp-summary__method,
-.sp-address-picker__option {
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--color-surface);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-.sp-summary__method:has(.sp-radio:checked),
-.sp-address-picker__option:has(.sp-radio:checked) {
-  background-color: var(--color-accent-subtle);
-  border-color: var(--color-accent);
-}
-/* The auto margin pushes the price past the room a wrapping name takes, which gap alone cannot do. */
-.sp-summary__method > :last-child {
-  margin-inline-start: auto;
-  font-variant-numeric: tabular-nums;
-}
-/* The actions, stacked over a rule; the markup gives each of them `.sp-btn--block`. */
-.sp-summary__actions {
-  display: grid;
-  gap: var(--space-2);
-  padding-block-start: var(--space-4);
-  border-block-start: var(--border-width) solid var(--color-border-subtle);
-}
-
 /* ==== Mini-cart ==== */
 /* The drawer's content, not the drawer: `.sp-drawer` in data-display.css owns the panel, backdrop and focus. */
 .sp-minicart {
@@ -287,10 +222,13 @@
 .sp-minicart__item + .sp-minicart__item {
   border-block-start: var(--border-width) solid var(--color-border-subtle);
 }
+/* The drawer's line wears the same 800x600 art in a 40px box: the square cover window sliced the mark there as
+ * it did in the row, so it takes the art's own ratio too. */
 .sp-minicart__item > img {
   flex: none;
   inline-size: var(--space-10);
-  block-size: var(--space-10);
+  block-size: auto;
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: var(--radius-sm);
 }
@@ -303,4 +241,40 @@
   gap: var(--space-2);
   padding-block-start: var(--space-4);
   border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+
+@media (min-width: 768px) {
+  /* --breakpoint-md */
+  /* A fixed money column, its figures right-aligned in it: a fixed track holds every row's figures in one place,
+   * where `auto` sizes each track from that row's own figure and the `1fr` name track absorbs the difference. The
+   * 6rem is a structural number of this row and not a token (tokens.css declares none for a money column); it holds
+   * the widest figure the seeded catalogue can produce — a $1,899.99 unit price at a line's own quantity reads
+   * "$37,999.80" and needs about 88px. */
+  .sp-cart-row {
+    grid-template-columns: auto minmax(0, 1fr) auto 6rem auto;
+    grid-template-areas:
+      "media body  qty   total remove"
+      ".     price price price price"
+      ".     warn  warn  warn  warn";
+    gap: var(--space-2) var(--space-5);
+    padding: var(--space-5);
+  }
+  .sp-cart-row__price {
+    justify-self: end;
+  }
+  .sp-cart-row__line-total {
+    align-self: center;
+    text-align: end;
+  }
+}
+
+/* The line's availability register, and the whole of its signal: a line near its ceiling reads in the warning
+ * pair, one that can no longer be bought in the danger pair, and the sentence beside the mark carries the state
+ * in both, so the tone only reinforces what the words already say. */
+.sp-cart-row__warning--low {
+  color: var(--color-warning-text);
+}
+
+.sp-cart-row__warning--out {
+  color: var(--color-danger-text);
 }

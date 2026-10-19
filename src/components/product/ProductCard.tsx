@@ -24,8 +24,8 @@ import { brandId } from "@/utils/strings";
 
 /*
  * Class contract. `src/styles/catalog.css` is the sole definition site of this block — no file under
- * `src/components/**` imports a stylesheet, because `src/main.tsx` is the only importer of
- * `src/styles/**` — so every class below is consumed by name: `sp-product-card` for the tile, which
+ * `src/components/**` imports a stylesheet — so every class below is consumed by name: `sp-product-card`
+ * for the tile, which
  * composes `sp-card` and `sp-card--interactive`, the frame that sheet's own comment says the tile wears;
  * `sp-product-card__media` for the image box; `sp-product-card__flag` for the mark placed over it;
  * `sp-product-card__body` for the text column, which the sheet lays out as a column so the price block can be

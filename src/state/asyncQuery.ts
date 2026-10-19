@@ -11,8 +11,8 @@ import type { ApiError, AsyncStatus, Result } from "@/types/common";
 import { isAbortError } from "@/utils/async";
 
 /*
- * A §0.5.5 split of `src/state/hooks.ts`, which had reached the request's 600-line ceiling with this concern
- * inside it: the hooks module keeps the storage-backed state, the debounced value and the document title, the
+ * A split of `src/state/hooks.ts`: that module may hold no more than 600 lines, and this concern is what took
+ * it to that limit. The hooks module keeps the storage-backed state, the debounced value and the document title, the
  * view-facing paging, media-query, breakpoint and outside-pointer hooks live beside the primitives that read
  * them in `src/components/ui/hooks.ts`, and the async-data concern lives here. The two halves of this module's
  * own contract are one — `src/state/hooks.ts` re-exports `useAsync`, `UseAsyncOptions` and `AsyncQueryState`,

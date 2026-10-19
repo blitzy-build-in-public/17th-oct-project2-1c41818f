@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/focusHandoff.ts
  * Purpose: The one home of the focus-handoff rule: when the control that had the focus goes away, hand the focus to the region the action's outcome lands in
- * Lines: 292
+ * Lines: 291
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -147,9 +147,9 @@ function focusRegion(region: HTMLElement | null): AlignedRegion | null {
    * choice it makes is the edge nearest where the reader already is: a region whose start edge sits above the
    * scrollport is focused where it stands, its start edge — and the focus ring drawn around the region's top —
    * left above the viewport and behind the header, and a region whose start edge is still below it is scrolled
-   * to that edge. Measured both ways on the checkout's step region. The move is therefore made deterministic in
-   * the one case where the outcome is not settled: the focus is taken without the browser's scroll, and then
-   * the start edge is aligned into the scrollport, below the clearance the document reserves for it.
+   * to that edge. The move is therefore made deterministic in the one case where the outcome is not settled:
+   * the focus is taken without the browser's scroll, and then the start edge is aligned into the scrollport,
+   * below the clearance the document reserves for it.
    *
    * A region that fits keeps the browser's own move untouched. That move scrolls as little as it can, which is
    * what leaves a reader who is halfway down a form exactly where they were, and a blanket alignment of every
@@ -241,8 +241,7 @@ export function useFocusHandoff<TElement extends HTMLElement = HTMLElement>(
      * transition the action started — a chip row, a pager, a page being replaced — and a query written through
      * the address bar lands a commit later still, so an alignment computed on the commit in between is left
      * pointing at a start edge the layout has since carried further up the document, behind the very header it
-     * was aligned to clear. Measured on the search results at 1280x900, where the departing chip row moved the
-     * region 42px up and left its ring behind the header.
+     * was aligned to clear.
      *
      * So while the region still holds the focus and the content above it has carried its start edge up the
      * document, the alignment is asked for again against the layout the reader actually has. Nothing else moves

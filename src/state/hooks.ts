@@ -1,6 +1,6 @@
 /**
  * Path: src/state/hooks.ts
- * Purpose: State-facing hooks: storage-backed state, debounced value, the async read re-exported from `src/state/asyncQuery.ts`, and the document title
+ * Purpose: Shared hooks: storage-backed state, debounced value, pagination, media query, async data, document title, outside click
  * Lines: 168
  */
 

@@ -1,7 +1,7 @@
 /**
  * Path: src/components/charts/chartScales.ts
  * Purpose: Linear and band scales, nice domains, tick generation and path helpers shared by the charts
- * Lines: 512
+ * Lines: 521
  */
 
 import {
@@ -32,8 +32,8 @@ import { roundMinorUnits } from "@/utils/format";
  *
  * The mark, path and data-table half of the same contract lives in `src/components/charts/chartGeometry.ts`
  * and is re-exported at the foot of this file, which is the path the three renderers and their tests import.
- * The charts' maths is one concern that the plan's 600-line ceiling splits; nothing here imports anything
- * upward, and the geometry module imports nothing from here.
+ * The charts' maths is one concern, and one file may hold no more than 600 lines, so the concern is split;
+ * nothing here imports anything upward, and the geometry module imports nothing from here.
  *
  * No colour, `stroke`, `fill` or copy appears in either file: `src/styles/tokens.css` owns
  * `--chart-series-N`, `src/styles/chart-series.css` maps it onto the series classes, and every heading or
@@ -349,8 +349,8 @@ export function buildBandTicks(
  * the widest label the axis writes, plus {@link MIN_BAND_LABEL_GAP}. A band label is centred on its band, and the
  * band at either end sits half a bandwidth inside the plot, so without that room the first and last labels are
  * painted past the frame and cut by its edge. An end `base` already insets further keeps its own inset, and a run
- * of labels narrower than that inset reserves nothing more, so a chart whose labels already fit its frame is
- * drawn exactly as it was.
+ * of labels narrower than that inset reserves nothing more, so a chart whose labels already fit its frame keeps
+ * the inset it was given.
  */
 export function bandAxisPadding(base: Padding, labels: readonly string[]): Padding {
   const widest = labels.reduce((widest, label) => Math.max(widest, estimateLabelWidth(label)), 0);
@@ -358,17 +358,26 @@ export function bandAxisPadding(base: Padding, labels: readonly string[]): Paddi
   return { ...base, left: Math.max(base.left, room), right: Math.max(base.right, room) };
 }
 
+/** Everything {@link axisLabelTransform} reads: the axes the chart draws, the rectangle the marks are drawn
+ *  in and the tick the label belongs to. */
+export interface AxisLabelTransformInput {
+  /** Which way the chart's value axis runs, which decides the side its labels are written on. */
+  readonly orientation: Orientation;
+  /** The axis the label belongs to: the value axis or the band axis. */
+  readonly axis: "value" | "band";
+  /** The rectangle the marks are drawn in, which the label is offset from by {@link TICK_GAP}. */
+  readonly plotArea: PlotArea;
+  /** The tick's coordinate along the axis, which the label is centred on or anchored at. */
+  readonly position: number;
+}
+
 /**
  * Where an axis label sits and how it anchors: an axis running vertically carries its labels beside it,
  * anchored at their end and centred on the tick, and one running horizontally carries them beneath it,
  * anchored at their middle and hanging from it, so no renderer hard-codes a tick anchor.
  */
-export function axisLabelTransform(
-  orientation: Orientation,
-  axis: "value" | "band",
-  plotArea: PlotArea,
-  position: number,
-): AxisLabelTransform {
+export function axisLabelTransform(input: AxisLabelTransformInput): AxisLabelTransform {
+  const { orientation, axis, plotArea, position } = input;
   const vertical = (axis === "value") === (orientation === "vertical");
   if (vertical) {
     return { x: plotArea.x - TICK_GAP, y: position, textAnchor: "end", dominantBaseline: "middle" };

@@ -1,19 +1,30 @@
 /**
  * Path: src/utils/storage.ts
- * Purpose: Typed, versioned, failure-tolerant localStorage access for every durable value the product keeps
- * Lines: 339
+ * Purpose: Typed, versioned, failure-tolerant localStorage access for the cart, the session and the last-used range
+ * Lines: 452
  */
 
-import { STORAGE_KEYS, STORAGE_KEY_PREFIX, STORAGE_VERSION } from "@/constants/config";
+import {
+  SESSION_STORAGE_KEYS,
+  STORAGE_KEYS,
+  STORAGE_KEY_PREFIX,
+  STORAGE_VERSION,
+} from "@/constants/config";
 import type { DateRange } from "@/types/common";
 import { validateDateRange } from "@/utils/dates";
 
 /**
- * The keys this module accepts: the six entries of `STORAGE_KEYS` and nothing else, so every key
+ * The durable keys this module accepts: the eight entries of `STORAGE_KEYS` and nothing else, so every key
  * read or written here is the one `src/constants/config.ts` declares and no other application's
- * entry on the same origin is ever touched.
+ * entry on the same origin is ever touched. {@link SessionStorageKey} is its tab-scoped counterpart.
  */
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
+
+/**
+ * The tab-scoped keys this module accepts: the entries of `SESSION_STORAGE_KEYS` and nothing else, so
+ * {@link readSessionStored} and {@link writeSessionStored} reach no entry their own set does not name.
+ */
+export type SessionStorageKey = (typeof SESSION_STORAGE_KEYS)[keyof typeof SESSION_STORAGE_KEYS];
 
 /**
  * Proves a value read back through {@link readStored} is the shape its caller expects. Supply one
@@ -35,16 +46,28 @@ interface StorageEnvelope {
 /** The Web Storage methods this module drives, named so no DOM type reaches its signatures. */
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+/**
+ * Which of the two Web Storage areas a call reads or writes: `"local"`, the durable store
+ * `STORAGE_KEYS` names, which belongs to the visitor and outlives the tab, or `"session"`, the store
+ * `SESSION_STORAGE_KEYS` names, which belongs to one tab's session and goes when that tab does.
+ */
+type StorageArea = "local" | "session";
+
 // Every function below performs Web Storage I/O, and the side effect is taken here and nowhere else:
-// this module is the only place in the product that reads or writes `localStorage`, so a context or a
-// page persists through these functions rather than reaching for the store itself.
+// this module is the only place in the product that reads or writes browser storage — `localStorage`
+// under the keys of `STORAGE_KEYS`, `sessionStorage` under those of `SESSION_STORAGE_KEYS` — so a
+// context, a page or the entry point persists through these functions rather than reaching for either
+// store itself.
 
 /**
- * The global object seen as an optional Web Storage surface. Declaring `localStorage` optional rather
- * than relying on the DOM's non-optional declaration is what lets this module load under the node test
- * project (`tests/unit/**`), which has no `window` and no store at all.
+ * The global object seen as an optional Web Storage surface, each area declared optional rather than
+ * relying on the DOM's non-optional declarations. That is what lets this module load under the node
+ * test project (`tests/unit/**`), which has no `window` and no store of either kind at all.
  */
-const webStorageScope: { readonly localStorage?: StorageLike | null } = globalThis;
+const webStorageScope: {
+  readonly localStorage?: StorageLike | null;
+  readonly sessionStorage?: StorageLike | null;
+} = globalThis;
 
 /**
  * The temporary entry the availability probe writes and removes: derived from the product's own
@@ -59,7 +82,12 @@ const PROBE_VALUE = "salespro-storage-probe";
 let availability: boolean | null = null;
 
 /**
- * Reports whether this environment can persist a value.
+ * Reports whether this environment can persist a value durably: the `localStorage` the cart, the
+ * session and the last-used report range are kept in.
+ *
+ * The tab's session store is deliberately not probed here — it is a different area of the same
+ * browser policy, and {@link writeSessionStored} reports a refusal of its own — so a caller that needs
+ * an answer about it reads that function's return value rather than this one's.
  *
  * The answer is probed once and memoised, so it can also go stale: a browser policy that withdraws
  * storage after the probe, or grants it after a negative answer, does not change what this returns
@@ -67,7 +95,7 @@ let availability: boolean | null = null;
  * precondition for a call — every other function here resolves the store when it runs.
  *
  * @returns `true` when a value can be written, read back and removed; `false` in an environment with
- *   no store at all (the node test project) or one that throws when accessed.
+ *   no durable store at all (the node test project) or one that throws when accessed.
  */
 export function isStorageAvailable(): boolean {
   const probed = availability ?? probeStorage();
@@ -76,12 +104,12 @@ export function isStorageAvailable(): boolean {
 }
 
 /**
- * Writes a temporary entry, reads it back and removes it: the only reliable answer to "can this
- * browser persist anything", since a store that refuses writes (a private window, a blocked cookie
- * policy, a full quota) or fails its read-back is unusable here.
+ * Writes a temporary entry to the durable store, reads it back and removes it: the only reliable answer
+ * to "can this browser persist anything", since a store that refuses writes (a private window, a blocked
+ * cookie policy, a full quota) or fails its read-back is unusable here.
  */
 function probeStorage(): boolean {
-  const store = openStore();
+  const store = openStore("local");
   if (store === null) return false;
   try {
     store.setItem(PROBE_KEY, PROBE_VALUE);
@@ -96,22 +124,32 @@ function probeStorage(): boolean {
 }
 
 /**
- * Resolves the store for the call being made, so persistence keeps working when a policy relaxes and
- * stops quietly when it is withdrawn; `null` means this environment has none.
+ * Resolves the named store for the call being made, so persistence keeps working when a policy relaxes
+ * and stops quietly when it is withdrawn; `null` means this environment has none of that kind.
+ *
+ * @param area - The store to resolve: `"local"` for the durable one, `"session"` for the tab's own.
  */
-function openStore(): StorageLike | null {
+function openStore(area: StorageArea): StorageLike | null {
   try {
-    return webStorageScope.localStorage ?? null;
+    return area === "session"
+      ? (webStorageScope.sessionStorage ?? null)
+      : (webStorageScope.localStorage ?? null);
   } catch {
     // Reading the property is what throws where storage is withheld (a blocked third-party frame, a
-    // locked-down profile), so the throw is this module's unavailable answer.
+    // locked-down profile), so the throw is this module's unavailable answer. The area is resolved per
+    // call because one policy may withhold a store and grant the other.
     return null;
   }
 }
 
-/** Reads one raw entry, or `null` when it is absent or the store refuses the read. */
-function readRawItem(key: StorageKey): string | null {
-  const store = openStore();
+/**
+ * Reads one raw entry from the named store, or `null` when it is absent or that store refuses the read.
+ *
+ * @param key - The product-owned key to read, from either key set.
+ * @param area - The store that key lives in.
+ */
+function readRawItem(key: StorageKey | SessionStorageKey, area: StorageArea): string | null {
+  const store = openStore(area);
   if (store === null) return null;
   try {
     return store.getItem(key);
@@ -121,9 +159,20 @@ function readRawItem(key: StorageKey): string | null {
   }
 }
 
-/** Writes one raw entry, replacing whatever the key held; `false` when the store refused the write. */
-function writeRawItem(key: StorageKey, payload: string): boolean {
-  const store = openStore();
+/**
+ * Writes one raw entry to the named store, replacing whatever the key held; `false` when that store
+ * refused the write.
+ *
+ * @param key - The product-owned key to write, from either key set.
+ * @param payload - The encoded envelope to store.
+ * @param area - The store to write it to.
+ */
+function writeRawItem(
+  key: StorageKey | SessionStorageKey,
+  payload: string,
+  area: StorageArea,
+): boolean {
+  const store = openStore(area);
   if (store === null) return false;
   try {
     store.setItem(key, payload);
@@ -135,11 +184,15 @@ function writeRawItem(key: StorageKey, payload: string): boolean {
 }
 
 /**
- * Removes one raw entry; `false` when no store can be reached or the store refused the drop, `true`
- * when the entry is gone — dropped, or never there to drop.
+ * Removes one raw entry from the named store; `false` when no store can be reached or that store
+ * refused the drop, `true` when the entry is gone — dropped, or never there to drop.
+ *
+ * @param key - The durable key to drop. The tab-scoped set has no removal here: the tab's own store is
+ *   dropped with the tab.
+ * @param area - The store to drop it from.
  */
-function removeRawItem(key: StorageKey): boolean {
-  const store = openStore();
+function removeRawItem(key: StorageKey, area: StorageArea): boolean {
+  const store = openStore(area);
   if (store === null) return false;
   try {
     store.removeItem(key);
@@ -186,12 +239,18 @@ function decodeEnvelope(raw: string): StorageEnvelope | null {
 }
 
 /**
- * Reads and decodes one key's payload; `null` covers an absent entry, an unavailable store and
- * undecodable content. A payload carrying a stale version comes back as it stands, so
- * {@link getStoredVersion} can report it and {@link readStored} can turn it into a fallback.
+ * Reads and decodes one key's payload from the named store; `null` covers an absent entry, an
+ * unavailable store and undecodable content. A payload carrying a stale version comes back as it
+ * stands, so {@link getStoredVersion} can report it and {@link readStored} can turn it into a fallback.
+ *
+ * @param key - The product-owned key to read, from either key set.
+ * @param area - The store that key lives in.
  */
-function readEnvelope(key: StorageKey): StorageEnvelope | null {
-  const raw = readRawItem(key);
+function readEnvelope(
+  key: StorageKey | SessionStorageKey,
+  area: StorageArea,
+): StorageEnvelope | null {
+  const raw = readRawItem(key, area);
   if (raw === null || raw.length === 0) return null;
   return decodeEnvelope(raw);
 }
@@ -213,7 +272,7 @@ function readEnvelope(key: StorageKey): StorageEnvelope | null {
  * @returns The stored value, or `fallback`.
  */
 export function readStored<T>(key: StorageKey, fallback: T, isValid?: StorageValidator<T>): T {
-  const envelope = readEnvelope(key);
+  const envelope = readEnvelope(key, "local");
   if (envelope === null || envelope.version !== STORAGE_VERSION) return fallback;
   if (isValid !== undefined && !isValid(envelope.value)) return fallback;
   // A supplied guard has already rejected anything it does not recognise; without one, `T` is the
@@ -232,7 +291,7 @@ export function readStored<T>(key: StorageKey, fallback: T, isValid?: StorageVal
  * @returns `true` when the key holds a payload that decodes and carries the current version.
  */
 export function hasStored(key: StorageKey): boolean {
-  const envelope = readEnvelope(key);
+  const envelope = readEnvelope(key, "local");
   return envelope !== null && envelope.version === STORAGE_VERSION;
 }
 
@@ -253,7 +312,7 @@ export function hasStored(key: StorageKey): boolean {
 export function writeStored<T>(key: StorageKey, value: T): boolean {
   const payload = encodeEnvelope(value);
   if (payload === null) return false;
-  return writeRawItem(key, payload);
+  return writeRawItem(key, payload, "local");
 }
 
 /**
@@ -267,11 +326,13 @@ export function writeStored<T>(key: StorageKey, value: T): boolean {
  *   store can be reached or the store refused to drop it.
  */
 export function removeStored(key: StorageKey): boolean {
-  return removeRawItem(key);
+  return removeRawItem(key, "local");
 }
 
 /**
- * Removes every entry this product owns: the keys of `STORAGE_KEYS`, and nothing else in the store.
+ * Removes every durable entry this product owns: the keys of `STORAGE_KEYS`, and nothing else in the
+ * store. The one tab-scoped entry of `SESSION_STORAGE_KEYS` is not part of it, because it belongs to
+ * the tab's own session and its store is dropped with the tab.
  *
  * Writes to the store. Anything another application on the same origin wrote is left exactly as it
  * was, which is why this walks the product's own keys instead of calling the store's `clear`. Every
@@ -283,7 +344,7 @@ export function removeStored(key: StorageKey): boolean {
 export function clearStoredKeys(): boolean {
   let everyKeyDropped = true;
   for (const key of Object.values(STORAGE_KEYS)) {
-    if (!removeRawItem(key)) everyKeyDropped = false;
+    if (!removeRawItem(key, "local")) everyKeyDropped = false;
   }
   return everyKeyDropped;
 }
@@ -301,7 +362,59 @@ export function clearStoredKeys(): boolean {
  *   `undefined` when nothing is stored there or the content is not a payload this module wrote.
  */
 export function getStoredVersion(key: StorageKey): number | undefined {
-  return readEnvelope(key)?.version;
+  return readEnvelope(key, "local")?.version;
+}
+
+// The tab's own session store ---------------------------------------------------------------------
+
+/**
+ * Reads a value the tab's session store holds, or the caller's fallback when there is nothing usable
+ * to read.
+ *
+ * Reads from the store. The rules are {@link readStored}'s exactly, over the area that belongs to one
+ * tab's session rather than to the visitor's durable state: the fallback is returned — never an
+ * exception, never a partly decoded value — for no store, a refused read, a key never written,
+ * unparseable content, a payload written by a different `STORAGE_VERSION` (never migrated silently),
+ * and a value the supplied guard rejects.
+ *
+ * @param key - The product-owned session key to read.
+ * @param fallback - What to return when nothing usable is stored, returned exactly as given, so a
+ *   caller passing an object or an array hands back that same reference.
+ * @param isValid - Optional guard proving the payload is `T`. Supply one whenever the stored shape
+ *   could have changed between builds: without one TypeScript has nothing to check the payload
+ *   against, and the value is handed back as `T` by assertion.
+ * @returns The stored value, or `fallback`.
+ */
+export function readSessionStored<T>(
+  key: SessionStorageKey,
+  fallback: T,
+  isValid?: StorageValidator<T>,
+): T {
+  const envelope = readEnvelope(key, "session");
+  if (envelope === null || envelope.version !== STORAGE_VERSION) return fallback;
+  if (isValid !== undefined && !isValid(envelope.value)) return fallback;
+  return envelope.value as T;
+}
+
+/**
+ * Stores a value in the tab's session store inside the versioned envelope, replacing whatever was
+ * there.
+ *
+ * Writes to the store. A refusal is reported rather than raised, for the reason {@link writeStored}
+ * reports one: persistence is best-effort, and the state the caller holds in memory is already the
+ * product's source of truth, so a browser that keeps no session store works without one.
+ *
+ * @param key - The product-owned session key to write.
+ * @param value - The value to store, in the shape `T` describes. It has to be JSON-serialisable:
+ *   JSON drops a function member and a member holding `undefined`, and cannot encode a cyclic
+ *   reference or a `bigint`, so such a value is reported as a refused write.
+ * @returns `true` when the value was written, `false` when it was not — no store, a refused write (a
+ *   blocked cookie policy is the ordinary case), or a value that cannot be serialised.
+ */
+export function writeSessionStored<T>(key: SessionStorageKey, value: T): boolean {
+  const payload = encodeEnvelope(value);
+  if (payload === null) return false;
+  return writeRawItem(key, payload, "session");
 }
 
 // The last-used report range ----------------------------------------------------------------------

@@ -466,8 +466,8 @@ function RouteFallback({ announce = true }: RouteFallbackProps): ReactElement {
  * category and a product route naming no product are one composition rather than three, and the state reads
  * the same way wherever it is reached. What this page adds is the name of its own address: the title is set
  * here through the same hook every other page sets its title through, so a cold load of an unmatched address
- * no longer leaves the bare product name in the tab and an in-app arrival no longer leaves the title of the
- * page the visitor left.
+ * sets the not-found title, and an in-app arrival replaces the previous screen's title, because the tab is
+ * meant to name the screen in front of the visitor.
  *
  * @returns The not-found view.
  */

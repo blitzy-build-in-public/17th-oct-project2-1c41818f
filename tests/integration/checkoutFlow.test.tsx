@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
  * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart
- * Lines: 509
+ * Lines: 521
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -155,11 +155,23 @@ const CARD: CardFill = {
   cvc: CARD_CVC,
 };
 
+/** The labels the payment step's five card controls carry, in the order the step declares them: the holder,
+ *  the number, the expiry's two halves and the security code. */
+const CARD_CONTROL_LABELS = [
+  CHECKOUT_COPY.NAME_ON_CARD_LABEL,
+  CHECKOUT_COPY.CARD_NUMBER_LABEL,
+  CHECKOUT_COPY.CARD_EXPIRY_MONTH_LABEL,
+  CHECKOUT_COPY.CARD_EXPIRY_YEAR_LABEL,
+  CHECKOUT_COPY.CARD_SECURITY_CODE_LABEL,
+] as const;
+
 /** Writes every judged member of the card, in the order the payment step declares its five controls: holder,
- *  number, the expiry's two halves and the security code. */
+ *  number, the expiry's two halves and the security code. Each control is reached by its own label rather
+ *  than by its role, because the number and the security code are masked controls and a masked control
+ *  carries no textbox role for a query to find. */
 async function fillCard(user: UserEvent, fill: CardFill): Promise<void> {
   const values = [CARD_HOLDER, fill.number, fill.expiryMonth, fill.expiryYear, fill.cvc];
-  const controls = screen.getAllByRole("textbox");
+  const controls = CARD_CONTROL_LABELS.map((label) => field(label));
   expect(controls).toHaveLength(values.length);
   for (const [index, control] of controls.entries()) {
     await user.clear(control);

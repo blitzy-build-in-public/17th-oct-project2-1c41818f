@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/Tabs.tsx
  * Purpose: Tabs with roving focus, and the accordion used for disclosure sections
- * Lines: 590
+ * Lines: 586
  */
 
 import { useId, useRef, useState } from "react";
@@ -10,10 +10,9 @@ import type { FocusEvent, KeyboardEvent, ReactElement, ReactNode } from "react";
 /*
  * Class contract. `src/styles/tabs-accordion.css` is the sole definition site of this family — it is the
  * sheet `src/styles/data-display.css` loads with `@import "./tabs-accordion.css";`, and `data-display.css`
- * is in turn the sheet `src/styles/components.css` loads with `@import "./data-display.css";`. No file under
- * `src/components/**` may import a stylesheet, because `src/main.tsx` is the only importer of
- * `src/styles/**`. Every class below is therefore consumed by name, and this comment is the list that
- * sheet owes the file: `sp-tabs` for the set, `sp-tabs__list` for the strip that scrolls sideways at a
+ * is in turn the sheet `src/styles/components.css` loads with `@import "./data-display.css";`. No stylesheet is
+ * imported here, so every class below is consumed by name, and this comment is the list that sheet owes the file:
+ * `sp-tabs` for the set, `sp-tabs__list` for the strip that scrolls sideways at a
  * small width, `sp-tabs__tab` for one tab, `sp-tabs__label` for the span holding a tab's own words and
  * carrying the `data-label` attribute the sheet's width reserve reads through `attr()` — so the reserve is
  * laid out from the label the tab announces — `sp-tabs__panel` for the region showing the selected tab's
@@ -45,8 +44,8 @@ import type { FocusEvent, KeyboardEvent, ReactElement, ReactNode } from "react";
  *     would move nothing and reveal nothing; a panel of this family that carries functionality carries
  *     its own focusable controls, because the report panels hold their sortable headers, their export
  *     control and a pager and the reviews panel holds a filter and a pager; and the tab that selects a
- *     panel already names and announces its region. The measured case settles it: a panel taller than
- *     the viewport is a focus target whose indicator cannot be shown whole, because the browser aligns
+ *     panel already names and announces its region. A panel taller than the viewport settles it: as a
+ *     focus target it cannot show its indicator whole, because the browser aligns
  *     the box's block-end to the scrollport and paints the ring a screenful above it, and no scroll
  *     padding and no scroll margin reaches that alignment.
  *
@@ -147,12 +146,9 @@ function composeClassName(...names: readonly (string | false | undefined)[]): st
  * Brings a tab the strip has only partly on screen fully inside it.
  *
  * The strip scrolls sideways at a small width, and the tab that ends past its right edge is painted only up
- * to that edge — a measured "Customer reviews" tab 149.31 px wide reached 48.84 px past the list's box at a
- * 375 px viewport, so a keyboard user read "Customer revie". The browser's own focus scroll does not carry
- * the tab in: Chrome scrolls nothing at all inside this strip, measured with and without a scroll margin, in
- * both directions, through a programmatic focus and through a real Tab with two ArrowRight presses, because
- * the tab's visible part already intersects the strip's box and a partly visible element is taken as visible.
- * The move is therefore made here.
+ * to that edge, so a keyboard user reads a label that is cut off. The browser's own focus scroll does not
+ * carry the tab in, because a partly visible tab counts as visible to it and the tab's visible part already
+ * intersects the strip's box: no focus scroll is issued inside this strip, so the move is made here.
  *
  * Only the strip's own box decides, so a tab already wholly inside asks for nothing, which is every tab at a
  * width where the three of them fit. The scroll takes the nearest edge on both axes, so the strip moves the

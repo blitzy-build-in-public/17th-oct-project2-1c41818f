@@ -8,7 +8,7 @@ import { useState } from "react";
 import type { ReactElement, RefObject } from "react";
 
 import { Button, IconButton } from "@/components/ui/Button";
-import { CloseIcon } from "@/components/ui/icons";
+import { CloseIcon } from "@/components/ui/Icons";
 import { COMMON_ACTIONS, SEARCH_COPY, removeFilterLabel } from "@/constants/content";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import type { CatalogFilters } from "@/state/CatalogContext";
@@ -19,8 +19,8 @@ import { activeFilterEntries } from "@/utils/queryParams";
 import type { ActiveFilterEntry } from "@/utils/queryParams";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**`
- * — so every class is consumed by name from the sheet that owns it: `sp-active-filters` (catalog.css) is
+ * Class contract. This list is what the sheets owe the row, each class named with the sheet that declares
+ * it: `sp-active-filters` (catalog.css) is
  * the row, `sp-active-filters__chip` is one chip whose own `button` rule sizes and colours the remove
  * control the sheet expects inside it, `sp-active-filters__clear-all` is the clear-all cell, pushed to the
  * row's end by that sheet's `margin-inline-start: auto`, and `sp-visually-hidden` (base.css) keeps the

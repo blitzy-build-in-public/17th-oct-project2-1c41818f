@@ -7,12 +7,12 @@
 import { countNoun } from "@/constants/content-reports";
 
 /**
- * The checkout surface's copy, split out of `src/constants/content.ts`, which stands at the request's
- * 600-line ceiling: the ceiling splits the concern into a second file rather than being raised, exactly as
- * `src/utils/isoInstants.ts` stands beside `src/utils/dates.ts` and `src/styles/catalog-landing.css`
- * beside `src/styles/catalog.css`. Every label, sentence and builder below is the one the copy library held,
- * moved unchanged. The singular/plural helper is imported from `src/constants/content-reports.ts` rather than
- * written again, because that rule keeps its one home there.
+ * The checkout surface's copy, kept beside `src/constants/content.ts` rather than inside it: the copy is one
+ * concern and one file may not exceed 600 lines, so it is split by surface rather than the ceiling raised.
+ * This register owns the checkout and confirmation copy: the step indicator's labels, the address and card
+ * field labels the checkout's forms render, the error-summary wording and the confirmation's own headings.
+ * The singular/plural helper is imported from `src/constants/content-reports.ts` rather than written again,
+ * because that rule keeps its one home there.
  */
 
 /** The checkout's steps in order. Consumers: `CheckoutSteps.tsx` and `CheckoutPage.tsx`. */

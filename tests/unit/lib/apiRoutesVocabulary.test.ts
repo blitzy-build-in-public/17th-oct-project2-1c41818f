@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/apiRoutesVocabulary.test.ts
  * Purpose: The vocabulary the seam refuses a hand-made request's own values with, driven through `src/lib/apiRoutes.ts`, `src/lib/apiRequests.ts` and `src/lib/apiOrders.ts`: one rule per parameter, the sentence each value that is present but invalid earns, and the idempotency conflict's own wording.
- * Lines: 349
+ * Lines: 443
  */
 
 // The vocabulary the file holds the seam to: the sentence each present-but-invalid value earns, driven
@@ -18,6 +18,7 @@ import {
   FEEDBACK_COPY,
   IDEMPOTENCY_CONFLICT_MESSAGE,
   VALIDATION_MESSAGES,
+  nameLengthMessage,
 } from "@/constants/content";
 import { getJson, postJson } from "@/lib/apiClient";
 import { API_ERROR_CODES, API_PATHS, fillApiPath } from "@/lib/mockServer";
@@ -25,9 +26,14 @@ import type { Session } from "@/types/account";
 import type { Product } from "@/types/catalog";
 import type { PageResult, Result } from "@/types/common";
 import type { Order, PricedCart } from "@/types/commerce";
-import { validateAddress, validateRating, validateShippingSubmission } from "@/utils/validation";
+import {
+  FREE_TEXT_LIMITS,
+  validateAddress,
+  validateRating,
+  validateShippingSubmission,
+} from "@/utils/validation";
 
-import { FIXED_DATE_RANGE, makeAddress } from "../../fixtures";
+import { FIXED_DATE_RANGE, makeAddress, makeCartLine } from "../../fixtures";
 
 import {
   PAGE_SIZE,
@@ -96,6 +102,12 @@ function listing(query: Record<string, string>): Promise<Result<unknown>> {
   return getJson(API_PATHS.PRODUCTS, { query });
 }
 
+/** A type-ahead read asked for the term a row names: the listing's own `q` member, at the second entry
+ *  point that reads it, so a row can hold both to the same rule and the same sentence. */
+function suggestions(query: Record<string, string>): Promise<Result<unknown>> {
+  return getJson(API_PATHS.SEARCH_SUGGEST, { query });
+}
+
 /** A KPI read over the fixture range, which only an administrator's session reaches. */
 function kpis(tokens: Tokens, query: Record<string, string>): Promise<Result<unknown>> {
   return getJson(API_PATHS.ANALYTICS_KPIS, {
@@ -130,6 +142,9 @@ const UNKNOWN_SORT = "not-a-sort-key";
 const BELOW_NOTHING = "-500";
 const UNKNOWN_BASELINE = "nonsense";
 const UNKNOWN_BUCKET = "fortnight";
+/** The length of the search term the QA report's own reproduction sent: an order of magnitude past the bound
+ *  every search control carries, so neither read of the `q` member can answer it as an ordinary term. */
+const OVER_BOUND_TERM_LENGTH = 200_000;
 
 /** One value the seam refuses: what is wrong with it, the request carrying it, the control the answer
  *  names, and the sentence that answer states. */
@@ -144,7 +159,8 @@ interface VocabularyCase {
  *  answer to, plus the member the caller left out, which its rule answers as missing. Each row asserts the
  *  sentence that parameter's rule earns, read back from the request the caller sent, so a delivered value is
  *  never reported as one nobody sent. The control is named correctly already, so the wording is what these
- *  rows hold the answer to. */
+ *  rows hold the answer to; the catalogue's `q` appears at both reads that carry it, so neither can serve a
+ *  term the other refuses. */
 const VOCABULARY: readonly VocabularyCase[] = [
   {
     what: "a review list rated outside the five",
@@ -204,6 +220,84 @@ const VOCABULARY: readonly VocabularyCase[] = [
     send: () => listing({ minPrice: BELOW_NOTHING }),
     field: "minPrice",
     message: VALIDATION_MESSAGES.OUT_OF_RANGE,
+  },
+  {
+    what: "a basket line priced beyond any amount the product can hold",
+    send: () =>
+      postJson(API_PATHS.CART_PRICE, { lines: [makeCartLine({ unitPriceMinor: 1e308 })] }),
+    field: "lines",
+    message: VALIDATION_MESSAGES.UNSUPPORTED_VALUE,
+  },
+  {
+    what: "a basket line priced at a whole number past the safe integer range",
+    send: () =>
+      postJson(API_PATHS.CART_PRICE, {
+        lines: [makeCartLine({ unitPriceMinor: Number.MAX_SAFE_INTEGER + 4 })],
+      }),
+    field: "lines",
+    message: VALIDATION_MESSAGES.UNSUPPORTED_VALUE,
+  },
+  {
+    what: "an order paid with a card whose digits are all the same",
+    send: async () =>
+      postJson(API_PATHS.ORDERS, await orderBody("key-repeated-pan", "0".repeat(16))),
+    field: "number",
+    message: VALIDATION_MESSAGES.CARD_NUMBER,
+  },
+  {
+    what: "a listing searched for a term past the bound the search controls carry",
+    send: () => listing({ q: "x".repeat(FREE_TEXT_LIMITS.SEARCH_TERM_MAX + 1) }),
+    field: "q",
+    message: nameLengthMessage(FREE_TEXT_LIMITS.SEARCH_TERM_MAX),
+  },
+  {
+    what: "a listing searched for a term carrying a control character",
+    send: () => listing({ q: "waxed\u0000jacket" }),
+    field: "q",
+    message: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+  },
+  {
+    what: "a type-ahead read asked for the 200,000-character term the search controls cannot carry",
+    send: () => suggestions({ q: "x".repeat(OVER_BOUND_TERM_LENGTH) }),
+    field: "q",
+    message: nameLengthMessage(FREE_TEXT_LIMITS.SEARCH_TERM_MAX),
+  },
+  {
+    what: "a type-ahead read asked for a term carrying a control character",
+    send: () => suggestions({ q: "waxed\u0000jacket" }),
+    field: "q",
+    message: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+  },
+  {
+    what: "an address whose first line is past the bound its own control carries",
+    send: (tokens) =>
+      postJson(
+        bookPath(tokens),
+        makeAddress({ line1: "x".repeat(FREE_TEXT_LIMITS.LINE_MAX + 1) }),
+        as(tokens.customer),
+      ),
+    field: "line1",
+    message: nameLengthMessage(FREE_TEXT_LIMITS.LINE_MAX),
+  },
+  {
+    what: "an address whose city carries a control character",
+    send: (tokens) =>
+      postJson(bookPath(tokens), makeAddress({ city: "Port\nland" }), as(tokens.customer)),
+    field: "city",
+    message: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
+  },
+  {
+    what: "a registration whose first name carries a control character",
+    send: () =>
+      postJson(API_PATHS.AUTH_REGISTER, {
+        email: "control-character@salespro.test",
+        password: DEMO_ACCOUNTS.PASSWORD,
+        firstName: "Ctrl\u0000Name\nLine",
+        lastName: "Okafor",
+        marketingOptIn: false,
+      }),
+    field: "firstName",
+    message: VALIDATION_MESSAGES.CONTROL_CHARACTERS,
   },
   {
     what: "a KPI read against a baseline no option declares",

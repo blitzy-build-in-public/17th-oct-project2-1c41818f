@@ -9,8 +9,8 @@ import type { ReactElement, ReactNode } from "react";
 import { Skeleton } from "@/components/ui/Feedback";
 
 /*
- * Class contract. No stylesheet is imported here — `src/main.tsx` is the only importer of `src/styles/**` —
- * so every class below is consumed by name, and they are the ones the three renderers already wear, so the
+ * Class contract. No stylesheet is imported here, so every class below is consumed by name, and they are
+ * the ones the three renderers already wear, so the
  * placeholder block is laid out by the same rules the chart is: `sp-chart` for the block, `sp-chart__header`
  * with `sp-chart__title`, `sp-card__description` and `sp-chart__controls` for the header the chart renders above
  * its plot — the title and the supporting line under it, which the renderers take from

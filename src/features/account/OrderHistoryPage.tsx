@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 314
+ * Lines: 313
  */
 
 import type { ReactElement } from "react";
@@ -38,8 +38,7 @@ import { formatDate, formatDateTime } from "@/utils/dates";
 import { formatMoney, formatQuantity } from "@/utils/format";
 
 /*
- * Class contract, consumed by name: no file under `src/features/**` imports a stylesheet, because
- * `src/main.tsx` is the only importer of `src/styles/**`. `src/styles/account.css` owns both modes —
+ * Class contract. `src/styles/account.css` owns both modes —
  * `sp-order-history` with its `__filters`, `__table`, `__placeholder` and `__empty`, and `sp-order-detail`
  * with its `__header`, `__number`, `__status`, `__lines`, `__totals`, `__addresses` and `__timeline` — and
  * earlier sheets supply the rest: the table primitive, `sp-alert`, `sp-empty`, `sp-stack`; from

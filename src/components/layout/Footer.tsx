@@ -119,7 +119,7 @@ function FooterColumn({ column }: { readonly column: FooterLinkColumn }): ReactE
  * from `src/styles/base.css` rather than suppressing it. Nothing here is a control: there is no
  * form, no button and no overlay.
  *
- * Styling. No stylesheet is imported — `src/main.tsx` is the only importer of `src/styles/**` — and
+ * Styling. No stylesheet is imported, and
  * no colour, radius, shadow or pixel breakpoint is written here. The classes this component renders
  * are the contract the footer skeleton in `src/styles/layout.css` styles: `sp-footer`,
  * `sp-footer__inner`, `sp-footer__columns`, `sp-footer__column`, `sp-footer__heading`,
