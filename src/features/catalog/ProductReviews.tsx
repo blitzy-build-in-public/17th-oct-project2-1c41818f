@@ -30,7 +30,7 @@ import {
 } from "@/constants/content";
 import { loginPath } from "@/constants/routes";
 import { FACET_DEFINITIONS } from "@/constants/taxonomy";
-import { listProductReviews, submitProductReview } from "@/lib/catalogReads";
+import { listProductReviews, submitProductReview } from "@/lib/catalogService";
 import { useAuth } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
 import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
@@ -60,8 +60,8 @@ import {
 import type { ReviewDraft } from "@/utils/validation";
 
 /*
- * Both review endpoints are reached through `src/lib/catalogReads.ts`, the catalogue's service surface beside
- * `src/lib/catalogService.ts`: `listProductReviews` reads a page and `submitProductReview` publishes one, so this
+ * Both review endpoints are reached through `src/lib/catalogService.ts`, the catalogue's service surface:
+ * `listProductReviews` reads a page and `submitProductReview` publishes one, so this
  * file names no request path and holds no second copy of either call. The rules those calls depend on live where
  * they already did — the review rule in `src/utils/validation.ts`, and the statuses and refusal shapes in
  * `src/lib/apiClient.ts`, which the service forwards unchanged.

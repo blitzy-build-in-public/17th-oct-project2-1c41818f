@@ -445,9 +445,9 @@ export function runReportDefinition(run: RunReportDefinitionInput): ReportResult
 // The series charted beside the table -------------------------------------------------------------
 
 /*
- * The chart's half of the report contract, beside the rows it charts. It is the concern
- * `src/lib/reportSeries.ts` was split out of `src/lib/reportService.ts` to carry, and that file now re-exports
- * {@link buildReportSeries} from here, so every consumer's path still resolves the whole contract.
+ * The chart's half of the report contract, beside the rows it charts, and the concern
+ * `src/lib/reportService.ts` re-exports {@link buildReportSeries} from, so every consumer's
+ * path still resolves the whole contract.
  *
  * The concern itself is one rule: a band is identified and worded by its period, never by the figure plotted
  * in it. `chartPointKey` in `src/components/charts/chartGeometry.ts` takes a band's identity from a point's

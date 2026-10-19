@@ -199,7 +199,7 @@ export function CustomerReport({
     { enabled: session !== null, keepPreviousData: true },
   );
 
-  // A band key read as axis wording. The key is the period's own wording — `src/lib/reportSeries.ts` keys and
+  // A band key read as axis wording. The key is the period's own wording — `buildReportSeries` keys and
   // words every band by its period — so a wording that is already readable is passed through and a raw bucket
   // key, or a product's name, is read by `src/utils/dates.ts` over the range the run covers, which is what
   // qualifies a band the range clipped; the `|| key` fallback is the one `defaultLabelFormatter` in

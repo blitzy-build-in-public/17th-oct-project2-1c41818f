@@ -32,7 +32,7 @@ import { ROUTE_PARAMS, ROUTES, categoryPath } from "@/constants/routes";
 import { SORT_OPTIONS } from "@/constants/taxonomy";
 import { CLASSES, CatalogFilterRegion } from "@/features/catalog/CatalogFilterRegion";
 import { ProductList } from "@/features/catalog/ProductList";
-import { flattenCategoryTree, listCategories } from "@/lib/catalogReads";
+import { flattenCategoryTree, listCategories } from "@/lib/catalogService";
 import type { CatalogFilters } from "@/state/CatalogContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
@@ -134,7 +134,7 @@ export function CatalogPage(): ReactElement {
   const changePageSize = handOffThen(handOffFocus, (size: number) => catalog.setPageSize(size));
 
   // The category read feeds the heading, the trail, the subcategory chips and the scope of the listing, so it
-  // runs only on the route that names a category. It comes from `src/lib/catalogReads.ts` — the catalogue's own
+  // runs only on the route that names a category. It comes from `src/lib/catalogService.ts`, the catalogue's own
   // service surface, so this file names no endpoint — and a failure there is folded into the page's own error
   // state rather than replacing the catalogue the visitor asked for.
   const categories = useAsync<CategoryNode[]>((signal) => listCategories({ signal }), [], {

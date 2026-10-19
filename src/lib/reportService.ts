@@ -51,9 +51,9 @@ export {
   type ReportRunRequest,
 } from "@/utils/reportRules";
 
-// The series charted beside a report: one file may not exceed 600 lines, so the chart's half of the report
-// contract lives in `src/lib/reportSeries.ts`, and this path re-exports it for a consumer that imports it here.
-export { buildReportSeries } from "@/lib/reportSeries";
+// The series a report is charted with, re-exported from the rules module beside the rows it charts, so a
+// consumer importing it from here still resolves the whole report contract.
+export { buildReportSeries } from "@/utils/reportRules";
 
 // The export matrix -------------------------------------------------------------------------------
 

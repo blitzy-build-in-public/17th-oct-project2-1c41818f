@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/ProductDetailPage.tsx
  * Purpose: Product route composing the gallery, details, tabs, reviews and related-products strip
- * Lines: 593
+ * Lines: 594
  */
 
 import { useId, useState } from "react";
@@ -39,10 +39,10 @@ import { API_ERROR_CODES } from "@/lib/apiClient";
 import {
   flattenCategoryTree,
   getProductBySlug,
+  getRelated,
   isProductSegment,
   listCategories,
-} from "@/lib/catalogReads";
-import { getRelated } from "@/lib/catalogService";
+} from "@/lib/catalogService";
 import { useCartDispatch, useQuickAdd } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
@@ -494,9 +494,10 @@ function ProductDetailBody({
 /**
  * The product detail route: everything one product is bought from, composed from the shared primitives.
  *
- * The route segment is the product's readable slug and `getProductBySlug` in `src/lib/catalogReads.ts` is the single
- * read that turns it into the product, so no request here asks the detail endpoint for an identifier the segment is
- * not; the product's own identifier then serves the two reads that need one — the related strip and the reviews.
+ * The route segment is the product's readable slug and `getProductBySlug` in `src/lib/catalogService.ts` is the
+ * single read that turns it into the product, so no request here asks the detail endpoint for an identifier the
+ * segment is not; the product's own identifier then serves the two reads that need one — the related strip and
+ * the reviews.
  * That read is also the one a published review refreshes: the reviews tab reports the write through
  * `onReviewPublished`, which re-reads this product, so the rating summary above the tabs and the review list
  * below them state one store's figures after the write resolves rather than disagreeing under one page.
