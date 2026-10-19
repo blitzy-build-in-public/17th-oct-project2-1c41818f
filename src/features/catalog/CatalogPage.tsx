@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 375
+ * Lines: 376
  */
 
 import { useId, useRef, useState } from "react";
@@ -288,6 +288,7 @@ export function CatalogPage(): ReactElement {
               <SortControl
                 isCompact
                 value={filters.sort}
+                queryTerm={filters.q}
                 onChange={(sort: SortKey): void => catalog.setSort(sort)}
               />
             </div>

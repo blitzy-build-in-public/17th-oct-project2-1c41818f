@@ -36,17 +36,17 @@ is generated.
 | Paths listed in Part 1                            | 271 — 157 counted files, 107 §0.5.5 split paths, 6 covering suites and this manifest; each of the 113 budget-free paths is charged to a mapped file — 107 to the mapped file whose allocation they draw on, 6 to the file they cover — so every path in the tree traces to a file §0.7.1 maps |
 | Counted in the 50,000-line total                  | 157 — the plan's budgets; a split path and a covering suite carry none of their own                                                                                                                                                                                                           |
 | Excluded from it                                  | 1 — this manifest, the only path whose own lines are never counted                                                                                                                                                                                                                            |
-| §0.5.5 split paths                                | 107 — 72 under `src/` holding 18,067 and 35 under `tests/` holding 9,826                                                                                                                                                                                                                      |
+| §0.5.5 split paths                                | 107 — 72 under `src/` holding 18,078 and 35 under `tests/` holding 9,900                                                                                                                                                                                                                      |
 | Covering suites carrying no budget of their own   | 6, holding 1,979 each charged to the mapped file it covers                                                                                                                                                                                                                                    |
-| Paths carrying no budget of their own, both kinds | 113, holding 29,872 — every one recorded with the mapped file whose allocation it draws on                                                                                                                                                                                                    |
-| The suite                                         | 64 paths and 23,293 lines against the plan's 23 files and 7,350 — the plan's own 23 test files hold 11,488 and the 41 paths charged to them hold 11,805; §0.5.5 reconciles it and real coverage is never cut                                                                                  |
+| Paths carrying no budget of their own, both kinds | 113, holding 29,957 — every one recorded with the mapped file whose allocation it draws on                                                                                                                                                                                                    |
+| The suite                                         | 64 paths and 23,395 lines against the plan's 23 files and 7,350 — the plan's own 23 test files hold 11,516 and the 41 paths charged to them hold 11,879; §0.5.5 reconciles it and real coverage is never cut                                                                                  |
 | Total budgeted                                    | exactly 50,000 lines across the 157 counted files                                                                                                                                                                                                                                             |
-| Lines delivered at this snapshot                  | counted 92,215 — the 157 mapped files' own 62,343 plus the 29,872 lines charged to them (Part 3 states the rule and its parts once)                                                                                                                                                           |
+| Lines delivered at this snapshot                  | counted 92,330 — the 157 mapped files' own 62,373 plus the 29,957 lines charged to them (Part 3 states the rule and its parts once)                                                                                                                                                           |
 | Generation phases                                 | Phase 0 plus 39, all complete; every one of the 39 holds 3 to 5 tree files                                                                                                                                                                                                                    |
 | Counted files beyond 10% of budget                | 124 — 95 over and 29 under, each with its row in Part 4                                                                                                                                                                                                                                       |
 | Paths over the request's 600-line ceiling         | 0 — none                                                                                                                                                                                                                                                                                      |
 | Largest per-file budget                           | 500 lines, inside the request's 600-line ceiling                                                                                                                                                                                                                                              |
-| **§0.5.1's ±5% band (47,500-52,500)**             | not met at 92,215; settled once at the end of Part 4, which states why no route to it is open                                                                                                                                                                                                 |
+| **§0.5.1's ±5% band (47,500-52,500)**             | not met at 92,330; settled once at the end of Part 4, which states why no route to it is open                                                                                                                                                                                                 |
 
 ## Part 1 — File tree in generation order, with budgets, status and actual counts
 
@@ -207,7 +207,7 @@ which draws on the mapped file's allocation and adds no line to the 50,000 · `c
 │   │   │   ├── Tabs.tsx  # 270 · P18 · Done · 586
 │   │   │   ├── Rating.tsx  # 250 · P18 · Done · 599
 │   │   │   ├── Tooltip.tsx  # 220 · P18 · Done · 403
-│   │   │   ├── SortControl.tsx  # part of src/features/search/SortControl.tsx 220 · P24 · Done · 139 · the sort selector both the catalogue page and the search page compose — split out of src/features/search/SortControl.tsx
+│   │   │   ├── SortControl.tsx  # part of src/features/search/SortControl.tsx 220 · P24 · Done · 150 · the sort selector both the catalogue page and the search page compose — split out of src/features/search/SortControl.tsx
 │   │   │   ├── DateRangeControl.tsx  # part of src/features/reports/DateRangePicker.tsx 310 · P32 · Done · 395 · the range control both administrator surfaces render: presets, the two date fields — split out of src/features/reports/DateRangePicker.tsx
 │   │   │   ├── hooks.ts  # part of src/state/hooks.ts 480 · P14 · Done · 288 · the view-facing hooks the shared primitives and their composing pages read: pagination — split out of src/state/hooks.ts
 │   │   │   └── focusHandoff.ts  # part of src/state/hooks.ts 480 · P14 · Done · 291 · the one home of the focus-handoff rule: when the control that had the focus goes away — split out of src/state/hooks.ts
@@ -235,13 +235,13 @@ which draws on the mapped file's allocation and adds no line to the 50,000 · `c
 │   │   │   ├── FeaturedProducts.tsx  # 290 · P21 · Done · 334
 │   │   │   └── CategoryShowcase.tsx  # 250 · P21 · Done · 257
 │   │   ├── catalog/
-│   │   │   ├── CatalogPage.tsx  # 380 · P22 · Done · 375
+│   │   │   ├── CatalogPage.tsx  # 380 · P22 · Done · 376
 │   │   │   ├── CatalogFilterRegion.tsx  # part of src/features/catalog/CatalogPage.tsx 380 · P22 · Done · 254 · catalogue facet panel: the five facet groups over the catalogue's own facet response — split out of src/features/catalog/CatalogPage.tsx
 │   │   │   ├── ProductList.tsx  # 310 · P22 · Done · 295
 │   │   │   ├── ProductDetailPage.tsx  # 475 · P22 · Done · 594
 │   │   │   └── ProductReviews.tsx  # 330 · P22 · Done · 600
 │   │   ├── search/
-│   │   │   ├── SearchPage.tsx  # 360 · P23 · Done · 358
+│   │   │   ├── SearchPage.tsx  # 360 · P23 · Done · 359
 │   │   │   ├── SearchBar.tsx  # 330 · P23 · Done · 506
 │   │   │   ├── SearchSuggestions.tsx  # 270 · P23 · Done · 318
 │   │   │   ├── FilterPanel.tsx  # 470 · P24 · Done · 490
@@ -299,7 +299,7 @@ which draws on the mapped file's allocation and adds no line to the 50,000 · `c
 │   │   │   ├── validationCard.test.ts  # part of tests/unit/utils/validation.test.ts 290 · P35 · Done · 141 · the card number, expiry and security-code rules with the Luhn check they rest on — split out of tests/unit/utils/validation.test.ts
 │   │   │   ├── collections.test.ts  # 400 · P35 · Done · 592
 │   │   │   ├── collectionsRanking.test.ts  # part of tests/unit/utils/collections.test.ts 400 · P35 · Done · 167 · keyed indexing, reversal, frequency ranking and top-N selection helpers — split out of tests/unit/utils/collections.test.ts
-│   │   │   ├── queryParams.test.ts  # 220 · P35 · Done · 537
+│   │   │   ├── queryParams.test.ts  # 220 · P35 · Done · 565
 │   │   │   ├── dates.test.ts  # part of tests/unit/utils/formatting.test.ts 380 · P35 · Done · 598 · the range arithmetic, bucket boundaries and comparison periods of src/utils/dates.ts — split out of tests/unit/utils/formatting.test.ts
 │   │   │   ├── bucketLabels.test.ts  # part of tests/unit/utils/formatting.test.ts 380 · P35 · Done · 233 · the wording of a bucket the selected range clips — split out of tests/unit/utils/formatting.test.ts
 │   │   │   ├── strings.test.ts  # part of tests/unit/utils/formatting.test.ts 380 · P35 · Done · 569 · the text, identifier-generator and credential-digest contracts of src/utils/strings.ts — split out of tests/unit/utils/formatting.test.ts
@@ -344,11 +344,11 @@ which draws on the mapped file's allocation and adds no line to the 50,000 · `c
 │   ├── helpers/
 │   │   ├── analyticsHarness.ts  # part of tests/unit/lib/analyticsService.test.ts 330 · P36 · Done · 96 · the fixture surface both analytics suites read and the seam calls each had declared for itself — split out of tests/unit/lib/analyticsService.test.ts
 │   │   ├── checkoutHarness.ts  # part of tests/integration/checkoutFlow.test.tsx 380 · P38 · Done · 116 · the basket walk and the shipping step's inputs the two checkout suites had each declared — split out of tests/integration/checkoutFlow.test.tsx
-│   │   ├── journeyHarness.tsx  # part of tests/integration/shoppingFlow.test.tsx 350 · P38 · Done · 380 · the harness the journey files read the rendered application through: the copy — split out of tests/integration/shoppingFlow.test.tsx
+│   │   ├── journeyHarness.tsx  # part of tests/integration/shoppingFlow.test.tsx 350 · P38 · Done · 381 · the harness the journey files read the rendered application through: the copy — split out of tests/integration/shoppingFlow.test.tsx
 │   │   └── pricingHarness.ts  # part of tests/unit/lib/pricingService.test.ts 330 · P36 · Done · 35 · the money invariants both pricing suites assert over a priced cart — split out of tests/unit/lib/pricingService.test.ts
 │   └── integration/
 │       ├── shoppingFlow.test.tsx  # 350 · P38 · Done · 299
-│       ├── catalogBrowseFlow.test.tsx  # part of tests/integration/shoppingFlow.test.tsx 350 · P38 · Done · 406 · the catalogue and search surfaces, from the listing's facets and sort to its failure states — split out of tests/integration/shoppingFlow.test.tsx
+│       ├── catalogBrowseFlow.test.tsx  # part of tests/integration/shoppingFlow.test.tsx 350 · P38 · Done · 479 · the catalogue and search surfaces, from the listing's facets and sort to its failure states — split out of tests/integration/shoppingFlow.test.tsx
 │       ├── catalogSuggestionsFlow.test.tsx  # part of tests/integration/shoppingFlow.test.tsx 350 · P38 · Done · 348 · the suggestion list's keyboard choice and the product page it opens — split out of tests/integration/catalogBrowseFlow.test.tsx
 │       ├── checkoutFlow.test.tsx  # 380 · P38 · Done · 521
 │       ├── checkoutPricingFailure.test.tsx  # part of tests/integration/checkoutFlow.test.tsx 380 · P38 · Done · 132 · the checkout's refused price request: the seam's failure reported with a retry — split out of tests/integration/checkoutFlow.test.tsx
@@ -399,25 +399,25 @@ number the closing progress line carries.
 | 19         | `src/components/product/ProductCard.tsx` (360); `src/components/product/ProductGallery.tsx` (270); `src/components/charts/chartScales.ts` (310)                                                                                                 | 940           | 2,007        | 47,438     |
 | 20         | `src/components/charts/LineChart.tsx` (420); `src/components/charts/BarChart.tsx` (400); `src/components/charts/DonutChart.tsx` (330)                                                                                                           | 1,150         | 2,905        | 50,343     |
 | 21         | `src/features/home/HomePage.tsx` (310); `src/features/home/HeroSection.tsx` (270); `src/features/home/FeaturedProducts.tsx` (290); `src/features/home/CategoryShowcase.tsx` (250)                                                               | 1,120         | 1,131        | 51,474     |
-| 22         | `src/features/catalog/CatalogPage.tsx` (380); `src/features/catalog/ProductList.tsx` (310); `src/features/catalog/ProductDetailPage.tsx` (475); `src/features/catalog/ProductReviews.tsx` (330)                                                 | 1,495         | 2,118        | 53,592     |
-| 23         | `src/features/search/SearchPage.tsx` (360); `src/features/search/SearchBar.tsx` (330); `src/features/search/SearchSuggestions.tsx` (270)                                                                                                        | 960           | 1,182        | 54,774     |
-| 24         | `src/features/search/FilterPanel.tsx` (470); `src/features/search/SortControl.tsx` (220); `src/features/search/ActiveFilters.tsx` (250)                                                                                                         | 940           | 899          | 55,673     |
-| 25         | `src/features/cart/CartPage.tsx` (360); `src/features/cart/CartItemRow.tsx` (290); `src/features/cart/CartSummary.tsx` (330); `src/features/cart/MiniCart.tsx` (330); `src/features/cart/cartSelectors.ts` (270)                                | 1,580         | 1,623        | 57,296     |
-| 26         | `src/features/checkout/CheckoutPage.tsx` (380); `src/features/checkout/CheckoutSteps.tsx` (250); `src/features/checkout/ShippingForm.tsx` (360)                                                                                                 | 990           | 1,578        | 58,874     |
-| 27         | `src/features/checkout/PaymentForm.tsx` (400); `src/features/checkout/ReviewOrder.tsx` (330); `src/features/checkout/OrderConfirmation.tsx` (330)                                                                                               | 1,060         | 1,331        | 60,205     |
-| 28         | `src/features/account/LoginPage.tsx` (330); `src/features/account/RegisterPage.tsx` (360); `src/features/account/AccountLayout.tsx` (250)                                                                                                       | 940           | 991          | 61,196     |
-| 29         | `src/features/account/ProfilePage.tsx` (350); `src/features/account/OrderHistoryPage.tsx` (360); `src/features/account/AddressBookPage.tsx` (380)                                                                                               | 1,090         | 1,610        | 62,806     |
-| 30         | `src/features/admin/AdminDashboardPage.tsx` (400); `src/features/admin/KpiCard.tsx` (270); `src/features/admin/SalesChart.tsx` (380); `src/features/admin/RecentOrdersTable.tsx` (290); `src/features/admin/TopProductsTable.tsx` (250)         | 1,590         | 1,888        | 64,694     |
-| 31         | `src/features/reports/ReportsPage.tsx` (330); `src/features/reports/SalesReport.tsx` (400); `src/features/reports/ProductPerformanceReport.tsx` (350)                                                                                           | 1,080         | 1,166        | 65,860     |
-| 32         | `src/features/reports/CustomerReport.tsx` (330); `src/features/reports/DateRangePicker.tsx` (310); `src/features/reports/ReportTable.tsx` (290)                                                                                                 | 930           | 1,386        | 67,246     |
-| 33         | `src/Router.tsx` (390); `src/App.tsx` (290); `src/main.tsx` (120)                                                                                                                                                                               | 800           | 1,103        | 68,349     |
-| 34         | `tests/setup.ts` (130); `tests/fixtures.ts` (440); `tests/testUtils.tsx` (270)                                                                                                                                                                  | 840           | 1,086        | 69,435     |
-| 35         | `tests/unit/utils/formatting.test.ts` (380); `tests/unit/utils/validation.test.ts` (290); `tests/unit/utils/collections.test.ts` (400); `tests/unit/utils/queryParams.test.ts` (220); `tests/unit/lib/catalogSearch.test.ts` (470)              | 1,760         | 6,682        | 76,117     |
-| 36         | `tests/unit/lib/pricingService.test.ts` (330); `tests/unit/lib/orderService.test.ts` (270); `tests/unit/lib/authService.test.ts` (250); `tests/unit/lib/analyticsService.test.ts` (330); `tests/unit/lib/reportService.test.ts` (310)           | 1,490         | 4,037        | 80,154     |
-| 37         | `tests/unit/lib/mockServer.test.ts` (220); `tests/unit/state/transactions.test.ts` (440); `tests/unit/state/catalogReducer.test.ts` (250); `tests/components/controls.test.tsx` (360); `tests/components/Table.test.tsx` (240)                  | 1,510         | 5,634        | 85,788     |
-| 38         | `tests/components/charts.test.tsx` (250); `tests/integration/shoppingFlow.test.tsx` (350); `tests/integration/checkoutFlow.test.tsx` (380); `tests/integration/accountFlow.test.tsx` (330); `tests/integration/adminReportsFlow.test.tsx` (440) | 1,750         | 5,510        | 91,298     |
-| 39         | `README.md` (310); `docs/architecture.md` (270); `docs/contributing.md` (160); `docs/mock-api.md` (200)                                                                                                                                         | 940           | 917          | 92,215     |
-| **Totals** | **157 mapped files, plus the 113 paths charged to them, over 39 phases**                                                                                                                                                                        | **50,000**    | **92,215**   | **92,215** |
+| 22         | `src/features/catalog/CatalogPage.tsx` (380); `src/features/catalog/ProductList.tsx` (310); `src/features/catalog/ProductDetailPage.tsx` (475); `src/features/catalog/ProductReviews.tsx` (330)                                                 | 1,495         | 2,119        | 53,593     |
+| 23         | `src/features/search/SearchPage.tsx` (360); `src/features/search/SearchBar.tsx` (330); `src/features/search/SearchSuggestions.tsx` (270)                                                                                                        | 960           | 1,183        | 54,776     |
+| 24         | `src/features/search/FilterPanel.tsx` (470); `src/features/search/SortControl.tsx` (220); `src/features/search/ActiveFilters.tsx` (250)                                                                                                         | 940           | 910          | 55,686     |
+| 25         | `src/features/cart/CartPage.tsx` (360); `src/features/cart/CartItemRow.tsx` (290); `src/features/cart/CartSummary.tsx` (330); `src/features/cart/MiniCart.tsx` (330); `src/features/cart/cartSelectors.ts` (270)                                | 1,580         | 1,623        | 57,309     |
+| 26         | `src/features/checkout/CheckoutPage.tsx` (380); `src/features/checkout/CheckoutSteps.tsx` (250); `src/features/checkout/ShippingForm.tsx` (360)                                                                                                 | 990           | 1,578        | 58,887     |
+| 27         | `src/features/checkout/PaymentForm.tsx` (400); `src/features/checkout/ReviewOrder.tsx` (330); `src/features/checkout/OrderConfirmation.tsx` (330)                                                                                               | 1,060         | 1,331        | 60,218     |
+| 28         | `src/features/account/LoginPage.tsx` (330); `src/features/account/RegisterPage.tsx` (360); `src/features/account/AccountLayout.tsx` (250)                                                                                                       | 940           | 991          | 61,209     |
+| 29         | `src/features/account/ProfilePage.tsx` (350); `src/features/account/OrderHistoryPage.tsx` (360); `src/features/account/AddressBookPage.tsx` (380)                                                                                               | 1,090         | 1,610        | 62,819     |
+| 30         | `src/features/admin/AdminDashboardPage.tsx` (400); `src/features/admin/KpiCard.tsx` (270); `src/features/admin/SalesChart.tsx` (380); `src/features/admin/RecentOrdersTable.tsx` (290); `src/features/admin/TopProductsTable.tsx` (250)         | 1,590         | 1,888        | 64,707     |
+| 31         | `src/features/reports/ReportsPage.tsx` (330); `src/features/reports/SalesReport.tsx` (400); `src/features/reports/ProductPerformanceReport.tsx` (350)                                                                                           | 1,080         | 1,166        | 65,873     |
+| 32         | `src/features/reports/CustomerReport.tsx` (330); `src/features/reports/DateRangePicker.tsx` (310); `src/features/reports/ReportTable.tsx` (290)                                                                                                 | 930           | 1,386        | 67,259     |
+| 33         | `src/Router.tsx` (390); `src/App.tsx` (290); `src/main.tsx` (120)                                                                                                                                                                               | 800           | 1,103        | 68,362     |
+| 34         | `tests/setup.ts` (130); `tests/fixtures.ts` (440); `tests/testUtils.tsx` (270)                                                                                                                                                                  | 840           | 1,086        | 69,448     |
+| 35         | `tests/unit/utils/formatting.test.ts` (380); `tests/unit/utils/validation.test.ts` (290); `tests/unit/utils/collections.test.ts` (400); `tests/unit/utils/queryParams.test.ts` (220); `tests/unit/lib/catalogSearch.test.ts` (470)              | 1,760         | 6,710        | 76,158     |
+| 36         | `tests/unit/lib/pricingService.test.ts` (330); `tests/unit/lib/orderService.test.ts` (270); `tests/unit/lib/authService.test.ts` (250); `tests/unit/lib/analyticsService.test.ts` (330); `tests/unit/lib/reportService.test.ts` (310)           | 1,490         | 4,037        | 80,195     |
+| 37         | `tests/unit/lib/mockServer.test.ts` (220); `tests/unit/state/transactions.test.ts` (440); `tests/unit/state/catalogReducer.test.ts` (250); `tests/components/controls.test.tsx` (360); `tests/components/Table.test.tsx` (240)                  | 1,510         | 5,634        | 85,829     |
+| 38         | `tests/components/charts.test.tsx` (250); `tests/integration/shoppingFlow.test.tsx` (350); `tests/integration/checkoutFlow.test.tsx` (380); `tests/integration/accountFlow.test.tsx` (330); `tests/integration/adminReportsFlow.test.tsx` (440) | 1,750         | 5,584        | 91,413     |
+| 39         | `README.md` (310); `docs/architecture.md` (270); `docs/contributing.md` (160); `docs/mock-api.md` (200)                                                                                                                                         | 940           | 917          | 92,330     |
+| **Totals** | **157 mapped files, plus the 113 paths charged to them, over 39 phases**                                                                                                                                                                        | **50,000**    | **92,330**   | **92,330** |
 
 **Batch deviation, recorded once.** §0.5.2 batches a phase as "the next 3 to 5 files from the tree,
 in tree order", and every one of the 39 phases above holds 3 to 5 tree files. A phase's Part 1 row
@@ -433,8 +433,8 @@ rule it departs from governs a generation session, which is over.
 ## Part 3 — Roll-ups and size distribution
 
 The counted total is every line the tree holds except `generation-manifest.md`: the 157 mapped files'
-own 62,343 lines, plus the 29,872 that carry no budget of their own — each
-charged to the mapped file whose allocation it draws on — for a delivered total of 92,215 lines. The
+own 62,373 lines, plus the 29,957 that carry no budget of their own — each
+charged to the mapped file whose allocation it draws on — for a delivered total of 92,330 lines. The
 tables below state each part of that rule once.
 
 Rows by area: the mapped files, their own lines, the paths charged to them with their lines, and the
@@ -442,11 +442,11 @@ counted lines the two make up.
 
 | Area                                    | Mapped files | Their own lines | Paths charged to them | Their lines | Counted lines | Budgeted   |
 | --------------------------------------- | ------------ | --------------- | --------------------- | ----------- | ------------- | ---------- |
-| `src/`                                  | 121          | 49,607          | 72                    | 18,067      | 67,674        | 41,285     |
-| `tests/`                                | 23           | 11,488          | 41                    | 11,805      | 23,293        | 7,350      |
+| `src/`                                  | 121          | 49,609          | 72                    | 18,078      | 67,687        | 41,285     |
+| `tests/`                                | 23           | 11,516          | 41                    | 11,879      | 23,395        | 7,350      |
 | Root tooling                            | 9            | 331             | 0                     | 0           | 331           | 425        |
 | Documentation (`README.md` and `docs/`) | 4            | 917             | 0                     | 0           | 917           | 940        |
-| **Total**                               | **157**      | **62,343**      | **113**               | **29,872**  | **92,215**    | **50,000** |
+| **Total**                               | **157**      | **62,373**      | **113**               | **29,957**  | **92,330**    | **50,000** |
 
 Rows by budget band over the same 157 mapped files, at their own lines.
 
@@ -454,10 +454,10 @@ Rows by budget band over the same 157 mapped files, at their own lines.
 | ------------------- | ------- | -------------- | --------------- |
 | 1 to 100            | 9       | 425            | 331             |
 | 100 to 199          | 4       | 590            | 836             |
-| 200 to 299          | 49      | 12,650         | 17,979          |
-| 300 to 399          | 59      | 20,500         | 27,097          |
+| 200 to 299          | 49      | 12,650         | 18,007          |
+| 300 to 399          | 59      | 20,500         | 27,099          |
 | 400 to 500          | 36      | 15,835         | 16,100          |
-| **Total**           | **157** | **50,000**     | **62,343**      |
+| **Total**           | **157** | **50,000**     | **62,373**      |
 
 The band table's last column is the mapped files' own lines, not the counted total: a budget-free
 path carries no band of its own, so its lines stand in the area table above and in the counted total
@@ -595,7 +595,7 @@ more than 10%, one row each, over and under as the numbers fall.
 | `tests/unit/state/catalogReducer.test.ts`     | 250    | 589    | +339       | +135.6% | over       | the load transitions and the query-fingerprint guard that discards a stale response, in thirty-seven cases over each state field                                   |
 | `tests/unit/utils/collections.test.ts`        | 400    | 592    | +192       | +48.0%  | over       | forty-five cases: grouping and sorting, chunking, indexing and paging, including the boundary pages and comparator ties                                            |
 | `tests/unit/utils/formatting.test.ts`         | 380    | 600    | +220       | +57.9%  | over       | money, number and percentage formatting with the rounding edge cases and the minor-unit boundaries, over ten describe blocks                                       |
-| `tests/unit/utils/queryParams.test.ts`        | 220    | 537    | +317       | +144.1% | over       | the round trip through the address bar in thirty-seven cases: normalisation, dropped defaults and the chip entries                                                 |
+| `tests/unit/utils/queryParams.test.ts`        | 220    | 565    | +345       | +156.8% | over       | the round trip through the address bar in thirty-seven cases: normalisation, dropped defaults and the chip entries                                                 |
 | `tests/unit/utils/validation.test.ts`         | 290    | 559    | +269       | +92.8%  | over       | fifty-six cases: each validator's accept and reject inputs plus the form-level error maps, one block per field covered                                             |
 | `tsconfig.json`                               | 45     | 28     | -17        | -37.8%  | under      | the strict flags, the module and target choices and the single path alias: an options block whose entries are one line each                                        |
 | `vite.config.ts`                              | 60     | 25     | -35        | -58.3%  | under      | the React plugin, the `@` alias and the build target: three settings and the note that says why each is set                                                        |
@@ -617,7 +617,7 @@ own row records its real count.
 | `src/components/charts/readoutPlacement.ts`            | `src/components/charts/LineChart.tsx` 137        | 137   | places a chart's hover readout inside the plot area — split out of `src/components/charts/LineChart.tsx`                                                                                          |
 | `src/components/charts/svgPaths.ts`                    | `src/components/charts/chartScales.ts` 139       | 139   | the SVG path text a chart’s marks are drawn from, in the frame’s own coordinate system — split out of `src/components/charts/chartGeometry.ts`                                                    |
 | `src/components/ui/DateRangeControl.tsx`               | `src/features/reports/DateRangePicker.tsx` 395   | 395   | the range control both administrator surfaces render: presets, the two date fields — split out of `src/features/reports/DateRangePicker.tsx`                                                      |
-| `src/components/ui/SortControl.tsx`                    | `src/features/search/SortControl.tsx` 139        | 139   | the sort selector both the catalogue page and the search page compose — split out of `src/features/search/SortControl.tsx`                                                                        |
+| `src/components/ui/SortControl.tsx`                    | `src/features/search/SortControl.tsx` 150        | 150   | the sort selector both the catalogue page and the search page compose — split out of `src/features/search/SortControl.tsx`                                                                        |
 | `src/components/ui/NotFoundView.tsx`                   | `src/components/ui/Feedback.tsx` 66              | 66    | the one not-found view every surface renders when the address it was given resolves — split out of `src/components/ui/Feedback.tsx`                                                               |
 | `src/components/ui/focusHandoff.ts`                    | `src/state/hooks.ts` 291                         | 291   | the one home of the focus-handoff rule: when the control that had the focus goes away — split out of `src/state/hooks.ts`                                                                         |
 | `src/components/ui/hooks.ts`                           | `src/state/hooks.ts` 288                         | 288   | the view-facing hooks the shared primitives and their composing pages read: pagination — split out of `src/state/hooks.ts`                                                                        |
@@ -684,10 +684,10 @@ own row records its real count.
 | `tests/components/overlays.test.tsx`                   | `tests/components/controls.test.tsx` 501         | 501   | the overlay family and the supplementary surfaces beside it — dialog semantics — split out of `tests/components/controls.test.tsx`                                                                |
 | `tests/helpers/analyticsHarness.ts`                    | `tests/unit/lib/analyticsService.test.ts` 96     | 96    | the fixture surface both analytics suites read and the seam calls each had declared for itself — split out of `tests/unit/lib/analyticsService.test.ts`                                           |
 | `tests/helpers/checkoutHarness.ts`                     | `tests/integration/checkoutFlow.test.tsx` 116    | 116   | the basket walk and the shipping step's inputs the two checkout suites had each declared — split out of `tests/integration/checkoutFlow.test.tsx`                                                 |
-| `tests/helpers/journeyHarness.tsx`                     | `tests/integration/shoppingFlow.test.tsx` 380    | 380   | the harness the journey files read the rendered application through: the copy — split out of `tests/integration/shoppingFlow.test.tsx`                                                            |
+| `tests/helpers/journeyHarness.tsx`                     | `tests/integration/shoppingFlow.test.tsx` 381    | 381   | the harness the journey files read the rendered application through: the copy — split out of `tests/integration/shoppingFlow.test.tsx`                                                            |
 | `tests/helpers/pricingHarness.ts`                      | `tests/unit/lib/pricingService.test.ts` 35       | 35    | the money invariants both pricing suites assert over a priced cart — split out of `tests/unit/lib/pricingService.test.ts`                                                                         |
 | `tests/integration/accountAddressBook.test.tsx`        | `tests/integration/accountFlow.test.tsx` 245     | 245   | the address book's own flow: a refused save, two adds, an edit — split out of `tests/integration/accountFlow.test.tsx`                                                                            |
-| `tests/integration/catalogBrowseFlow.test.tsx`         | `tests/integration/shoppingFlow.test.tsx` 406    | 406   | the catalogue and search surfaces, from the listing's facets and sort to its failure states — split out of `tests/integration/shoppingFlow.test.tsx`                                              |
+| `tests/integration/catalogBrowseFlow.test.tsx`         | `tests/integration/shoppingFlow.test.tsx` 479    | 479   | the catalogue and search surfaces, from the listing's facets and sort to its failure states — split out of `tests/integration/shoppingFlow.test.tsx`                                              |
 | `tests/integration/catalogSuggestionsFlow.test.tsx`    | `tests/integration/shoppingFlow.test.tsx` 348    | 348   | the suggestion list's keyboard choice and the product page it opens — split out of `tests/integration/catalogBrowseFlow.test.tsx`                                                                 |
 | `tests/integration/catalogUrlState.test.tsx`           | `tests/integration/shoppingFlow.test.tsx` 208    | 208   | the catalogue's query contract with the address bar: writes raised inside one render — split out of `tests/integration/shoppingFlow.test.tsx`                                                     |
 | `tests/integration/checkoutPricingFailure.test.tsx`    | `tests/integration/checkoutFlow.test.tsx` 132    | 132   | the checkout's refused price request: the seam's failure reported with a retry — split out of `tests/integration/checkoutFlow.test.tsx`                                                           |
@@ -736,14 +736,14 @@ covering suite supplies.
 **§0.5.1's ±5% band (47,500-52,500) — settled at delivery.** §0.5.1 allocates exactly 50,000
 lines across the 157 counted files and expects the delivered total inside ±5% of that through
 §0.5.5's reconciliation rule. The allocation holds exactly: 157 integer budgets, no ranges, the
-largest 500. The delivered total is 92,215, so the band is not met. It cannot be met on this tree,
+largest 500. The delivered total is 92,330, so the band is not met. It cannot be met on this tree,
 because each of the three routes to it is closed. Padding a file up to its budget only raises the
 total, and §0.5.5 forbids it — "Nothing is added to a file that has finished its job". Cutting a
 file's real content down to its budget is forbidden by §0.5.5, §0.8.2 and §0.12.2 — no real code is
 cut to stay inside one. Folding the 113 budget-free paths back into the mapped files they draw on is
 the third, and it cannot reach the band either: a merge changes the file count and not the line
 count, absorbing only the header and the import lines it removes — under 2,000 lines across all 113 —
-where the tree stands 42,215 lines past the allocation and 39,715 past the band's top. Most of the
+where the tree stands 42,330 lines past the allocation and 39,830 past the band's top. Most of the
 folds would not fit anyway: measured on this tree, 47 of the 52 allocation roots' whole groups
 already exceed 600 lines, and the file a split is charged to, plus that split's own lines, exceeds
 600 in 84 of the 107 splits; §0.5.4's one-file-once rule — a generated file is never rewritten — and
@@ -833,4 +833,4 @@ output, so the contract is recorded here rather than checked here.
 in the file that owns the concern and never by duplicating logic into another file. The only file
 rewritten across phases is this manifest, which is bookkeeping rather than product code.
 
-Total lines so far: 92215 / 50000
+Total lines so far: 92330 / 50000

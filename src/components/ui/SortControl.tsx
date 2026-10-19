@@ -1,7 +1,7 @@
 /**
  * Path: src/components/ui/SortControl.tsx
  * Purpose: The sort selector both the catalogue and search surfaces compose, reporting the chosen key onward
- * Lines: 139
+ * Lines: 150
  */
 
 import type { ChangeEvent, ReactElement } from "react";
@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { CATALOG_COPY } from "@/constants/content";
 import { SORT_OPTIONS } from "@/constants/taxonomy";
 import type { SortKey } from "@/types/catalog";
+import { sortOptionsFor } from "@/utils/queryParams";
 
 /*
  * Class contract. This list is what the sheets owe the control, each class named with the sheet that declares
@@ -41,6 +42,12 @@ export interface SortControlProps {
    * renders the sort the address bar carries rather than one of its own.
    */
   readonly value: SortKey;
+  /**
+   * The active search term, which is what decides the keys the query can apply: the vocabulary's `relevance`
+   * ranks against a term, so `src/utils/queryParams.ts` offers it only to a query that carries one. Required
+   * rather than optional, so no caller can reintroduce that option by leaving it out.
+   */
+  readonly queryTerm: string;
   /**
    * Reports the key the shopper picked. The caller writes it through the catalogue's own setter, which
    * navigates: the URL stays the single store of the query, the listing returns to its first page because a
@@ -84,10 +91,13 @@ function composeClassName(...values: readonly (string | false | undefined)[]): s
  * value it reads there and the setter that writes it back — `useCatalogFilters().filters.sort` and that
  * context's `setSort` on the two surfaces that compose this control today — so no surface keeps the two in
  * step and the listing returns to its first page through the writer's own rule. The options are the
- * taxonomy's own list, so the order the keys appear in and the words a shopper reads have one home, and the
- * comparators that apply a key stay in `src/lib/catalogService.ts`; no ordering rule is written here. The key
- * a change carries is looked up among those options rather than cast from the DOM's string, so a value the
- * option list does not carry is ignored and the query keeps the sort it holds.
+ * taxonomy's own vocabulary cut to the keys `src/utils/queryParams.ts` reads for the active term, so the order
+ * the keys appear in and the words a shopper reads have one home and the comparators that apply a key stay in
+ * `src/lib/catalogService.ts`; no ordering rule is written here. That is why `relevance` is absent from a
+ * term-less listing: the same reader resolves it to the term-less default there, so offering it would leave
+ * the shopper with an option that silently snaps the control back to another one. The key a change carries is
+ * looked up among the vocabulary's own options rather than cast from the DOM's string, so a value the option
+ * list does not carry is ignored and the query keeps the sort it holds.
  *
  * The control is never disabled. While the listing is reloading it stays usable, and a failed load leaves it
  * usable so picking another order issues a fresh request; the surface reports the in-flight state with its own
@@ -108,12 +118,13 @@ function composeClassName(...values: readonly (string | false | undefined)[]): s
  * change it reports is written back by navigating — this control reads no context and enforces neither, which
  * is what keeps it free of the state layer it would otherwise sit above.
  *
- * @param props - The key to show, the change to report onward, the visible label, the dense arrangement and
- *   any extra classes. See {@link SortControlProps}.
+ * @param props - The key to show, the active query term behind the offerable keys, the change to report onward,
+ *   the visible label, the dense arrangement and any extra classes. See {@link SortControlProps}.
  * @returns The field holding the sort select.
  */
 export function SortControl({
   value,
+  queryTerm,
   onChange,
   label,
   isCompact = false,
@@ -130,7 +141,7 @@ export function SortControl({
   return (
     <Select
       label={label ?? CATALOG_COPY.SORT_GROUP_LABEL}
-      options={SORT_OPTIONS}
+      options={sortOptionsFor(queryTerm)}
       value={value}
       onChange={changeSort}
       containerClassName={composeClassName(isCompact && "sp-sort", className)}

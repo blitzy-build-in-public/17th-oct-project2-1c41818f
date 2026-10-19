@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/catalogBrowseFlow.test.tsx
  * Purpose: The catalogue listing's own surfaces, from its paging, category scope, facets, sort and focus hand-off to the search listing's empty, unapplied-term and failed-read states.
- * Lines: 406
+ * Lines: 479
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -25,6 +25,7 @@ import {
   ROUTES,
   SEARCH_COPY,
   SELECTED_BRAND,
+  SORT_OPTIONS,
   act,
   announcedTotal,
   buttonNamed,
@@ -52,6 +53,7 @@ import {
   setQuery,
   settledTiles,
   showcaseTile,
+  textOf,
   tileNames,
   tilePricesMinor,
   toggleFacetValue,
@@ -69,6 +71,24 @@ import {
  * states through the seam's own failure switch. Every input comes from the seeded records or the copy module, so
  * no figure and no sentence is typed.
  */
+
+// The two inputs these cases add to the harness's own -------------------------------------------------
+
+/**
+ * The term a shopper submits from the term-less search page: one the catalogue answers with several products
+ * whose relevance order and newest order differ, which is what tells the two entry points to one query apart.
+ */
+const SEARCHED_TERM = "headphones";
+
+/** The sort key that needs a term to rank, which is the option a term-less listing cannot apply. */
+const RELEVANCE_SORT = "relevance";
+
+/** The names a sort control offers, read from the options it renders rather than counted. */
+function offeredSortNames(control: HTMLElement): string[] {
+  return within(control)
+    .queryAllByRole("option")
+    .map((option) => textOf(option));
+}
 
 describe("the shopper's catalogue and search journey", () => {
   isolateJourneyCases();
@@ -214,6 +234,59 @@ describe("the shopper's catalogue and search journey", () => {
       expect(prices.length).toBeGreaterThan(1);
       expect(prices).toEqual([...prices].sort((left, right) => left - right));
     });
+  });
+
+  it("offers no relevance option until the query carries a term to rank", async () => {
+    const relevance = SORT_OPTIONS.find((option) => option.value === RELEVANCE_SORT);
+    if (relevance === undefined) throw new Error("The taxonomy declares no relevance sort option.");
+
+    const { unmount } = renderApp({ route: ROUTES.CATALOG });
+    await announcedTotal();
+
+    // Relevance ranks against a term, so a term-less listing is not offered an option it cannot apply.
+    expect(offeredSortNames(screen.getByLabelText(CATALOG_COPY.SORT_GROUP_LABEL))).not.toContain(
+      relevance.label,
+    );
+
+    unmount();
+    renderApp({
+      route: filtersToPath(ROUTES.SEARCH, setQuery(DEFAULT_FILTER_STATE, SEARCHED_TERM)),
+    });
+    await settledTiles();
+
+    // The same key applies once a term is present, so the control offers it there.
+    expect(offeredSortNames(screen.getByLabelText(CATALOG_COPY.SORT_GROUP_LABEL))).toContain(
+      relevance.label,
+    );
+  });
+
+  it("ranks the first search a shopper submits as the same query loaded directly", async () => {
+    const submittedSearch = renderApp({ route: ROUTES.SEARCH });
+    const field = await screen.findByLabelText(SEARCH_COPY.FIELD_LABEL);
+    await submittedSearch.user.type(field, SEARCHED_TERM);
+    await submittedSearch.user.keyboard("{Enter}");
+
+    const submitted = await settledTiles();
+    const termState = setQuery(DEFAULT_FILTER_STATE, SEARCHED_TERM);
+    // The submit introduces the term onto a state resting at the term-less default, so the new query's own
+    // default applies in its place rather than being pinned into the address: the control holds that sort.
+    expect(termState.sort).toBe(RELEVANCE_SORT);
+    expect(filtersToPath(ROUTES.SEARCH, termState)).toBe(`${ROUTES.SEARCH}?q=${SEARCHED_TERM}`);
+    expect(screen.getByLabelText(CATALOG_COPY.SORT_GROUP_LABEL)).toHaveValue(termState.sort);
+    submittedSearch.unmount();
+
+    // One query, one ranking: the address the submit leaves, loaded directly, renders the identical tile order.
+    const directLoad = renderApp({ route: filtersToPath(ROUTES.SEARCH, termState) });
+    await waitFor(() => expect(tileNames()).toEqual(submitted));
+    directLoad.unmount();
+
+    // The term-less default the old submit pinned in would have ordered the search the other way instead, which
+    // this term's own results tell apart.
+    renderApp({
+      route: filtersToPath(ROUTES.SEARCH, withSort(termState, DEFAULT_FILTER_STATE.sort)),
+    });
+    await waitFor(() => expect(tileNames()).toHaveLength(submitted.length));
+    expect(tileNames()).not.toEqual(submitted);
   });
 
   it("reloads a searched, filtered and sorted URL to the identical result set", async () => {

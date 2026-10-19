@@ -1,7 +1,7 @@
 /**
  * Path: tests/helpers/journeyHarness.tsx
  * Purpose: The harness the journey files read the rendered application through: the copy, records and seam they assert by, the test-utils surface they drive it with, and one reader per rendered surface.
- * Lines: 380
+ * Lines: 381
  */
 
 import { act } from "@testing-library/react";
@@ -15,7 +15,7 @@ import {
 import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
 import * as content from "@/constants/content";
 import { ROUTES, categoryPath, productPath } from "@/constants/routes";
-import { CATEGORY_DEFINITIONS, FACET_DEFINITIONS } from "@/constants/taxonomy";
+import { CATEGORY_DEFINITIONS, FACET_DEFINITIONS, SORT_OPTIONS } from "@/constants/taxonomy";
 import { BRANDS } from "@/data/categories";
 import { PRODUCTS } from "@/data/products";
 import { API_PATHS } from "@/lib/apiClient";
@@ -60,6 +60,7 @@ export {
   screen,
   SEARCH_SUGGESTION_LIMIT,
   setQuery,
+  SORT_OPTIONS,
   toggleFacetValue,
   waitFor,
   within,

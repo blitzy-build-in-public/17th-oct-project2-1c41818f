@@ -5,10 +5,9 @@
  */
 
 /**
- * The URL is the store of every catalogue and search query: this module is its only reader and writer, and a
- * filtered, sorted and searched URL therefore reloads to the identical result set. Reading is tolerant — an
- * unknown sort key, a malformed number, a repeated parameter, an out-of-range page and an inverted price range
- * all resolve to a usable state — while writing is canonical, so equivalent selections serialise to one URL.
+ * The URL is the store of every catalogue and search query: this module is its only reader and writer, so a filtered,
+ * sorted and searched URL reloads to the identical result set. Reading tolerates anything a hand-made URL carries, as
+ * the per-key contract below states, and writing is canonical, so equivalent selections serialise to one URL.
  *
  * Per-key contract. `Default` is what `readFilterState` restores when a key is absent and what
  * `DEFAULT_FILTER_STATE` holds; `Omitted when` is what `writeFilterState` leaves out.
@@ -37,6 +36,7 @@ import {
   SORT_OPTIONS,
   type FacetDefinition,
   type FacetDefinitionOption,
+  type SortOption,
 } from "@/constants/taxonomy";
 import type { FacetId, FacetQuery, FilterState, SortKey } from "@/types/catalog";
 import { clampPage, normalisePageSize, uniqueBy } from "@/utils/collections";
@@ -45,9 +45,8 @@ import { roundMinorUnits } from "@/utils/format";
 // Local aliases -----------------------------------------------------------------------------------
 
 /**
- * The state's own field types, read as indexed accesses rather than imported from `src/types`. The branded
- * identifiers are asserted from the URL's strings — the signal that they did not come from the generator in
- * `src/utils/strings.ts` — and whether an id names a real category is the data layer's decision.
+ * The state's own field types, read as indexed accesses rather than imported from `src/types`. The branded identifiers are asserted from the URL's
+ * strings — the signal that they did not come from the generator in `src/utils/strings.ts` — and whether an id names a real category is the data layer's decision.
  */
 type CategoryIdentifier = FilterState["categoryIds"][number];
 type BrandIdentifier = FilterState["brandIds"][number];
@@ -63,9 +62,8 @@ interface PriceRange {
 // Query-string vocabulary -------------------------------------------------------------------------
 
 /**
- * Every query-string key this module reads and writes, named once so the URL, `GET /api/products` and
- * `GET /api/facets` cannot drift apart. A list is written as one comma-separated value and is also accepted
- * as repeated occurrences of the key.
+ * Every query-string key this module reads and writes, named once so the URL, `GET /api/products` and `GET /api/facets`
+ * cannot drift apart; a list is written as one comma-separated value and is also accepted as repeated keys.
  */
 export const FILTER_PARAMS = {
   QUERY: "q",
@@ -97,9 +95,8 @@ const DEFAULT_SORT_KEY: SortKey = "newest";
 const TRUE_LITERAL = "true";
 
 /**
- * The canonical empty selection, and the reference every omission is measured against: no query term, no
- * facet, no price bound, no rating, the default sort, the first page and the default page size, so a listing
- * at this state writes an empty query string and `/catalog` and `/catalog?` name one listing.
+ * The canonical empty selection, and the reference every omission is measured against, so a listing at this state
+ * writes an empty query string: `/catalog` and `/catalog?` name one listing.
  */
 export const DEFAULT_FILTER_STATE: FilterState = {
   q: "",
@@ -123,8 +120,7 @@ const FACET_VOCABULARY: readonly FacetDefinition[] = FACET_DEFINITIONS;
 /** The sort keys the URL accepts, read from the taxonomy so it cannot carry a key the control cannot show. */
 const SORT_KEYS: readonly string[] = SORT_OPTIONS.map((option) => option.value);
 
-/** The vocabulary's one reading of the sort member, which the URL reader and the transport's request reader
- * both judge a `sort` key by: whether it is one the sort control offers. */
+/** The vocabulary's one reading of the sort member, which the URL reader and the transport both judge a `sort` key by: whether the sort control offers it. */
 export const isConfiguredSortKey = (value: string): value is SortKey => SORT_KEYS.includes(value);
 
 /** The values a facet declares, or none when the catalogue supplies its terms instead. */
@@ -222,6 +218,17 @@ function normaliseSort(named: string, query: string): SortKey {
   return named === "relevance" && query.trim() === "" ? DEFAULT_SORT_KEY : named;
 }
 
+/**
+ * The sort keys a query can apply, and so the options `src/components/ui/SortControl.tsx` offers: a key stands
+ * exactly when this module's own reading of it for that query yields it, so `relevance` needs a term.
+ *
+ * @param query - The active search term, as the state holds it.
+ * @returns The vocabulary's options in its own order, filtered to the keys this query resolves to.
+ */
+export function sortOptionsFor(query: string): readonly SortOption[] {
+  return SORT_OPTIONS.filter((option) => normaliseSort(option.value, query) === option.value);
+}
+
 /** A requested page as a whole number at or above the first, clamped to `pageCount` when the caller knows it. */
 function normalisePageNumber(requested: number | null, pageCount?: number): number {
   const page =
@@ -306,9 +313,8 @@ interface FacetAccessor {
 }
 
 /**
- * The five facets' accessors, stated once per facet: every matcher, writer and chip reads this table rather
- * than switching over the facet ids, so the panel, the chips and the services cannot disagree about what a
- * facet holds. A single-valued facet — the price range and the rating — reports at most one value.
+ * The five facets' accessors, stated once per facet: every matcher, writer and chip reads this table rather than switching over the facet ids, so
+ * the panel, the chips and the services cannot disagree about what a facet holds; a single-valued facet (price, rating) reports at most one value.
  */
 const FACET_ACCESSORS: Readonly<Record<FacetId, FacetAccessor>> = {
   category: {
@@ -351,9 +357,8 @@ const FACET_ACCESSORS: Readonly<Record<FacetId, FacetAccessor>> = {
 // Reading -----------------------------------------------------------------------------------------
 
 /**
- * Reads query state from a URL query string through the vocabulary's one reading of each member, tolerating
- * anything a hand-made URL can carry as the per-key contract above states and clamping the page to the pages
- * that exist when the caller knows `pageCount`. An unset field reads as `null` or as its default.
+ * Reads query state from a URL query string through the vocabulary's one reading of each member, tolerating anything a hand-made
+ * URL carries as the per-key contract above states. `pageCount`, when known, clamps the page; an unset field reads as `null` or its default.
  *
  * @param params - The query string, with or without a leading `?`, or already-parsed parameters.
  */
@@ -384,9 +389,8 @@ export function readFilterState(params: URLSearchParams | string, pageCount?: nu
 // Writing -----------------------------------------------------------------------------------------
 
 /**
- * Writes query state as canonical, default-free parameters: keys sorted, list values de-duplicated and sorted
- * into one comma-separated value, and every field holding its default left out, so an empty string means the
- * default selection. The state is normalised again here and is never mutated.
+ * Writes query state as canonical, default-free parameters: keys sorted, list values de-duplicated and sorted into one comma-separated
+ * value, every field holding its default left out so an empty string means the default selection, and the state normalised, never mutated.
  */
 export function writeFilterState(state: FilterState): URLSearchParams {
   const params = new URLSearchParams();
@@ -423,9 +427,8 @@ export function filtersToSearchString(state: FilterState): string {
 }
 
 /**
- * Builds the path and query of a link into a filtered listing, so a link and the navigation that follows a
- * filter write the identical URL; `path` carries no query of its own, as the builders in
- * `src/constants/routes.ts` produce it.
+ * Builds the path and query of a link into a filtered listing, so a link and the navigation that follows a filter write the identical
+ * URL; `path` carries no query of its own, as the builders in `src/constants/routes.ts` produce it.
  */
 export function filtersToPath(path: string, state: FilterState): string {
   return `${path}${filtersToSearchString(state)}`;
@@ -434,9 +437,8 @@ export function filtersToPath(path: string, state: FilterState): string {
 // Filter summary ----------------------------------------------------------------------------------
 
 /**
- * The filter half of the state — every facet, the query term and the tags, with the sort and the paging
- * dropped — as `GET /api/products` and `GET /api/facets` take their parameters. Read back from the state's
- * canonical form, so the terms a facet counts are the terms the listing filtered by.
+ * The filter half of the state — every facet, the query term and the tags, with the sort and the paging dropped — as `GET /api/products`
+ * and `GET /api/facets` take their parameters, read back from the state's canonical form, so the terms a facet counts are the terms the listing filtered by.
  */
 export function toFacetQuery(state: FilterState): FacetQuery {
   const { q, categoryIds, brandIds, minPriceMinor, maxPriceMinor, minRating, inStockOnly, tags } =
@@ -445,9 +447,8 @@ export function toFacetQuery(state: FilterState): FacetQuery {
 }
 
 /**
- * Reports whether any filter is applied: a facet value or a tag, but not a query term, a sort or a page.
- * Each branch mirrors the emptiness rule of that facet's own accessor in `FACET_ACCESSORS`, so the boolean
- * and the chip count cannot disagree, and no chip descriptor or label lookup is built to answer it.
+ * Reports whether any filter is applied: a facet value or a tag, but not a query term, a sort or a page. Each branch mirrors the emptiness
+ * rule of that facet's own accessor in `FACET_ACCESSORS`, so the boolean and the chip count cannot disagree, and no chip or label lookup is built to answer it.
  */
 export function hasActiveFilters(state: FilterState): boolean {
   if (state.categoryIds.length > 0 || state.brandIds.length > 0) return true;
@@ -475,10 +476,7 @@ export type ActiveFilterEntry =
     }
   | { readonly kind: "tag"; readonly value: string };
 
-/**
- * The applied filters as one chip each, in the panel's own facet order with tags last, so
- * `src/features/search/ActiveFilters.tsx` and `FilterPanel.tsx` cannot disagree about what is applied.
- */
+/** The applied filters as one chip each, in the panel's own facet order with tags last, so `ActiveFilters.tsx` and `FilterPanel.tsx` cannot disagree about what is applied. */
 export function activeFilterEntries(state: FilterState): readonly ActiveFilterEntry[] {
   const entries: ActiveFilterEntry[] = [];
   for (const definition of FACET_VOCABULARY) {
@@ -520,12 +518,15 @@ export function withSort(state: FilterState, sortKey: SortKey): FilterState {
 }
 
 /**
- * Sets the search term, trimmed. A chosen sort is kept — only a relevance sort left with no term is repaired
- * to the default — and the listing returns to its first page.
+ * Sets the search term, trimmed, and returns the listing to its first page. A sort the shopper chose is kept,
+ * while a state resting on its own query's default takes the new query's default in its place: a submit that
+ * introduces a term therefore ranks by relevance, and clearing one returns the sort to the term-less default.
  */
 export function setQuery(state: FilterState, q: string): FilterState {
   const query = q.trim();
-  return { ...state, q: query, sort: normaliseSort(state.sort, query), page: 1 };
+  const restedOnDefault = normaliseSort(state.sort, state.q) === defaultSortKeyFor(state.q);
+  const sort = restedOnDefault ? defaultSortKeyFor(query) : normaliseSort(state.sort, query);
+  return { ...state, q: query, sort, page: 1 };
 }
 
 /** Adds a facet value to the filter, or removes it when it is already applied; one that names nothing holds. */
@@ -540,9 +541,8 @@ export function toggleFacetValue(state: FilterState, facetId: FacetId, value: st
 }
 
 /**
- * Replaces every value of one facet at once, as a preset or a group's clear action does: an empty list clears
- * the facet, and a range facet applies several bands as the smallest range containing them, leaving the upper
- * bound open when one of the bands is open.
+ * Replaces every value of one facet at once, as a preset or a group's clear action does: an empty list clears the facet, and a range facet
+ * applies several bands as the smallest range containing them, leaving the upper bound open when one of the bands is open.
  */
 export function setFacetValues(
   state: FilterState,

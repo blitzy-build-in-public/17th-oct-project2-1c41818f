@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 358
+ * Lines: 359
  */
 
 import { useId } from "react";
@@ -335,6 +335,7 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
               <SortControl
                 isCompact
                 value={catalog.filters.sort}
+                queryTerm={catalog.filters.q}
                 onChange={(sort: SortKey): void => catalog.setSort(sort)}
               />
             </div>

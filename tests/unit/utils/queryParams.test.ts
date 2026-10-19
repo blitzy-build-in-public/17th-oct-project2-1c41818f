@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/utils/queryParams.test.ts
  * Purpose: Filter state to URL and back, with normalisation and default omission
- * Lines: 537
+ * Lines: 565
  */
 
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,7 @@ import {
   setPriceRange,
   setQuery,
   setRating,
+  sortOptionsFor,
   toFacetQuery,
   toggleFacetValue,
   toggleTag,
@@ -197,6 +198,8 @@ describe("canonical identity and normalisation", () => {
       brandIds: [BRAND_IDS[1]],
       minRating: 4,
       inStockOnly: true,
+      // A term query rests at its own default sort, which its address carries no key for either.
+      sort: readFilterState("?q=lamp").sort,
     });
     expect(filtersToSearchString(composed)).toBe(filtersToSearchString(written));
     expect(readFilterState(filtersToSearchString(composed)).q).toBe("lamp");
@@ -311,6 +314,19 @@ describe("the composed writers", () => {
     expect(readFilterState("?q=lamp&sort=relevance").sort).toBe("relevance");
     expect(readFilterState("?sort=relevance").sort).toBe(DEFAULT_FILTER_STATE.sort);
     expect(readFilterState("?sort=sideways").sort).toBe(DEFAULT_FILTER_STATE.sort);
+  });
+
+  it("rests a term introduced by a submit at that query's own default, and keeps a chosen key", () => {
+    // The state a submit introduces a term onto rests at the term-less default, which is no sort of the new
+    // query's: that query's own default applies in its place and its address carries no sort key, so a query
+    // ranks one way whether it is submitted or loaded. A key the shopper chose is carried over untouched.
+    const introduced = setQuery(DEFAULT_FILTER_STATE, "headphones");
+    expect(introduced.sort).toBe(readFilterState("?q=headphones").sort);
+    expect(filtersToSearchString(introduced)).toBe("?q=headphones");
+
+    const chosen = setQuery(makeFilterState({ sort: "price-asc" }), "headphones");
+    expect(chosen.sort).toBe("price-asc");
+    expect(filtersToSearchString(chosen)).toBe("?q=headphones&sort=price-asc");
   });
 
   it.each(SORT_OPTIONS.map((option) => option.value))("round-trips the sort key %s", (sortKey) => {
@@ -443,6 +459,18 @@ describe("the composed writers", () => {
     expect(params.get("page")).toBe("2");
     expect(params.get("sort")).toBeNull();
     expect(state).toEqual(snapshot);
+  });
+});
+
+describe("the sort options a query can offer", () => {
+  it("offers a key exactly when the query's own reading of it yields that key", () => {
+    // Both lists come from the vocabulary, so no assertion restates a key or an order of its own: a term
+    // offers the whole vocabulary, and a term-less listing loses the one key that needs a term to rank.
+    expect(sortOptionsFor("lamp")).toEqual([...SORT_OPTIONS]);
+    expect(sortOptionsFor("")).toEqual(
+      SORT_OPTIONS.filter((option) => option.value !== "relevance"),
+    );
+    expect(sortOptionsFor("   ")).toEqual(sortOptionsFor(""));
   });
 });
 
