@@ -1,7 +1,7 @@
 /**
  * Path: src/data/reviewWrites.ts
  * Purpose: The review half of this browser's durable record: the guard that reads a published review back, the append that records one and the fold that lays the record's rows over the seeded ones
- * Lines: 107
+ * Lines: 110
  */
 
 // This is not a path the tree maps on its own: it is a second split of the durable record
@@ -10,10 +10,13 @@
 // fourth collection this browser adds to a seeded one, and the only one the seed holds as a list of rows
 // rather than as a record indexed by identifier: the member's own guard, the append that records an
 // accepted review and the fold that lays the record's rows over the seeded ones live here, while the
-// record's shape, its key and its other members stay in `src/data/clientWrites.ts`, which owns the one
-// write through the storage util. This module holds no store, no key and no state of its own.
+// record's key, its guard, its writes and its other folds stay in `src/data/clientWrites.ts`, which owns the
+// one write through the storage util. The record's own shape lives in `src/data/clientWriteRecord.ts`, which
+// both modules read it from: this module takes the shape from there rather than from the module that folds
+// it, so between the two of them the module graph stays acyclic. This module holds no store, no key and no
+// state of its own.
 
-import type { ClientWrites } from "@/data/clientWrites";
+import type { ClientWrites } from "@/data/clientWriteRecord";
 import type { Review } from "@/types/catalog";
 
 // Reading a stored review ---------------------------------------------------------------------------

@@ -60,7 +60,7 @@ export const STORAGE_KEYS = {
    * own key rather than inside the table it seals, because a secret stored beside the records it proves
    * would be replaced with them. The check is demonstration-grade, not a boundary: the secret is held in the
    * same browser store the records are, so whoever writes one can write the other — the limit
-   * `src/data/collectionStore.ts` states for the whole account store. */
+   * `src/data/storeWrites.ts` states for the whole account store. */
   SESSION_SEAL: `${STORAGE_KEY_PREFIX}.session-seal`,
   /** The secret a placement record is sealed with: one value this browser mints for itself, so an entry a
    * script wrote into `ORDER_TOKENS` can be told from one the product itself recorded and is refused, and a

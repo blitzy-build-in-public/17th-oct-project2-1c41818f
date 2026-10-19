@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchPage.tsx
  * Purpose: Search route: query summary, facets, sort control, active-filter chips and results
- * Lines: 353
+ * Lines: 358
  */
 
 import { useId } from "react";
@@ -32,6 +32,7 @@ import { SearchBar } from "@/features/search/SearchBar";
 import { SortControl } from "@/features/search/SortControl";
 import { highlightSegments, isBlankQuery, tokenise } from "@/lib/searchService";
 import type { SearchSegment } from "@/lib/searchService";
+import type { SortKey } from "@/types/catalog";
 import { useQuickAdd } from "@/state/CartContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
@@ -124,9 +125,9 @@ export interface SearchPageProps {
  * The search route: the term, the facets, the sort and the page in the address bar, and the results they name.
  *
  * The URL is the single store of the query. This page reads it through `useCatalogFilters()` and writes it
- * only through that context's setters — each composing control calls the setter it needs for itself — so a
- * searched, filtered and paged address reloads to the identical result set and no filter value is mirrored
- * into React state. What it reads about the answer is `useCatalog()` alone: the page holds no state, issues no
+ * only through that context's setters — the controls composed here call the setter each needs, the shared
+ * sort control reporting its key for this page to write — so a searched, filtered, sorted and paged address
+ * reloads to the identical result set and no filter value is mirrored into React state. What it reads about the answer is `useCatalog()` alone: the page holds no state, issues no
  * request and recomputes no facet count, because the catalogue service answered with the facets it counted.
  * The one other thing it reads is the cart's add, taken through `useQuickAdd` in `src/state/CartContext.tsx`
  * and handed to the results' tiles: a tile is shared presentation and may not read the cart itself, and the
@@ -331,7 +332,11 @@ export function SearchPage({ className }: SearchPageProps): ReactElement {
               <p className="sp-result-count" role="status">
                 {announcement}
               </p>
-              <SortControl isCompact />
+              <SortControl
+                isCompact
+                value={catalog.filters.sort}
+                onChange={(sort: SortKey): void => catalog.setSort(sort)}
+              />
             </div>
             <ActiveFilters focusTargetRef={regionRef} />
             <section

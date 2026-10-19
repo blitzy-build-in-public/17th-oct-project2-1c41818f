@@ -1,14 +1,15 @@
 /**
  * Path: tests/integration/catalogSuggestionsFlow.test.tsx
  * Purpose: The suggestion list's keyboard choice and the product page it opens, with the review a signed-in customer adds and the addresses that resolve to nothing.
- * Lines: 281
+ * Lines: 348
  */
 
 import { describe, expect, it, vi } from "vitest";
 
 import { DEMO_ACCOUNTS } from "@/constants/config";
 import { loginPath } from "@/constants/routes";
-import { formatReviewCount } from "@/utils/format";
+import type { Product } from "@/types/catalog";
+import { formatDiscount, formatReviewCount, formatScaledPercent } from "@/utils/format";
 
 import {
   A11Y_COPY,
@@ -63,6 +64,9 @@ const SUITE_API_LATENCY_MS = "0";
 /** How a rating summary reads: the copy module's own sentence with both figures left open. */
 const RATING_SUMMARY_PATTERN = /^Rated [0-9.]+ from [0-9,]+ reviews?$/;
 
+/** What a suggestion row's caption joins the brand, the price and any saving with. */
+const CAPTION_SEPARATOR = " \u00b7 ";
+
 /** Where a page's rating summaries live: the review list's own and the related strip's tiles each sit in a
  *  named region, so what the pattern leaves outside every region is the product's own summary. */
 
@@ -81,6 +85,18 @@ function detailRatingSummary(): HTMLElement {
   if (first === undefined || found.length > 1)
     throw new Error(`The product page stated ${String(found.length)} rating summaries of its own.`);
   return first;
+}
+
+/** The seeded product a suggestion row names, as the longest seeded name its own text starts with.
+ *  A row renders the text it suggests first and its caption after it, so a brand or a category row
+ *  starts with no product's name and names none. */
+function suggestedProduct(text: string): Product | undefined {
+  let named: Product | undefined;
+  for (const product of PRODUCTS) {
+    if (!text.startsWith(product.name)) continue;
+    if (named === undefined || product.name.length > named.name.length) named = product;
+  }
+  return named;
 }
 
 describe("the shopper's suggestions and the product page they open", () => {
@@ -116,6 +132,57 @@ describe("the shopper's suggestions and the product page they open", () => {
       const landed = screen.getByRole("heading", { level: 1 });
       expect(productNamed(textOf(landed)).brandId).toBe(SELECTED_BRAND.id);
     });
+  });
+
+  it("captions a suggested product with the record the loaded catalogue page holds", async () => {
+    const { user } = renderApp({ route: ROUTES.SEARCH });
+    const field = await screen.findByLabelText(SEARCH_COPY.FIELD_LABEL);
+
+    // The brand is searched for through the field, so the page behind the panel is the one holding that
+    // brand's products: the flow in which the record a caption states is in hand.
+    await user.type(field, SELECTED_BRAND.name);
+    await user.keyboard("{Enter}");
+    const pageNames = await settledTiles();
+
+    // Submitting closes the panel while the field keeps the focus, so the focus is moved off it first and then
+    // clicked back. The panel opens on the term as it has settled: while nothing searchable has settled yet the
+    // bar offers this session's recent terms, so the case waits for the answer's own product group before it
+    // reads the list, which is the panel that carries the captions.
+    await user.tab();
+    await user.click(field);
+    await screen.findByRole("group", { name: SEARCH_COPY.SUGGESTIONS_PRODUCTS_HEADING });
+    const list = screen.getByRole("listbox", { name: SEARCH_COPY.SUGGESTIONS_LIST_LABEL });
+
+    // Only a product the loaded page holds can be captioned, because the records a caption is resolved from
+    // are that page's own, and the row's brand is the brand searched for.
+    const rows = within(list).getAllByRole("option");
+    let captioned: { readonly row: HTMLElement; readonly product: Product } | undefined;
+    for (const row of rows) {
+      const product = suggestedProduct(textOf(row));
+      if (product === undefined || product.brandId !== SELECTED_BRAND.id) continue;
+      if (!pageNames.includes(product.name)) continue;
+      captioned = { row, product };
+      break;
+    }
+    if (captioned === undefined) {
+      throw new Error(
+        `No suggested ${SELECTED_BRAND.name} row named a product the page holds; ` +
+          `the page held ${pageNames.join(", ")}; the rows read ${rows.map(textOf).join(" | ")}.`,
+      );
+    }
+    const { row, product } = captioned;
+
+    // The caption states the brand and the price of the seeded record — figures a suggestion does not carry —
+    // and a record on sale carries the whole percentage saved beside them.
+    const price = formatMoney(product.priceMinor, product.currency);
+    const caption = `${SELECTED_BRAND.name}${CAPTION_SEPARATOR}${price}`;
+    expect(within(row).getByText(caption, { exact: false })).toBeInTheDocument();
+    if (product.listPriceMinor > product.priceMinor) {
+      const discount = formatDiscount(product.listPriceMinor, product.priceMinor);
+      expect(
+        within(row).getByText(`${caption}${CAPTION_SEPARATOR}${formatScaledPercent(discount, 0)}`),
+      ).toBeInTheDocument();
+    }
   });
 
   it("opens a product from the catalogue with its fields, tabs and related strip", async () => {

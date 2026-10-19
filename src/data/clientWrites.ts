@@ -1,23 +1,31 @@
 /**
  * Path: src/data/clientWrites.ts
  * Purpose: The durable record of this browser's own writes to the seeded collections, and the folds that replay it onto the seeds
- * Lines: 598
+ * Lines: 563
  */
 
 // The seeded collections are rebuilt from the frozen seed on every document load, so everything this
 // browser writes for itself would otherwise live only in the document that wrote it: a reload would forget
 // the order a checkout placed, the account a registration created with the digest that verifies it, the
 // profile a customer edited, the address book they wrote and the review they published. This module owns
-// the shape of that durable record, the writes that extend it and the pure folds that lay it over the
-// seeds. The review member's guard, append and fold live in `src/data/reviewWrites.ts`, because a review is
-// the one write the record holds as a list of rows rather than keyed by an identifier. `src/utils/storage.ts`
-// is the only store, under the key `src/constants/config.ts` declares, and the store's own collections stay
-// the source of truth for a running document — a refused write changes nothing about them.
+// the writes that extend that durable record and the pure folds that lay it over the seeds. The record's own
+// shape and its empty value live in `src/data/clientWriteRecord.ts` and are re-exported below, so the review
+// member's guard, append and fold — which read that shape — live in `src/data/reviewWrites.ts` without this
+// module importing a shape back from them: a review is the one write the record holds as a list of rows
+// rather than keyed by an identifier. `src/utils/storage.ts` is the only store, under the key
+// `src/constants/config.ts` declares, and the store's own collections stay the source of truth for a running
+// document — a refused write changes nothing about them.
 
 import { STORAGE_KEYS } from "@/constants/config";
+import {
+  NO_CLIENT_WRITES,
+  type AddressBookWrite,
+  type ClientWrites,
+  type RegisteredAccount,
+} from "@/data/clientWriteRecord";
 import type { StoredCredential } from "@/data/customers";
 import { isStoredReviews, reviewsOf, withReview } from "@/data/reviewWrites";
-import type { Address, CredentialDigest, Customer, Role } from "@/types/account";
+import type { Address, Customer, Role } from "@/types/account";
 import type { Review } from "@/types/catalog";
 import type { CustomerId, IsoDateString } from "@/types/common";
 import type {
@@ -31,61 +39,18 @@ import type {
 import { startOfDay } from "@/utils/dates";
 import { readStored, writeStored } from "@/utils/storage";
 
-// The durable record --------------------------------------------------------------------------------
+// The record's shape is published here as well as in `src/data/clientWriteRecord.ts`, because the split that
+// took the shape out left this module's public surface as it was: a consumer of the record reads it from this
+// path exactly as it did before, whether it needs the shape or one of the folds that follow.
 
-/** An account this browser registered, with the digest that verifies its password: the record a
- * reload needs for the derived session token to name an account again, and for the credentials of a
- * registered customer to sign in. The digest is the only shape a password is ever held in — the plain
- * text exists for the length of the call that digests it and is never written here. */
-export interface RegisteredAccount {
-  readonly customer: Customer;
-  readonly digest: CredentialDigest;
-}
+export { NO_CLIENT_WRITES } from "@/data/clientWriteRecord";
 
-/** One address book this browser wrote, whole: the addresses as they stood when it was written, so a
- * replay replaces that customer's book rather than merging into it. A book holds at most one default
- * of each kind, and replacing it wholesale is what keeps that true across a load. */
-export interface AddressBookWrite {
-  readonly customerId: CustomerId;
-  readonly addresses: readonly Address[];
-}
-
-/** How far this browser's own order minting has reached: `nextIndex` is the index the next order it
- * places takes, and `day` and `sequence` are the day and the sequence of the last order number it
- * minted. Two documents open at once agree through these marks instead of deriving an identity from
- * the seed each of them loaded, which is what stops them minting one identifier between them. */
-export interface OrderMint {
-  readonly nextIndex: number;
-  readonly day: IsoDateString;
-  readonly sequence: number;
-}
-
-/** Everything this browser has written to the seeded collections: the orders it placed with the marks
- * its minting has reached, the accounts it registered, the profile edits it made, the address books it
- * wrote and the reviews it published. Held under one key, so one read replays all of it onto the seed. */
-export interface ClientWrites {
-  readonly orders: readonly Order[];
-  readonly orderMint: OrderMint;
-  readonly accounts: readonly RegisteredAccount[];
-  readonly profiles: readonly Customer[];
-  readonly books: readonly AddressBookWrite[];
-  /** The reviews this browser published, newest first. Optional because a payload written before the
-   * record carried reviews holds none, and `src/data/reviewWrites.ts` reads its absence as no review
-   * rather than as a payload this build will not read. */
-  readonly reviews?: readonly Review[];
-}
-
-/** The record before this browser has written anything: what a reader gets with no store, an empty one,
- * and a payload this build will not read. Nothing here is ever written through — every write builds a
- * new record from a read — so the same value can answer every reader. */
-export const NO_CLIENT_WRITES: ClientWrites = {
-  orders: [],
-  orderMint: { nextIndex: 0, day: "", sequence: 0 },
-  accounts: [],
-  profiles: [],
-  books: [],
-  reviews: [],
-};
+export type {
+  AddressBookWrite,
+  ClientWrites,
+  OrderMint,
+  RegisteredAccount,
+} from "@/data/clientWriteRecord";
 
 /** The roles an account record can carry, as the union `src/types/account.ts` declares them: the guard
  * below tests a stored payload against this set rather than trusting a string from the store. */
@@ -95,7 +60,7 @@ const ACCOUNT_ROLES: readonly Role[] = ["guest", "customer", "admin"];
  * The key an email address is looked up and compared by: an address is case-insensitive, so a stored
  * account and a submitted address meet on this key rather than on the spelling either arrived in.
  *
- * This is the rule's one home — `src/data/collectionStore.ts` imports it for its credential map — so
+ * This is the rule's one home — `src/data/storeWrites.ts` imports it for its credential map — so
  * the account a registration creates, the account a sign-in looks up and the account a reload replays
  * are found by one comparison.
  *

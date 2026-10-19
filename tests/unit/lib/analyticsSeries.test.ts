@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/analyticsSeries.test.ts
  * Purpose: The band wording of a charted period's series: one band per bucket, and no two bands of one run worded alike.
- * Lines: 71
+ * Lines: 74
  */
 
 // What a series' band wording must guarantee: one band per bucket of the run, no two of its bands worded
@@ -11,7 +11,7 @@
 // and the facts are the seeded ones, so the expectations hold whatever day the suite runs.
 import { describe, expect, it } from "vitest";
 
-import { SALES_RECORDS } from "@/data/salesHistory";
+import { seededSalesRecords } from "@/data/salesHistory";
 import { computeKpis, computeRevenueSeries } from "@/lib/analyticsService";
 import type { ChartSeries, SalesRecord } from "@/types/analytics";
 import type { DateRange } from "@/types/common";
@@ -29,7 +29,10 @@ const WIDEST: DateRange = maxReportRange();
 
 /** The seeded facts as one whole-period series over a day-bucketed range: no split is asked for, so the
  *  series stands even when the range holds nothing, and the range alone decides the buckets. */
-function daySeries(range: DateRange, records: readonly SalesRecord[] = SALES_RECORDS): ChartSeries {
+function daySeries(
+  range: DateRange,
+  records: readonly SalesRecord[] = seededSalesRecords(),
+): ChartSeries {
   const [series] = computeRevenueSeries({ records, query: { ...range, bucket: "day" } });
   return series;
 }
@@ -51,7 +54,7 @@ describe("the band wording of a charted period", () => {
     const { points } = daySeries(WIDEST);
     const plotted = points.reduce((total, point) => total + point.y, 0);
     const kpis = computeKpis({
-      records: SALES_RECORDS,
+      records: seededSalesRecords(),
       orders: [],
       customers: [],
       query: WIDEST,

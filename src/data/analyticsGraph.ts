@@ -101,7 +101,7 @@ export function loadAnalyticsGraph(): Promise<DeferredAnalytics | null> {
  * so a page shows its one generic failure whether the seam, the transport or this fetch is what failed.
  *
  * The code is restated here rather than imported, because the vocabulary `src/lib/apiContract.ts` owns is
- * outside the dependency whitelist this layer is given — the same choice `src/data/collectionStore.ts` recorded
+ * outside the dependency whitelist this layer is given — the same choice `src/data/storeWrites.ts` recorded
  * for the refusals it decides.
  */
 export function unexpectedFailure(): Result<never> {

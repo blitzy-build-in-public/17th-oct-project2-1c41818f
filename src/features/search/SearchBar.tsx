@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchBar.tsx
  * Purpose: The search input with debounced suggestions, keyboard selection and recent history
- * Lines: 498
+ * Lines: 506
  */
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -9,17 +9,18 @@ import type { ChangeEvent, FormEvent, KeyboardEvent, ReactElement } from "react"
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { Button, IconButton } from "@/components/ui/Button";
+import { CloseIcon } from "@/components/ui/Icons";
 import { useOnClickOutside } from "@/components/ui/hooks";
 import { Input } from "@/components/ui/Input";
 import { SEARCH_SUGGESTION_DEBOUNCE_MS, SEARCH_SUGGESTION_LIMIT } from "@/constants/config";
 import { COMMON_ACTIONS, SEARCH_COPY, suggestionsUpdatedAnnouncement } from "@/constants/content";
-import { ROUTES } from "@/constants/routes";
+import { ROUTES, productPath } from "@/constants/routes";
 import { SearchSuggestions, suggestionOptionId } from "@/features/search/SearchSuggestions";
 import { isBlankQuery, suggest } from "@/lib/searchService";
 import type { SearchLookup } from "@/lib/searchService";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { useAsync, useDebouncedValue } from "@/state/hooks";
-import type { Facet, FacetId, SearchSuggestion } from "@/types/catalog";
+import type { Facet, FacetId, Product, SearchSuggestion } from "@/types/catalog";
 import { filtersToPath, setQuery as withQueryTerm } from "@/utils/queryParams";
 import { FREE_TEXT_LIMITS } from "@/utils/validation";
 
@@ -39,17 +40,19 @@ import { FREE_TEXT_LIMITS } from "@/utils/validation";
  *
  * BLITZY [CONTRACT]: the bar hands `SearchSuggestions` the brand and category names it can reach — the
  * term facets the catalogue service counted, whose values pair the identifier the URL carries with the
- * shopper's wording — and no product lookup, because the only identity a suggestion carries is the route
- * path it points at and the seeded collections sit behind the transport. A product row therefore renders
- * its name alone here; the brand-and-price caption waits on a layer that can resolve a product.
+ * shopper's wording — and the product records the loaded catalogue page holds, keyed by the detail path the
+ * suggestion's own target names, because a suggestion is answered as a label, a kind and that path and
+ * carries no figure of its own. A product the loaded page does not hold renders its name alone, the row's
+ * documented behaviour for a figure that is not in hand, and no caption costs a second catalogue read.
  *
- * BLITZY [BUDGET]: the concern reached 496 lines against its 330-line budget and stays inside the
+ * BLITZY [BUDGET]: the concern reached 506 lines against its 330-line budget and stays inside the
  * 600-line ceiling, so its overrun is taken from the remainder rather than from a capability. The lines
- * hold the surface the bar publishes — `SearchBarProps` and `SearchBar` — plus the eight private members
- * the bar cannot do without: the class table, the two glyphs, the facet-derived name lookup the suggestion
- * list requires, the recent-terms rule, the list cursor the keyboard moves and the choice union over the
- * two lists. The request itself is `useAsync` in `src/state/hooks.ts`, which owns the abort controller,
- * the superseded-run guard and the shaping of a failure, so none of those is written a second time here.
+ * hold the surface the bar publishes — `SearchBarProps` and `SearchBar` — plus the private
+ * members the bar cannot do without: the class table, its magnifier glyph, the facet-derived name lookup
+ * the suggestion list requires, the product lookup the caption is resolved from, the recent-terms rule,
+ * the list cursor the keyboard moves and the choice union over the two lists. The request itself is `useAsync` in
+ * `src/state/hooks.ts`, which owns the abort controller, the superseded-run guard and the shaping of a
+ * failure, so none of those is written a second time here.
  * No line is padding and nothing was cut to reach a number.
  */
 
@@ -86,15 +89,6 @@ function SearchGlyph(): ReactElement {
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
       <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth={2} />
       <path d="M16.4 16.4 21 21" fill="none" stroke="currentColor" strokeWidth={2} />
-    </svg>
-  );
-}
-
-/** The cross on the clear action; decoration for the same reason. */
-function ClearGlyph(): ReactElement {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth={2} />
     </svg>
   );
 }
@@ -188,7 +182,7 @@ export function SearchBar({
   // Kept whole rather than destructured: the context's setters are methods, and calling one away from
   // the object it belongs to is what `@typescript-eslint/unbound-method` refuses.
   const catalogFilters = useCatalogFilters();
-  const { facets } = useCatalog();
+  const { facets, page } = useCatalog();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -223,6 +217,19 @@ export function SearchBar({
   );
 
   const lookup = useMemo(() => nameLookupFrom(facets), [facets]);
+
+  /**
+   * The catalogue records the loaded page already holds, keyed by the detail path a product suggestion points
+   * at: that target and this key are one path, because `src/data/collectionStore.ts` builds the first from
+   * `src/constants/routes.ts`'s `productPath` too, so a row naming a product this page holds is resolved from
+   * what the view already carries rather than by a second read of the catalogue. A product the page does not
+   * hold keeps the name-alone row the list documents for a figure it was not handed.
+   */
+  const productLookup = useMemo(() => {
+    const byTarget = new Map<string, Product>();
+    for (const product of page?.items ?? []) byTarget.set(productPath(product.slug), product);
+    return (target: string): Product | undefined => byTarget.get(target);
+  }, [page]);
 
   // The rows the panel renders: the answer in hand, or the one the last answered term produced while a newer
   // term is being answered, which is what keeps the list the shopper is reading on screen across a keystroke.
@@ -425,7 +432,7 @@ export function SearchBar({
           className={CLASSES.clear}
           variant="ghost"
           label={COMMON_ACTIONS.CLEAR}
-          icon={<ClearGlyph />}
+          icon={<CloseIcon />}
           hidden={text === ""}
           onClick={handleClear}
         />
@@ -485,6 +492,7 @@ export function SearchBar({
           onSelect={chooseSuggestion}
           onPreview={preview}
           onRetry={retry}
+          productLookup={productLookup}
         />
       ) : null}
       {/* Present from the first render and only ever given new text, because a live region inserted at the

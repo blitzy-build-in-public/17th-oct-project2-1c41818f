@@ -1,7 +1,7 @@
 /**
  * Path: src/features/catalog/CatalogFilterRegion.tsx
  * Purpose: Catalogue facet panel: the five facet groups over the catalogue's own facet response, as the sticky column or the drawer body
- * Lines: 260
+ * Lines: 254
  */
 
 import type { ReactElement, ReactNode, RefObject } from "react";
@@ -102,10 +102,12 @@ interface FilterRegionProps {
  * The region is composed here rather than imported from the search slice's `FilterPanel.tsx`, which one feature may
  * not reach into, and applies no rule of its own: `src/lib/catalogService.ts` counts the facets,
  * `src/constants/taxonomy.ts` declares the vocabulary, and the setters it is handed own the query, so nothing is
- * mirrored into state. A facet with no answer renders its placeholder, a settled response holding no value says
- * what that means, and each facet's clear action takes its own control away — so it is armed with the handoff of
- * `focusTargetRef`, the page body, and of `fallbackRef`, this panel — which takes that focus while the open
- * drawer has made it inert.
+ * mirrored into state. The region carries no clear-all of its own: the page's chips row above the results carries
+ * the surface's one in the column placement, and the page's drawer footer carries the reset that is the only one
+ * reachable while that drawer stands over the page. A facet with no answer renders its placeholder, a settled
+ * response holding no value says what that means, and each facet's clear action takes its own control away — so
+ * it is armed with the handoff of `focusTargetRef`, the page body, and of `fallbackRef`, this panel — which takes
+ * that focus while the open drawer has made it inert.
  */
 export function CatalogFilterRegion({
   facets,
@@ -119,14 +121,7 @@ export function CatalogFilterRegion({
 }: FilterRegionProps): ReactElement {
   const applied = activeFilterEntries(filters);
   const { handOffFocus } = useFocusHandoff(focusTargetRef, fallbackRef);
-  const clearAll = handOffThen(handOffFocus, () => catalog.clearAll());
   const clearFacet = handOffThen(handOffFocus, (id: FacetId) => catalog.clearFacet(id));
-  const clearAllAction =
-    applied.length === 0 ? null : (
-      <Button className={CLASSES.clear} variant="link" size="sm" onClick={clearAll}>
-        {COMMON_ACTIONS.CLEAR_ALL}
-      </Button>
-    );
 
   // A facet's state and value come from the query writer's chip list, so the panel and the chips agree.
   const appliedEntryOf = (facetId: FacetDefinition["id"]): ActiveFilterEntry | undefined =>
@@ -252,7 +247,6 @@ export function CatalogFilterRegion({
     <div className={isDrawer ? `${CLASSES.column} sp-facets--drawer` : CLASSES.column} id={id}>
       <div className="sp-facets__panel" ref={fallbackRef} tabIndex={-1}>
         {isDrawer ? null : <h2 className={CLASSES.legend}>{SEARCH_COPY.FILTER_PANEL_HEADING}</h2>}
-        {isDrawer ? null : clearAllAction}
         {content}
       </div>
     </div>

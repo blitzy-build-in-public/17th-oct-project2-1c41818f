@@ -7,9 +7,9 @@
 import type { ReactElement } from "react";
 
 /*
- * Why the glyphs live here: three surfaces on two layers paint the same close glyph — the modal and drawer
- * family, the catalogue's filter chips and the search slice's active-filter chips — and shared presentation
- * may not import a feature slice, so a glyph two features need belongs in the shared presentation layer.
+ * Why the glyphs live here: shared presentation may not import a feature slice, so a glyph several layers
+ * need belongs in the shared presentation layer. Four surfaces paint this close glyph: the modal and
+ * drawer family, the catalogue's filter chips, the search slice's controls and a toast's dismiss control.
  * Each caller keeps the class its own stylesheet selects (the modal's `sp-modal__close` on the `IconButton`,
  * the chip's remove-control classes), so the sheet still sizes and positions the glyph and nothing here
  * invents a class, a width or a height.

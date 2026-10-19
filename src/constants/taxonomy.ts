@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/taxonomy.ts
  * Purpose: The controlled vocabulary: categories, brands, sort keys, order statuses, facet and report definitions
- * Lines: 552
+ * Lines: 553
  */
 
 import { CHECKOUT_COPY } from "@/constants/checkoutCopy";
@@ -126,9 +126,10 @@ export type SortOption = SelectOption<SortKey>;
 
 /**
  * The six orders a listing or a set of search results can be put in, read by
- * `src/features/search/SortControl.tsx` for its options and by `src/lib/catalogService.ts`'s
- * `compareBy` for its comparators; `relevance` is the default while a query term is present, and the
- * other five are absolute orders that need none.
+ * `src/components/ui/SortControl.tsx` — the shared control both the catalogue page and the search page
+ * compose, and which this slice's own `src/features/search/SortControl.tsx` re-exports — and by
+ * `src/lib/catalogService.ts`'s `compareBy` for its comparators; `relevance` is the default while a
+ * query term is present, and the other five are absolute orders that need none.
  */
 export const SORT_OPTIONS = [
   { value: "relevance", label: "Relevance" },

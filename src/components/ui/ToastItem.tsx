@@ -1,13 +1,14 @@
 /**
  * Path: src/components/ui/ToastItem.tsx
  * Purpose: One queued toast message: its markup, its kind's glyph and live role, and its pausable countdown
- * Lines: 311
+ * Lines: 296
  */
 
 import { useCallback, useEffect, useRef } from "react";
 import type { ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/Button";
+import { CloseIcon } from "@/components/ui/Icons";
 import { TOAST_DURATION_MS } from "@/constants/config";
 import { COMMON_ACTIONS } from "@/constants/content";
 import type { ToastKind, ToastMessage } from "@/types/common";
@@ -88,9 +89,6 @@ const KIND_ICON_PATHS: Readonly<Record<ToastKind, string>> = {
   error: "M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 7.4v5.6M12 16.6h.01",
   info: "M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 11v5.6M12 7.4h.01",
 };
-
-/** The dismiss control's glyph, in the same stroked treatment as the kind glyphs. */
-const CLOSE_ICON_PATH = "M18 6 6 18M6 6l12 12";
 
 /**
  * Joins the class names one of these components composes, leaving out every absent one.
@@ -291,20 +289,7 @@ export function ToastItem({ toast, onDismiss, pointerOverStack }: ToastItemProps
         variant="ghost"
         label={COMMON_ACTIONS.CLOSE}
         onClick={dismissSelf}
-        icon={
-          <svg
-            aria-hidden="true"
-            focusable="false"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d={CLOSE_ICON_PATH} />
-          </svg>
-        }
+        icon={<CloseIcon />}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 /**
  * Path: src/data/salesHistory.ts
  * Purpose: The daily sales fact rows derived from the generated orders, keyed by category and channel
- * Lines: 362
+ * Lines: 379
  */
 
 import { ORDERS } from "@/data/orders";
@@ -21,12 +21,14 @@ import { parseIso, startOfDay } from "@/utils/dates";
  * **One reduction, over the collection a read is actually serving.** `src/data/orders.ts` holds the whole
  * seeded history, so the rows here are one reduction over an order collection — no second seeded stream, no
  * re-priced basket, no clock read and no randomness — and the collection they are reduced from is the one
- * the read is answering from: the seeded history for a figure stated over the seed, and the orders the data
- * source is serving whenever a live one is asked, through `salesRecordsFor` below. `src/data/repositories.ts`
- * is the only caller of either, and both paths run the one reduction this module owns. That is what makes a
- * period's revenue and the orders placed in it agree rather than drift apart, a sale placed in this browser
- * included, and it is the property to keep: every amount a row carries was computed once by
- * `src/lib/pricingService.ts`, is read here, and is never recalculated.
+ * the read is answering from: the orders the data source is serving whenever a live one is asked, through
+ * `salesRecordsFor` below, and the seeded history itself for a figure stated over the seed, through
+ * `seededSalesRecords` below. `src/data/repositories.ts` reads every application figure through
+ * `salesRecordsFor` alone, and the seed's own table is built on the first request for it by the accessor
+ * below, so no read pays for a table nothing asked for. That is what makes a period's revenue and the orders
+ * placed in it agree rather than drift apart, a sale placed in this browser included, and it is the property
+ * to keep: every amount a row carries was computed once by `src/lib/pricingService.ts`, is read here, and is
+ * never recalculated.
  *
  * **Keyed by day, category and channel, and by nothing else.** A row deliberately carries no product key.
  * Product performance is computed from the order collection, where every line names the product it sold,
@@ -293,8 +295,8 @@ function toSalesRecord(row: SalesRow): SalesRecord {
  * sold, and its revenue the goods they brought net of the discounts applied to them.
  *
  * @param orders - The collection to reduce; neither it nor any order in it is written to. The seeded history
- * when a caller names nothing, so the reference table below and every test stated over the seed are built
- * the same way a live one is.
+ * when a caller names nothing, so the table {@link seededSalesRecords} answers with and every test stated
+ * over the seed are built the same way a live one is.
  * @returns The rows, oldest day first, then by category and channel.
  */
 export function buildSalesRecords(orders: readonly Order[] = ORDERS): readonly SalesRecord[] {
@@ -355,8 +357,23 @@ let servedTable: {
 
 /**
  * The seeded sales fact table, exactly as {@link buildSalesRecords} builds it over the seeded history alone:
- * the table every figure stated over the seed itself is read from. A read serving the collection a running
- * application holds — the orders this browser has placed included — goes through {@link salesRecordsFor},
- * because this one is reduced once, at import, and can never carry a later write.
+ * the table a figure stated over the seed itself is read from.
+ *
+ * Built on the first call rather than while the module is imported, because the module is fetched by the
+ * first analytics or report read (`src/data/analyticsGraph.ts`) and every read that fetch serves answers from
+ * the collection the data source holds, through {@link salesRecordsFor} — so a table built at import would be
+ * a whole second reduction of the seeded history that no surface reads, paid by the first back-office read
+ * and held for the life of the document.
+ *
+ * Built once and remembered, because the seeded collection never changes: `src/data/orders.ts` generates it
+ * once and nothing writes to it, so a reduction over it always returns the same rows.
+ *
+ * @returns The rows over the seeded history, oldest day first, then by category and channel.
  */
-export const SALES_RECORDS: readonly SalesRecord[] = buildSalesRecords();
+export function seededSalesRecords(): readonly SalesRecord[] {
+  return (seededTable ??= buildSalesRecords());
+}
+
+/** The seeded table {@link seededSalesRecords} built, held so the one reduction over the seeded history runs
+ *  once however many callers ask for it. `null` until the first of them does. */
+let seededTable: readonly SalesRecord[] | null = null;

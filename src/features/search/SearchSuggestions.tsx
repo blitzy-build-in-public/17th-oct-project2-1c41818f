@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/SearchSuggestions.tsx
  * Purpose: The type-ahead suggestion list grouping product, brand and category matches
- * Lines: 316
+ * Lines: 318
  */
 
 import type { ReactElement } from "react";
@@ -30,7 +30,7 @@ import { formatDiscount, formatMoney, formatScaledPercent } from "@/utils/format
  * element default `src/styles/base.css` paints with the accent-subtle and accent-contrast tokens, so the
  * marking colour reaches the document through `tokens.css` like every other value on this surface.
  *
- * BLITZY [BUDGET]: the concern reached 316 lines against its 270-line budget — the class contract, the
+ * BLITZY [BUDGET]: the concern reached 318 lines against its 270-line budget — the class contract, the
  * four data states, the ARIA wiring of a labelled listbox and the extraction of the option row — and
  * stays well inside the 600-line ceiling. Nothing was cut from it to reach a number.
  */
@@ -91,7 +91,9 @@ export interface SearchSuggestionsProps {
    * Resolves the product a product suggestion names, from that suggestion's own target — the only
    * identity a suggestion carries. A suggestion is answered as a label, a kind and a target, with no
    * price and no brand, so a caller that can reach the catalogue passes this to have the caption filled
-   * in; without it a product row renders its name alone rather than a figure nobody supplied.
+   * in: `SearchBar` supplies it from the catalogue records its loaded page already holds, keyed by the
+   * suggestion's own target, and a caller that passes none renders the name alone rather than a figure
+   * nobody supplied.
    */ readonly productLookup?: (target: string) => Product | undefined;
   /** Extra classes for the panel's own box. */
   readonly className?: string;

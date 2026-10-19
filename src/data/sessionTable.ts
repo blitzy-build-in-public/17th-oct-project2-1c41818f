@@ -101,7 +101,7 @@ export type SessionMembers = Session & { readonly revokedAt?: IsoDateTimeString 
  * copy of the table that put it back. The mark travels inside the record and the secret the table is sealed
  * under is rotated with it, so neither the mark nor the record it sits in can be reproduced by a copy taken
  * before the sign-out. A record carrying a mark authenticates nobody whatever it claims, and
- * `src/data/collectionStore.ts` is where it is refused.
+ * `src/data/storeWrites.ts` is where it is refused.
  */
 export interface SessionRecord extends SessionMembers {
   /** The keyed digest of this record's own members under this browser's seal secret. */
@@ -316,7 +316,7 @@ function writeTable(
  * Records a session this document has just issued: the record is sealed under the secret standing now and
  * written into the table as this browser's own, so the instant the session was issued is durable and the record
  * is one the store that reads it back can prove. The one mint site for an issuance, so registration and sign-in
- * — the two arrivals through `src/data/collectionStore.ts`'s `openSession` — cannot write a record two ways.
+ * — the two arrivals through `src/data/storeWrites.ts`'s `openSession` — cannot write a record two ways.
  *
  * @param registry - The records this document holds, as the store keeps them.
  * @param session - The session the store has just issued.

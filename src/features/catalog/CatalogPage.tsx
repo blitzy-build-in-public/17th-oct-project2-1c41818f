@@ -1,11 +1,11 @@
 /**
  * Path: src/features/catalog/CatalogPage.tsx
  * Purpose: Catalogue route for all products or one category, with facets, result count and pagination
- * Lines: 376
+ * Lines: 375
  */
 
 import { useId, useRef, useState } from "react";
-import type { ChangeEvent, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { BreadcrumbItem } from "@/components/layout/PageHeader";
@@ -15,12 +15,13 @@ import { useMediaQuery } from "@/components/ui/hooks";
 import { Drawer } from "@/components/ui/Modal";
 import { NotFoundView } from "@/components/ui/NotFoundView";
 import { Pagination } from "@/components/ui/Pagination";
-import { Select } from "@/components/ui/Select";
+import { SortControl } from "@/components/ui/SortControl";
 import { CloseIcon } from "@/components/ui/Icons";
 import { BREAKPOINTS, PAGE_SIZE_OPTIONS } from "@/constants/config";
 import {
   CATALOG_COPY,
   COMMON_ACTIONS,
+  EMPTY_STATES,
   PAGE_TITLES,
   SEARCH_COPY,
   categoryPageHeading,
@@ -29,7 +30,6 @@ import {
   removeFilterLabel,
 } from "@/constants/content";
 import { ROUTE_PARAMS, ROUTES, categoryPath } from "@/constants/routes";
-import { SORT_OPTIONS } from "@/constants/taxonomy";
 import { CLASSES, CatalogFilterRegion } from "@/features/catalog/CatalogFilterRegion";
 import { ProductList } from "@/features/catalog/ProductList";
 import { flattenCategoryTree, listCategories } from "@/lib/catalogService";
@@ -37,7 +37,7 @@ import type { CatalogFilters } from "@/state/CatalogContext";
 import { useCatalog, useCatalogFilters } from "@/state/CatalogContext";
 import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useAsync, useDocumentTitle } from "@/state/hooks";
-import type { CategoryNode, Facet, FilterState } from "@/types/catalog";
+import type { CategoryNode, Facet, FilterState, SortKey } from "@/types/catalog";
 import type { ApiError, AsyncStatus, CategoryId } from "@/types/common";
 import { formatMoney, formatNumber } from "@/utils/format";
 import {
@@ -223,12 +223,18 @@ export function CatalogPage(): ReactElement {
       fallbackRef={panelRef}
     />
   );
-  const clearAllAction =
-    appliedCount === 0 ? null : (
-      <Button className={CLASSES.clear} variant="link" size="sm" onClick={clearAll}>
-        {COMMON_ACTIONS.CLEAR_ALL}
-      </Button>
-    );
+  // One reset per placement, and each named for where it acts, so no two controls on one viewport answer to the
+  // same name: the chips row carries the surface's clear-all, and an empty result set offers the catalogue empty
+  // state's own wording — the label the search surface's empty state already uses for the same reset. Both write
+  // through the one handler above, which hands the focus to the results region as it removes the control raised.
+  const clearAllControl = (label: string): ReactElement => (
+    <Button className={CLASSES.clear} variant="link" size="sm" onClick={clearAll}>
+      {label}
+    </Button>
+  );
+  const clearAllAction = appliedCount === 0 ? null : clearAllControl(COMMON_ACTIONS.CLEAR_ALL);
+  const emptyClearAction =
+    appliedCount === 0 ? undefined : clearAllControl(EMPTY_STATES.catalogue.actionLabel);
 
   return (
     <div className="sp-container">
@@ -279,17 +285,10 @@ export function CatalogPage(): ReactElement {
               <p className="sp-result-count" role="status">
                 {total === null ? "" : productCountAnnouncement(total)}
               </p>
-              <Select
-                containerClassName="sp-sort"
-                label={CATALOG_COPY.SORT_GROUP_LABEL}
-                options={SORT_OPTIONS}
+              <SortControl
+                isCompact
                 value={filters.sort}
-                // The value is looked up among the vocabulary's own keys rather than cast, so a value the
-                // control did not offer is ignored and the URL keeps the sort it holds.
-                onChange={(event: ChangeEvent<HTMLSelectElement>): void => {
-                  const chosen = SORT_OPTIONS.find((option) => option.value === event.target.value);
-                  if (chosen !== undefined) catalog.setSort(chosen.value);
-                }}
+                onChange={(sort: SortKey): void => catalog.setSort(sort)}
               />
             </div>
             {entries.length === 0 ? null : (
@@ -336,7 +335,7 @@ export function CatalogPage(): ReactElement {
                   if (categories.error === null) view.reload();
                   else categories.reload();
                 })}
-                emptyAction={clearAllAction ?? undefined}
+                emptyAction={emptyClearAction}
               />
               {/* The paging belongs to the answer, so it is held back while a new one is on its way: the page
                   in hand is the previous query's until this one lands. */}

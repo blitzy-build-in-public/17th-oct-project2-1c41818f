@@ -1,7 +1,7 @@
 /**
  * Path: src/features/search/FilterPanel.tsx
  * Purpose: The facet panel for category, brand, price, rating and availability, with counts and clear actions
- * Lines: 488
+ * Lines: 490
  */
 
 import { useCallback, useId, useRef, useState } from "react";
@@ -39,8 +39,8 @@ import { activeFilterEntries, countActiveFilters, facetValueMatches } from "@/ut
  * sheet hides it below that stop because the drawer takes over, so exactly one of the two is ever rendered and
  * no control id or label reaches the document twice. `sp-facets--drawer` is the same element inside the drawer,
  * resetting the sticky positioning and the panel's own scroll, and the sheet writes it after `sp-facets`, so its
- * `display: grid` holds at every width. `sp-facets__panel` is the bordered box laying the heading and the clear
- * action out in a two-column first row; `__group` spans both tracks; `__legend` is a group heading; `__values`,
+ * `display: grid` holds at every width. `sp-facets__panel` is the bordered box opening with a column's heading
+ * that every child below spans past; `__group` spans both tracks; `__legend` is a group heading; `__values`,
  * `__value`, `__label` and `__count` are a value list, its rows, the growing label side of a row and the count
  * beside it; `__clear` is a clear action aligned to the end of its row; and `__toggle` is the small-screen
  * trigger, hidden from the extra-large stop up and so rendered only while the panel is a drawer.
@@ -269,16 +269,19 @@ export interface FilterPanelProps {
  * nothing: this surface's counts are the response's, and a count from a query that was never answered is not a
  * current count, while a second alert beside the page's would announce one failure twice. Counts are only ever
  * the ones the response carries, so the surface holds no rule of the catalogue's own: no predicate, no comparator
- * and no second count. Each of its own actions takes the control that raised it away, so it is armed with the
- * handoff of the region `focusTargetRef` names — the page's results — and of the container this panel renders
- * itself, which takes that focus instead while the open drawer has made the page inert.
+ * and no second count. One clear-all serves a surface: in the column placement the chips row above the results
+ * carries it, so this panel renders none of its own there and keeps its per-facet Clear actions alone, while as
+ * a drawer it renders the reset its own footer holds, because nothing the open overlay covers is reachable. Its
+ * own actions take the control that raised one away, so each is armed with the handoff of the region
+ * `focusTargetRef` names — the page's results — and of the container this panel renders itself, which takes that
+ * focus instead while the open drawer has made the page inert.
  *
  * @param props - The facets and filter state to render, the change observer, the panel's id, extra classes and
  *   the region its own actions hand the focus off to.
  * @returns The column from the extra-large stop up, or the trigger with its drawer below it — or nothing at all
  *   while the read that fills the panel stands failed, because neither placement then has anything to offer.
  *
- * BLITZY [BUDGET]: 488 lines against its 470-line budget, and inside the 600-line ceiling — no line was
+ * BLITZY [BUDGET]: 490 lines against its 470-line budget, and inside the 600-line ceiling — no line was
  * added to reach a number and none was cut to leave one. The five data-driven groups, the three controls they
  * dispatch to, the class contract and the four data states are what the surface needs, and the remedy a split
  * offers — a second file — would break the path this slice's page imports.
@@ -296,9 +299,9 @@ export function FilterPanel({
   const filters = filtersProp ?? catalog.filters;
   const facets = facetsProp ?? view.facets;
   // The panel's own actions take the control that raised them with them — a cleared facet drops its Clear
-  // action and a cleared query drops the clear-all action — so each is armed with the region the caller hands
-  // in, which survives both. That region lives inside the application root, which an open overlay makes inert,
-  // so the panel's own container stands in for it then.
+  // action, and the drawer's footer drops its reset with the last filter it clears — so each is armed with the
+  // region the caller hands in, which survives both. That region lives inside the application root, which an
+  // open overlay makes inert, so the panel's own container stands in for it then.
   const panelRef = useRef<HTMLDivElement | null>(null);
   const { handOffFocus } = useFocusHandoff(focusTargetRef, panelRef);
 
@@ -448,7 +451,6 @@ export function FilterPanel({
     >
       <div className={CLASSES.panel}>
         {isColumn ? <h2 className={CLASSES.legend}>{SEARCH_COPY.FILTER_PANEL_HEADING}</h2> : null}
-        {isColumn ? clearAllAction : null}
         {content}
       </div>
     </div>

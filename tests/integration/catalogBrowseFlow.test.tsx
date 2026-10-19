@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/catalogBrowseFlow.test.tsx
  * Purpose: The catalogue listing's own surfaces, from its paging, category scope, facets, sort and focus hand-off to the search listing's empty, unapplied-term and failed-read states.
- * Lines: 401
+ * Lines: 406
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -164,7 +164,7 @@ describe("the shopper's catalogue and search journey", () => {
     await waitFor(() => expect(readAnnouncedTotal()).toBe(before));
   });
 
-  it("hands the focus to the page body when a facet panel action takes its own control away", async () => {
+  it("hands the focus to the page body when a clearing action takes its own control away", async () => {
     // Every `min-width` query satisfied is the desktop stop, where the panel is the sticky column the
     // handoff serves first: applying a facet there leaves the focus on the control the shopper is working,
     // and clearing one hands it to the region the cleared listing holds.
@@ -189,11 +189,13 @@ describe("the shopper's catalogue and search journey", () => {
     expect(pageBodyRegion()).toHaveFocus();
     expect(document.body).not.toHaveFocus();
 
-    // The panel's own clear-all, with two facets applied: the same rule over both controls it removes.
+    // The chips row's clear-all above the results, with two facets applied: it unmounts the whole row that holds
+    // it, so the same rule hands the focus to the page body rather than dropping it on the document.
     await user.click(facetTermControl(panel, SELECTED_BRAND.name));
     await user.click(facetTermControl(panel, OTHER_BRAND.name));
     await waitFor(() => expect(readAnnouncedTotal()).toBeLessThan(unfiltered));
-    await user.click(within(panel).getByRole("button", { name: COMMON_ACTIONS.CLEAR_ALL }));
+    const chips = await screen.findByRole("list", { name: SEARCH_COPY.ACTIVE_FILTERS_HEADING });
+    await user.click(within(chips).getByRole("button", { name: COMMON_ACTIONS.CLEAR_ALL }));
 
     await waitFor(() => expect(readAnnouncedTotal()).toBe(unfiltered));
     expect(pageBodyRegion()).toHaveFocus();
@@ -329,9 +331,12 @@ describe("the shopper's catalogue and search journey", () => {
     const { user } = renderApp({ route: filtersToPath(categoryPath(empty.slug), picked) });
 
     expect(await headingNamed(EMPTY_STATES.catalogue.title, 2)).toBeInTheDocument();
-    // The empty state's one action is inside the results region, not the chip row's own clear-all above it.
+    // The empty state's one action is inside the results region, not the chip row's own clear-all above it, and
+    // it wears the catalogue empty state's wording so the two controls on this viewport are named apart.
     await user.click(
-      within(resultsRegion()).getByRole("button", { name: COMMON_ACTIONS.CLEAR_ALL }),
+      within(resultsRegion()).getByRole("button", {
+        name: EMPTY_STATES.catalogue.actionLabel,
+      }),
     );
 
     // It leaves the category route rather than being written back by the route's own scope guard: the whole
