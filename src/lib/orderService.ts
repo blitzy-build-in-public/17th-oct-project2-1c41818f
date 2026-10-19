@@ -1,7 +1,7 @@
 /**
  * Path: src/lib/orderService.ts
- * Purpose: Builds orders from a cart snapshot, numbers them, applies the status transitions and carries the placement credential of an account-less one
- * Lines: 389
+ * Purpose: Builds orders from a cart snapshot, numbers them and applies the status transitions
+ * Lines: 355
  */
 
 import { DEFAULT_PAGE_SIZE } from "@/constants/config";
@@ -162,40 +162,6 @@ export function summariseOrderTotals(order: Order): OrderTotalsSummary {
   const { subtotalMinor, discountTotalMinor, shippingMinor, taxMinor, grandTotalMinor } =
     order.pricedCart;
   return { subtotalMinor, discountTotalMinor, shippingMinor, taxMinor, grandTotalMinor };
-}
-
-// The submission guard ---------------------------------------------------------------------------
-
-/** What a checkout tracks about the attempt it is making: whether one is in flight, and the key the
- * tracked attempt was submitted under, so a caller can tell a retry (`lastKey` equal to the key it
- * holds) from a new attempt. It is `undefined` before the first submission. */
-export interface OrderSubmitGuardState {
-  readonly submitting: boolean;
-  readonly lastKey: string | undefined;
-}
-
-/**
- * Whether a submission may begin: the client-side half of the guard against placing an order twice.
- *
- * It refuses a submission already in flight and a key with nothing in it. What it deliberately does not
- * refuse is a repeat of the tracked attempt's key: that is a retry, and the checkout keeps its key across
- * a failed attempt precisely so an attempt that did reach the seam replays the order it created rather
- * than placing a second — refusing it here would strand a buyer whose order was already recorded.
- *
- * A guard is not the control, which is what its name says: it shortens the window in which a second
- * submission can be attempted, while the idempotency key is what makes a repeat harmless if one is
- * attempted anyway. The seam holds the key's outcome; this module mints the key and asks whether the
- * attempt may start.
- *
- * @param previous - What the checkout tracks about the attempt behind this one.
- * @param idempotencyKey - The key this submission would be sent under.
- * @returns Whether the submission may begin.
- */
-export function canSubmitOrder(previous: OrderSubmitGuardState, idempotencyKey: string): boolean {
-  if (previous.submitting) {
-    return false;
-  }
-  return idempotencyKey.trim() !== "";
 }
 
 // Assembling a submission ------------------------------------------------------------------------

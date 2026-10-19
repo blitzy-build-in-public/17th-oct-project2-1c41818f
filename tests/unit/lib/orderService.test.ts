@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/orderService.test.ts
- * Purpose: Order construction from a snapshot, numbering, status transitions, snapshot immutability and the placement credential a guest order is read with
- * Lines: 590
+ * Purpose: Order construction from a snapshot, numbering, status transitions and snapshot immutability
+ * Lines: 576
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +13,6 @@ import {
   ORDER_STATUS_EVENTS,
   appendStatusHistory,
   buildOrderInput,
-  canSubmitOrder,
   canTransition,
   createIdempotencyKey,
   createOrder,
@@ -380,20 +379,7 @@ describe("an order's status history", () => {
   });
 });
 
-describe("the submission guard's client half", () => {
-  it("refuses a submission already in flight and one with no key to send", () => {
-    const key = createIdempotencyKey();
-
-    expect(canSubmitOrder({ submitting: true, lastKey: undefined }, key)).toBe(false);
-    expect(canSubmitOrder({ submitting: true, lastKey: key }, key)).toBe(false);
-    expect(canSubmitOrder({ submitting: false, lastKey: undefined }, "")).toBe(false);
-    expect(canSubmitOrder({ submitting: false, lastKey: undefined }, "   ")).toBe(false);
-    expect(canSubmitOrder({ submitting: false, lastKey: undefined }, key)).toBe(true);
-    // A retry of the tracked attempt is deliberately let through: the key it repeats is what makes the
-    // second attempt harmless, and refusing it here would strand a buyer whose order is already recorded.
-    expect(canSubmitOrder({ submitting: false, lastKey: key }, key)).toBe(true);
-  });
-
+describe("what a submission refuses before a request is made", () => {
   it("refuses a submission the rules reject before a request is made, naming the half at fault", async () => {
     const contact = contactFor(INVOICE_PAYMENT);
     const nothingToBuy = await createOrder(
