@@ -40,12 +40,12 @@ is generated.
 | Covering suites carrying no budget of their own   | 6, holding 1,974                                                                                                                                      |
 | Paths carrying no budget of their own, both kinds | 106, holding 28,587                                                                                                                                   |
 | Total budgeted                                    | exactly 50,000 lines across the 157 counted files                                                                                                     |
-| Lines delivered at this snapshot                  | counted 62,708; split paths 26,613; covering suites 1,974; whole tree 91,295                                                                          |
+| Lines delivered at this snapshot                  | counted 62,712; split paths 26,613; covering suites 1,974; whole tree 91,299                                                                          |
 | Generation phases                                 | Phase 0 plus 39, all complete                                                                                                                         |
 | Counted files beyond 10% of budget                | 122 — 95 over and 27 under, each with its row in Part 4                                                                                               |
 | Paths over the request's 600-line ceiling         | 2 — `src/utils/strings.ts` 620 and `src/data/collectionStore.ts` 617                                                                                  |
 | Largest per-file budget                           | 500 lines, inside the request's 600-line ceiling                                                                                                      |
-| Remainder carried forward                         | the whole tree's 41,295 lines of overrun on the allocation, 38,795 of them above the band's top of 52,500; on the counted set alone 12,708 and 10,208 |
+| Remainder carried forward                         | the whole tree's 41,299 lines of overrun on the allocation, 38,799 of them above the band's top of 52,500; on the counted set alone 12,712 and 10,212 |
 
 ## Part 1 — File tree in generation order, with budgets, status and actual counts
 
@@ -261,7 +261,7 @@ for a path that carries none of its own.
 │   │   │   ├── RegisterPage.tsx  # 360 · P28 · Done · 408
 │   │   │   ├── AccountLayout.tsx  # 250 · P28 · Done · 191
 │   │   │   ├── ProfilePage.tsx  # 350 · P29 · Done · 359
-│   │   │   ├── OrderHistoryPage.tsx  # 360 · P29 · Done · 313
+│   │   │   ├── OrderHistoryPage.tsx  # 360 · P29 · Done · 317
 │   │   │   ├── OrderHistoryList.tsx  # part of src/features/account/OrderHistoryPage.tsx 360 · P29 · Done · 376 · the customer's order history: the status and date filters — split out of src/features/account/OrderHistoryPage.tsx
 │   │   │   └── AddressBookPage.tsx  # 380 · P29 · Done · 563
 │   │   ├── admin/
@@ -397,18 +397,18 @@ the same number the closing progress line carries.
 | 26         | `src/features/checkout/CheckoutPage.tsx` (380); `src/features/checkout/CheckoutSteps.tsx` (250); `src/features/checkout/ShippingForm.tsx` (360)                                                                                                 | 990           | 1,569        | 58,187     |
 | 27         | `src/features/checkout/PaymentForm.tsx` (400); `src/features/checkout/ReviewOrder.tsx` (330); `src/features/checkout/OrderConfirmation.tsx` (330)                                                                                               | 1,060         | 1,337        | 59,524     |
 | 28         | `src/features/account/LoginPage.tsx` (330); `src/features/account/RegisterPage.tsx` (360); `src/features/account/AccountLayout.tsx` (250)                                                                                                       | 940           | 969          | 60,493     |
-| 29         | `src/features/account/ProfilePage.tsx` (350); `src/features/account/OrderHistoryPage.tsx` (360); `src/features/account/AddressBookPage.tsx` (380)                                                                                               | 1,090         | 1,611        | 62,104     |
-| 30         | `src/features/admin/AdminDashboardPage.tsx` (400); `src/features/admin/KpiCard.tsx` (270); `src/features/admin/SalesChart.tsx` (380); `src/features/admin/RecentOrdersTable.tsx` (290); `src/features/admin/TopProductsTable.tsx` (250)         | 1,590         | 1,888        | 63,992     |
-| 31         | `src/features/reports/ReportsPage.tsx` (330); `src/features/reports/SalesReport.tsx` (400); `src/features/reports/ProductPerformanceReport.tsx` (350)                                                                                           | 1,080         | 1,166        | 65,158     |
-| 32         | `src/features/reports/CustomerReport.tsx` (330); `src/features/reports/DateRangePicker.tsx` (310); `src/features/reports/ReportTable.tsx` (290)                                                                                                 | 930           | 1,386        | 66,544     |
-| 33         | `src/Router.tsx` (390); `src/App.tsx` (290); `src/main.tsx` (120)                                                                                                                                                                               | 800           | 1,103        | 67,647     |
-| 34         | `tests/setup.ts` (130); `tests/fixtures.ts` (440); `tests/testUtils.tsx` (270)                                                                                                                                                                  | 840           | 1,086        | 68,733     |
-| 35         | `tests/unit/utils/formatting.test.ts` (380); `tests/unit/utils/validation.test.ts` (290); `tests/unit/utils/collections.test.ts` (400); `tests/unit/utils/queryParams.test.ts` (220); `tests/unit/lib/catalogSearch.test.ts` (470)              | 1,760         | 6,679        | 75,412     |
-| 36         | `tests/unit/lib/pricingService.test.ts` (330); `tests/unit/lib/orderService.test.ts` (270); `tests/unit/lib/authService.test.ts` (250); `tests/unit/lib/analyticsService.test.ts` (330); `tests/unit/lib/reportService.test.ts` (310)           | 1,490         | 4,024        | 79,436     |
-| 37         | `tests/unit/lib/mockServer.test.ts` (220); `tests/unit/state/transactions.test.ts` (440); `tests/unit/state/catalogReducer.test.ts` (250); `tests/components/controls.test.tsx` (360); `tests/components/Table.test.tsx` (240)                  | 1,510         | 5,587        | 85,023     |
-| 38         | `tests/components/charts.test.tsx` (250); `tests/integration/shoppingFlow.test.tsx` (350); `tests/integration/checkoutFlow.test.tsx` (380); `tests/integration/accountFlow.test.tsx` (330); `tests/integration/adminReportsFlow.test.tsx` (440) | 1,750         | 5,361        | 90,384     |
-| 39         | `README.md` (310); `docs/architecture.md` (270); `docs/contributing.md` (160); `docs/mock-api.md` (200)                                                                                                                                         | 940           | 911          | 91,295     |
-| **Totals** | **157 counted files over 39 phases**                                                                                                                                                                                                            | **50,000**    | **91,295**   | **91,295** |
+| 29         | `src/features/account/ProfilePage.tsx` (350); `src/features/account/OrderHistoryPage.tsx` (360); `src/features/account/AddressBookPage.tsx` (380)                                                                                               | 1,090         | 1,615        | 62,108     |
+| 30         | `src/features/admin/AdminDashboardPage.tsx` (400); `src/features/admin/KpiCard.tsx` (270); `src/features/admin/SalesChart.tsx` (380); `src/features/admin/RecentOrdersTable.tsx` (290); `src/features/admin/TopProductsTable.tsx` (250)         | 1,590         | 1,888        | 63,996     |
+| 31         | `src/features/reports/ReportsPage.tsx` (330); `src/features/reports/SalesReport.tsx` (400); `src/features/reports/ProductPerformanceReport.tsx` (350)                                                                                           | 1,080         | 1,166        | 65,162     |
+| 32         | `src/features/reports/CustomerReport.tsx` (330); `src/features/reports/DateRangePicker.tsx` (310); `src/features/reports/ReportTable.tsx` (290)                                                                                                 | 930           | 1,386        | 66,548     |
+| 33         | `src/Router.tsx` (390); `src/App.tsx` (290); `src/main.tsx` (120)                                                                                                                                                                               | 800           | 1,103        | 67,651     |
+| 34         | `tests/setup.ts` (130); `tests/fixtures.ts` (440); `tests/testUtils.tsx` (270)                                                                                                                                                                  | 840           | 1,086        | 68,737     |
+| 35         | `tests/unit/utils/formatting.test.ts` (380); `tests/unit/utils/validation.test.ts` (290); `tests/unit/utils/collections.test.ts` (400); `tests/unit/utils/queryParams.test.ts` (220); `tests/unit/lib/catalogSearch.test.ts` (470)              | 1,760         | 6,679        | 75,416     |
+| 36         | `tests/unit/lib/pricingService.test.ts` (330); `tests/unit/lib/orderService.test.ts` (270); `tests/unit/lib/authService.test.ts` (250); `tests/unit/lib/analyticsService.test.ts` (330); `tests/unit/lib/reportService.test.ts` (310)           | 1,490         | 4,024        | 79,440     |
+| 37         | `tests/unit/lib/mockServer.test.ts` (220); `tests/unit/state/transactions.test.ts` (440); `tests/unit/state/catalogReducer.test.ts` (250); `tests/components/controls.test.tsx` (360); `tests/components/Table.test.tsx` (240)                  | 1,510         | 5,587        | 85,027     |
+| 38         | `tests/components/charts.test.tsx` (250); `tests/integration/shoppingFlow.test.tsx` (350); `tests/integration/checkoutFlow.test.tsx` (380); `tests/integration/accountFlow.test.tsx` (330); `tests/integration/adminReportsFlow.test.tsx` (440) | 1,750         | 5,361        | 90,388     |
+| 39         | `README.md` (310); `docs/architecture.md` (270); `docs/contributing.md` (160); `docs/mock-api.md` (200)                                                                                                                                         | 940           | 911          | 91,299     |
+| **Totals** | **157 counted files over 39 phases**                                                                                                                                                                                                            | **50,000**    | **91,299**   | **91,299** |
 
 **Batch deviation.** The schedule runs 39 phases after Phase 0. Every phase's row above names 3 to 5
 files from the tree, so §0.5.2's batching rule is met on the tree's files; counting every path Part 1
@@ -429,11 +429,11 @@ Rows by area over the 157 counted files.
 
 | Area                                    | Files   | Budgeted lines | Actual lines |
 | --------------------------------------- | ------- | -------------- | ------------ |
-| `src/`                                  | 121     | 41,285         | 49,976       |
+| `src/`                                  | 121     | 41,285         | 49,980       |
 | `tests/`                                | 23      | 7,350          | 11,490       |
 | Root tooling                            | 9       | 425            | 331          |
 | Documentation (`README.md` and `docs/`) | 4       | 940            | 911          |
-| **Total**                               | **157** | **50,000**     | **62,708**   |
+| **Total**                               | **157** | **50,000**     | **62,712**   |
 
 Rows by budget band over the same 157 files.
 
@@ -442,9 +442,9 @@ Rows by budget band over the same 157 files.
 | 1 to 99             | 9       | 425            | 331          |
 | 100 to 199          | 4       | 590            | 834          |
 | 200 to 299          | 49      | 12,650         | 18,087       |
-| 300 to 399          | 59      | 20,500         | 27,133       |
+| 300 to 399          | 59      | 20,500         | 27,137       |
 | 400 to 500          | 36      | 15,835         | 16,323       |
-| **Total**           | **157** | **50,000**     | **62,708**   |
+| **Total**           | **157** | **50,000**     | **62,712**   |
 
 This manifest's own self-record, outside both tables and outside the 50,000.
 
@@ -499,7 +499,7 @@ more than 10%, one row each, over and under as the numbers fall.
 | `src/features/account/AccountLayout.tsx`      | 250    | 191    | -59        | -23.6%  | under      | a shell that renders its section list and an outlet: no state, one composition and the classes the account sheet declares                             |
 | `src/features/account/AddressBookPage.tsx`    | 380    | 563    | +183       | +48.2%  | over       | address cards with add, edit, remove and set-default, the removal confirm dialog and the empty, loading and error states                              |
 | `src/features/account/LoginPage.tsx`          | 330    | 370    | +40        | +12.1%  | over       | the sign-in form's two fields with a validator each, the restoring placeholders and the return path the guard preserved, in one screen                |
-| `src/features/account/OrderHistoryPage.tsx`   | 360    | 313    | -47        | -13.1%  | under      | the orders route: the session gate and the single-order view, with the history list, its filters and its paging in a file of their own                |
+| `src/features/account/OrderHistoryPage.tsx`   | 360    | 317    | -43        | -11.9%  | under      | the orders route: the session gate and the single-order view, with the history list, its filters and its paging in a file of their own                |
 | `src/features/account/RegisterPage.tsx`       | 360    | 408    | +48        | +13.3%  | over       | registration fields with their validation, the second-account email case and the inline summary, each field through the shared wrapper                |
 | `src/features/admin/RecentOrdersTable.tsx`    | 290    | 366    | +76        | +26.2%  | over       | the dashboard's recent-orders table: its column definitions, its cell renderers and the status badges, configured for the shared table                |
 | `src/features/admin/SalesChart.tsx`           | 380    | 489    | +109       | +28.7%  | over       | the bucket control, the series toggle, the hint beside them, the period sentence and the frame a failed read is stated in                             |
@@ -705,9 +705,9 @@ With these rows recorded, no path in the tree stands without a parent: every spl
 mapped file whose allocation it draws on, and every covering suite names the module or flow it
 covers.
 **Remainder carried forward.** The allocation is 50,000 lines and the whole tree holds
-91,295 of them, 41,295 past the allocation and 38,795 above the
-band's top of 52,500. On the counted set alone, 62,708 lines stand
-12,708 past the allocation and 10,208 above the band's top.
+91,299 of them, 41,299 past the allocation and 38,799 above the
+band's top of 52,500. On the counted set alone, 62,712 lines stand
+12,712 past the allocation and 10,212 above the band's top.
 Nothing is reallocated onto a file that is not yet generated, because every counted file is
 generated.
 
@@ -800,4 +800,4 @@ output, so the contract is recorded here rather than checked here.
 in the file that owns the concern and never by duplicating logic into another file. The only file
 rewritten across phases is this manifest, which is bookkeeping rather than product code.
 
-Total lines so far: 91295 / 50000
+Total lines so far: 91299 / 50000

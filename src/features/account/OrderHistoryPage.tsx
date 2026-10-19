@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/OrderHistoryPage.tsx
  * Purpose: The customer's orders with status and date filters, paging and a link to each order
- * Lines: 313
+ * Lines: 317
  */
 
 import type { ReactElement } from "react";
@@ -63,6 +63,10 @@ import { formatMoney, formatQuantity } from "@/utils/format";
 const CARD_TAIL_MASK = "•••• ";
 const QUANTITY_PRICE_SEPARATOR = " × ";
 const STAMP_SEPARATOR = " · ";
+
+/** The sign a saving carries before its amount: markup rather than the hyphen a negated figure prints, so a
+ *  saving reads here as it does on the cart and the checkout surfaces. */
+const DISCOUNT_SIGN = "−";
 
 // Reading a route and an order
 
@@ -226,7 +230,7 @@ function OrderDetail({
           {discountTotalMinor === 0 ? null : (
             <div className="sp-summary__row sp-summary__row--discount">
               <span>{CART_COPY.SUMMARY_DISCOUNT_LABEL}</span>
-              <span>{formatMoney(-discountTotalMinor, currency)}</span>
+              <span>{`${DISCOUNT_SIGN}${formatMoney(discountTotalMinor, currency)}`}</span>
             </div>
           )}
           <div className="sp-summary__row">
