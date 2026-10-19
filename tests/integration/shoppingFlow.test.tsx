@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/shoppingFlow.test.tsx
  * Purpose: Home, catalogue, search and add-to-cart, including their empty and error states
- * Lines: 299
+ * Lines: 333
  */
 
 import { describe, expect, it } from "vitest";
@@ -199,6 +199,40 @@ describe("the shopper's home and add-to-cart journey", () => {
     expect(screen.getByRole("button", { name: cartButtonLabel(0) })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: CART_COPY.MINI_CART_HEADING })).toBeNull();
   });
+
+  it.each([CATALOG_COPY.ADD_TO_CART_LABEL, CATALOG_COPY.BUY_NOW_LABEL])(
+    "states why the detail page's %s refuses a product with no stock",
+    async (label) => {
+      // The subject is a seeded product with nothing on hand, the state both of the detail page's buy controls
+      // report themselves unavailable in — and the state the page renders no quantity stepper for.
+      const product = PRODUCTS.find((entry) => entry.stockOnHand === 0);
+      if (product === undefined)
+        throw new Error("The seed holds no product with no stock on hand.");
+      const { user } = renderApp({ route: productPath(product.slug) });
+
+      const control = await screen.findByRole("button", { name: label });
+      expect(control).toHaveAttribute("aria-disabled", "true");
+
+      // What the control is described by is a real element holding the copy module's own sentence, the one the
+      // catalogue tile refuses this same state with, so the reason is read before the activation.
+      const describedBy = control.getAttribute("aria-describedby") ?? "";
+      const reason = document.getElementById(describedBy);
+      expect(reason === null ? null : textOf(reason)).toBe(CATALOG_COPY.OUT_OF_STOCK_LABEL);
+
+      await user.click(control);
+
+      // A control the shopper can reach either acts or explains itself: the refusal is announced instead of
+      // passing in silence, and the cart holds nothing.
+      expect(await screen.findByRole("alert")).toHaveTextContent(CATALOG_COPY.OUT_OF_STOCK_LABEL);
+      expect(screen.getByRole("button", { name: cartButtonLabel(0) })).toBeInTheDocument();
+
+      // Buy now is the control that would otherwise leave this page, so the product's own title still standing
+      // is the proof that no checkout was entered.
+      if (label === CATALOG_COPY.BUY_NOW_LABEL) {
+        expect(screen.getByRole("heading", { level: 1, name: product.name })).toBeInTheDocument();
+      }
+    },
+  );
 
   it("adds the quantity the detail page's stepper holds", async () => {
     const { user } = renderApp({ route: productPath(SELLABLE_PRODUCT.slug) });

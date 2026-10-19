@@ -12,8 +12,10 @@ import {
   postalCodeFormatMessage,
   promoCodeLengthMessage,
   quantityRangeMessage,
-  reviewBodyLengthMessage,
-  reviewTitleLengthMessage,
+  reviewBodyTooLongMessage,
+  reviewBodyTooShortMessage,
+  reviewTitleTooLongMessage,
+  reviewTitleTooShortMessage,
 } from "@/constants/content";
 import { SUPPORTED_COUNTRIES, type CountryOption } from "@/constants/taxonomy";
 import type {
@@ -172,8 +174,7 @@ function integerOf(value: FieldValue): number | undefined {
 const isReportable = (message: string | undefined): message is string =>
   typeof message === "string" && message.length > 0;
 
-/** What a field rule returns: one entry keyed by the control the rule judged, carrying the message it broke,
- * or an empty map when the value was accepted. Every rule returns through this one builder. */
+/** Builds the one-entry map every rule returns, dropping a message that is absent or empty. */
 function ruleErrors(field: string, message: string | undefined): FieldErrors {
   return isReportable(message) ? { [field]: message } : {};
 }
@@ -378,31 +379,30 @@ export function validateQuantity(value: FieldValue, maxQuantity: number): FieldE
 
 /** The rule the catalogue's search term is accepted by: the free-text rule at
  * {@link FREE_TEXT_LIMITS.SEARCH_TERM_MAX} characters, the bound the search controls carry as their own
- * `maxLength`. `field` is the query parameter the term travels under, the `q` of
- * `src/utils/queryParams.ts`; a blank term is no filter rather than a fault. Returns the field's map,
- * empty when the term is acceptable. */
+ * `maxLength`; `field` is the query parameter the term travels under, the `q` of
+ * `src/utils/queryParams.ts`, and a blank term is no filter rather than a fault. */
 export function validateSearchTerm(value: FieldValue, field = "q"): FieldErrors {
   return validateFreeText(field, value, FREE_TEXT_LIMITS.SEARCH_TERM_MAX, false);
 }
 
 /** The rule a review's title is accepted by: 3 to 80 characters once trimmed, the bounds in
- * {@link REVIEW_LIMITS}; an empty title reports as missing rather than as badly sized. */
+ * {@link REVIEW_LIMITS}, each bound its own sentence; an empty title is missing, not badly sized. */
 export function validateReviewTitle(value: FieldValue): FieldErrors {
   const title = textOf(value);
   if (title.length === 0) return ruleErrors("title", VALIDATION_MESSAGES.REQUIRED);
   const { TITLE_MIN, TITLE_MAX } = REVIEW_LIMITS;
-  const wrongLength = title.length < TITLE_MIN || title.length > TITLE_MAX;
-  return wrongLength ? ruleErrors("title", reviewTitleLengthMessage(TITLE_MIN, TITLE_MAX)) : {};
+  if (title.length < TITLE_MIN) return ruleErrors("title", reviewTitleTooShortMessage(TITLE_MIN));
+  return title.length > TITLE_MAX ? ruleErrors("title", reviewTitleTooLongMessage(TITLE_MAX)) : {};
 }
 
 /** The rule a review's body is accepted by: 10 to 1,200 characters once trimmed, the bounds in
- * {@link REVIEW_LIMITS}; an empty body reports as missing rather than as badly sized. */
+ * {@link REVIEW_LIMITS}, each bound its own sentence; an empty body is missing, not badly sized. */
 export function validateReviewBody(value: FieldValue): FieldErrors {
   const body = textOf(value);
   if (body.length === 0) return ruleErrors("body", VALIDATION_MESSAGES.REQUIRED);
   const { BODY_MIN, BODY_MAX } = REVIEW_LIMITS;
-  const wrongLength = body.length < BODY_MIN || body.length > BODY_MAX;
-  return wrongLength ? ruleErrors("body", reviewBodyLengthMessage(BODY_MIN, BODY_MAX)) : {};
+  if (body.length < BODY_MIN) return ruleErrors("body", reviewBodyTooShortMessage(BODY_MIN));
+  return body.length > BODY_MAX ? ruleErrors("body", reviewBodyTooLongMessage(BODY_MAX)) : {};
 }
 
 /** Whether a value is a whole rating from one to five, the review form's narrowing guard. */

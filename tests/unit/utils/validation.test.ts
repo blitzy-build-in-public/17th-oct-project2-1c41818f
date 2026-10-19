@@ -16,8 +16,10 @@ import {
   postalCodeFormatMessage,
   promoCodeLengthMessage,
   quantityRangeMessage,
-  reviewBodyLengthMessage,
-  reviewTitleLengthMessage,
+  reviewBodyTooLongMessage,
+  reviewBodyTooShortMessage,
+  reviewTitleTooLongMessage,
+  reviewTitleTooShortMessage,
 } from "@/constants/content";
 import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
 import type { FieldErrors } from "@/types/common";
@@ -286,16 +288,15 @@ describe("field rules", () => {
   });
 
   it("accepts a review title at each end of its configured bounds", () => {
-    const { TITLE_MIN, TITLE_MAX } = REVIEW_LIMITS;
-    expect(validateReviewTitle("x".repeat(TITLE_MIN))).toEqual({});
-    expect(validateReviewTitle("x".repeat(TITLE_MAX))).toEqual({});
+    expect(validateReviewTitle("x".repeat(REVIEW_LIMITS.TITLE_MIN))).toEqual({});
+    expect(validateReviewTitle("x".repeat(REVIEW_LIMITS.TITLE_MAX))).toEqual({});
   });
 
   it("rejects a review title one character outside those bounds", () => {
-    const { TITLE_MIN, TITLE_MAX } = REVIEW_LIMITS;
-    const message = reviewTitleLengthMessage(TITLE_MIN, TITLE_MAX);
-    expect(validateReviewTitle("x".repeat(TITLE_MIN - 1))).toEqual({ title: message });
-    expect(validateReviewTitle("x".repeat(TITLE_MAX + 1))).toEqual({ title: message });
+    const tooShort = { title: reviewTitleTooShortMessage(REVIEW_LIMITS.TITLE_MIN) };
+    const tooLong = { title: reviewTitleTooLongMessage(REVIEW_LIMITS.TITLE_MAX) };
+    expect(validateReviewTitle("x".repeat(REVIEW_LIMITS.TITLE_MIN - 1))).toEqual(tooShort);
+    expect(validateReviewTitle("x".repeat(REVIEW_LIMITS.TITLE_MAX + 1))).toEqual(tooLong);
     expect(validateReviewTitle("")).toEqual({ title: VALIDATION_MESSAGES.REQUIRED });
   });
 
@@ -306,10 +307,10 @@ describe("field rules", () => {
   });
 
   it("rejects a review body one character outside those bounds", () => {
-    const { BODY_MIN, BODY_MAX } = REVIEW_LIMITS;
-    const message = reviewBodyLengthMessage(BODY_MIN, BODY_MAX);
-    expect(validateReviewBody("x".repeat(BODY_MIN - 1))).toEqual({ body: message });
-    expect(validateReviewBody("x".repeat(BODY_MAX + 1))).toEqual({ body: message });
+    const tooShort = { body: reviewBodyTooShortMessage(REVIEW_LIMITS.BODY_MIN) };
+    const tooLong = { body: reviewBodyTooLongMessage(REVIEW_LIMITS.BODY_MAX) };
+    expect(validateReviewBody("x".repeat(REVIEW_LIMITS.BODY_MIN - 1))).toEqual(tooShort);
+    expect(validateReviewBody("x".repeat(REVIEW_LIMITS.BODY_MAX + 1))).toEqual(tooLong);
     expect(validateReviewBody("  ")).toEqual({ body: VALIDATION_MESSAGES.REQUIRED });
   });
 });
@@ -491,11 +492,10 @@ describe("form validators", () => {
 
   it("keys a rejected review by rating, title and body", () => {
     const errors = validateReview({ rating: undefined, title: "no", body: "too short" });
-    const { TITLE_MIN, TITLE_MAX, BODY_MIN, BODY_MAX } = REVIEW_LIMITS;
     expectRejectedWith(errors, ["rating", "title", "body"]);
     expect(errors.rating).toBe(VALIDATION_MESSAGES.REQUIRED);
-    expect(errors.title).toBe(reviewTitleLengthMessage(TITLE_MIN, TITLE_MAX));
-    expect(errors.body).toBe(reviewBodyLengthMessage(BODY_MIN, BODY_MAX));
+    expect(errors.title).toBe(reviewTitleTooShortMessage(REVIEW_LIMITS.TITLE_MIN));
+    expect(errors.body).toBe(reviewBodyTooShortMessage(REVIEW_LIMITS.BODY_MIN));
   });
 });
 

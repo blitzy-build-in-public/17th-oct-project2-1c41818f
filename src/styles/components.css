@@ -1,6 +1,6 @@
 /* Path: src/styles/components.css
  * Purpose: Styles for the shared primitives: buttons, fields, cards, tables, overlays, badges and feedback states
- * Lines: 510
+ * Lines: 511
  */
 
 /* The twelve primitive families every page composes are defined across the four sheets this chain loads:
@@ -146,6 +146,7 @@ button.sp-rating__star {
 }
 .sp-quantity__input {
   inline-size: var(--space-12);
+  min-block-size: var(--touch-target-min);
   padding-block: var(--space-2);
   border: 0;
   border-inline: var(--border-width) solid var(--color-border-strong);

@@ -18,7 +18,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-block-size: var(--control-height-md);
+  min-block-size: max(var(--control-height-md), var(--touch-target-min));
   padding: var(--space-2) var(--space-4);
   color: var(--color-text);
   border: var(--border-width) solid transparent;
@@ -91,10 +91,10 @@
   background-color: var(--color-surface-sunken);
 }
 .sp-btn--sm {
-  min-block-size: var(--control-height-sm);
-  /* BLITZY [LAYOUT]: the block padding drops to the smallest step so a small control reaches the 32px its
-   * token declares — at the base rule's `--space-2` the label's own line box made it 36px tall, because a
-   * minimum only sets a floor. The three sizes now land exactly on `--control-height-sm`, `-md` and `-lg`. */
+  min-block-size: max(var(--control-height-sm), var(--touch-target-min));
+  /* BLITZY [LAYOUT]: a small control keeps its small type and its inline padding while its height pads up to
+   * the touch floor, the treatment the icon buttons declare — the family's own step is the max()'s lower
+   * bound, so the size still reads as the small one and a finger still lands on the floor every control shares. */
   padding-block: var(--space-1);
   padding-inline: var(--space-3);
   font-size: var(--text-body-sm-size);
@@ -334,7 +334,7 @@
 .sp-textarea,
 .sp-select {
   inline-size: 100%;
-  min-block-size: var(--control-height-md);
+  min-block-size: max(var(--control-height-md), var(--touch-target-min));
   padding: var(--space-2) var(--space-3);
   background-color: var(--color-surface);
   border: var(--border-width) solid var(--color-border-strong);

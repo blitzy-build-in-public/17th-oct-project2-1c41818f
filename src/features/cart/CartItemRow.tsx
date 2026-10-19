@@ -1,9 +1,10 @@
 /**
  * Path: src/features/cart/CartItemRow.tsx
  * Purpose: A single cart line with thumbnail, quantity stepper, removal and an availability warning
- * Lines: 356
+ * Lines: 442
  */
 
+import { useRef } from "react";
 import type { ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/Button";
@@ -76,6 +77,13 @@ import { formatMoney } from "@/utils/format";
  * sentence. Both of that control's bounds carry the same `aria-disabled` spelling, so a keyboard user keeps
  * their place in the row, and a step it refuses states the bound in a polite status region rather than doing
  * nothing in silence.
+ *
+ * The removal control carries one markup hook of this file's own rather than a class of either sheet's:
+ * `data-cart-remove` is how the row that is about to leave finds the removal control of the row beside it, so
+ * the focus the browser would otherwise drop onto `document.body` is taken by the control a shopper working
+ * through the list would press next. No class of the two sheets tells that control from the quantity stepper's
+ * two beside it, which is why the hook is this file's; it is written once, as the attribute the control is
+ * rendered with and as the selector the lookup queries the list by.
  */
 
 /** The glyph the removal control draws: U+2715, sized and coloured by the row's own class. */
@@ -115,6 +123,22 @@ const CLASSES = {
 } as const;
 
 /**
+ * The `data-` attribute the row's removal control carries, named once so the control and the lookup that finds
+ * its neighbours cannot drift apart. `IconButton` spreads the rest of its props onto the real `<button>`, so an
+ * attribute named here reaches the element the shopper presses, and the class contract above records why the
+ * hook is this file's rather than a sheet's.
+ */
+const REMOVE_CONTROL_ATTRIBUTE = "data-cart-remove";
+
+/** The attribute above as a selector: every removal control of the list this row sits in, in the order its rows
+ *  stand. */
+const REMOVE_CONTROL_SELECTOR = `[${REMOVE_CONTROL_ATTRIBUTE}]`;
+
+/** The attribute above as the props the removal control is rendered with, so its name is written once and React
+ *  receives it by the same spelling the selector reads. */
+const REMOVE_CONTROL_HOOK = { [REMOVE_CONTROL_ATTRIBUTE]: "" } as const;
+
+/**
  * Everything {@link CartItemRow} accepts.
  *
  * The row is rendered from the line it is given and from nothing else it holds: it reads no cart state, keeps
@@ -147,6 +171,18 @@ export interface CartItemRowProps {
    * second row of its own.
    */
   readonly isCompact?: boolean;
+  /**
+   * The list owner's own focus handoff, armed when the removal leaves the list with no other row to take the
+   * focus — the last line of the cart page's list, or of the drawer's.
+   *
+   * A removal hands the focus to the neighbouring row's removal control whenever there is a row beside this one,
+   * because that is where a shopper working through the list carries on; this is the owner's call for the one
+   * case that lookup cannot answer, where the only survivor left to hold the focus is a region the owner renders
+   * and this row does not — the cart page's body, which stands in every state of that route, or the drawer's own
+   * content root, which outlives its line list. Omitted, removing the only line moves no focus at all, which is
+   * what a surface with no such region asks for.
+   */
+  readonly onRemoveLastLine?: () => void;
 }
 
 /**
@@ -193,6 +229,33 @@ function availabilityWarning(availability: LineAvailability): ReactElement | nul
 }
 
 /**
+ * The removal control of the row that takes the focus when this row's line leaves.
+ *
+ * The row that holds the pressed control goes out of the document with the line it removed, and a browser left
+ * with nothing focused drops the focus onto `document.body` — the top of the page, as many Tab presses from the
+ * surface the shopper was working in as the document is long. The list this row sits in is what survives that
+ * removal, so the removal controls of its rows are read back in the order the rows stand, this row's own is
+ * found among them, and the next one is returned: the row below, which takes the place the removed one held. A
+ * line removed from the list's last row has no row below it, so the row above stands in; a list left with no
+ * other row answers `null`, which is the case the list owner's own handoff exists for.
+ *
+ * Assumptions: the row is a list item of the list holding every row — the cart page's `<ul>` or the drawer's —
+ * so the controls this reads are exactly its siblings' and never another surface's; and it is read from inside
+ * the handler of the removal, while the row's own list, and the neighbour in it, are still in the document.
+ *
+ * @param row - This row's `<li>`, or `null` before the element has mounted.
+ * @returns The neighbouring row's removal control, or `null` when this row is the list's only one.
+ */
+function neighbourRemoveControl(row: HTMLLIElement | null): HTMLElement | null {
+  const list = row === null ? null : row.parentElement;
+  if (row === null || list === null) return null;
+  const controls = Array.from(list.querySelectorAll<HTMLElement>(REMOVE_CONTROL_SELECTOR));
+  const index = controls.findIndex((control) => row.contains(control));
+  if (index === -1) return null;
+  return controls[index + 1] ?? controls[index - 1] ?? null;
+}
+
+/**
  * One cart line: a thumbnail, what the line is, how many of it the shopper holds, what it costs, the way to
  * change or drop it, and whatever its availability has to say.
  *
@@ -202,6 +265,13 @@ function availabilityWarning(availability: LineAvailability): ReactElement | nul
  * `removeItem(line.id)` — and neither is followed by a local correction: `src/state/cartReducer.ts` clamps a
  * quantity to its line's ceiling and drops the line a removal names, so the cart decides what an edit means and
  * this file only reports the shopper's intent.
+ *
+ * The removal hands the focus on before it takes effect, because the control that was pressed goes out of the
+ * document with the line. The focus is claimed first by the next row's removal control — the preceding row's
+ * when it is the list's last row being removed — and, when the removal leaves the list with no other row at
+ * all, by the region the list's owner names through `onRemoveLastLine`: the cart page's body or the drawer's
+ * own content root, both of which outlive the line the shopper removed. Without that, the browser drops the
+ * focus onto `document.body` and a keyboard shopper restarts at the top of the page.
  *
  * The quantity control is bounded twice over, deliberately rather than redundantly: `QuantityStepper` receives
  * the ceiling `selectAvailability` read off the line, so its controls and its field refuse to leave the range
@@ -236,9 +306,13 @@ export function CartItemRow({
   line,
   pricedLine,
   isCompact = false,
+  onRemoveLastLine,
 }: CartItemRowProps): ReactElement {
   const cart = useCartDispatch();
   const toast = useToast();
+
+  /** The row itself, as the removal control's handler reads it to find the row that takes this one's place. */
+  const rowRef = useRef<HTMLLIElement | null>(null);
 
   const availability = selectAvailability(line);
   const discountMinor = pricedLine === undefined ? 0 : selectLineDiscountMinor(pricedLine);
@@ -291,17 +365,29 @@ export function CartItemRow({
 
   /**
    * The way out of the line: a ghost control whose accessible name is the action together with the product, and
-   * whose press drops the line and then reports the outcome on the product's transient-outcome surface.
+   * whose press drops the line, reports the outcome on the product's transient-outcome surface and hands the
+   * focus on before the row leaves with the line.
+   *
+   * The control carries this file's `data-cart-remove` hook, which is how the row beside it is found; the
+   * neighbour itself is {@link neighbourRemoveControl}'s to read. The neighbour takes the focus before the state
+   * write commits, while the row being removed and the row beside it are both still in the document; the write
+   * then removes this row alone, and the focus stays on the control the shopper would press next. A list left
+   * with no other row arms the owner's own handoff instead, which moves the focus after the commit that emptied
+   * the list — the only moment at which a region outside this row can be known to be standing.
    */
   const removeControl = (
     <IconButton
+      {...REMOVE_CONTROL_HOOK}
       className={isCompact ? undefined : CLASSES.remove}
       variant="ghost"
       icon={REMOVE_GLYPH}
       label={removeLineLabel(line.name)}
       onClick={() => {
+        const neighbour = neighbourRemoveControl(rowRef.current);
+        if (neighbour === null) onRemoveLastLine?.();
         cart.removeItem(line.id);
         toast.success(FEEDBACK_COPY.TOAST_REMOVED_FROM_CART);
+        neighbour?.focus();
       }}
     />
   );
@@ -310,7 +396,7 @@ export function CartItemRow({
    * sheet's wrapping gives it a line of its own rather than the narrow column the name shares. */
   if (isCompact) {
     return (
-      <li className={CLASSES.compactRow}>
+      <li className={CLASSES.compactRow} ref={rowRef}>
         <img src={line.imageUrl} alt="" />
         <div className={CLASSES.body}>
           {identity}
@@ -330,7 +416,7 @@ export function CartItemRow({
    * whose area it fills, in reading order — what it is, how many, what one costs, what they come to, how to be
    * rid of it, and what availability has to say. */
   return (
-    <li className={CLASSES.row}>
+    <li className={CLASSES.row} ref={rowRef}>
       <img className={CLASSES.media} src={line.imageUrl} alt="" />
       <div className={CLASSES.body}>
         {identity}

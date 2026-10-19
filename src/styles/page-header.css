@@ -1,6 +1,6 @@
 /* Path: src/styles/page-header.css
  * Purpose: Styles for the page header and its breadcrumb trail that src/components/layout/PageHeader.tsx renders, split out of src/styles/layout.css, which loads this sheet with @import
- * Lines: 136
+ * Lines: 146
  */
 
 /* The page-header family, and the sole definition site of the .sp-page-header* classes
@@ -68,11 +68,21 @@
   max-inline-size: var(--layout-measure);
   color: var(--color-text-muted);
 }
-/* The page's primary control: stacked on a phone, closed to the end of the row from --breakpoint-md. */
+/* The page's primary control: stacked on a phone, closed to the end of the row from --breakpoint-md. The slot
+ * holds the page's own actions and nothing else, so a control in it always stands alone rather than inside a
+ * sentence: the link register's `min-block-size: auto` and zero inline padding are written for a link a sentence
+ * holds, where a 44px box would grow the line box, and this is not that case. The slot therefore declares the
+ * shared touch floor tokens.css publishes, and a link-register control in it is lifted to that floor on both axes
+ * — the floor is a control's minimum, so a short label like the cart's Clear reaches it in inline size as well as
+ * block size — while the register keeps `auto` for prose. */
 .sp-page-header__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  min-block-size: var(--touch-target-min);
+}
+.sp-page-header__actions .sp-btn--link {
+  min-inline-size: var(--touch-target-min);
 }
 
 /* ==== The loading header ====

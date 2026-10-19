@@ -1,7 +1,7 @@
 <!--
 Path: docs/architecture.md
 Purpose: The layers, the import rules and the data flow any new file must fit
-Lines: 340
+Lines: 341
 -->
 
 # Architecture
@@ -60,6 +60,7 @@ The 600-line ceiling is never raised. When one concern cannot be held in one fil
 - `src/components/charts/BarChart.tsx` → `src/components/charts/barGeometry.ts`: the bar renderer's own scales, marks, value labels and readout placement.
 - `src/components/charts/DonutChart.tsx` → `src/components/charts/donutLabelModel.ts`: where each of a donut's percentages is written, and where its readout is placed.
 - `src/features/catalog/CatalogPage.tsx` → `src/features/catalog/CatalogFilterRegion.tsx`: the facet panel and its value list, as the sticky column or the drawer body.
+- `src/features/catalog/ProductDetailPage.tsx` → `src/features/catalog/PurchasePanel.tsx`: the buy column — brand and SKU, rating, price and availability, the quantity stepper and the two ways to order — which the route composes.
 - `src/features/checkout/CheckoutPage.tsx` → `src/features/checkout/CheckoutErrorSummary.tsx` and `src/features/checkout/OrderSummaryPanel.tsx`: the step's summary of what is wrong, and the order summary panel with the priced figures it shows.
 - `src/features/account/OrderHistoryPage.tsx` → `src/features/account/OrderHistoryList.tsx`: the status and date filters, the paged table they resolve to and its loading placeholder.
 - `src/features/reports/ReportsPage.tsx` → `src/features/reports/ReportPlaceholder.tsx`: the shape a report's body takes while its run is in flight.

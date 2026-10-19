@@ -455,8 +455,8 @@ export function countryLabel(code: string): string {
 // Address fields ----------------------------------------------------------------------------------
 
 /**
- * One member of the address body a form field writes: `AddressInput`'s members bar `label`, which names
- * an address-book entry rather than a control.
+ * One member of the address body a form field writes: `AddressInput`'s members bar `label`, which the
+ * address book renders as its own optional control because the checkout's shipping values hold none.
  */
 export type AddressFieldMember = Exclude<keyof AddressInput, "label">;
 

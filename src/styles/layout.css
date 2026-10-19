@@ -202,7 +202,7 @@
 .sp-header__logo {
   display: inline-flex;
   gap: var(--space-2);
-  min-block-size: var(--control-height-md);
+  min-block-size: max(var(--control-height-md), var(--touch-target-min));
   min-inline-size: 0;
   /* What makes the wrapper's contract real: the cap holds the link to its wrapper, so it clips rather than spills. */
   max-inline-size: 100%;
@@ -297,7 +297,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-block-size: var(--control-height-md);
+  min-block-size: max(var(--control-height-md), var(--touch-target-min));
   padding-inline: var(--space-3);
   border-radius: var(--radius-md);
   color: var(--color-text);

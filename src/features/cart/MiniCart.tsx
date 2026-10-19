@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/MiniCart.tsx
  * Purpose: The cart drawer opened from the header badge, with quick quantity edits and a checkout link
- * Lines: 271
+ * Lines: 288
  */
 
 import type { ReactElement } from "react";
@@ -10,6 +10,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { EmptyState } from "@/components/ui/Feedback";
 import { Drawer } from "@/components/ui/Modal";
+import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { CART_COPY, cartItemCountLabel } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
 import { CartItemRow } from "@/features/cart/CartItemRow";
@@ -172,7 +173,11 @@ function miniCartActionLink({
  * an ordinary sentence and not a live region: the panel's name is what announces it, and a count that
  * re-announced itself on every quantity change would talk over the shopper instead of reporting a result.
  * Every row is `CartItemRow`, so the stepper's label, the removal's label and the availability sentence —
- * text, never colour alone — are that component's and arrive here unchanged.
+ * text, never colour alone — are that component's and arrive here unchanged. One focus move inside that
+ * contract is this file's own: a removal that takes the drawer's last line arms the handoff below, so the
+ * focus lands on the drawer's content root — a region that survives the empty state the removal lands in —
+ * rather than being dropped onto the document body behind the open panel. A removal with a line still beside
+ * it hands the focus to that line's own removal control, which is `CartItemRow`'s to do.
  *
  * @returns The drawer, rendered only while the cart context reports it open.
  */
@@ -198,6 +203,18 @@ export function MiniCart(): ReactElement {
   };
 
   /**
+   * The region a removal that empties the drawer's list hands the focus to, and the arming call the rows make.
+   *
+   * The content root is the survivor the handoff can land on: it is rendered in both states the panel has —
+   * the lines and the empty state — so it is still in the document at the commit that took the last line out.
+   * `tabIndex={-1}` is what lets it take the focus without joining the tab order: it is a programmatic-only
+   * stop, skipped by the panel's own tab cycle, which the overlay engine builds from elements whose index is
+   * not negative. A drawer holding more than one line never arms this, because a row hands the focus to the
+   * row beside it instead.
+   */
+  const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
+
+  /**
    * The empty state's single action: dismiss the panel first, then go to the catalogue.
    *
    * The order matters for the same reason the destinations' does — the drawer outlives the route — and the
@@ -220,7 +237,7 @@ export function MiniCart(): ReactElement {
       side="end"
       title={CART_COPY.MINI_CART_HEADING}
     >
-      <div className={CLASSES.root}>
+      <div className={CLASSES.root} ref={regionRef} tabIndex={-1}>
         {isEmpty ? (
           /* The empty cart: the shared empty state, its wording and its one action the content library's,
            * at a heading level below the drawer's own so the panel's outline stays in order — the title the
@@ -243,7 +260,7 @@ export function MiniCart(): ReactElement {
              * does — the cart page's own list, the search grids and the review list wear it too. */}
             <ul className={CLASSES.list} role="list">
               {lines.map((line) => (
-                <CartItemRow isCompact key={line.id} line={line} />
+                <CartItemRow isCompact key={line.id} line={line} onRemoveLastLine={handOffFocus} />
               ))}
             </ul>
             {/* The two ways on, neither rendered for an empty cart, whose one action is the empty state's:

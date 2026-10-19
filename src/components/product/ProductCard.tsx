@@ -29,8 +29,8 @@ import { brandId } from "@/utils/strings";
  * composes `sp-card` and `sp-card--interactive`, the frame that sheet's own comment says the tile wears;
  * `sp-product-card__media` for the image box; `sp-product-card__flag` for the mark placed over it;
  * `sp-product-card__body` for the text column, which the sheet lays out as a column so the price block can be
- * pinned to its foot; `sp-product-card__name` for the heading, which the sheet clamps to two lanes and
- * reserves both of, rising to three from the four-column stop; `sp-product-card__brand`;
+ * pinned to its foot; `sp-product-card__name` for the heading, which the sheet clamps to two lanes and reserves
+ * both of, rising to four from the small stop where the grid first goes multi-column; `sp-product-card__brand`;
  * `sp-product-card__rating`, which the sheet holds at the start of the row it sits in;
  * `sp-product-card__price`, which carries the `sp-price` primitive and is pinned to the foot of the body so
  * one row's availability sentence sits on one baseline, its discount pill placed out of the row by the sheet;
@@ -303,9 +303,9 @@ function ProductCardTile({
       <div className={CLASSES.body}>
         {brand === null ? null : <p className={CLASSES.brand}>{brand}</p>}
         <h3 className={CLASSES.name}>
-          {/* The sheet clamps the heading and this link, so a name longer than the lanes they allow can still
-              hide a word below the four-column stop. The title carries the whole name for the pointer; the
-              link's own text is unchanged and remains the accessible name every reader gets. */}
+          {/* The sheet clamps the heading and this link to the lanes the card's column allows, so a name longer
+              than those lanes can still hide a word below the stop where the card widens. The title carries the
+              whole name for the pointer; the link's text is unchanged and stays the accessible name readers get. */}
           <Link to={productPath(product.slug)} title={product.name}>
             {product.name}
           </Link>

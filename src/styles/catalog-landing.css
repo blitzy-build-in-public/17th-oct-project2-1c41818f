@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog-landing.css
  * Purpose: Styles for the landing page's bands: the hero with its illustration, the promotional banner, the trust strip, the category showcase and the featured strip
- * Lines: 347
+ * Lines: 353
  */
 
 /* The landing surface: the hero band with its drawing, the promotional band, the trust strip, the category
@@ -264,7 +264,7 @@
 .sp-category-chip {
   display: inline-flex;
   align-items: center;
-  min-block-size: var(--control-height-sm);
+  min-block-size: var(--touch-target-min);
   padding-inline: var(--space-3);
   background-color: var(--color-surface);
   border: var(--border-width) solid var(--color-border);
@@ -324,10 +324,16 @@
 }
 /* The row's action takes the exemption the hero's actions carry: the label is what would otherwise fix the
  * row's minimum width for the whole section, and a row that already wraps its children lets the control break
- * its own label once it has a line of its own too narrow to hold the longest word. */
+ * its own label once it has a line of its own too narrow to hold the longest word. The row also carries the shared
+ * touch floor tokens.css publishes for a control, because a band header holds this one control and nothing else,
+ * so the action stands alone rather than inside a sentence: the case the link register's `min-block-size: auto` is
+ * written for is a link inside prose, not this one, and this rule outranks the register so a link-register action
+ * here takes the floor every other control takes. The featured band's action wears the secondary variant, which
+ * already reaches the floor through the family, so this declaration changes the link-register action alone. */
 .sp-featured__header .sp-btn,
 .sp-related__header .sp-btn {
   white-space: normal;
+  min-block-size: var(--touch-target-min);
 }
 /* The supporting sentence under a section heading — the one role the featured strip and the category showcase
  * share. It takes the muted text register the hero paragraph, a page header's description and a card's own

@@ -1,7 +1,7 @@
 /**
  * Path: tests/integration/checkoutFlow.test.tsx
  * Purpose: Cart to order through the three steps, the idempotent submission and the cleared cart
- * Lines: 521
+ * Lines: 599
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,6 +31,7 @@ import {
   freeShippingProgressLabel,
   lowStockLabel,
   quantityLabel,
+  quickAddLabel,
   removeLineLabel,
   removePromoLabel,
 } from "@/constants/content";
@@ -54,7 +55,16 @@ import {
   fillShippingAddress,
 } from "../helpers/checkoutHarness";
 import type { CartWalk } from "../helpers/checkoutHarness";
-import { moneyFigures, rowAmount, summaryFigures, summaryPanel } from "../helpers/journeyHarness";
+import {
+  moneyFigures,
+  pageBodyRegion,
+  rowAmount,
+  settledTiles,
+  summaryFigures,
+  summaryPanel,
+  textOf,
+  tileHeadings,
+} from "../helpers/journeyHarness";
 import { failNext, renderApp, resetApiState, screen, waitFor, within } from "../testUtils";
 import type { UserEvent } from "../testUtils";
 
@@ -241,6 +251,58 @@ describe("the cart", () => {
       ROUTES.CATALOG,
     );
   });
+
+  it("hands the focus to the next line's removal control, and to the page's own body when the last line goes", async () => {
+    /*
+     * Two products, so the cart holds two rows. They are added off the listing's own quick add rather than by
+     * walking into a product twice: the walk asserts the drawer's count, which only an empty basket answers,
+     * and the quick add reports the add where it is performed and leaves the drawer closed. A tile the
+     * storefront cannot sell reports itself unavailable, so only the tiles a shopper can act on are taken.
+     */
+    const { user } = renderApp({ route: ROUTES.CATALOG });
+    await settledTiles();
+    const offers = tileHeadings()
+      .map((heading) => ({
+        name: textOf(heading),
+        quickAdd: within(heading.closest("li") ?? heading).getByRole("button", {
+          name: quickAddLabel(textOf(heading)),
+        }),
+      }))
+      .filter((offer) => offer.quickAdd.getAttribute("aria-disabled") !== "true");
+    const [first, second] = offers;
+    if (first === undefined || second === undefined) {
+      throw new Error("The listing offered fewer than two products the storefront can sell.");
+    }
+    await user.click(first.quickAdd);
+    await screen.findByRole("button", { name: cartButtonLabel(1) });
+    await user.click(second.quickAdd);
+    await user.click(await screen.findByRole("button", { name: cartButtonLabel(2) }));
+    await user.click(
+      await screen.findByRole("link", { name: CART_COPY.MINI_CART_VIEW_CART_LABEL }),
+    );
+    await screen.findByRole("heading", { name: CART_COPY.PAGE_HEADING });
+
+    /* The keyboard path: the control is activated from the keyboard, and the focus a browser would drop onto
+       the document body when its row leaves is claimed by the row that takes its place — the second line's
+       own removal control, read before the removal so the node it asserts on is the one that was focused. */
+    const firstRemove = screen.getByRole("button", { name: removeLineLabel(first.name) });
+    const secondRemove = screen.getByRole("button", { name: removeLineLabel(second.name) });
+    firstRemove.focus();
+    expect(firstRemove).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: removeLineLabel(first.name) })).toBeNull(),
+    );
+    expect(document.activeElement).toBe(secondRemove);
+
+    /* The last line: nothing beside it is left to take the focus, so the page's own body — the region that
+       stands in every state of this route — holds it instead of the document body, where a keyboard shopper
+       would otherwise be returned to the top of the page. */
+    await user.click(secondRemove);
+    expect(await screen.findByText(EMPTY_STATES.cart.title)).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    expect(document.activeElement).toBe(pageBodyRegion());
+  });
 });
 
 describe("promo codes", () => {
@@ -326,6 +388,22 @@ describe("the mini-cart", () => {
     await harness.user.click(screen.getByRole("button", { name: cartButtonLabel(0) }));
     const cleared = await screen.findByRole("dialog", { name: CART_COPY.MINI_CART_HEADING });
     expect(within(cleared).getByText(EMPTY_STATES.cart.title)).toBeInTheDocument();
+  });
+
+  it("keeps the focus inside the drawer when a removal empties it", async () => {
+    const harness = renderApp({ route: ROUTES.CATALOG });
+    const name = await addItemToCart(harness.user);
+    await harness.user.click(screen.getByRole("button", { name: cartButtonLabel(1) }));
+    const drawer = await screen.findByRole("dialog", { name: CART_COPY.MINI_CART_HEADING });
+    const remove = within(drawer).getByRole("button", { name: removeLineLabel(name) });
+    remove.focus();
+    await harness.user.keyboard("{Enter}");
+
+    // The pressed control leaves with the line, and the drawer — the region its empty state renders in —
+    // takes the focus rather than the document body behind the open panel.
+    expect(within(drawer).getByText(EMPTY_STATES.cart.title)).toBeInTheDocument();
+    await waitFor(() => expect(drawer.contains(document.activeElement)).toBe(true));
+    expect(document.activeElement).not.toBe(document.body);
   });
 });
 

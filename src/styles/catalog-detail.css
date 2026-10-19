@@ -1,6 +1,6 @@
 /* Path: src/styles/catalog-detail.css
  * Purpose: Styles for the product detail surfaces: the two-column layout, the gallery, the specification and feature lists, the related strip and the reviews with their form
- * Lines: 303
+ * Lines: 314
  */
 
 /* One product's own page: its gallery and buy column, its specifications and features, the related strip under it
@@ -62,7 +62,9 @@
   font-size: var(--text-heading-2-size);
 }
 /* The stepper is first, the add-to-cart second and buy-now third: stacked at full width on a phone, and from
- * --breakpoint-sm the stepper and the add-to-cart share a row with buy-now closed across both tracks. */
+ * --breakpoint-sm the stepper and the add-to-cart share a row with buy-now closed across both tracks. A product
+ * with nothing on hand renders no stepper, so the row that would carry it closes to one column instead, and the
+ * rule inside that breakpoint's block says why. */
 .sp-product-detail__actions {
   display: grid;
   gap: var(--space-3);
@@ -79,6 +81,14 @@
   .sp-product-detail__actions {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
+  }
+  /* The first track is there for the quantity stepper alone, and a ceiling holding nothing purchasable renders no
+   * stepper at all: the `auto` track would then be sized by the add-to-cart button's own label while the `1fr`
+   * beside it stood empty on that row, so one primary action ran at a fraction of the other's width though both
+   * are the same kind of block control. An action row holding no stepper takes the single column the phone layout
+   * already stacks them in, which gives both controls the column whole, however wide it is. */
+  .sp-product-detail__actions:not(:has(> .sp-quantity)) {
+    grid-template-columns: minmax(0, 1fr);
   }
   .sp-product-detail__actions > :last-child {
     grid-column: 1 / -1;
@@ -297,7 +307,8 @@
 }
 
 /* ==== Responsive summary ====
- * At --breakpoint-sm: the buy controls pair up with buy-now closed across both, and a specification becomes a term
+ * At --breakpoint-sm: the buy controls pair up with buy-now closed across both, the row closing to one column when
+ * it holds no stepper — which is what a product with nothing on hand renders — and a specification becomes a term
  * beside its value. At --breakpoint-md: the page becomes a wide gallery column and a narrow buy column, and the
  * review form becomes two columns. At --breakpoint-lg: the buy column sticks under the header.
  */

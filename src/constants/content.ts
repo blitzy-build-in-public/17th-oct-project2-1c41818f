@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content.ts
  * Purpose: All user-facing copy: navigation, section headings, button labels, empty states and help text
- * Lines: 491
+ * Lines: 513
  */
 
 import type { PromoRejectionReason } from "@/types/commerce";
@@ -181,6 +181,14 @@ export const productCountAnnouncement = (count: number): string =>
  * Consumer: `src/features/catalog/ProductList.tsx`.
  */
 export const lowStockLabel = (count: number): string => `Only ${count} left in stock`;
+/**
+ * Counts the readers who found a review helpful, singular and plural handled.
+ * Consumer: `src/features/catalog/ProductReviews.tsx`, the helpful line each review row carries.
+ */
+export const helpfulCountLabel = (count: number): string =>
+  count === 0
+    ? "No one has found this helpful yet"
+    : `${count} ${countNoun(count, "person", "people")} found this helpful`;
 
 // Search and filters ----------------------------------------------------------------------------
 /** Search copy. Consumers: `src/features/search/*`. */
@@ -454,12 +462,26 @@ export const postalCodeFormatMessage = (countryLabel: string): string =>
 /** States the quantity rule against the stock on hand, singular handled. */
 export const quantityRangeMessage = (max: number): string =>
   max === 1 ? "Only one is in stock." : `Choose a quantity between 1 and ${max}.`;
-/** States the length a review title must fall between, from both bounds. */
+/** States the length a review title must fall between, from both bounds. Consumer: the review form's title
+ * hint, which the bound-specific sentences below replace while the rule reports the title itself. */
 export const reviewTitleLengthMessage = (minValue: number, maxValue: number): string =>
   `Use between ${minValue} and ${maxValue} characters for the title.`;
-/** States the length a review body must fall between, from both bounds. */
+/** States the floor a review title must reach. Consumer: `src/utils/validation.ts`, the title too short. */
+export const reviewTitleTooShortMessage = (min: number): string =>
+  `Use at least ${min} characters for the title.`;
+/** States the ceiling no review title may pass. Consumer: `src/utils/validation.ts`, the title too long. */
+export const reviewTitleTooLongMessage = (max: number): string =>
+  `Use ${max} characters or fewer for the title.`;
+/** States the length a review body must fall between, from both bounds. Consumer: the review form's body
+ * hint, which the bound-specific sentences below replace while the rule reports the body itself. */
 export const reviewBodyLengthMessage = (minValue: number, maxValue: number): string =>
   `Write between ${minValue} and ${maxValue} characters.`;
+/** States the floor a review body must reach. Consumer: `src/utils/validation.ts`, the body too short. */
+export const reviewBodyTooShortMessage = (min: number): string =>
+  `Write at least ${min} characters.`;
+/** States the ceiling no review body may pass. Consumer: `src/utils/validation.ts`, the body too long. */
+export const reviewBodyTooLongMessage = (max: number): string =>
+  `Write ${max} characters or fewer.`;
 /** States the length a promo code must fall between, from both bounds. */
 export const promoCodeLengthMessage = (minValue: number, maxValue: number): string =>
   `Use between ${minValue} and ${maxValue} characters for the code.`;

@@ -1,8 +1,8 @@
 /**
  * Path: tests/integration/accountAddressBook.test.tsx
- * Purpose: The address book's own flow: a refused save, two adds, an edit, both default flags and a
- * confirmed removal.
- * Lines: 245
+ * Purpose: The address book's own flow: a refused save, two adds, a card named from its label, an edit,
+ * both default flags and a confirmed removal.
+ * Lines: 281
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -85,7 +85,8 @@ async function openSection(user: UserEvent, label: string): Promise<void> {
 
 // Reading an address card -------------------------------------------------------------------------
 
-/** One address card, found by the street line it shows, which is `addressLabel`'s own fallback name. */
+/** One address card, found by the name it shows: the customer's own label, or `addressLabel`'s street-and-city
+ *  fallback when the address carries none. */
 function addressCard(line1: string): HTMLElement {
   const card = screen.getByRole("heading", { name: new RegExp(line1) }).closest("li");
   if (card === null) throw new Error(`The address card at "${line1}" is not a list item.`);
@@ -116,6 +117,9 @@ interface AddressDraft {
   readonly city: string;
   readonly region: string;
   readonly postalCode: string;
+  /** The customer's own name for the address, typed into the dialog's optional label control when a case
+   *  carries one; left out, the card falls back to the street line and the city. */
+  readonly label?: string;
 }
 
 function addressDraft(line1: string, city: string): AddressDraft {
@@ -138,6 +142,11 @@ async function addAddress(user: UserEvent, draft: AddressDraft): Promise<void> {
   await user.type(city, draft.city);
   await user.type(region, draft.region);
   await user.type(postalCode, draft.postalCode);
+  // The label is the dialog's one optional field, so it is typed only where a draft carries one.
+  if (draft.label !== undefined) {
+    const label = within(dialog).getByLabelText(fieldLabel(ACCOUNT_COPY.ADDRESS_LABEL_FIELD_LABEL));
+    await user.type(label, draft.label);
+  }
   await user.click(within(dialog).getByRole("button", { name: COMMON_ACTIONS.SAVE }));
   await waitFor(() => {
     expect(screen.queryByRole("dialog", { name: ACCOUNT_COPY.ADD_ADDRESS_LABEL })).toBeNull();
@@ -241,5 +250,32 @@ describe("the account address book", () => {
     });
     // The default the removed address held falls to the address that remains.
     await expectOneBadge(ACCOUNT_COPY.DEFAULT_BILLING_BADGE, relocated.line1);
+  });
+
+  it("names a card from the label the customer types, and from its street and city when left empty", async () => {
+    const { user } = renderApp({ route: ROUTES.REGISTER });
+    await registerAndLand(user, uniqueEmail("labels"));
+    await openSection(user, ACCOUNT_COPY.NAV_ADDRESSES_LABEL);
+
+    const ownLabel = "Studio";
+    const named: AddressDraft = { ...addressDraft("31 Alder Way", "Salem"), label: ownLabel };
+    const unnamed = addressDraft("46 Cedar Lane", "Salem");
+    await addAddress(user, named);
+    await addAddress(user, unnamed);
+
+    // The label the customer typed is the card's name, and the fallback it would otherwise carry is not used.
+    expect(await screen.findByRole("heading", { name: ownLabel })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: `${named.line1}, ${named.city}` })).toBeNull();
+    // An address left unnamed is still named from the street line and the city it holds.
+    expect(
+      await screen.findByRole("heading", { name: `${unnamed.line1}, ${unnamed.city}` }),
+    ).toBeVisible();
+
+    // The dialog an edit opens pre-fills the label control with the name the card is shown under.
+    await user.click(cardAction(addressCard(ownLabel), COMMON_ACTIONS.EDIT));
+    const dialog = await screen.findByRole("dialog", { name: new RegExp(ownLabel) });
+    expect(
+      within(dialog).getByLabelText(fieldLabel(ACCOUNT_COPY.ADDRESS_LABEL_FIELD_LABEL)),
+    ).toHaveValue(ownLabel);
   });
 });

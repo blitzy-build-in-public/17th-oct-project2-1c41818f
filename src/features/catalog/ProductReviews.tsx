@@ -25,6 +25,7 @@ import {
   FEEDBACK_COPY,
   PAGING_NOUNS,
   clearFacetLabel,
+  helpfulCountLabel,
   reviewBodyLengthMessage,
   reviewTitleLengthMessage,
 } from "@/constants/content";
@@ -61,9 +62,9 @@ import type { ReviewDraft } from "@/utils/validation";
 
 /*
  * Both review endpoints are reached through `src/lib/catalogService.ts`, the catalogue's service surface:
- * `listProductReviews` reads a page and `submitProductReview` publishes one, so this
- * file names no request path and holds no second copy of either call. The rules those calls depend on live where
- * they already did — the review rule in `src/utils/validation.ts`, and the statuses and refusal shapes in
+ * `listProductReviews` reads a page and `submitProductReview` publishes one, so this file names no request
+ * path and holds no second copy of either call. The rules those calls depend on live where they already did
+ * — the review rule in `src/utils/validation.ts`, and the statuses and refusal shapes in
  * `src/lib/apiClient.ts`, which the service forwards unchanged.
  *
  * Class contract. This list is what the sheets owe the surface, each class named with the sheet that
@@ -71,16 +72,14 @@ import type { ReviewDraft } from "@/utils/validation";
  * `@import`, declares `sp-reviews`, its `__summary` row, its `__list` and `__item`, the
  * `__header`/`__author`/`__date` byline, the `__title` h3, the `__body` prose measure and the `__form` grid;
  * `src/styles/controls.css` owns `sp-form` and `sp-form__actions`, and the feedback primitives own theirs. The
- * summary's count borrows `__date`, the family's caption treatment, because the sheet declares no rule of its
- * own for it and body type would outweigh the filter control beside it.
+ * summary's count and each row's helpful line borrow `__date`, the family's caption treatment, because the
+ * sheet declares no rule of its own for either, and body type would outweigh the filter control beside it.
  *
  * Every string on this surface is `src/constants/content.ts`'s own, the empty state's included; the filter's
- * five choices are the bare numerals, as the pagination control's size selector is, because it holds no wording
- * for a rating either.
+ * five choices are the bare numerals, because that module holds no wording for a rating either.
  */
 
-/** The field keys the review rule reports under, which are also the `name` each control carries, so a map
- *  keyed by a field lands on the control that owns it. */
+/** The field keys the rule reports under, and the `name` each control carries, so one map lands on both. */
 const REVIEW_FIELDS = { RATING: "rating", TITLE: "title", BODY: "body" } as const;
 
 /** The filter's choices: every star, then the unfiltered one, so a cleared filter is a choice a reader can
@@ -112,8 +111,12 @@ const CLEAR_RATING_LABEL: string =
 /** The form as it opens: no star chosen, both fields empty. */
 const EMPTY_REVIEW_DRAFT: ReviewDraft = { rating: undefined, title: "", body: "" };
 
-/** The placeholder rows the loading list stands in with, each carrying its own identity rather than a
- *  position, so no key is an index. */
+/** The two length hints, each withdrawn for the field whose own message stands: that message names the bound
+ *  that broke, so the general rule beside it would state the same rule twice in the control's description. */
+const TITLE_HINT = reviewTitleLengthMessage(REVIEW_LIMITS.TITLE_MIN, REVIEW_LIMITS.TITLE_MAX);
+const BODY_HINT = reviewBodyLengthMessage(REVIEW_LIMITS.BODY_MIN, REVIEW_LIMITS.BODY_MAX);
+
+/** The placeholder rows the loading list stands in with, each keyed by its own identity, never an index. */
 const PLACEHOLDER_ROW_KEYS = ["first", "second", "third"] as const;
 
 /** The loading state: three decorative rows shaped like the reviews that will replace them, hidden from
@@ -129,8 +132,8 @@ function ReviewPlaceholders(): ReactElement {
 }
 
 /**
- * One review: the rating it gives with its value as text, the reviewer, the day it was written, the
- * verified-purchase mark when the reviewer bought the product, and the review itself.
+ * One review: the rating it gives with its value as text, the reviewer, the day it was written, the verified
+ * mark when the reviewer bought the product, the review itself and the readers who found it helpful.
  *
  * Nothing is derived here: the rating is drawn by the shared control, which states the value as text so it is
  * not carried by the stars alone, the timestamp is formatted by `src/utils/dates.ts`, and the verified mark
@@ -152,6 +155,7 @@ function ReviewRow({ review }: { readonly review: Review }): ReactElement {
       </div>
       <h3 className="sp-reviews__title">{review.title}</h3>
       <p className="sp-reviews__body">{review.body}</p>
+      <p className="sp-reviews__date">{helpfulCountLabel(review.helpfulCount)}</p>
     </li>
   );
 }
@@ -201,8 +205,7 @@ interface ReviewFormProps {
  * same fields the controls are named. A field's message clears the moment the field is edited and is
  * recomputed when it loses focus, so a reader is never told about a field they have already corrected. And a
  * submission is single: the flag below disables the control while the write is in flight, and a ref blocks
- * the second submission a double click could start before that flag has rendered, so one review is published
- * once.
+ * the second submission a double click could start before that flag has rendered.
  *
  * @param props - The product, the token, the form's own ref and the sink a published review reports to.
  * @returns The labelled form, with the review body's controls inside it.
@@ -299,6 +302,9 @@ function ReviewForm({
     void submitReview(input, controller.signal);
   };
 
+  const titleHint = fieldErrors[REVIEW_FIELDS.TITLE] === undefined ? TITLE_HINT : undefined;
+  const bodyHint = fieldErrors[REVIEW_FIELDS.BODY] === undefined ? BODY_HINT : undefined;
+
   return (
     <form
       ref={formRef}
@@ -323,7 +329,7 @@ function ReviewForm({
       <Input
         name={REVIEW_FIELDS.TITLE}
         label={CATALOG_COPY.REVIEW_FORM_TITLE_LABEL}
-        hint={reviewTitleLengthMessage(REVIEW_LIMITS.TITLE_MIN, REVIEW_LIMITS.TITLE_MAX)}
+        hint={titleHint}
         errors={fieldErrors}
         value={draft.title}
         maxLength={REVIEW_LIMITS.TITLE_MAX}
@@ -334,7 +340,7 @@ function ReviewForm({
       <TextArea
         name={REVIEW_FIELDS.BODY}
         label={CATALOG_COPY.REVIEW_FORM_BODY_LABEL}
-        hint={reviewBodyLengthMessage(REVIEW_LIMITS.BODY_MIN, REVIEW_LIMITS.BODY_MAX)}
+        hint={bodyHint}
         errors={fieldErrors}
         value={draft.body}
         rows={6}
@@ -369,33 +375,27 @@ export interface ProductReviewsProps {
  * form a signed-in customer submits through.
  *
  * The read belongs to this file and there is exactly one of it. The rating filter and the page are state of
- * this section rather than of the URL, because the URL's filter state is the catalogue's — the search params
- * `src/utils/queryParams.ts` reads and writes carry the catalogue's query, and a product's reviews are a
- * section of a page rather than a listing of their own. Changing either one re-issues the read through
- * `useAsync`, which aborts the read it supersedes, so a slow page cannot overwrite the state of the one that
- * replaced it.
+ * this section rather than of the URL, because the URL's filter state is the catalogue's — the query
+ * `src/utils/queryParams.ts` reads and writes is that one, and a product's reviews are a section of a page
+ * rather than a listing of their own. Changing either one re-issues the read through `useAsync`, which aborts
+ * the read it supersedes, so a slow page cannot overwrite the state of the one that replaced it.
  *
  * Paging is the shared control's, reached through `usePagination`, so the page count, the two bounds and the
  * page buttons cannot disagree with the payload the endpoint answered, and the caption beside them counts
  * reviews rather than the catalogue's products. The read itself is issued with the page the reader asked for
- * rather than with the clamped one: while a page is in flight the previous total is not in hand, and clamping
- * against an absent total would re-issue the first page instead of the chosen one. A paged change takes the pager
- * off the screen, so `applyPaging` also hands the focus to the section below, which survives the read and is named
- * by its own heading.
+ * rather than with the clamped one, because while a page is in flight the previous total is not in hand and
+ * clamping against an absent total would re-issue the first page instead of the chosen one.
  *
- * All four states are derived during render — the placeholder rows while the read is in flight, the alert
- * carrying the failure's own message with its retry, the empty state when the product has no reviews at all or
- * when the chosen rating matches none of them, and the list otherwise — so nothing is mirrored into state and
- * no placeholder is ever shown beside a stale list. The summary's count is an always-present polite live
- * region, so a count changed by a filter is announced rather than only seen, and the pager defers to it: its
- * caption states that figure while its own region announces the page alone.
+ * All four states are derived during render — the placeholders while the read is in flight, the failure's
+ * alert with its retry, the empty state when the product holds no reviews or none match the filter, and the
+ * list otherwise — so nothing is mirrored into state and no placeholder is shown beside a stale list. The
+ * summary's count is an always-present polite live region, so a count changed by a filter is announced.
  *
  * A published review is a change to the review collection, so this section refreshes the list it owns and
- * reports the write above through `onReviewPublished`, whose surface states the product's own figures: left
- * unreported, the list would move under a header still stating the review set of the page's first read.
+ * reports the write above through `onReviewPublished`: left unreported, the list would move under a header
+ * still stating the review set of the page's first read.
  *
- * @param props - The product to read reviews of, the section's extra classes and the report a published review
- *   makes above.
+ * @param props - The product to read reviews of, its extra classes, and the report a published review makes.
  * @returns The labelled section holding the summary, the reviews and the form.
  */
 export function ProductReviews({

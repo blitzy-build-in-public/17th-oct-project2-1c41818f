@@ -1,7 +1,7 @@
 /**
  * Path: src/features/cart/CartPage.tsx
  * Purpose: The cart route: line rows, the summary panel and the empty-cart state
- * Lines: 374
+ * Lines: 391
  */
 
 import { useEffect } from "react";
@@ -75,7 +75,8 @@ import type { CartLine, PricedCart, PricedCartLine } from "@/types/commerce";
  * not a second live region — the figure a shopper waits on is the money, and that one is the panel's to
  * announce. Focus is put back on the page's body whenever an action of this page unmounts the control that
  * held it — the clear control when the cart empties, the retry when a price arrives — so neither route
- * drops a keyboard user at the top of the document.
+ * drops a keyboard user at the top of the document; and a row that removes a line hands the focus to the
+ * row beside it, arming that same move only for the removal that leaves the list with no other row.
  *
  * Three boundaries are deliberate. `sp-summary__actions` declares its rule above a block that follows the
  * summary, so that hairline meets the panel's own bottom edge where the two sit flush; the composition is
@@ -209,12 +210,14 @@ export function CartPage(): ReactElement {
    * The region the page's body lands in, and the arming call its own actions make, so the focus can be moved to
    * it when an action of this page removes the control that held it.
    *
-   * Two controls do that: the clear control is rendered only while lines are held, so pressing it removes the
-   * focused element from the document, and the retry the failure state offers sits in the alert that leaves with
-   * the failure, so a price that arrives unmounts it in the same way. In both cases the browser would otherwise
-   * drop the focus onto the document body and return a keyboard user to the top of the page with nothing said.
-   * The page body is the survivor the handoff lands on because it is rendered in every one of this page's states,
-   * empty included, so it is always there to take the focus.
+   * Three controls do that: the clear control is rendered only while lines are held, so pressing it removes the
+   * focused element from the document; the retry the failure state offers sits in the alert that leaves with
+   * the failure, so a price that arrives unmounts it in the same way; and a line's removal control is held by a
+   * row that goes out with the line, which the rows answer for themselves except in the one case they cannot —
+   * a list left with no other row, whose removal arms this same handoff through `onRemoveLastLine`. In all
+   * three cases the browser would otherwise drop the focus onto the document body and return a keyboard user to
+   * the top of the page with nothing said. The page body is the survivor the handoff lands on because it is
+   * rendered in every one of this page's states, empty included, so it is always there to take the focus.
    */
   const { regionRef, handOffFocus } = useFocusHandoff<HTMLDivElement>();
 
@@ -254,7 +257,7 @@ export function CartPage(): ReactElement {
     <EmptyState actionHref={ROUTES.CATALOG} className={CLASSES.empty} surface="cart" />
   ) : (
     <div className={CLASSES.frame}>
-      <CartLines lines={lines} pricedLinesById={pricedLinesById} />
+      <CartLines lines={lines} onRemoveLastLine={handOffFocus} pricedLinesById={pricedLinesById} />
       <aside className={CLASSES.aside}>
         <CartSummary error={error} onRetry={retryPricing} pricedCart={pricedCart} status={status} />
         <CartActions isCheckoutAvailable={status !== "error"} />
@@ -292,26 +295,40 @@ interface CartLinesProps {
   readonly lines: readonly CartLine[];
   /** The priced lines keyed by id, or `null` before this basket has been priced. */
   readonly pricedLinesById: ReadonlyMap<LineId, PricedCartLine> | null;
+  /**
+   * The page's own focus handoff, handed to every row: a row whose removal leaves the list with no other row
+   * arms it, so the focus lands on the page's body — the region that stands in every state of this route —
+   * instead of on the document body. A row that removes a line with a row beside it hands the focus on itself
+   * and never arms this.
+   */
+  readonly onRemoveLastLine: () => void;
 }
 
 /**
- * The cart's rows: one `CartItemRow` per line, each handed the priced figures for its own line.
+ * The cart's rows: one `CartItemRow` per line, each handed the priced figures for its own line and the page's
+ * focus handoff for the one removal it cannot answer for.
  *
  * The list is a `<ul>` because it is a list of what the shopper holds, and it carries `role="list"` because
  * its rows are grid items: a grid item generates no marker box, and the pairing is what keeps the list
  * announced as a list rather than as a run of text. A row is keyed by its own line id and never by position,
  * so editing a quantity re-renders the row it belongs to and can never hand a line another line's figures.
  *
- * @param props - The cart's lines and the priced lines keyed by id.
+ * Focus is the rows' own business until the list is left with none: a row whose line leaves hands the focus to
+ * its neighbour's removal control, which is a node the keying above keeps in the document, and the removal
+ * that empties the list arms the page's handoff instead, so a keyboard shopper is never dropped onto the
+ * document body by the control they just pressed.
+ *
+ * @param props - The cart's lines, the priced lines keyed by id, and the page's focus handoff.
  * @returns The list of rows.
  */
-function CartLines({ lines, pricedLinesById }: CartLinesProps): ReactElement {
+function CartLines({ lines, pricedLinesById, onRemoveLastLine }: CartLinesProps): ReactElement {
   return (
     <ul className={CLASSES.lines} role="list">
       {lines.map((line) => (
         <CartItemRow
           key={line.id}
           line={line}
+          onRemoveLastLine={onRemoveLastLine}
           pricedLine={pricedLinesById === null ? undefined : pricedLinesById.get(line.id)}
         />
       ))}

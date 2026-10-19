@@ -152,7 +152,7 @@
  * -webkit-box form is the only spelling every engine renders, so the fallback pair travels with it, and
  * min-block-size reserves every lane the clamp allows, so a clamped tile and a short one align. Two lanes where
  * three or four tiles share a row; the block at the foot of this section raises the clamp, the reservation and the
- * link inside the heading together at the four-column stop. */
+ * link inside the heading together from --breakpoint-sm. */
 .sp-product-card__name {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -175,10 +175,10 @@
   color: inherit;
   text-decoration-line: none;
 }
-@media (min-width: 1024px) {
-  /* --breakpoint-lg, the stop at which the grid shows four columns: a track there holds about 181px of card content
-   * and the longest name the data layer generates takes four lanes in it, so the heading, the link inside it and the
-   * heading's reservation all move to four together and the tiles of a row stay aligned. */
+@media (min-width: 480px) {
+  /* --breakpoint-sm, where the grid first goes multi-column (two from here, three from --breakpoint-md, four from
+   * --breakpoint-lg): its two-column track leaves the card 182px, narrower than the three-column stop's 184.7px,
+   * so the clamp, its reservation and the link inside the heading all take the longest name's four lanes together. */
   .sp-product-card__name {
     -webkit-line-clamp: 4;
     min-block-size: calc(var(--text-heading-3-line-height) * 4em);
@@ -405,8 +405,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-inline-size: var(--control-height-sm);
-  min-block-size: var(--control-height-sm);
+  min-inline-size: var(--touch-target-min);
+  min-block-size: var(--touch-target-min);
   color: var(--color-text-subtle);
   border-radius: var(--radius-pill);
 }

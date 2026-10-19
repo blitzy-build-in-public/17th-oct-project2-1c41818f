@@ -112,7 +112,7 @@
 }
 .sp-report-placeholder__export-action {
   inline-size: 10ch;
-  block-size: var(--control-height-md);
+  block-size: var(--touch-target-min);
 }
 .sp-report-placeholder__export-note {
   inline-size: 40ch;
@@ -146,14 +146,14 @@
   inline-size: 60%;
   block-size: calc(var(--text-caption-size) * var(--line-height-normal));
 }
-/* The name's two clamped lanes, at the floor the loaded tile reserves for them, rising to four at the four-column
- * stop with the loaded tile's own reservation (see `.sp-product-card__name` in `src/styles/catalog.css`). */
+/* The name's two clamped lanes, at the floor the loaded tile reserves for them, rising to four at --breakpoint-sm
+ * with the loaded tile's own reservation (see `.sp-product-card__name` in `src/styles/catalog.css`). */
 .sp-product-card--placeholder .sp-product-placeholder__name {
   inline-size: 100%;
   block-size: calc(var(--text-heading-3-size) * var(--text-heading-3-line-height) * 2);
 }
-@media (min-width: 1024px) {
-  /* --breakpoint-lg, the stop at which the loaded tile's heading reserves four lanes instead of two: the
+@media (min-width: 480px) {
+  /* --breakpoint-sm, the stop at which the loaded tile's heading reserves four lanes instead of two: the
    * placeholder's name block moves with it, because left at two it would reserve 46.8px where the tile it stands
    * in for reserves 93.6px — the larger part of the height the placeholder and the loaded tile disagree by. */
   .sp-product-card--placeholder .sp-product-placeholder__name {
@@ -193,5 +193,5 @@
 }
 .sp-product-card--placeholder .sp-product-placeholder__action {
   inline-size: 100%;
-  block-size: var(--control-height-sm);
+  block-size: var(--touch-target-min);
 }

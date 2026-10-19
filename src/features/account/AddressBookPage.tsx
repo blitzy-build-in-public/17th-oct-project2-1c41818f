@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/AddressBookPage.tsx
  * Purpose: Address cards with add, edit, remove and set-default actions, and a confirm dialog on removal
- * Lines: 558
+ * Lines: 573
  */
 
 import { useId, useRef, useState } from "react";
@@ -13,7 +13,7 @@ import { Alert, EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { Input } from "@/components/ui/Input";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { Checkbox, Select } from "@/components/ui/Select";
-import { editSectionLabel } from "@/constants/checkoutCopy";
+import { editSectionLabel, optionalFieldLabel } from "@/constants/checkoutCopy";
 import {
   ACCOUNT_COPY,
   COMMON_ACTIONS,
@@ -102,11 +102,13 @@ interface AddressFormProps {
  * the checkout's shipping step runs. Errors reach each control through the shared map the field reads by its
  * `name`, and `noValidate` leaves the judging to `src/utils/validation.ts` rather than to the browser.
  *
- * The address's own label is deliberately not a field: `src/constants/content.ts` holds no sentence for one,
- * so an edited address keeps the label it carries and a new one takes `addressLabel`'s fallback.
+ * The address's own label is the one body member the shared `ADDRESS_FIELDS` list does not carry, because the
+ * checkout's shipping values hold none: the address book offers it here as the address's own name, optional and
+ * judged only for its length by `validateAddress`, and the card takes its name from it or, when it is left
+ * empty, from `addressLabel`'s street-and-city fallback.
  *
  * @param props - The draft, the errors, the change and submit sinks and the opening-focus ref.
- * @returns The form, with every field of the address body inside it.
+ * @returns The form, with every field of the address body inside it, and the address's own name last.
  */
 function AddressForm({
   values,
@@ -160,6 +162,19 @@ function AddressForm({
           />
         ),
       )}
+      {/* Written out rather than carried by `ADDRESS_FIELDS`, which the checkout's shipping step shares and
+          whose values hold no label: an address-book entry is the only address a customer names, and this
+          control sits last so the dialog still opens on the first field of the body. */}
+      <Input
+        errors={errors}
+        hint={ACCOUNT_COPY.ADDRESS_LABEL_FIELD_HINT}
+        label={optionalFieldLabel(ACCOUNT_COPY.ADDRESS_LABEL_FIELD_LABEL)}
+        name="label"
+        onChange={changeMember("label")}
+        required={false}
+        type="text"
+        value={values.label}
+      />
     </form>
   );
 }

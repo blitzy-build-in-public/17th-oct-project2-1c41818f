@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/content-account.ts
  * Purpose: The account register of the user-facing copy: signing in and registering, the profile, the loyalty labels, the order history and the address book, split out of src/constants/content.ts, which re-exports them
- * Lines: 101
+ * Lines: 105
  */
 
 import type { LoyaltyTier } from "@/types/account";
@@ -65,6 +65,10 @@ export const ACCOUNT_COPY = {
   ORDER_DETAIL_UPDATED_LABEL: "Last updated",
   ADDRESS_BOOK_HEADING: "Address book",
   ADD_ADDRESS_LABEL: "Add an address",
+  // The address book's own field, and this register's only word for one: `AddressInput.label` names a saved
+  // address rather than a body member the checkout's shipping values carry.
+  ADDRESS_LABEL_FIELD_LABEL: "Label",
+  ADDRESS_LABEL_FIELD_HINT: "Your own name for this address, such as Home or Work",
   DEFAULT_SHIPPING_BADGE: "Default shipping",
   DEFAULT_BILLING_BADGE: "Default billing",
   SET_DEFAULT_SHIPPING_LABEL: "Make this the default shipping address",
