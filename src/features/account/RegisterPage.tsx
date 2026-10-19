@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/RegisterPage.tsx
  * Purpose: Registration form with field validation and duplicate-email handling
- * Lines: 408
+ * Lines: 430
  */
 
 import { useId, useRef, useState } from "react";
@@ -25,14 +25,14 @@ import {
   registeredMessage,
   signedInMessage,
 } from "@/constants/content";
-import { RETURN_TO_QUERY_KEY, ROUTES, loginPath } from "@/constants/routes";
+import { RETURN_TO_QUERY_KEY, ROUTES, canReachPath, loginPath } from "@/constants/routes";
 import { toAuthFieldErrors } from "@/lib/authService";
 import { useAuth, useAuthDispatch } from "@/state/AuthContext";
 import { useToast } from "@/state/ToastContext";
 import { useFocusHandoff } from "@/components/ui/focusHandoff";
 import { useRefusalFocus } from "@/state/focusHooks";
 import { useDocumentTitle } from "@/state/hooks";
-import type { RegistrationInput } from "@/types/account";
+import type { RegistrationInput, Role } from "@/types/account";
 import type { FieldErrors } from "@/types/common";
 import {
   FORM_ERROR_KEY,
@@ -133,12 +133,23 @@ const PLACEHOLDER_LINE_COUNT = REGISTRATION_FIELDS.length;
 const PLACEHOLDER_HEADING_WIDTH = "18ch";
 
 /**
+ * The role a completed registration holds: `POST /api/auth/register` opens a customer session and no other,
+ * so a preserved path is judged against it while the form is on screen.
+ */
+const REGISTRATION_ROLE: Role = "customer";
+
+/**
  * The path a preserved return value names, when it is one this application may navigate to.
  *
  * The value arrives from the address bar, so it is treated as untrusted: only a same-origin path — one that
  * opens with a single separator — is returned, which refuses an absolute or protocol-relative address a
  * hand-made link could carry. `undefined` sends the caller to the account instead, so a refused value costs
  * the visitor a redirect rather than a route nobody wrote.
+ *
+ * Origin is the whole of the question settled here. Whether the visitor's role can open the path this
+ * returns is judged where the destination is settled, through `canReachPath` in `src/constants/routes.ts`,
+ * because a caller needs the raw path as well: the link across to the sign-in screen carries it on for a
+ * visitor whose own role may reach it once they are signed in.
  *
  * @param value - The raw query value, or `null` when the route carried none.
  * @returns The path to navigate to, or `undefined` when the value is not one.
@@ -162,9 +173,10 @@ function returnPathOf(value: string | null): string | undefined {
  * the sign-in greeting for a visitor who arrived already holding one. Everything else renders the form.
  *
  * The page guards nothing: it hands the visitor to the account route — or to the path a guarded route
- * preserved, when the route carried one — and `src/Router.tsx` is what refuses a screen the session cannot
- * serve. Registration itself is an anonymous endpoint, and the session the seam answers with carries the role
- * the seam issued, so no role is claimed here.
+ * preserved, when the role the move happens under can open it — and `src/Router.tsx` is what refuses a screen
+ * the session cannot serve. Registration itself is an anonymous endpoint, and the session the seam answers
+ * with carries the role the seam issued and no other — `REGISTRATION_ROLE` states which — so a role is read
+ * from the session here and never chosen on the form.
  *
  * @returns The registration panel in whichever of its three states applies.
  */
@@ -176,7 +188,7 @@ export function RegisterPage(): ReactElement {
   useDocumentTitle(documentTitle(PAGE_TITLES.REGISTER));
 
   const { register } = useAuthDispatch();
-  const { status, isAuthenticated, displayName } = useAuth();
+  const { status, isAuthenticated, displayName, role } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -198,7 +210,17 @@ export function RegisterPage(): ReactElement {
   const formRef = useRef<HTMLFormElement | null>(null);
 
   const preservedPath = returnPathOf(searchParams.get(RETURN_TO_QUERY_KEY));
-  const destination = preservedPath ?? ROUTES.ACCOUNT;
+  // `canReachPath` in `src/constants/routes.ts` is the one home of the role-to-section rule, and the check the
+  // sign-in screen applies to this same value, so no second test is written here. The role judged is the one
+  // the move happens under: the session a visitor already holds while the signed-in panel is on screen, and
+  // the `customer` session a registration opens otherwise — because a registration can never honour a path
+  // only an administrator may open, and handing that path to the guard would answer a visitor who has just
+  // created an account with a refusal rather than with the account they now hold.
+  const destination =
+    preservedPath !== undefined &&
+    canReachPath(preservedPath, isAuthenticated ? role : REGISTRATION_ROLE)
+      ? preservedPath
+      : ROUTES.ACCOUNT;
   const formError: string | undefined = errors[FORM_ERROR_KEY];
   // The placeholder belongs to the session restore and not to a submission: while a submission is in flight
   // the control that started it reports the wait, and standing a placeholder over the form would take that

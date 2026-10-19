@@ -1,13 +1,12 @@
 /**
  * Path: tests/unit/lib/pricingService.test.ts
  * Purpose: Line and order totals, promo kinds and limits, shipping thresholds and tax rounding
- * Lines: 491
+ * Lines: 466
  */
 
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_CURRENCY,
   FREE_SHIPPING_METHOD_ID,
   FREE_SHIPPING_THRESHOLD_MINOR,
   SHIPPING_METHODS,
@@ -18,6 +17,7 @@ import { PROMO_KIND_LABELS } from "@/constants/taxonomy";
 // this file exercises eleven of its exports, and eleven specifiers named singly cost thirteen lines.
 import * as pricing from "@/lib/pricingService";
 import { FIXED_DATE, makeApiError, makeCartLine, makePromoCode } from "../../fixtures";
+import { expectMoneyInvariants } from "../../helpers/pricingHarness";
 
 import type { CategoryId, MinorUnits } from "@/types/common";
 import type { CartLine, PromoCode, PromoRejectionReason, PricedCart } from "@/types/commerce";
@@ -25,8 +25,7 @@ import type { CartLine, PromoCode, PromoRejectionReason, PricedCart } from "@/ty
 // Every figure asserted below is a whole number of minor units and every date comes from the fixture
 // clock, so no case reads the real time.
 
-/** The currency every priced figure is in, and the tax the configured rate puts on 10,000 minor units. */
-const CURRENCY = DEFAULT_CURRENCY;
+/** The tax the configured rate puts on 10,000 minor units. */
 const TAX_ON_10_000_MINOR = 825;
 /** The configured threshold, the method it waives, that method's own charge and the boundary below it. */
 const THRESHOLD_MINOR = FREE_SHIPPING_THRESHOLD_MINOR;
@@ -52,30 +51,6 @@ function priced(
   shippingMethodId: string | null = null,
 ): PricedCart {
   return pricing.priceCartLines({ lines, promo, shippingMethodId });
-}
-
-/**
- * The invariants every priced cart satisfies whatever was priced: each amount is a whole number of minor
- * units, the grand total is the four parts added in the documented order, the lines' subtotals add up to
- * the cart's and their discounts to the code's, and each line's total is its subtotal less its own share.
- * Asserted through one helper rather than restated case by case, because a second statement of the same
- * arithmetic is how two cases come to disagree about it.
- */
-function expectMoneyInvariants(cart: PricedCart): void {
-  const amounts = [cart.subtotalMinor, cart.discountTotalMinor, cart.shippingMinor, cart.taxMinor];
-  expect(amounts.every(Number.isInteger)).toBe(true);
-  expect(Number.isInteger(cart.freeShippingRemainingMinor)).toBe(true);
-  expect(cart.grandTotalMinor).toBe(
-    cart.subtotalMinor - cart.discountTotalMinor + cart.shippingMinor + cart.taxMinor,
-  );
-  expect(cart.currency).toBe(CURRENCY);
-  const subtotals = cart.lines.map((item) => item.lineSubtotalMinor);
-  const discounts = cart.lines.map((item) => item.discountMinor);
-  expect(subtotals.reduce((sum, amount) => sum + amount, 0)).toBe(cart.subtotalMinor);
-  expect(discounts.reduce((sum, amount) => sum + amount, 0)).toBe(cart.discountTotalMinor);
-  expect(cart.lines.map((item) => item.lineTotalMinor)).toEqual(
-    cart.lines.map((item) => item.lineSubtotalMinor - item.discountMinor),
-  );
 }
 
 /** Three lines at 1,999 and 12,900 twice and 3,499 once: a subtotal of 35,296, checked by hand. */

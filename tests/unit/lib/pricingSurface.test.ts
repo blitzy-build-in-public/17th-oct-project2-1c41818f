@@ -2,17 +2,12 @@
  * Path: tests/unit/lib/pricingSurface.test.ts
  * Purpose: The pricing service's transport-backed surface: promo validation, the delivery methods, a basket
  * priced over the seam, the shelf each line is checked against and the catalogue's price a line is priced at.
- * Lines: 261
+ * Lines: 233
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  DEFAULT_CURRENCY,
-  DEMO_CARD_NUMBERS,
-  PAGE_SIZE_OPTIONS,
-  SHIPPING_METHODS,
-} from "@/constants/config";
+import { DEMO_CARD_NUMBERS, PAGE_SIZE_OPTIONS, SHIPPING_METHODS } from "@/constants/config";
 import { PROMO_REJECTION_MESSAGES } from "@/constants/content";
 import { salesProDataSource } from "@/data/repositories";
 import { postJson } from "@/lib/apiClient";
@@ -22,6 +17,9 @@ import { API_PATHS, failNext, registerDataSource, resetMockServer } from "@/lib/
 import * as pricing from "@/lib/pricingService";
 import { DEFAULT_FILTER_STATE } from "@/utils/queryParams";
 import { makeCartLine, makePromoCode } from "../../fixtures";
+// The money invariants both pricing suites assert now have one home in tests/helpers/pricingHarness.ts,
+// imported here and by the pure half of the suite, so the two cannot come to disagree about the arithmetic.
+import { expectMoneyInvariants } from "../../helpers/pricingHarness";
 
 import type { Product } from "@/types/catalog";
 import type { ApiError, Result } from "@/types/common";
@@ -34,8 +32,6 @@ import { orderBody } from "./mockServerHarness";
 // source — no case mocks a module, and the only isolation used is the seam's own failure injection — and
 // every figure asserted is a whole number of minor units.
 
-/** The currency every priced figure is in. */
-const CURRENCY = DEFAULT_CURRENCY;
 /** The largest page a listing may be read at, so reading the whole seeded catalogue costs three reads. */
 const LARGEST_PAGE_SIZE = Math.max(...PAGE_SIZE_OPTIONS);
 
@@ -50,30 +46,6 @@ function valueOf<TValue>(result: Result<TValue>): TValue {
 function failureOf<TValue>(result: Result<TValue>): ApiError {
   if (result.ok) throw new Error("expected a failure but the seam answered a payload");
   return result.error;
-}
-
-/**
- * The invariants every priced cart satisfies whatever was priced: each amount is a whole number of minor
- * units, the grand total is the four parts added in the documented order, the lines' subtotals add up to
- * the cart's and their discounts to the code's, and each line's total is its subtotal less its own share.
- * This file carries its own copy of the assertion the pure half of the suite makes, because a small
- * assertion helper belongs to the suite that makes it, as `valueOf` and `failureOf` above do.
- */
-function expectMoneyInvariants(cart: PricedCart): void {
-  const amounts = [cart.subtotalMinor, cart.discountTotalMinor, cart.shippingMinor, cart.taxMinor];
-  expect(amounts.every(Number.isInteger)).toBe(true);
-  expect(Number.isInteger(cart.freeShippingRemainingMinor)).toBe(true);
-  expect(cart.grandTotalMinor).toBe(
-    cart.subtotalMinor - cart.discountTotalMinor + cart.shippingMinor + cart.taxMinor,
-  );
-  expect(cart.currency).toBe(CURRENCY);
-  const subtotals = cart.lines.map((item) => item.lineSubtotalMinor);
-  const discounts = cart.lines.map((item) => item.discountMinor);
-  expect(subtotals.reduce((sum, amount) => sum + amount, 0)).toBe(cart.subtotalMinor);
-  expect(discounts.reduce((sum, amount) => sum + amount, 0)).toBe(cart.discountTotalMinor);
-  expect(cart.lines.map((item) => item.lineTotalMinor)).toEqual(
-    cart.lines.map((item) => item.lineSubtotalMinor - item.discountMinor),
-  );
 }
 
 /**

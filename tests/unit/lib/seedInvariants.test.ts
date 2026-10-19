@@ -1,7 +1,7 @@
 /**
  * Path: tests/unit/lib/seedInvariants.test.ts
  * Purpose: The seeded data's own invariants: no attributed order and no review dated before its product or the account it belongs to, and nothing seeded dated after the anchor day's first hour.
- * Lines: 87
+ * Lines: 122
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import { createSalesProDataSource } from "@/data/repositories";
 import { PRODUCTS } from "@/data/products";
 import { REVIEWS } from "@/data/reviews";
 import { registerDataSource, resetMockServer, type SalesProDataSource } from "@/lib/mockServer";
-import { compareIso } from "@/utils/dates";
+import { addDays, compareIso, toIsoDate } from "@/utils/dates";
 
 // The invariants a seeded cohort must not break: an account predates every order attributed to it, and no
 // review precedes the account that wrote it. Both read the data source's own accessors, so no DOM, no
@@ -19,6 +19,24 @@ import { compareIso } from "@/utils/dates";
 
 /** A row limit past the seeded order count, so a pass reads the whole collection it is about. */
 const ALL_ROWS = 10_000;
+
+/** The attributed orders the seed delivers, `ATTRIBUTED_ORDER_TOTAL` in `src/data/orderAttribution.ts` and the sum
+ *  of the plan that places them: stated here as the figure the case below pins, so a change to the plan and to
+ *  that total together is caught by the suite rather than passing unnoticed. */
+const ATTRIBUTED_ORDERS = 60;
+
+/** The trailing days the history's attributed orders are placed in, `TRAILING_WINDOW_DAYS` in
+ *  `src/data/orders.ts`: the window every attributed order falls inside and a real shop's year of trade is
+ *  counted over. */
+const TRAILING_WINDOW_DAYS = 365;
+
+/** The lower bound of the band the trailing year's volume is exact inside, derived rather than observed: fifty-two
+ *  whole weeks at the seeded curve's twenty-one orders a week are 1,092, the sixty days the seasonal lift covers
+ *  add 60, and the day the window closes on adds its own weekday's 2 orders. */
+const TRAILING_WINDOW_MIN_ORDERS = 1_154;
+
+/** The band's upper bound, from the same derivation with the closing day's weekday at its heaviest four orders. */
+const TRAILING_WINDOW_MAX_ORDERS = 1_156;
 
 /** The data source the case in progress is read from, bound by the hook below. */
 let source: SalesProDataSource;
@@ -45,8 +63,25 @@ describe("the seeded facts' invariants", () => {
       expect(compareIso(order.placedAt, account.createdAt)).toBeGreaterThanOrEqual(0);
       attributed += 1;
     }
-    // An equality over no order at all would hold without proving anything, so the sample is required.
-    expect(attributed).toBeGreaterThan(0);
+    // The delivered count rather than a non-empty sample: sixty orders are the whole of the seeded accounts'
+    // history, so the figure is pinned by this case as well as guarded where the plan and its total are written.
+    expect(attributed).toBe(ATTRIBUTED_ORDERS);
+  });
+
+  it("trades about 1,100 orders in the trailing year, every attributed one of them inside it", () => {
+    // The trailing window is the seed's own reading of "the trailing year": the last 365 days the history spans,
+    // the days the seasonal lift covers being among them. The band pins the volume the plan requires — "about
+    // 1,100 orders over the trailing year" — and the attributed rows are pinned to sixty inside that window, so
+    // no attributed order is placed in the earlier era guests own.
+    const windowOpens = addDays(toIsoDate(new Date()), -(TRAILING_WINDOW_DAYS - 1));
+    const orders = source.getRecentOrders(ALL_ROWS);
+    const inWindow = orders.filter((order) => compareIso(order.placedAt, windowOpens) >= 0);
+    expect(inWindow.length).toBeGreaterThanOrEqual(TRAILING_WINDOW_MIN_ORDERS);
+    expect(inWindow.length).toBeLessThanOrEqual(TRAILING_WINDOW_MAX_ORDERS);
+    const attributed = orders.filter((order) => order.customerId !== null);
+    const attributedInWindow = inWindow.filter((order) => order.customerId !== null);
+    expect(attributedInWindow).toHaveLength(ATTRIBUTED_ORDERS);
+    expect(attributedInWindow).toHaveLength(attributed.length);
   });
 
   it("dates no review before the product it reviews, and none after the anchor day's first hour", () => {

@@ -1,7 +1,7 @@
 /**
  * Path: src/features/account/AddressBookPage.tsx
  * Purpose: Address cards with add, edit, remove and set-default actions, and a confirm dialog on removal
- * Lines: 563
+ * Lines: 558
  */
 
 import { useId, useRef, useState } from "react";
@@ -22,7 +22,7 @@ import {
   documentTitle,
   removeAddressLabel,
 } from "@/constants/content";
-import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
+import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES, countryLabel } from "@/constants/taxonomy";
 import {
   addAddress,
   addressLabel,
@@ -76,11 +76,6 @@ const BLANK_ADDRESS: AddressInput = {
 
 /** The two placeholder cards the loading state renders in place of the grid the load will fill. */
 const PLACEHOLDER_CARDS = ["first", "second"] as const;
-
-/** The display name of a stored country code, falling back to the code for one the configured set dropped. */
-function countryNameOf(code: string): string {
-  return SUPPORTED_COUNTRIES.find((country) => country.code === code)?.label ?? code;
-}
 
 /** Whether a stored line carries something to show: neither absent nor blank. */
 function isWritten(value: string): boolean {
@@ -229,7 +224,7 @@ function AddressCard({
         <p>{address.line1}</p>
         {isWritten(address.line2) ? <p>{address.line2}</p> : null}
         {isWritten(cityLine) ? <p>{cityLine}</p> : null}
-        <p>{countryNameOf(address.country)}</p>
+        <p>{countryLabel(address.country)}</p>
         {isWritten(address.phone) ? <p>{address.phone}</p> : null}
       </div>
       <div className="sp-address-card__defaults">

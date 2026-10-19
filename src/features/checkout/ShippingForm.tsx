@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ShippingForm.tsx
  * Purpose: The shipping step: address entry or reuse of a saved address, with per-field validation
- * Lines: 534
+ * Lines: 529
  */
 
 import { useEffect, useRef } from "react";
@@ -15,7 +15,12 @@ import { RadioGroup, Select } from "@/components/ui/Select";
 import { CHECKOUT_COPY, transitWindowLabel } from "@/constants/checkoutCopy";
 import { ACCOUNT_COPY, COMMON_ACTIONS } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
-import { ADDRESS_FIELDS, SUPPORTED_COUNTRIES, type AddressFieldMember } from "@/constants/taxonomy";
+import {
+  ADDRESS_FIELDS,
+  SUPPORTED_COUNTRIES,
+  countryLabel,
+  type AddressFieldMember,
+} from "@/constants/taxonomy";
 import {
   addressLabel,
   buildAddressInput,
@@ -47,11 +52,6 @@ import { formatMoney } from "@/utils/format";
  */
 
 // Address fields ---------------------------------------------------------------------------------
-
-/** One configured country's code and its label, keyed for the picker's address lines. */
-const COUNTRY_LABELS: ReadonlyMap<string, string> = new Map(
-  SUPPORTED_COUNTRIES.map((country): [string, string] => [country.code, country.label]),
-);
 
 /** The patch each address field writes, keyed by the member its control binds to: a control's `name` is
  * both the key it reads its error by and the key it writes its value under, so the two cannot drift. */
@@ -112,15 +112,10 @@ function postalLineOf(address: Address): string {
     address.city,
     address.region,
     address.postalCode,
-    countryNameOf(address.country),
+    countryLabel(address.country),
   ]
     .filter(isWritten)
     .join(", ");
-}
-
-/** The country a stored code names, falling back to the code for one the configured set no longer holds. */
-function countryNameOf(code: string): string {
-  return COUNTRY_LABELS.get(code) ?? code;
 }
 
 /**

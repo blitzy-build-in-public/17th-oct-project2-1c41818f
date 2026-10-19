@@ -1,7 +1,7 @@
 /**
  * Path: src/features/checkout/ReviewOrder.tsx
  * Purpose: The review step: items, addresses, shipping, totals and payment restated before submission
- * Lines: 515
+ * Lines: 509
  */
 
 import { useId, useRef } from "react";
@@ -20,7 +20,7 @@ import {
   freeShippingProgressLabel,
 } from "@/constants/content";
 import { ROUTES } from "@/constants/routes";
-import { SUPPORTED_COUNTRIES } from "@/constants/taxonomy";
+import { countryLabel } from "@/constants/taxonomy";
 import { useCheckout } from "@/state/CheckoutContext";
 import type { CheckoutActions, CheckoutView } from "@/state/CheckoutContext";
 import { handOffThen, useFocusHandoff } from "@/components/ui/focusHandoff";
@@ -72,12 +72,6 @@ type AmountRow = readonly [label: string, value: string, className: string];
 /** Builds one amount row, so a row's shape is written once rather than at each of the rows below. */
 function row(label: string, value: string, className: string): AmountRow {
   return [label, value, className];
-}
-
-/** The country a code names, from the product's one list of supported countries; a code the list does not carry
- *  reads as itself rather than as nothing. */
-function countryLabel(code: string): string {
-  return SUPPORTED_COUNTRIES.find((country) => country.code === code)?.label ?? code;
 }
 
 /** One address as the lines it is read by, in postal order, skipping whatever was left empty. The projection is

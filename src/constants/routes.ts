@@ -1,7 +1,7 @@
 /**
  * Path: src/constants/routes.ts
  * Purpose: Every route path and its builder, so no route string is written twice
- * Lines: 296
+ * Lines: 298
  */
 
 import type { Role } from "@/types/account";
@@ -117,8 +117,10 @@ function pathnameOf(path: string): string {
  * to read is settled in `src/lib/mockServer.ts`, which re-checks the session on every privileged
  * endpoint.
  *
- * Consumer: `src/features/account/LoginPage.tsx`, which refuses a preserved return path the visitor's role
- * cannot reach rather than offering to continue into a second refusal, and honours one it can.
+ * Consumers: `src/features/account/LoginPage.tsx`, which refuses a preserved return path the visitor's role
+ * cannot reach rather than offering to continue into a second refusal, and honours one it can; and
+ * `src/features/account/RegisterPage.tsx`, which judges a preserved path the same way before it lands a
+ * visitor whose registration always opens a `customer` session.
  *
  * @param path - The path to judge, with or without a query string or fragment.
  * @param role - The role of the session that would reach it.
